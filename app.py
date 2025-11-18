@@ -3,7 +3,7 @@ NoteHelper - A note-taking application for Azure technical sellers.
 Single-user Flask application for tracking customer call notes.
 """
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
@@ -27,6 +27,15 @@ migrate = Migrate(app, db)
 
 
 # =============================================================================
+# Helper Functions
+# =============================================================================
+
+def utc_now():
+    """Return current UTC time with timezone info."""
+    return datetime.now(timezone.utc)
+
+
+# =============================================================================
 # Database Models
 # =============================================================================
 
@@ -44,7 +53,7 @@ class Territory(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
     sellers = db.relationship('Seller', back_populates='territory', lazy='dynamic')
@@ -61,7 +70,7 @@ class Seller(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
     territory = db.relationship('Territory', back_populates='sellers')
@@ -73,16 +82,16 @@ class Seller(db.Model):
 
 
 class Customer(db.Model):
-    """Customer account that can have associated call logs."""
+    """Customer account that can be associated with call logs."""
     __tablename__ = 'customers'
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     tpid = db.Column(db.BigInteger, nullable=False)
     tpid_url = db.Column(db.String(500), nullable=True)
-    seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
     seller = db.relationship('Seller', back_populates='customers')
@@ -109,7 +118,7 @@ class Topic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
     call_logs = db.relationship(
@@ -131,10 +140,10 @@ class CallLog(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
-    call_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    call_date = db.Column(db.DateTime, nullable=False, default=utc_now)
     content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     # Relationships
     customer = db.relationship('Customer', back_populates='call_logs')
@@ -214,7 +223,7 @@ def territory_view(id):
     
     # Get calls from last 7 days
     from datetime import timedelta
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = utc_now() - timedelta(days=7)
     recent_calls = CallLog.query.filter(
         CallLog.territory_id == id,
         CallLog.call_date >= week_ago
