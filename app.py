@@ -386,8 +386,8 @@ def seller_edit(id):
         
         seller.name = name
         
-        # Update territories - clear existing and add new ones
-        seller.territories.clear()
+        # Update territories - replace the collection
+        seller.territories = []
         if territory_ids:
             for territory_id in territory_ids:
                 territory = Territory.query.get(int(territory_id))
