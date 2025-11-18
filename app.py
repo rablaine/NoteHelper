@@ -532,6 +532,38 @@ def topics_list():
     return render_template('topics_list.html', topics=topics)
 
 
+@app.route('/api/topic/create', methods=['POST'])
+def api_topic_create():
+    """API endpoint to create a new topic via AJAX (FR027)."""
+    data = request.get_json()
+    name = data.get('name', '').strip() if data else ''
+    
+    if not name:
+        return jsonify({'error': 'Topic name is required'}), 400
+    
+    # Check for duplicate topic names (case-insensitive)
+    existing = Topic.query.filter(func.lower(Topic.name) == func.lower(name)).first()
+    if existing:
+        return jsonify({
+            'id': existing.id,
+            'name': existing.name,
+            'description': existing.description or '',
+            'existed': True
+        }), 200
+    
+    # Create new topic
+    topic = Topic(name=name, description=None)
+    db.session.add(topic)
+    db.session.commit()
+    
+    return jsonify({
+        'id': topic.id,
+        'name': topic.name,
+        'description': topic.description or '',
+        'existed': False
+    }), 201
+
+
 @app.route('/topic/new', methods=['GET', 'POST'])
 def topic_create():
     """Create a new topic (FR004)."""

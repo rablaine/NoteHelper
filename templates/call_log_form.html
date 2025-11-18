@@ -196,21 +196,27 @@ topicSearch.addEventListener('input', function() {
 
 // Keyboard navigation
 topicSearch.addEventListener('keydown', function(e) {
-    if (currentMatches.length === 0) return;
-    
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown' && currentMatches.length > 0) {
         e.preventDefault();
         selectedIndex = (selectedIndex + 1) % currentMatches.length;
         renderDropdown();
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowUp' && currentMatches.length > 0) {
         e.preventDefault();
         selectedIndex = selectedIndex <= 0 ? currentMatches.length - 1 : selectedIndex - 1;
         renderDropdown();
     } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') {
-        if (selectedIndex >= 0 && selectedIndex < currentMatches.length) {
-            e.preventDefault();
+        e.preventDefault();
+        
+        if (currentMatches.length > 0 && selectedIndex >= 0 && selectedIndex < currentMatches.length) {
+            // Select existing topic from search results
             const topic = currentMatches[selectedIndex];
             addTopic(topic.id, topic.name);
+        } else {
+            // No matches - create new topic
+            const searchTerm = topicSearch.value.trim();
+            if (searchTerm.length > 0) {
+                createNewTopic(searchTerm);
+            }
         }
     } else if (e.key === 'Escape') {
         topicDropdown.style.display = 'none';
@@ -268,6 +274,52 @@ function removeTopic(topicId) {
     if (badge) {
         badge.remove();
     }
+}
+
+function createNewTopic(topicName) {
+    // Show loading indicator
+    topicSearch.disabled = true;
+    topicSearch.placeholder = 'Creating topic...';
+    
+    fetch('/api/topic/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: topicName })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.id) {
+            // Add newly created or existing topic to the list
+            allTopics.push({
+                id: data.id,
+                name: data.name,
+                description: data.description
+            });
+            
+            // Add to selected topics
+            addTopic(data.id, data.name);
+            
+            // Show feedback
+            if (data.existed) {
+                console.log('Topic already existed, added to selection');
+            } else {
+                console.log('New topic created and added');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error creating topic:', error);
+        alert('Failed to create topic. Please try again.');
+    })
+    .finally(() => {
+        // Reset search box
+        topicSearch.disabled = false;
+        topicSearch.placeholder = 'Search and add topics...';
+        topicSearch.value = '';
+        topicSearch.focus();
+    });
 }
 
 // Set current date/time as default if creating new call log
