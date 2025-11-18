@@ -52,24 +52,31 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="topics" class="form-label">Topics</label>
-                        <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
-                            {% if topics %}
-                                {% for topic in topics %}
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="topic_ids" 
-                                               value="{{ topic.id }}" id="topic_{{ topic.id }}"
-                                               {% if (call_log and topic in call_log.topics.all()) or (preselect_topic_id and preselect_topic_id == topic.id) %}checked{% endif %}>
-                                        <label class="form-check-label" for="topic_{{ topic.id }}">
-                                            {{ topic.name }}
-                                            {% if topic.description %}
-                                                <small class="text-muted">- {{ topic.description|truncate(50) }}</small>
-                                            {% endif %}
-                                        </label>
-                                    </div>
+                        <label for="topic_search" class="form-label">Topics</label>
+                        <input type="text" class="form-control" id="topic_search" 
+                               placeholder="Search and add topics..." autocomplete="off">
+                        <div id="topic_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                        
+                        <div id="selected_topics" class="mt-2 d-flex flex-wrap gap-2">
+                            {% if call_log %}
+                                {% for topic in call_log.topics.all() %}
+                                    <span class="badge bg-warning text-dark d-flex align-items-center" data-topic-id="{{ topic.id }}">
+                                        <i class="bi bi-tag me-1"></i> {{ topic.name }}
+                                        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTopic({{ topic.id }})"></button>
+                                        <input type="hidden" name="topic_ids" value="{{ topic.id }}">
+                                    </span>
                                 {% endfor %}
-                            {% else %}
-                                <p class="text-muted mb-0">No topics available. <a href="{{ url_for('topic_create') }}" target="_blank">Create a topic</a>.</p>
+                            {% endif %}
+                            {% if preselect_topic_id %}
+                                {% for topic in topics %}
+                                    {% if topic.id == preselect_topic_id %}
+                                        <span class="badge bg-warning text-dark d-flex align-items-center" data-topic-id="{{ topic.id }}">
+                                            <i class="bi bi-tag me-1"></i> {{ topic.name }}
+                                            <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTopic({{ topic.id }})"></button>
+                                            <input type="hidden" name="topic_ids" value="{{ topic.id }}">
+                                        </span>
+                                    {% endif %}
+                                {% endfor %}
                             {% endif %}
                         </div>
                     </div>
@@ -143,6 +150,80 @@ document.getElementById('customer_id').addEventListener('change', function() {
         sellerSelect.value = sellerId;
     }
 });
+
+// Topic search and selection functionality
+const allTopics = [
+    {% for topic in topics %}
+        { id: {{ topic.id }}, name: "{{ topic.name|escape }}", description: "{{ topic.description|escape if topic.description else '' }}" },
+    {% endfor %}
+];
+
+const topicSearch = document.getElementById('topic_search');
+const topicDropdown = document.getElementById('topic_dropdown');
+const selectedTopicsContainer = document.getElementById('selected_topics');
+
+topicSearch.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase().trim();
+    
+    if (searchTerm.length === 0) {
+        topicDropdown.style.display = 'none';
+        return;
+    }
+    
+    // Filter topics case-insensitively
+    const matches = allTopics.filter(topic => 
+        topic.name.toLowerCase().includes(searchTerm) && 
+        !isTopicSelected(topic.id)
+    );
+    
+    if (matches.length > 0) {
+        topicDropdown.innerHTML = matches.map(topic => 
+            `<a href="#" class="list-group-item list-group-item-action" onclick="addTopic(${topic.id}, '${topic.name.replace(/'/g, "\\'")}'); return false;">
+                <i class="bi bi-tag"></i> ${topic.name}
+                ${topic.description ? '<br><small class="text-muted">' + topic.description + '</small>' : ''}
+            </a>`
+        ).join('');
+        topicDropdown.style.display = 'block';
+        topicDropdown.style.width = topicSearch.offsetWidth + 'px';
+    } else {
+        topicDropdown.style.display = 'none';
+    }
+});
+
+// Hide dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!topicSearch.contains(e.target) && !topicDropdown.contains(e.target)) {
+        topicDropdown.style.display = 'none';
+    }
+});
+
+function isTopicSelected(topicId) {
+    return document.querySelector(`[data-topic-id="${topicId}"]`) !== null;
+}
+
+function addTopic(topicId, topicName) {
+    if (isTopicSelected(topicId)) return;
+    
+    const badge = document.createElement('span');
+    badge.className = 'badge bg-warning text-dark d-flex align-items-center';
+    badge.setAttribute('data-topic-id', topicId);
+    badge.innerHTML = `
+        <i class="bi bi-tag me-1"></i> ${topicName}
+        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTopic(${topicId})"></button>
+        <input type="hidden" name="topic_ids" value="${topicId}">
+    `;
+    
+    selectedTopicsContainer.appendChild(badge);
+    topicSearch.value = '';
+    topicDropdown.style.display = 'none';
+}
+
+function removeTopic(topicId) {
+    const badge = document.querySelector(`[data-topic-id="${topicId}"]`);
+    if (badge) {
+        badge.remove();
+    }
+}
 
 // Set current date/time as default if creating new call log
 {% if not call_log %}
