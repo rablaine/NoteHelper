@@ -20,8 +20,10 @@
                             <h5 class="mb-1">{{ seller.name }}</h5>
                         </a>
                         <p class="mb-1">
-                            {% if seller.territory %}
-                                <span class="badge bg-info">{{ seller.territory.name }}</span>
+                            {% if seller.territories.count() > 0 %}
+                                {% for territory in seller.territories.order_by('name').all() %}
+                                    <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
+                                {% endfor %}
                             {% else %}
                                 <span class="badge bg-secondary">No territory</span>
                             {% endif %}

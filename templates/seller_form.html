@@ -17,16 +17,22 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="territory_id" class="form-label">Territory</label>
-                        <select class="form-select" id="territory_id" name="territory_id">
-                            <option value="">-- No territory --</option>
-                            {% for territory in territories %}
-                                <option value="{{ territory.id }}" 
-                                    {{ 'selected' if seller and seller.territory_id == territory.id else '' }}>
-                                    {{ territory.name }}
-                                </option>
-                            {% endfor %}
-                        </select>
+                        <label for="territory_search" class="form-label">Territories</label>
+                        <input type="text" class="form-control" id="territory_search" 
+                               placeholder="Search and add territories..." autocomplete="off">
+                        <div id="territory_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                        
+                        <div id="selected_territories" class="mt-2 d-flex flex-wrap gap-2">
+                            {% if seller %}
+                                {% for territory in seller.territories.order_by('name').all() %}
+                                    <span class="badge bg-info text-dark d-flex align-items-center" data-territory-id="{{ territory.id }}">
+                                        <i class="bi bi-geo-alt me-1"></i> {{ territory.name }}
+                                        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTerritory({{ territory.id }})"></button>
+                                        <input type="hidden" name="territory_ids" value="{{ territory.id }}">
+                                    </span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
                         <div class="form-text">
                             Or <a href="#" data-bs-toggle="modal" data-bs-target="#newTerritoryModal">create a new territory</a>
                         </div>
@@ -85,4 +91,126 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Territory search and selection functionality
+const allTerritories = [
+    {% for territory in territories %}
+        { id: {{ territory.id }}, name: "{{ territory.name|escape }}" },
+    {% endfor %}
+];
+
+const territorySearch = document.getElementById('territory_search');
+const territoryDropdown = document.getElementById('territory_dropdown');
+const selectedTerritoriesContainer = document.getElementById('selected_territories');
+let currentMatches = [];
+let selectedIndex = -1;
+
+territorySearch.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase().trim();
+    
+    if (searchTerm.length === 0) {
+        territoryDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+        return;
+    }
+    
+    // Filter territories case-insensitively
+    currentMatches = allTerritories.filter(territory => 
+        territory.name.toLowerCase().includes(searchTerm) && 
+        !isTerritorySelected(territory.id)
+    );
+    
+    if (currentMatches.length > 0) {
+        selectedIndex = 0; // Auto-select first item
+        renderDropdown();
+        territoryDropdown.style.display = 'block';
+        territoryDropdown.style.width = territorySearch.offsetWidth + 'px';
+    } else {
+        territoryDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+    }
+});
+
+// Keyboard navigation
+territorySearch.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowDown' && currentMatches.length > 0) {
+        e.preventDefault();
+        selectedIndex = (selectedIndex + 1) % currentMatches.length;
+        renderDropdown();
+    } else if (e.key === 'ArrowUp' && currentMatches.length > 0) {
+        e.preventDefault();
+        selectedIndex = selectedIndex <= 0 ? currentMatches.length - 1 : selectedIndex - 1;
+        renderDropdown();
+    } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') {
+        e.preventDefault();
+        
+        if (currentMatches.length > 0 && selectedIndex >= 0 && selectedIndex < currentMatches.length) {
+            const territory = currentMatches[selectedIndex];
+            addTerritory(territory.id, territory.name);
+        }
+    } else if (e.key === 'Escape') {
+        territoryDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+    }
+});
+
+function renderDropdown() {
+    territoryDropdown.innerHTML = currentMatches.map((territory, index) => 
+        `<a href="#" class="list-group-item list-group-item-action ${index === selectedIndex ? 'active' : ''}" 
+            onclick="addTerritory(${territory.id}, '${territory.name.replace(/'/g, "\\'")}'); return false;"
+            onmouseover="selectedIndex = ${index}; renderDropdown();">
+            <i class="bi bi-geo-alt"></i> ${territory.name}
+        </a>`
+    ).join('');
+}
+
+// Hide dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!territorySearch.contains(e.target) && !territoryDropdown.contains(e.target)) {
+        territoryDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+    }
+});
+
+function isTerritorySelected(territoryId) {
+    return document.querySelector(`[data-territory-id="${territoryId}"]`) !== null;
+}
+
+function addTerritory(territoryId, territoryName) {
+    if (isTerritorySelected(territoryId)) {
+        return; // Already added
+    }
+    
+    const badge = document.createElement('span');
+    badge.className = 'badge bg-info text-dark d-flex align-items-center';
+    badge.setAttribute('data-territory-id', territoryId);
+    badge.innerHTML = `
+        <i class="bi bi-geo-alt me-1"></i> ${territoryName}
+        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTerritory(${territoryId})"></button>
+        <input type="hidden" name="territory_ids" value="${territoryId}">
+    `;
+    
+    selectedTerritoriesContainer.appendChild(badge);
+    
+    // Clear search and hide dropdown
+    territorySearch.value = '';
+    territoryDropdown.style.display = 'none';
+    currentMatches = [];
+    selectedIndex = -1;
+}
+
+function removeTerritory(territoryId) {
+    const badge = document.querySelector(`[data-territory-id="${territoryId}"]`);
+    if (badge) {
+        badge.remove();
+    }
+}
+</script>
 {% endblock %}

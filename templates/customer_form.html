@@ -10,6 +10,7 @@
         <div class="card">
             <div class="card-body">
                 <form method="POST">
+                    <input type="hidden" name="referrer" value="{{ referrer if referrer else '' }}">
                     <div class="mb-3">
                         <label for="name" class="form-label">Customer Name *</label>
                         <input type="text" class="form-control" id="name" name="name" 
@@ -38,10 +39,12 @@
                             <option value="">-- No seller --</option>
                             {% for seller in sellers %}
                                 <option value="{{ seller.id }}" 
-                                    data-territory-id="{{ seller.territory_id if seller.territory_id else '' }}"
+                                    data-territory-id="{{ seller.territories.first().id if seller.territories.count() == 1 else '' }}"
                                     {% if (customer and customer.seller_id == seller.id) or (preselect_seller_id and preselect_seller_id == seller.id) %}selected{% endif %}>
                                     {{ seller.name }}
-                                    {% if seller.territory %} ({{ seller.territory.name }}){% endif %}
+                                    {% if seller.territories.count() == 1 %} ({{ seller.territories.first().name }})
+                                    {% elif seller.territories.count() > 1 %} ({{ seller.territories.count() }} territories)
+                                    {% endif %}
                                 </option>
                             {% endfor %}
                         </select>

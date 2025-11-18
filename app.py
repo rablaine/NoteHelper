@@ -46,6 +46,13 @@ call_logs_topics = db.Table(
     db.Column('topic_id', db.Integer, db.ForeignKey('topics.id'), primary_key=True)
 )
 
+# Association table for many-to-many relationship between Seller and Territory
+sellers_territories = db.Table(
+    'sellers_territories',
+    db.Column('seller_id', db.Integer, db.ForeignKey('sellers.id'), primary_key=True),
+    db.Column('territory_id', db.Integer, db.ForeignKey('territories.id'), primary_key=True)
+)
+
 
 class Territory(db.Model):
     """Geographic or organizational territory for organizing customers and sellers."""
@@ -56,7 +63,12 @@ class Territory(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
-    sellers = db.relationship('Seller', back_populates='territory', lazy='dynamic')
+    sellers = db.relationship(
+        'Seller',
+        secondary=sellers_territories,
+        back_populates='territories',
+        lazy='dynamic'
+    )
     customers = db.relationship('Customer', back_populates='territory', lazy='dynamic')
     
     def __repr__(self) -> str:
@@ -69,11 +81,17 @@ class Seller(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
+    # Note: territory_id column kept for backwards compatibility but will be deprecated
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
-    territory = db.relationship('Territory', back_populates='sellers')
+    territories = db.relationship(
+        'Territory',
+        secondary=sellers_territories,
+        back_populates='sellers',
+        lazy='dynamic'
+    )
     customers = db.relationship('Customer', back_populates='seller', lazy='dynamic')
     call_logs = db.relationship('CallLog', back_populates='seller', lazy='dynamic')
     
@@ -282,7 +300,7 @@ def seller_create():
     """Create a new seller (FR002)."""
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
-        territory_id = request.form.get('territory_id')
+        territory_ids = request.form.getlist('territory_ids')
         
         if not name:
             flash('Seller name is required.', 'danger')
@@ -294,10 +312,15 @@ def seller_create():
             flash(f'Seller "{name}" already exists.', 'warning')
             return redirect(url_for('seller_view', id=existing.id))
         
-        seller = Seller(
-            name=name,
-            territory_id=int(territory_id) if territory_id else None
-        )
+        seller = Seller(name=name)
+        
+        # Add territories to many-to-many relationship
+        if territory_ids:
+            for territory_id in territory_ids:
+                territory = Territory.query.get(int(territory_id))
+                if territory:
+                    seller.territories.append(territory)
+        
         db.session.add(seller)
         db.session.commit()
         
@@ -338,7 +361,7 @@ def seller_edit(id):
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
-        territory_id = request.form.get('territory_id')
+        territory_ids = request.form.getlist('territory_ids')
         
         if not name:
             flash('Seller name is required.', 'danger')
@@ -354,7 +377,15 @@ def seller_edit(id):
             return redirect(url_for('seller_edit', id=id))
         
         seller.name = name
-        seller.territory_id = int(territory_id) if territory_id else None
+        
+        # Update territories - clear existing and add new ones
+        seller.territories.clear()
+        if territory_ids:
+            for territory_id in territory_ids:
+                territory = Territory.query.get(int(territory_id))
+                if territory:
+                    seller.territories.append(territory)
+        
         db.session.commit()
         
         flash(f'Seller "{name}" updated successfully!', 'success')
@@ -471,11 +502,11 @@ def customer_create():
     preselect_seller_id = request.args.get('seller_id', type=int)
     preselect_territory_id = request.args.get('territory_id', type=int)
     
-    # If seller is pre-selected and has a territory, auto-select it
+    # If seller is pre-selected and has exactly one territory, auto-select it
     if preselect_seller_id:
         seller = Seller.query.get(preselect_seller_id)
-        if seller and seller.territory_id:
-            preselect_territory_id = seller.territory_id
+        if seller and seller.territories.count() == 1:
+            preselect_territory_id = seller.territories.first().id
     
     # If territory is pre-selected and has only one seller, auto-select it (FR032)
     if preselect_territory_id and not preselect_seller_id:

@@ -22,13 +22,18 @@
                 <h5 class="mb-0">Details</h5>
             </div>
             <div class="card-body">
-                <p><strong>Territory:</strong> 
-                    {% if seller.territory %}
-                        <a href="{{ url_for('territory_view', id=seller.territory.id) }}">{{ seller.territory.name }}</a>
-                    {% else %}
-                        <span class="text-muted">No territory assigned</span>
-                    {% endif %}
-                </p>
+                <p><strong>Territories:</strong></p>
+                {% if seller.territories.count() > 0 %}
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        {% for territory in seller.territories.order_by('name').all() %}
+                            <a href="{{ url_for('territory_view', id=territory.id) }}" class="badge bg-info text-dark text-decoration-none">
+                                <i class="bi bi-geo-alt"></i> {{ territory.name }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">No territories assigned</p>
+                {% endif %}
                 <p><strong>Total Customers:</strong> {{ customers|length }}</p>
             </div>
         </div>
