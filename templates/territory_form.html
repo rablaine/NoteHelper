@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if territory else 'New' }} Territory - NoteHelper{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">{{ 'Edit' if territory else 'New' }} Territory</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Territory Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ territory.name if territory else '' }}" required>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save Territory
+                        </button>
+                        <a href="{{ url_for('territories_list') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        {% if existing_territories %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">Existing Territories (to prevent duplicates)</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    {% for t in existing_territories %}
+                        <span class="badge bg-secondary">{{ t.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

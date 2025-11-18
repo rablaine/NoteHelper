@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.name }} - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        <i class="bi bi-building"></i> {{ customer.name }}
+        {% if customer.tpid_url %}
+            (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
+        {% else %}
+            ({{ customer.tpid }})
+        {% endif %}
+    </h1>
+    <div>
+        <a href="{{ url_for('call_log_create') }}?customer_id={{ customer.id }}" class="btn btn-success me-2">
+            <i class="bi bi-plus-circle"></i> New Call Log
+        </a>
+        <a href="{{ url_for('customer_edit', id=customer.id) }}" class="btn btn-primary">
+            <i class="bi bi-pencil"></i> Edit Customer
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Details</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>TPID:</strong> 
+                    {% if customer.tpid_url %}
+                        <a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>
+                    {% else %}
+                        {{ customer.tpid }}
+                    {% endif %}
+                </p>
+                <p><strong>Seller:</strong> 
+                    {% if customer.seller %}
+                        <a href="{{ url_for('seller_view', id=customer.seller.id) }}">{{ customer.seller.name }}</a>
+                    {% else %}
+                        <span class="text-muted">No seller assigned</span>
+                    {% endif %}
+                </p>
+                <p><strong>Territory:</strong> 
+                    {% if customer.territory %}
+                        <a href="{{ url_for('territory_view', id=customer.territory.id) }}">{{ customer.territory.name }}</a>
+                    {% else %}
+                        <span class="text-muted">No territory assigned</span>
+                    {% endif %}
+                </p>
+                <p><strong>Total Calls:</strong> {{ call_logs|length }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Call Logs (most recent first)</h5>
+            </div>
+            <div class="card-body">
+                {% if call_logs %}
+                    <div class="list-group">
+                        {% for call in call_logs %}
+                            <a href="{{ url_for('call_log_view', id=call.id) }}" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ call.call_date.strftime('%b %d, %Y %I:%M %p') }}</h6>
+                                    {% if call.seller %}
+                                        <small class="text-muted">{{ call.seller.name }}</small>
+                                    {% endif %}
+                                </div>
+                                <p class="mb-1">{{ call.content|striptags|truncate(150) }}</p>
+                                {% if call.topics.count() > 0 %}
+                                    <small>
+                                        {% for topic in call.topics.all() %}
+                                            <span class="badge bg-warning text-dark">{{ topic.name }}</span>
+                                        {% endfor %}
+                                    </small>
+                                {% endif %}
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">No call logs for this customer yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('customers_list') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Customers
+    </a>
+</div>
+{% endblock %}

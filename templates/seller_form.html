@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if seller else 'New' }} Seller - NoteHelper{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">{{ 'Edit' if seller else 'New' }} Seller</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Seller Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ seller.name if seller else '' }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="territory_id" class="form-label">Territory</label>
+                        <select class="form-select" id="territory_id" name="territory_id">
+                            <option value="">-- No territory --</option>
+                            {% for territory in territories %}
+                                <option value="{{ territory.id }}" 
+                                    {{ 'selected' if seller and seller.territory_id == territory.id else '' }}>
+                                    {{ territory.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Or <a href="#" data-bs-toggle="modal" data-bs-target="#newTerritoryModal">create a new territory</a>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save Seller
+                        </button>
+                        <a href="{{ url_for('sellers_list') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        {% if existing_sellers %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">Existing Sellers (to prevent duplicates)</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    {% for s in existing_sellers %}
+                        <span class="badge bg-secondary">{{ s.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- New Territory Modal -->
+<div class="modal fade" id="newTerritoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Territory</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('territory_create_inline') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="new_territory_name" class="form-label">Territory Name</label>
+                        <input type="text" class="form-control" id="new_territory_name" name="name" required>
+                    </div>
+                    <input type="hidden" name="redirect_to" value="{{ request.url }}">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Territory</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

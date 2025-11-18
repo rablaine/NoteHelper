@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if customer else 'New' }} Customer - NoteHelper{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">{{ 'Edit' if customer else 'New' }} Customer</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Customer Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ customer.name if customer else '' }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="tpid" class="form-label">TPID (Top Parent ID) *</label>
+                        <input type="number" class="form-control" id="tpid" name="tpid" 
+                               value="{{ customer.tpid if customer else '' }}" 
+                               required min="0" step="1">
+                        <div class="form-text">Numerical identifier for the customer's top parent organization</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="tpid_url" class="form-label">TPID URL</label>
+                        <input type="url" class="form-control" id="tpid_url" name="tpid_url" 
+                               value="{{ customer.tpid_url if customer else '' }}" 
+                               maxlength="500" placeholder="https://example.com/customer-details">
+                        <div class="form-text">Optional: Link to external system for this TPID</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="seller_id" class="form-label">Seller</label>
+                        <select class="form-select" id="seller_id" name="seller_id">
+                            <option value="">-- No seller --</option>
+                            {% for seller in sellers %}
+                                <option value="{{ seller.id }}" 
+                                    data-territory-id="{{ seller.territory_id if seller.territory_id else '' }}"
+                                    {{ 'selected' if customer and customer.seller_id == seller.id else '' }}>
+                                    {{ seller.name }}
+                                    {% if seller.territory %} ({{ seller.territory.name }}){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Or <a href="#" data-bs-toggle="modal" data-bs-target="#newSellerModal">create a new seller</a>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="territory_id" class="form-label">Territory</label>
+                        <select class="form-select" id="territory_id" name="territory_id">
+                            <option value="">-- No territory --</option>
+                            {% for territory in territories %}
+                                <option value="{{ territory.id }}"
+                                    {{ 'selected' if customer and customer.territory_id == territory.id else '' }}>
+                                    {{ territory.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text" id="territory-auto-msg" style="display:none;">
+                            <span class="text-info"><i class="bi bi-info-circle"></i> Territory auto-selected based on seller</span>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save Customer
+                        </button>
+                        <a href="{{ url_for('customers_list') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Seller Modal -->
+<div class="modal fade" id="newSellerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Seller</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('seller_create_inline') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="new_seller_name" class="form-label">Seller Name</label>
+                        <input type="text" class="form-control" id="new_seller_name" name="name" required>
+                    </div>
+                    <input type="hidden" name="redirect_to" value="{{ request.url }}">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Seller</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-select territory when seller is chosen (FR003)
+document.getElementById('seller_id').addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    const territoryId = selectedOption.getAttribute('data-territory-id');
+    const territorySelect = document.getElementById('territory_id');
+    const autoMsg = document.getElementById('territory-auto-msg');
+    
+    if (territoryId) {
+        territorySelect.value = territoryId;
+        autoMsg.style.display = 'block';
+    } else {
+        autoMsg.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

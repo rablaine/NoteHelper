@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}{{ seller.name }} - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-person"></i> {{ seller.name }}</h1>
+    <a href="{{ url_for('seller_edit', id=seller.id) }}" class="btn btn-primary">
+        <i class="bi bi-pencil"></i> Edit Seller
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Details</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Territory:</strong> 
+                    {% if seller.territory %}
+                        <a href="{{ url_for('territory_view', id=seller.territory.id) }}">{{ seller.territory.name }}</a>
+                    {% else %}
+                        <span class="text-muted">No territory assigned</span>
+                    {% endif %}
+                </p>
+                <p><strong>Total Customers:</strong> {{ customers|length }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Customers (sorted by most recent call)</h5>
+            </div>
+            <div class="card-body">
+                {% if customers %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Most Recent Call</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for customer_data in customers %}
+                                    <tr>
+                                        <td>
+                                            <a href="{{ url_for('customer_view', id=customer_data.customer.id) }}">
+                                                {{ customer_data.customer.name }}
+                                            </a>
+                                        </td>
+                                        <td>
+                                            {% if customer_data.last_call %}
+                                                {{ customer_data.last_call.strftime('%b %d, %Y') }}
+                                            {% else %}
+                                                <span class="text-muted">No calls yet</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No customers assigned to this seller yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('sellers_list') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Sellers
+    </a>
+</div>
+{% endblock %}
