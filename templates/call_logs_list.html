@@ -13,13 +13,13 @@
 {% if call_logs %}
     <div class="list-group">
         {% for call in call_logs %}
-            <a href="{{ url_for('call_log_view', id=call.id) }}" class="list-group-item list-group-item-action">
-                <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                    <h5 class="mb-0">
                         {% if call.customer %}
-                            {{ call.customer.name }} 
+                            <a href="{{ url_for('customer_view', id=call.customer.id) }}" class="text-decoration-none">{{ call.customer.name }}</a>
                             {% if call.customer.tpid_url %}
-                                (<a href="{{ call.customer.tpid_url }}" target="_blank" onclick="event.stopPropagation()">{{ call.customer.tpid }}</a>)
+                                (<a href="{{ call.customer.tpid_url }}" target="_blank">{{ call.customer.tpid }}</a>)
                             {% else %}
                                 ({{ call.customer.tpid }})
                             {% endif %}
@@ -27,10 +27,14 @@
                             Unknown Customer
                         {% endif %}
                     </h5>
-                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y %I:%M %p') }}</small>
+                    <small class="text-muted text-nowrap ms-3">{{ call.call_date.strftime('%b %d, %Y %I:%M %p') }}</small>
                 </div>
-                <p class="mb-1">{{ call.content|striptags|truncate(200) }}</p>
-                <small>
+                <p class="mb-2">
+                    <a href="{{ url_for('call_log_view', id=call.id) }}" class="text-decoration-none text-dark">
+                        {{ call.content|striptags|truncate(200) }}
+                    </a>
+                </p>
+                <div>
                     {% if call.seller %}
                         <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ call.seller.name }}</span>
                     {% endif %}
@@ -40,8 +44,8 @@
                     {% for topic in call.topics.all() %}
                         <span class="badge bg-warning text-dark"><i class="bi bi-tag"></i> {{ topic.name }}</span>
                     {% endfor %}
-                </small>
-            </a>
+                </div>
+            </div>
         {% endfor %}
     </div>
 {% else %}
