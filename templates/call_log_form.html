@@ -15,6 +15,7 @@
         <div class="card">
             <div class="card-body">
                 <form method="POST" id="callLogForm">
+                    <input type="hidden" name="referrer" value="{{ referrer if referrer else '' }}">
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="customer_id" class="form-label">Customer *</label>
@@ -204,19 +205,27 @@ topicSearch.addEventListener('keydown', function(e) {
         e.preventDefault();
         selectedIndex = selectedIndex <= 0 ? currentMatches.length - 1 : selectedIndex - 1;
         renderDropdown();
-    } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') {
+    } else if (e.key === 'Tab') {
         e.preventDefault();
         
         if (currentMatches.length > 0 && selectedIndex >= 0 && selectedIndex < currentMatches.length) {
             // Select existing topic from search results
             const topic = currentMatches[selectedIndex];
             addTopic(topic.id, topic.name);
-        } else {
-            // No matches - create new topic
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        // Only create new topic on Enter if there are no matches
+        if (currentMatches.length === 0) {
             const searchTerm = topicSearch.value.trim();
             if (searchTerm.length > 0) {
                 createNewTopic(searchTerm);
             }
+        } else if (selectedIndex >= 0 && selectedIndex < currentMatches.length) {
+            // Select the highlighted topic
+            const topic = currentMatches[selectedIndex];
+            addTopic(topic.id, topic.name);
         }
     } else if (e.key === 'Escape') {
         topicDropdown.style.display = 'none';
@@ -227,17 +236,37 @@ topicSearch.addEventListener('keydown', function(e) {
 
 function renderDropdown() {
     topicDropdown.innerHTML = currentMatches.map((topic, index) => 
-        `<a href="#" class="list-group-item list-group-item-action ${index === selectedIndex ? 'active' : ''}" 
-            onclick="addTopic(${topic.id}, '${topic.name.replace(/'/g, "\\'")}'); return false;"
-            onmouseover="selectedIndex = ${index}; renderDropdown();">
+        `<button type="button" class="list-group-item list-group-item-action ${index === selectedIndex ? 'active' : ''}" 
+            data-topic-id="${topic.id}" 
+            data-topic-name="${topic.name.replace(/"/g, '&quot;')}"
+            data-topic-index="${index}"
+            onmouseenter="handleTopicHover(${index})"
+            onclick="handleTopicClick(${topic.id}, '${topic.name.replace(/'/g, "\\'")}')">
             <i class="bi bi-tag"></i> ${topic.name}
             ${topic.description ? '<br><small class="text-muted">' + topic.description + '</small>' : ''}
-        </a>`
+        </button>`
     ).join('');
+}
+
+function handleTopicHover(index) {
+    selectedIndex = index;
+    // Update active class
+    topicDropdown.querySelectorAll('button').forEach((btn, i) => {
+        if (i === index) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
+function handleTopicClick(topicId, topicName) {
+    addTopic(topicId, topicName);
 }
 
 // Hide dropdown when clicking outside
 document.addEventListener('click', function(e) {
+    // Only hide if clicking outside both the search input and the dropdown
     if (!topicSearch.contains(e.target) && !topicDropdown.contains(e.target)) {
         topicDropdown.style.display = 'none';
         currentMatches = [];
@@ -246,7 +275,7 @@ document.addEventListener('click', function(e) {
 });
 
 function isTopicSelected(topicId) {
-    return document.querySelector(`[data-topic-id="${topicId}"]`) !== null;
+    return selectedTopicsContainer.querySelector(`[data-topic-id="${topicId}"]`) !== null;
 }
 
 function addTopic(topicId, topicName) {
@@ -270,7 +299,7 @@ function addTopic(topicId, topicName) {
 }
 
 function removeTopic(topicId) {
-    const badge = document.querySelector(`[data-topic-id="${topicId}"]`);
+    const badge = selectedTopicsContainer.querySelector(`span[data-topic-id="${topicId}"]`);
     if (badge) {
         badge.remove();
     }

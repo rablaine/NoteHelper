@@ -730,6 +730,27 @@ def topic_edit(id):
     return render_template('topic_form.html', topic=topic)
 
 
+@app.route('/topic/<int:id>/delete', methods=['POST'])
+def topic_delete(id):
+    """Delete topic and remove from all associated call logs."""
+    topic = Topic.query.get_or_404(id)
+    topic_name = topic.name
+    
+    # Get all call logs associated with this topic
+    call_logs_count = topic.call_logs.count()
+    
+    # Delete the topic (SQLAlchemy will automatically remove associations from call_logs_topics table)
+    db.session.delete(topic)
+    db.session.commit()
+    
+    if call_logs_count > 0:
+        flash(f'Topic "{topic_name}" deleted and removed from {call_logs_count} call log(s).', 'success')
+    else:
+        flash(f'Topic "{topic_name}" deleted successfully.', 'success')
+    
+    return redirect(url_for('topics_list'))
+
+
 # ============================================================================
 # CALL LOG ROUTES (FR005, FR010)
 # ============================================================================
@@ -750,6 +771,7 @@ def call_log_create():
         call_date_str = request.form.get('call_date')
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
+        referrer = request.form.get('referrer', '')
         
         # Validation
         if not customer_id:
@@ -802,6 +824,11 @@ def call_log_create():
         db.session.commit()
         
         flash('Call log created successfully!', 'success')
+        
+        # Redirect back to referrer if provided
+        if referrer:
+            return redirect(referrer)
+        
         return redirect(url_for('call_log_view', id=call_log.id))
     
     # GET request - load form
@@ -820,6 +847,9 @@ def call_log_create():
         if customer and customer.seller_id:
             preselect_seller_id = customer.seller_id
     
+    # Capture referrer for redirect after creation
+    referrer = request.referrer or ''
+    
     return render_template('call_log_form.html', 
                          call_log=None, 
                          customers=customers,
@@ -827,7 +857,8 @@ def call_log_create():
                          topics=topics,
                          preselect_customer_id=preselect_customer_id,
                          preselect_seller_id=preselect_seller_id,
-                         preselect_topic_id=preselect_topic_id)
+                         preselect_topic_id=preselect_topic_id,
+                         referrer=referrer)
 
 
 @app.route('/call-log/<int:id>')

@@ -12,6 +12,33 @@
         <a href="{{ url_for('topic_edit', id=topic.id) }}" class="btn btn-primary">
             <i class="bi bi-pencil"></i> Edit Topic
         </a>
+        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTopicModal">
+            <i class="bi bi-trash"></i> Delete
+        </button>
+    </div>
+</div>
+
+<!-- Delete Topic Modal -->
+<div class="modal fade" id="deleteTopicModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Topic</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the topic <strong>{{ topic.name }}</strong>?</p>
+                {% if call_logs|length > 0 %}
+                    <p class="text-warning"><i class="bi bi-exclamation-triangle"></i> This topic is currently associated with {{ call_logs|length }} call log(s). The topic will be removed from all associated calls.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('topic_delete', id=topic.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Delete Topic</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
