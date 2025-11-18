@@ -530,7 +530,7 @@ def topic_create():
         db.session.commit()
         
         flash(f'Topic "{name}" created successfully!', 'success')
-        return redirect(url_for('topic_view', id=topic.id))
+        return redirect(url_for('topics_list'))
     
     return render_template('topic_form.html', topic=None)
 
