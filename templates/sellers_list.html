@@ -13,19 +13,28 @@
 {% if sellers %}
     <div class="list-group">
         {% for seller in sellers %}
-            <a href="{{ url_for('seller_view', id=seller.id) }}" class="list-group-item list-group-item-action">
-                <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">{{ seller.name }}</h5>
-                    <small class="text-muted">{{ seller.customers.count() }} customers</small>
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <a href="{{ url_for('seller_view', id=seller.id) }}" class="text-decoration-none">
+                            <h5 class="mb-1">{{ seller.name }}</h5>
+                        </a>
+                        <p class="mb-1">
+                            {% if seller.territory %}
+                                <span class="badge bg-info">{{ seller.territory.name }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">No territory</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted text-nowrap">{{ seller.customers.count() }} customers</small>
+                        <a href="{{ url_for('customer_create', seller_id=seller.id) }}" class="btn btn-sm btn-success">
+                            <i class="bi bi-plus-circle"></i> New Customer
+                        </a>
+                    </div>
                 </div>
-                <p class="mb-1">
-                    {% if seller.territory %}
-                        <span class="badge bg-info">{{ seller.territory.name }}</span>
-                    {% else %}
-                        <span class="badge bg-secondary">No territory</span>
-                    {% endif %}
-                </p>
-            </a>
+            </div>
         {% endfor %}
     </div>
 {% else %}
