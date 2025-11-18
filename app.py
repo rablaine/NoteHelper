@@ -494,10 +494,87 @@ def seller_create_inline():
     return redirect(redirect_to)
 
 
-# Placeholder routes for other sections
+# ============================================================================
+# TOPIC ROUTES (FR004, FR009)
+# ============================================================================
+
 @app.route('/topics')
 def topics_list():
-    return "Topics list - Coming soon"
+    """List all topics (FR009)."""
+    topics = Topic.query.order_by(Topic.name).all()
+    return render_template('topics_list.html', topics=topics)
+
+
+@app.route('/topic/new', methods=['GET', 'POST'])
+def topic_create():
+    """Create a new topic (FR004)."""
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        
+        if not name:
+            flash('Topic name is required.', 'danger')
+            return redirect(url_for('topic_create'))
+        
+        # Check for duplicate topic names
+        existing = Topic.query.filter_by(name=name).first()
+        if existing:
+            flash(f'Topic "{name}" already exists.', 'warning')
+            return redirect(url_for('topic_view', id=existing.id))
+        
+        topic = Topic(
+            name=name,
+            description=description if description else None
+        )
+        db.session.add(topic)
+        db.session.commit()
+        
+        flash(f'Topic "{name}" created successfully!', 'success')
+        return redirect(url_for('topic_view', id=topic.id))
+    
+    return render_template('topic_form.html', topic=None)
+
+
+@app.route('/topic/<int:id>')
+def topic_view(id):
+    """View topic details (FR009)."""
+    topic = Topic.query.get_or_404(id)
+    call_logs = topic.call_logs.order_by(CallLog.call_date.desc()).all()
+    return render_template('topic_view.html', topic=topic, call_logs=call_logs)
+
+
+@app.route('/topic/<int:id>/edit', methods=['GET', 'POST'])
+def topic_edit(id):
+    """Edit topic (FR009)."""
+    topic = Topic.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        
+        if not name:
+            flash('Topic name is required.', 'danger')
+            return redirect(url_for('topic_edit', id=id))
+        
+        # Check for duplicate topic names (excluding current topic)
+        existing = Topic.query.filter(Topic.name == name, Topic.id != id).first()
+        if existing:
+            flash(f'Topic "{name}" already exists.', 'warning')
+            return redirect(url_for('topic_edit', id=id))
+        
+        topic.name = name
+        topic.description = description if description else None
+        db.session.commit()
+        
+        flash(f'Topic "{name}" updated successfully!', 'success')
+        return redirect(url_for('topic_view', id=topic.id))
+    
+    return render_template('topic_form.html', topic=topic)
+
+
+# ============================================================================
+# CALL LOG ROUTES (FR005, FR010)
+# ============================================================================
 
 @app.route('/call-logs')
 def call_logs_list():
