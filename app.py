@@ -397,13 +397,14 @@ def customers_list():
 
 @app.route('/customer/new', methods=['GET', 'POST'])
 def customer_create():
-    """Create a new customer (FR003)."""
+    """Create a new customer (FR003, FR031)."""
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         tpid = request.form.get('tpid', '').strip()
         tpid_url = request.form.get('tpid_url', '').strip()
         seller_id = request.form.get('seller_id')
         territory_id = request.form.get('territory_id')
+        referrer = request.form.get('referrer', '')
         
         if not name:
             flash('Customer name is required.', 'danger')
@@ -430,6 +431,11 @@ def customer_create():
         db.session.commit()
         
         flash(f'Customer "{name}" created successfully!', 'success')
+        
+        # Redirect back to referrer (FR031)
+        if referrer:
+            return redirect(referrer)
+        
         return redirect(url_for('customer_view', id=customer.id))
     
     sellers = Seller.query.order_by(Seller.name).all()
@@ -444,15 +450,26 @@ def customer_create():
             for c in customers
         ]
     
-    # Pre-select seller and territory from query params
+    # Pre-select seller and territory from query params (FR032)
     preselect_seller_id = request.args.get('seller_id', type=int)
-    preselect_territory_id = None
+    preselect_territory_id = request.args.get('territory_id', type=int)
     
-    # If seller is pre-selected and has only one territory, auto-select it
+    # If seller is pre-selected and has a territory, auto-select it
     if preselect_seller_id:
         seller = Seller.query.get(preselect_seller_id)
         if seller and seller.territory_id:
             preselect_territory_id = seller.territory_id
+    
+    # If territory is pre-selected and has only one seller, auto-select it (FR032)
+    if preselect_territory_id and not preselect_seller_id:
+        territory = Territory.query.get(preselect_territory_id)
+        if territory:
+            territory_sellers = territory.sellers.all()
+            if len(territory_sellers) == 1:
+                preselect_seller_id = territory_sellers[0].id
+    
+    # Capture referrer for redirect after creation (FR031)
+    referrer = request.referrer or ''
     
     return render_template('customer_form.html', 
                          customer=None, 
@@ -460,7 +477,8 @@ def customer_create():
                          territories=territories,
                          seller_customers=seller_customers,
                          preselect_seller_id=preselect_seller_id,
-                         preselect_territory_id=preselect_territory_id)
+                         preselect_territory_id=preselect_territory_id,
+                         referrer=referrer)
 
 
 @app.route('/customer/<int:id>')

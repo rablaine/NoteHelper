@@ -13,15 +13,24 @@
 {% if territories %}
     <div class="list-group">
         {% for territory in territories %}
-            <a href="{{ url_for('territory_view', id=territory.id) }}" class="list-group-item list-group-item-action">
-                <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">{{ territory.name }}</h5>
-                    <small class="text-muted">{{ territory.sellers.count() }} sellers</small>
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <a href="{{ url_for('territory_view', id=territory.id) }}" class="text-decoration-none">
+                            <h5 class="mb-1">{{ territory.name }}</h5>
+                        </a>
+                        <p class="mb-1">
+                            <span class="badge bg-secondary">{{ territory.sellers.count() }} sellers</span>
+                            <span class="badge bg-info">{{ territory.customers.count() }} customers</span>
+                        </p>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{{ url_for('customer_create', territory_id=territory.id) }}" class="btn btn-sm btn-success">
+                            <i class="bi bi-plus-circle"></i> New Customer
+                        </a>
+                    </div>
                 </div>
-                <p class="mb-1">
-                    <span class="badge bg-info">{{ territory.customers.count() }} customers</span>
-                </p>
-            </a>
+            </div>
         {% endfor %}
     </div>
 {% else %}
