@@ -45,7 +45,7 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="call_date" class="form-label">Call Date & Time *</label>
+                        <label for="call_date" class="form-label">Call Date *</label>
                         <input type="datetime-local" class="form-control" id="call_date" name="call_date" 
                                value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}" 
                                required>

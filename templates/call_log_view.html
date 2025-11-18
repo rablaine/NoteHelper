@@ -19,8 +19,12 @@
                 <h5 class="mb-0">Call Details</h5>
             </div>
             <div class="card-body">
-                <p><strong>Date & Time:</strong><br>
-                    {{ call_log.call_date.strftime('%B %d, %Y at %I:%M %p') }}
+                <p><strong>{% if call_log.call_date.hour == 12 and call_log.call_date.minute == 0 %}Date{% else %}Date & Time{% endif %}:</strong><br>
+                    {% if call_log.call_date.hour == 12 and call_log.call_date.minute == 0 %}
+                        {{ call_log.call_date.strftime('%B %d, %Y') }}
+                    {% else %}
+                        {{ call_log.call_date.strftime('%B %d, %Y at %I:%M %p') }}
+                    {% endif %}
                 </p>
                 
                 <p><strong>Customer:</strong><br>
@@ -67,11 +71,11 @@
                 <hr>
                 
                 <p class="mb-1"><small class="text-muted">
-                    Created: <span class="local-datetime" data-utc="{{ call_log.created_at.isoformat() }}">{{ call_log.created_at.strftime('%b %d, %Y %I:%M %p') }}</span>
+                    Created: <span class="local-datetime" data-utc="{{ call_log.created_at.isoformat() }}">{{ call_log.created_at.strftime('%b %d, %Y %I:%M %p') }}</span> <span class="timezone-label"></span>
                 </small></p>
                 {% if call_log.updated_at and call_log.updated_at != call_log.created_at %}
                     <p class="mb-0"><small class="text-muted">
-                        Updated: <span class="local-datetime" data-utc="{{ call_log.updated_at.isoformat() }}">{{ call_log.updated_at.strftime('%b %d, %Y %I:%M %p') }}</span>
+                        Updated: <span class="local-datetime" data-utc="{{ call_log.updated_at.isoformat() }}">{{ call_log.updated_at.strftime('%b %d, %Y %I:%M %p') }}</span> <span class="timezone-label"></span>
                     </small></p>
                 {% endif %}
             </div>
@@ -79,8 +83,13 @@
     </div>
     
     <script>
-    // Convert UTC timestamps to local time
+    // Convert UTC timestamps to local time and add timezone indicator
     document.addEventListener('DOMContentLoaded', function() {
+        // Get timezone abbreviation
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const now = new Date();
+        const shortTimeZone = now.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+        
         document.querySelectorAll('.local-datetime').forEach(function(element) {
             const utcDate = new Date(element.getAttribute('data-utc'));
             const options = { 
@@ -92,6 +101,11 @@
                 hour12: true 
             };
             element.textContent = utcDate.toLocaleString('en-US', options);
+        });
+        
+        // Add timezone labels
+        document.querySelectorAll('.timezone-label').forEach(function(element) {
+            element.textContent = '(' + shortTimeZone + ')';
         });
     });
     </script>
