@@ -714,11 +714,11 @@ def call_log_edit(id):
         call_log.call_date = call_date
         call_log.content = content
         
-        # Update topics
-        call_log.topics.clear()
+        # Update topics - remove all existing associations first
+        call_log.topics = []
         if topic_ids:
             topics = Topic.query.filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
-            call_log.topics.extend(topics)
+            call_log.topics = topics
         
         db.session.commit()
         
