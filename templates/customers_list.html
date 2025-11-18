@@ -13,27 +13,27 @@
 {% if customers %}
     <div class="list-group">
         {% for customer in customers %}
-            <a href="{{ url_for('customer_view', id=customer.id) }}" class="list-group-item list-group-item-action">
-                <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">
-                        {{ customer.name }} 
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                    <h5 class="mb-0">
+                        <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
                         {% if customer.tpid_url %}
-                            (<a href="{{ customer.tpid_url }}" target="_blank" onclick="event.stopPropagation()">{{ customer.tpid }}</a>)
+                            (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
                         {% else %}
                             ({{ customer.tpid }})
                         {% endif %}
                     </h5>
-                    <small class="text-muted">{{ customer.call_logs.count() }} calls</small>
+                    <small class="text-muted text-nowrap ms-3">{{ customer.call_logs.count() }} calls</small>
                 </div>
-                <p class="mb-1">
+                <div>
                     {% if customer.seller %}
                         <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ customer.seller.name }}</span>
                     {% endif %}
                     {% if customer.territory %}
                         <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
                     {% endif %}
-                </p>
-            </a>
+                </div>
+            </div>
         {% endfor %}
     </div>
 {% else %}
