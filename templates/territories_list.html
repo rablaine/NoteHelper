@@ -20,7 +20,13 @@
                             <h5 class="mb-1">{{ territory.name }}</h5>
                         </a>
                         <p class="mb-1">
-                            <span class="badge bg-secondary">{{ territory.sellers.count() }} sellers</span>
+                            {% if territory.sellers.count() > 0 %}
+                                {% for seller in territory.sellers.order_by('name').all() %}
+                                    <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ seller.name }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="badge bg-secondary text-muted">No sellers</span>
+                            {% endif %}
                             <span class="badge bg-info">{{ territory.customers.count() }} customers</span>
                         </p>
                     </div>
