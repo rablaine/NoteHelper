@@ -84,7 +84,7 @@
                     <div class="mb-3">
                         <label for="content" class="form-label">Call Notes *</label>
                         <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
-                        <textarea name="content" id="content" style="display:none;" required></textarea>
+                        <textarea name="content" id="content" style="display:none;"></textarea>
                         <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
                     </div>
                     
@@ -123,7 +123,7 @@ var quill = new Quill('#editor', {
 });
 
 // Sync editor content to hidden textarea on form submit
-document.getElementById('callLogForm').onsubmit = function() {
+document.getElementById('callLogForm').onsubmit = function(e) {
     var content = document.querySelector('textarea[name=content]');
     content.value = quill.root.innerHTML;
     
@@ -133,7 +133,9 @@ document.getElementById('callLogForm').onsubmit = function() {
     var textContent = tempDiv.textContent || tempDiv.innerText || '';
     
     if (textContent.trim().length === 0) {
+        e.preventDefault();
         alert('Call notes cannot be empty.');
+        quill.focus();
         return false;
     }
     
