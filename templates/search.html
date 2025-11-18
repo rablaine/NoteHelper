@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Search Call Logs - NoteHelper{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="bi bi-search"></i> Search & Filter Call Logs</h1>
+
+<!-- Search and Filter Form -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('search') }}">
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label for="q" class="form-label">Search Text</label>
+                    <input type="text" class="form-control" id="q" name="q" 
+                           value="{{ search_text }}" placeholder="Search in call notes...">
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="customer_id" class="form-label">Customer</label>
+                    <select class="form-select" id="customer_id" name="customer_id">
+                        <option value="">-- All customers --</option>
+                        {% for customer in customers %}
+                            <option value="{{ customer.id }}"
+                                {{ 'selected' if selected_customer_id == customer.id else '' }}>
+                                {{ customer.name }} ({{ customer.tpid }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="seller_id" class="form-label">Seller</label>
+                    <select class="form-select" id="seller_id" name="seller_id">
+                        <option value="">-- All sellers --</option>
+                        {% for seller in sellers %}
+                            <option value="{{ seller.id }}"
+                                {{ 'selected' if selected_seller_id == seller.id else '' }}>
+                                {{ seller.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="territory_id" class="form-label">Territory</label>
+                    <select class="form-select" id="territory_id" name="territory_id">
+                        <option value="">-- All territories --</option>
+                        {% for territory in territories %}
+                            <option value="{{ territory.id }}"
+                                {{ 'selected' if selected_territory_id == territory.id else '' }}>
+                                {{ territory.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="topics" class="form-label">Topics</label>
+                    <select class="form-select" id="topics" name="topic_ids" multiple size="3">
+                        {% for topic in topics %}
+                            <option value="{{ topic.id }}"
+                                {{ 'selected' if topic.id in selected_topic_ids else '' }}>
+                                {{ topic.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple</small>
+                </div>
+            </div>
+            
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <a href="{{ url_for('search') }}" class="btn btn-secondary">
+                    <i class="bi bi-x-circle"></i> Clear Filters
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Results -->
+{% if call_logs %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Found {{ call_logs|length }} call log(s)
+    </div>
+    
+    <!-- Grouped Results: Seller → Customer → Calls -->
+    {% for seller_id, seller_data in grouped_data.items() %}
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-person"></i> 
+                    {% if seller_data.seller %}
+                        <a href="{{ url_for('seller_view', id=seller_data.seller.id) }}" class="text-white text-decoration-none">
+                            {{ seller_data.seller.name }}
+                        </a>
+                    {% else %}
+                        No Seller Assigned
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% for customer_data in seller_data.customers_sorted %}
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2">
+                            <i class="bi bi-building"></i>
+                            {% if customer_data.customer %}
+                                <a href="{{ url_for('customer_view', id=customer_data.customer.id) }}">
+                                    {{ customer_data.customer.name }}
+                                    {% if customer_data.customer.tpid_url %}
+                                        (<a href="{{ customer_data.customer.tpid_url }}" target="_blank">{{ customer_data.customer.tpid }}</a>)
+                                    {% else %}
+                                        ({{ customer_data.customer.tpid }})
+                                    {% endif %}
+                                </a>
+                            {% else %}
+                                No Customer Assigned
+                            {% endif %}
+                            <small class="text-muted">({{ customer_data.calls|length }} call{{ 's' if customer_data.calls|length != 1 else '' }})</small>
+                        </h6>
+                        
+                        <div class="list-group">
+                            {% for call in customer_data.calls %}
+                                <a href="{{ url_for('call_log_view', id=call.id) }}" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">{{ call.call_date.strftime('%b %d, %Y %I:%M %p') }}</h6>
+                                    </div>
+                                    <p class="mb-1">{{ call.content|striptags|truncate(200) }}</p>
+                                    <small>
+                                        {% if call.territory %}
+                                            <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>
+                                        {% endif %}
+                                        {% for topic in call.topics.all() %}
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-tag"></i> {{ topic.name }}</span>
+                                        {% endfor %}
+                                    </small>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-secondary">
+        <i class="bi bi-inbox"></i> 
+        {% if search_text or selected_customer_id or selected_seller_id or selected_territory_id or selected_topic_ids %}
+            No call logs match your search criteria. Try adjusting your filters.
+        {% else %}
+            No call logs yet. <a href="{{ url_for('call_log_create') }}">Create your first call log</a>!
+        {% endif %}
+    </div>
+{% endif %}
+{% endblock %}

@@ -730,5 +730,98 @@ def call_log_edit(id):
                          preselect_topic_id=None)
 
 
+# ============================================================================
+# SEARCH AND FILTER ROUTES (FR011)
+# ============================================================================
+
+@app.route('/search')
+def search():
+    """Search and filter call logs (FR011)."""
+    # Get filter parameters
+    search_text = request.args.get('q', '').strip()
+    customer_id = request.args.get('customer_id', type=int)
+    seller_id = request.args.get('seller_id', type=int)
+    territory_id = request.args.get('territory_id', type=int)
+    topic_ids = request.args.getlist('topic_ids', type=int)
+    
+    # Start with base query
+    query = CallLog.query
+    
+    # Apply filters
+    if search_text:
+        query = query.filter(CallLog.content.ilike(f'%{search_text}%'))
+    
+    if customer_id:
+        query = query.filter(CallLog.customer_id == customer_id)
+    
+    if seller_id:
+        query = query.filter(CallLog.seller_id == seller_id)
+    
+    if territory_id:
+        query = query.filter(CallLog.territory_id == territory_id)
+    
+    if topic_ids:
+        # Filter by topics (call logs that have ANY of the selected topics)
+        query = query.join(CallLog.topics).filter(Topic.id.in_(topic_ids))
+    
+    # Get filtered call logs
+    call_logs = query.order_by(CallLog.call_date.desc()).all()
+    
+    # Group call logs by Seller → Customer structure (FR011)
+    # Structure: { seller_id: { 'seller': Seller, 'customers': { customer_id: { 'customer': Customer, 'calls': [CallLog] } } } }
+    grouped_data = {}
+    
+    for call in call_logs:
+        seller_id_key = call.seller_id if call.seller_id else 0  # 0 = no seller
+        customer_id_key = call.customer_id if call.customer_id else 0  # 0 = no customer
+        
+        # Initialize seller group
+        if seller_id_key not in grouped_data:
+            grouped_data[seller_id_key] = {
+                'seller': call.seller,
+                'customers': {}
+            }
+        
+        # Initialize customer group
+        if customer_id_key not in grouped_data[seller_id_key]['customers']:
+            grouped_data[seller_id_key]['customers'][customer_id_key] = {
+                'customer': call.customer,
+                'calls': [],
+                'most_recent_date': call.call_date
+            }
+        
+        # Add call to customer group
+        grouped_data[seller_id_key]['customers'][customer_id_key]['calls'].append(call)
+        
+        # Update most recent date
+        if call.call_date > grouped_data[seller_id_key]['customers'][customer_id_key]['most_recent_date']:
+            grouped_data[seller_id_key]['customers'][customer_id_key]['most_recent_date'] = call.call_date
+    
+    # Sort customers by most recent call within each seller
+    for seller_id_key in grouped_data:
+        customers_list = list(grouped_data[seller_id_key]['customers'].values())
+        customers_list.sort(key=lambda x: x['most_recent_date'], reverse=True)
+        grouped_data[seller_id_key]['customers_sorted'] = customers_list
+    
+    # Get all filter options for dropdowns
+    customers = Customer.query.order_by(Customer.name).all()
+    sellers = Seller.query.order_by(Seller.name).all()
+    territories = Territory.query.order_by(Territory.name).all()
+    topics = Topic.query.order_by(Topic.name).all()
+    
+    return render_template('search.html',
+                         grouped_data=grouped_data,
+                         call_logs=call_logs,
+                         search_text=search_text,
+                         selected_customer_id=customer_id,
+                         selected_seller_id=seller_id,
+                         selected_territory_id=territory_id,
+                         selected_topic_ids=topic_ids,
+                         customers=customers,
+                         sellers=sellers,
+                         territories=territories,
+                         topics=topics)
+
+
 if __name__ == '__main__':
     app.run(debug=True)
