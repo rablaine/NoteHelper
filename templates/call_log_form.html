@@ -161,39 +161,79 @@ const allTopics = [
 const topicSearch = document.getElementById('topic_search');
 const topicDropdown = document.getElementById('topic_dropdown');
 const selectedTopicsContainer = document.getElementById('selected_topics');
+let currentMatches = [];
+let selectedIndex = -1;
 
 topicSearch.addEventListener('input', function() {
     const searchTerm = this.value.toLowerCase().trim();
     
     if (searchTerm.length === 0) {
         topicDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
         return;
     }
     
     // Filter topics case-insensitively
-    const matches = allTopics.filter(topic => 
+    currentMatches = allTopics.filter(topic => 
         topic.name.toLowerCase().includes(searchTerm) && 
         !isTopicSelected(topic.id)
     );
     
-    if (matches.length > 0) {
-        topicDropdown.innerHTML = matches.map(topic => 
-            `<a href="#" class="list-group-item list-group-item-action" onclick="addTopic(${topic.id}, '${topic.name.replace(/'/g, "\\'")}'); return false;">
-                <i class="bi bi-tag"></i> ${topic.name}
-                ${topic.description ? '<br><small class="text-muted">' + topic.description + '</small>' : ''}
-            </a>`
-        ).join('');
+    if (currentMatches.length > 0) {
+        selectedIndex = 0; // Auto-select first item
+        renderDropdown();
         topicDropdown.style.display = 'block';
         topicDropdown.style.width = topicSearch.offsetWidth + 'px';
     } else {
         topicDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
     }
 });
+
+// Keyboard navigation
+topicSearch.addEventListener('keydown', function(e) {
+    if (currentMatches.length === 0) return;
+    
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedIndex = (selectedIndex + 1) % currentMatches.length;
+        renderDropdown();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedIndex = selectedIndex <= 0 ? currentMatches.length - 1 : selectedIndex - 1;
+        renderDropdown();
+    } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') {
+        if (selectedIndex >= 0 && selectedIndex < currentMatches.length) {
+            e.preventDefault();
+            const topic = currentMatches[selectedIndex];
+            addTopic(topic.id, topic.name);
+        }
+    } else if (e.key === 'Escape') {
+        topicDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+    }
+});
+
+function renderDropdown() {
+    topicDropdown.innerHTML = currentMatches.map((topic, index) => 
+        `<a href="#" class="list-group-item list-group-item-action ${index === selectedIndex ? 'active' : ''}" 
+            onclick="addTopic(${topic.id}, '${topic.name.replace(/'/g, "\\'")}'); return false;"
+            onmouseover="selectedIndex = ${index}; renderDropdown();">
+            <i class="bi bi-tag"></i> ${topic.name}
+            ${topic.description ? '<br><small class="text-muted">' + topic.description + '</small>' : ''}
+        </a>`
+    ).join('');
+}
 
 // Hide dropdown when clicking outside
 document.addEventListener('click', function(e) {
     if (!topicSearch.contains(e.target) && !topicDropdown.contains(e.target)) {
         topicDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
     }
 });
 
@@ -216,6 +256,9 @@ function addTopic(topicId, topicName) {
     selectedTopicsContainer.appendChild(badge);
     topicSearch.value = '';
     topicDropdown.style.display = 'none';
+    currentMatches = [];
+    selectedIndex = -1;
+    topicSearch.focus(); // Keep focus on search box
 }
 
 function removeTopic(topicId) {
