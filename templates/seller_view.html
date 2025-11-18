@@ -60,7 +60,7 @@
                                         <td>
                                             {% if customer_data.last_call %}
                                                 <a href="{{ url_for('call_log_view', id=customer_data.last_call.id) }}">
-                                                    {{ customer_data.last_call.call_date.strftime('%b %d, %Y %I:%M %p') }}
+                                                    {{ customer_data.last_call.call_date.strftime('%b %d, %Y') }}
                                                 </a>
                                             {% else %}
                                                 <span class="text-muted">No calls yet</span>

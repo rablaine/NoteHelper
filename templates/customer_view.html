@@ -66,7 +66,7 @@
                         {% for call in call_logs %}
                             <a href="{{ url_for('call_log_view', id=call.id) }}" class="list-group-item list-group-item-action">
                                 <div class="d-flex w-100 justify-content-between">
-                                    <h6 class="mb-1">{{ call.call_date.strftime('%b %d, %Y %I:%M %p') }}</h6>
+                                    <h6 class="mb-1">{{ call.call_date.strftime('%b %d, %Y') }}</h6>
                                     {% if call.seller %}
                                         <small class="text-muted">{{ call.seller.name }}</small>
                                     {% endif %}

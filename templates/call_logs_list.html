@@ -27,7 +27,7 @@
                             Unknown Customer
                         {% endif %}
                     </h5>
-                    <small class="text-muted text-nowrap ms-3">{{ call.call_date.strftime('%b %d, %Y %I:%M %p') }}</small>
+                    <small class="text-muted text-nowrap ms-3">{{ call.call_date.strftime('%b %d, %Y') }}</small>
                 </div>
                 <p class="mb-2">
                     <a href="{{ url_for('call_log_view', id=call.id) }}" class="text-decoration-none text-dark">
