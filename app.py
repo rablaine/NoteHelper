@@ -390,9 +390,26 @@ def territory_create_inline():
 
 @app.route('/customers')
 def customers_list():
-    """List all customers."""
-    customers = Customer.query.order_by(Customer.name).all()
-    return render_template('customers_list.html', customers=customers)
+    """List all customers grouped by seller (FR033)."""
+    # Get all sellers with their customers
+    sellers = Seller.query.order_by(Seller.name).all()
+    
+    # Build grouped data structure
+    grouped_customers = []
+    for seller in sellers:
+        customers = seller.customers.order_by(Customer.name).all()
+        if customers:
+            grouped_customers.append({
+                'seller': seller,
+                'customers': customers
+            })
+    
+    # Get customers without a seller
+    customers_without_seller = Customer.query.filter_by(seller_id=None).order_by(Customer.name).all()
+    
+    return render_template('customers_list.html', 
+                         grouped_customers=grouped_customers,
+                         customers_without_seller=customers_without_seller)
 
 
 @app.route('/customer/new', methods=['GET', 'POST'])
