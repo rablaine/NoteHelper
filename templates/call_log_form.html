@@ -278,5 +278,21 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('call_date').value = now.toISOString().slice(0, 16);
 });
 {% endif %}
+
+// Auto-set time to noon when date is changed
+document.getElementById('call_date').addEventListener('change', function() {
+    const currentValue = this.value;
+    if (currentValue) {
+        const date = new Date(currentValue);
+        const today = new Date();
+        
+        // Check if the selected date is different from today
+        if (date.toDateString() !== today.toDateString()) {
+            // Set time to 12:00 PM (noon)
+            const dateOnly = currentValue.split('T')[0];
+            this.value = dateOnly + 'T12:00';
+        }
+    }
+});
 </script>
 {% endblock %}
