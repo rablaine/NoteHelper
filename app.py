@@ -349,7 +349,15 @@ def seller_view(id):
     # Sort by most recent call date (nulls last)
     # Use timezone-aware min datetime for comparison
     min_datetime = datetime.min.replace(tzinfo=timezone.utc)
-    customers_data.sort(key=lambda x: x['last_call'].call_date if x['last_call'] else min_datetime, reverse=True)
+    def get_sort_key(x):
+        if not x['last_call']:
+            return min_datetime
+        call_date = x['last_call'].call_date
+        # Ensure call_date is timezone-aware
+        if call_date.tzinfo is None:
+            call_date = call_date.replace(tzinfo=timezone.utc)
+        return call_date
+    customers_data.sort(key=get_sort_key, reverse=True)
     
     return render_template('seller_view.html', seller=seller, customers=customers_data)
 
