@@ -664,12 +664,20 @@ def call_log_create():
     preselect_customer_id = request.args.get('customer_id', type=int)
     preselect_topic_id = request.args.get('topic_id', type=int)
     
+    # Pre-select seller if customer is pre-selected and has a seller
+    preselect_seller_id = None
+    if preselect_customer_id:
+        customer = Customer.query.get(preselect_customer_id)
+        if customer and customer.seller_id:
+            preselect_seller_id = customer.seller_id
+    
     return render_template('call_log_form.html', 
                          call_log=None, 
                          customers=customers,
                          sellers=sellers,
                          topics=topics,
                          preselect_customer_id=preselect_customer_id,
+                         preselect_seller_id=preselect_seller_id,
                          preselect_topic_id=preselect_topic_id)
 
 

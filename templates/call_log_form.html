@@ -36,7 +36,7 @@
                                 <option value="">-- No seller --</option>
                                 {% for seller in sellers %}
                                     <option value="{{ seller.id }}"
-                                        {{ 'selected' if call_log and call_log.seller_id == seller.id else '' }}>
+                                        {% if (call_log and call_log.seller_id == seller.id) or (preselect_seller_id and preselect_seller_id == seller.id) %}selected{% endif %}>
                                         {{ seller.name }}
                                     </option>
                                 {% endfor %}
