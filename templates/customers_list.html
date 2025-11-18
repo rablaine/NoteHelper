@@ -23,7 +23,12 @@
                             ({{ customer.tpid }})
                         {% endif %}
                     </h5>
-                    <small class="text-muted text-nowrap ms-3">{{ customer.call_logs.count() }} calls</small>
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted text-nowrap">{{ customer.call_logs.count() }} calls</small>
+                        <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success">
+                            <i class="bi bi-plus-circle"></i> New Call Log
+                        </a>
+                    </div>
                 </div>
                 <div>
                     {% if customer.seller %}
