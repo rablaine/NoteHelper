@@ -208,7 +208,7 @@ def territory_create():
         db.session.commit()
         
         flash(f'Territory "{name}" created successfully!', 'success')
-        return redirect(url_for('territory_view', id=territory.id))
+        return redirect(url_for('territories_list'))
     
     # Show existing territories to prevent duplicates
     existing_territories = Territory.query.order_by(Territory.name).all()
@@ -302,7 +302,7 @@ def seller_create():
         db.session.commit()
         
         flash(f'Seller "{name}" created successfully!', 'success')
-        return redirect(url_for('seller_view', id=seller.id))
+        return redirect(url_for('sellers_list'))
     
     territories = Territory.query.order_by(Territory.name).all()
     existing_sellers = Seller.query.order_by(Seller.name).all()
