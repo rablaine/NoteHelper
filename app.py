@@ -617,6 +617,15 @@ def call_log_create():
         customer = Customer.query.get(int(customer_id))
         territory_id = customer.territory_id if customer else None
         
+        # If customer doesn't have a seller but one is selected, associate it
+        if customer and not customer.seller_id and seller_id:
+            customer.seller_id = int(seller_id)
+            # Also update customer's territory if seller has one
+            seller = Seller.query.get(int(seller_id))
+            if seller and seller.territory_id:
+                customer.territory_id = seller.territory_id
+                territory_id = seller.territory_id
+        
         # Create call log
         call_log = CallLog(
             customer_id=int(customer_id),

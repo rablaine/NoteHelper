@@ -22,6 +22,7 @@
                                 <option value="">-- Select customer --</option>
                                 {% for customer in customers %}
                                     <option value="{{ customer.id }}"
+                                        data-seller-id="{{ customer.seller_id if customer.seller_id else '' }}"
                                         {% if (call_log and call_log.customer_id == customer.id) or (preselect_customer_id and preselect_customer_id == customer.id) %}selected{% endif %}>
                                         {{ customer.name }} ({{ customer.tpid }})
                                     </option>
@@ -131,6 +132,17 @@ document.getElementById('callLogForm').onsubmit = function() {
     
     return true;
 };
+
+// Auto-select seller when customer is chosen
+document.getElementById('customer_id').addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    const sellerId = selectedOption.getAttribute('data-seller-id');
+    const sellerSelect = document.getElementById('seller_id');
+    
+    if (sellerId) {
+        sellerSelect.value = sellerId;
+    }
+});
 
 // Set current date/time as default if creating new call log
 {% if not call_log %}
