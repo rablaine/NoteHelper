@@ -25,14 +25,12 @@
                 
                 <p><strong>Customer:</strong><br>
                     {% if call_log.customer %}
-                        <a href="{{ url_for('customer_view', id=call_log.customer.id) }}">
-                            {{ call_log.customer.name }}
-                            {% if call_log.customer.tpid_url %}
-                                (<a href="{{ call_log.customer.tpid_url }}" target="_blank">{{ call_log.customer.tpid }}</a>)
-                            {% else %}
-                                ({{ call_log.customer.tpid }})
-                            {% endif %}
-                        </a>
+                        <a href="{{ url_for('customer_view', id=call_log.customer.id) }}">{{ call_log.customer.name }}</a>
+                        {% if call_log.customer.tpid_url %}
+                            (<a href="{{ call_log.customer.tpid_url }}" target="_blank">{{ call_log.customer.tpid }}</a>)
+                        {% else %}
+                            ({{ call_log.customer.tpid }})
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">Unknown</span>
                     {% endif %}

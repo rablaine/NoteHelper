@@ -17,7 +17,7 @@
                 <div class="d-flex w-100 justify-content-between">
                     <h5 class="mb-1">
                         {% if call.customer %}
-                            {{ call.customer.name }}
+                            {{ call.customer.name }} 
                             {% if call.customer.tpid_url %}
                                 (<a href="{{ call.customer.tpid_url }}" target="_blank" onclick="event.stopPropagation()">{{ call.customer.tpid }}</a>)
                             {% else %}

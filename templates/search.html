@@ -108,14 +108,12 @@
                         <h6 class="border-bottom pb-2">
                             <i class="bi bi-building"></i>
                             {% if customer_data.customer %}
-                                <a href="{{ url_for('customer_view', id=customer_data.customer.id) }}">
-                                    {{ customer_data.customer.name }}
-                                    {% if customer_data.customer.tpid_url %}
-                                        (<a href="{{ customer_data.customer.tpid_url }}" target="_blank">{{ customer_data.customer.tpid }}</a>)
-                                    {% else %}
-                                        ({{ customer_data.customer.tpid }})
-                                    {% endif %}
-                                </a>
+                                <a href="{{ url_for('customer_view', id=customer_data.customer.id) }}">{{ customer_data.customer.name }}</a>
+                                {% if customer_data.customer.tpid_url %}
+                                    (<a href="{{ customer_data.customer.tpid_url }}" target="_blank">{{ customer_data.customer.tpid }}</a>)
+                                {% else %}
+                                    ({{ customer_data.customer.tpid }})
+                                {% endif %}
                             {% else %}
                                 No Customer Assigned
                             {% endif %}
