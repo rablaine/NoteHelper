@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if call_log else 'New' }} Call Log - NoteHelper{% endblock %}
+
+{% block extra_css %}
+<!-- Quill Rich Text Editor -->
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">{{ 'Edit' if call_log else 'New' }} Call Log</h1>
+
+<div class="row">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" id="callLogForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="customer_id" class="form-label">Customer *</label>
+                            <select class="form-select" id="customer_id" name="customer_id" required>
+                                <option value="">-- Select customer --</option>
+                                {% for customer in customers %}
+                                    <option value="{{ customer.id }}"
+                                        {% if (call_log and call_log.customer_id == customer.id) or (preselect_customer_id and preselect_customer_id == customer.id) %}selected{% endif %}>
+                                        {{ customer.name }} ({{ customer.tpid }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="seller_id" class="form-label">Seller</label>
+                            <select class="form-select" id="seller_id" name="seller_id">
+                                <option value="">-- No seller --</option>
+                                {% for seller in sellers %}
+                                    <option value="{{ seller.id }}"
+                                        {{ 'selected' if call_log and call_log.seller_id == seller.id else '' }}>
+                                        {{ seller.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="call_date" class="form-label">Call Date & Time *</label>
+                        <input type="datetime-local" class="form-control" id="call_date" name="call_date" 
+                               value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}" 
+                               required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="topics" class="form-label">Topics</label>
+                        <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                            {% if topics %}
+                                {% for topic in topics %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="topic_ids" 
+                                               value="{{ topic.id }}" id="topic_{{ topic.id }}"
+                                               {% if (call_log and topic in call_log.topics.all()) or (preselect_topic_id and preselect_topic_id == topic.id) %}checked{% endif %}>
+                                        <label class="form-check-label" for="topic_{{ topic.id }}">
+                                            {{ topic.name }}
+                                            {% if topic.description %}
+                                                <small class="text-muted">- {{ topic.description|truncate(50) }}</small>
+                                            {% endif %}
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted mb-0">No topics available. <a href="{{ url_for('topic_create') }}" target="_blank">Create a topic</a>.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="content" class="form-label">Call Notes *</label>
+                        <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
+                        <textarea name="content" id="content" style="display:none;" required></textarea>
+                        <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-circle"></i> Save Call Log
+                        </button>
+                        <a href="{{ url_for('call_logs_list') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Quill Rich Text Editor -->
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+<script>
+// Initialize Quill editor
+var quill = new Quill('#editor', {
+    theme: 'snow',
+    modules: {
+        toolbar: [
+            [{ 'header': [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'indent': '-1'}, { 'indent': '+1' }],
+            ['link'],
+            ['clean']
+        ]
+    }
+});
+
+// Sync editor content to hidden textarea on form submit
+document.getElementById('callLogForm').onsubmit = function() {
+    var content = document.querySelector('textarea[name=content]');
+    content.value = quill.root.innerHTML;
+    
+    // Validation: check if content is empty (only whitespace/tags)
+    var tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content.value;
+    var textContent = tempDiv.textContent || tempDiv.innerText || '';
+    
+    if (textContent.trim().length === 0) {
+        alert('Call notes cannot be empty.');
+        return false;
+    }
+    
+    return true;
+};
+
+// Set current date/time as default if creating new call log
+{% if not call_log %}
+document.addEventListener('DOMContentLoaded', function() {
+    var now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('call_date').value = now.toISOString().slice(0, 16);
+});
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Call Log - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-journal-text"></i> Call Log</h1>
+    <div>
+        <a href="{{ url_for('call_log_edit', id=call_log.id) }}" class="btn btn-primary">
+            <i class="bi bi-pencil"></i> Edit Call Log
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Call Details</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Date & Time:</strong><br>
+                    {{ call_log.call_date.strftime('%B %d, %Y at %I:%M %p') }}
+                </p>
+                
+                <p><strong>Customer:</strong><br>
+                    {% if call_log.customer %}
+                        <a href="{{ url_for('customer_view', id=call_log.customer.id) }}">
+                            {{ call_log.customer.name }}
+                            {% if call_log.customer.tpid_url %}
+                                (<a href="{{ call_log.customer.tpid_url }}" target="_blank">{{ call_log.customer.tpid }}</a>)
+                            {% else %}
+                                ({{ call_log.customer.tpid }})
+                            {% endif %}
+                        </a>
+                    {% else %}
+                        <span class="text-muted">Unknown</span>
+                    {% endif %}
+                </p>
+                
+                <p><strong>Seller:</strong><br>
+                    {% if call_log.seller %}
+                        <a href="{{ url_for('seller_view', id=call_log.seller.id) }}">{{ call_log.seller.name }}</a>
+                    {% else %}
+                        <span class="text-muted">Not specified</span>
+                    {% endif %}
+                </p>
+                
+                <p><strong>Territory:</strong><br>
+                    {% if call_log.territory %}
+                        <a href="{{ url_for('territory_view', id=call_log.territory.id) }}">{{ call_log.territory.name }}</a>
+                    {% else %}
+                        <span class="text-muted">Not specified</span>
+                    {% endif %}
+                </p>
+                
+                <p><strong>Topics:</strong><br>
+                    {% if call_log.topics.count() > 0 %}
+                        {% for topic in call_log.topics.all() %}
+                            <a href="{{ url_for('topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none">
+                                <i class="bi bi-tag"></i> {{ topic.name }}
+                            </a>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">No topics tagged</span>
+                    {% endif %}
+                </p>
+                
+                <hr>
+                
+                <p class="mb-1"><small class="text-muted">
+                    Created: {{ call_log.created_at.strftime('%b %d, %Y %I:%M %p') }}
+                </small></p>
+                {% if call_log.updated_at and call_log.updated_at != call_log.created_at %}
+                    <p class="mb-0"><small class="text-muted">
+                        Updated: {{ call_log.updated_at.strftime('%b %d, %Y %I:%M %p') }}
+                    </small></p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Call Notes</h5>
+            </div>
+            <div class="card-body">
+                <div class="call-content">
+                    {{ call_log.content|safe }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('call_logs_list') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Call Logs
+    </a>
+</div>
+{% endblock %}
