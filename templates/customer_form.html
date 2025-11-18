@@ -39,7 +39,7 @@
                             {% for seller in sellers %}
                                 <option value="{{ seller.id }}" 
                                     data-territory-id="{{ seller.territory_id if seller.territory_id else '' }}"
-                                    {{ 'selected' if customer and customer.seller_id == seller.id else '' }}>
+                                    {% if (customer and customer.seller_id == seller.id) or (preselect_seller_id and preselect_seller_id == seller.id) %}selected{% endif %}>
                                     {{ seller.name }}
                                     {% if seller.territory %} ({{ seller.territory.name }}){% endif %}
                                 </option>
@@ -56,7 +56,7 @@
                             <option value="">-- No territory --</option>
                             {% for territory in territories %}
                                 <option value="{{ territory.id }}"
-                                    {{ 'selected' if customer and customer.territory_id == territory.id else '' }}>
+                                    {% if (customer and customer.territory_id == territory.id) or (preselect_territory_id and preselect_territory_id == territory.id) %}selected{% endif %}>
                                     {{ territory.name }}
                                 </option>
                             {% endfor %}

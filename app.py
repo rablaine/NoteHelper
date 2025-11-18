@@ -314,19 +314,19 @@ def seller_view(id):
     """View seller details (FR007)."""
     seller = Seller.query.get_or_404(id)
     
-    # Get customers with their most recent call date
+    # Get customers with their most recent call log
     customers_data = []
     for customer in seller.customers.order_by(Customer.name).all():
-        last_call = customer.get_most_recent_call_date()
+        most_recent_call = customer.call_logs.order_by(CallLog.call_date.desc()).first()
         customers_data.append({
             'customer': customer,
-            'last_call': last_call
+            'last_call': most_recent_call
         })
     
     # Sort by most recent call date (nulls last)
     # Use timezone-aware min datetime for comparison
     min_datetime = datetime.min.replace(tzinfo=timezone.utc)
-    customers_data.sort(key=lambda x: x['last_call'] if x['last_call'] else min_datetime, reverse=True)
+    customers_data.sort(key=lambda x: x['last_call'].call_date if x['last_call'] else min_datetime, reverse=True)
     
     return render_template('seller_view.html', seller=seller, customers=customers_data)
 
@@ -434,7 +434,23 @@ def customer_create():
     
     sellers = Seller.query.order_by(Seller.name).all()
     territories = Territory.query.order_by(Territory.name).all()
-    return render_template('customer_form.html', customer=None, sellers=sellers, territories=territories)
+    
+    # Pre-select seller and territory from query params
+    preselect_seller_id = request.args.get('seller_id', type=int)
+    preselect_territory_id = None
+    
+    # If seller is pre-selected and has only one territory, auto-select it
+    if preselect_seller_id:
+        seller = Seller.query.get(preselect_seller_id)
+        if seller and seller.territory_id:
+            preselect_territory_id = seller.territory_id
+    
+    return render_template('customer_form.html', 
+                         customer=None, 
+                         sellers=sellers, 
+                         territories=territories,
+                         preselect_seller_id=preselect_seller_id,
+                         preselect_territory_id=preselect_territory_id)
 
 
 @app.route('/customer/<int:id>')

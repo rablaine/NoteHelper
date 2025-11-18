@@ -12,46 +12,57 @@
 
 <div class="row mt-4">
     <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <i class="bi bi-telephone-fill text-primary" style="font-size: 3rem;"></i>
-                <h5 class="card-title mt-3">Call Logs</h5>
-                <p class="card-text">{{ stats.call_logs }} total</p>
-                <a href="{{ url_for('call_logs_list') }}" class="btn btn-sm btn-primary">View All</a>
+        <a href="{{ url_for('call_logs_list') }}" class="text-decoration-none">
+            <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
+                <div class="card-body">
+                    <i class="bi bi-telephone-fill text-primary" style="font-size: 3rem;"></i>
+                    <h5 class="card-title mt-3 text-dark">Call Logs</h5>
+                    <p class="card-text text-muted">{{ stats.call_logs }} total</p>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <i class="bi bi-building text-success" style="font-size: 3rem;"></i>
-                <h5 class="card-title mt-3">Customers</h5>
-                <p class="card-text">{{ stats.customers }} total</p>
-                <a href="{{ url_for('customers_list') }}" class="btn btn-sm btn-success">View All</a>
+        <a href="{{ url_for('customers_list') }}" class="text-decoration-none">
+            <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
+                <div class="card-body">
+                    <i class="bi bi-building text-success" style="font-size: 3rem;"></i>
+                    <h5 class="card-title mt-3 text-dark">Customers</h5>
+                    <p class="card-text text-muted">{{ stats.customers }} total</p>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <i class="bi bi-people text-info" style="font-size: 3rem;"></i>
-                <h5 class="card-title mt-3">Sellers</h5>
-                <p class="card-text">{{ stats.sellers }} total</p>
-                <a href="{{ url_for('sellers_list') }}" class="btn btn-sm btn-info">View All</a>
+        <a href="{{ url_for('sellers_list') }}" class="text-decoration-none">
+            <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
+                <div class="card-body">
+                    <i class="bi bi-people text-info" style="font-size: 3rem;"></i>
+                    <h5 class="card-title mt-3 text-dark">Sellers</h5>
+                    <p class="card-text text-muted">{{ stats.sellers }} total</p>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <i class="bi bi-tags text-warning" style="font-size: 3rem;"></i>
-                <h5 class="card-title mt-3">Topics</h5>
-                <p class="card-text">{{ stats.topics }} total</p>
-                <a href="{{ url_for('topics_list') }}" class="btn btn-sm btn-warning">View All</a>
+        <a href="{{ url_for('topics_list') }}" class="text-decoration-none">
+            <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
+                <div class="card-body">
+                    <i class="bi bi-tags text-warning" style="font-size: 3rem;"></i>
+                    <h5 class="card-title mt-3 text-dark">Topics</h5>
+                    <p class="card-text text-muted">{{ stats.topics }} total</p>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
+
+<style>
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
 
 <div class="row mt-5">
     <div class="col-md-12">
