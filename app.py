@@ -575,7 +575,22 @@ def customer_edit(id):
     
     sellers = Seller.query.order_by(Seller.name).all()
     territories = Territory.query.order_by(Territory.name).all()
-    return render_template('customer_form.html', customer=customer, sellers=sellers, territories=territories)
+    
+    # Build seller customers map for duplicate prevention (FR030)
+    seller_customers = {}
+    for seller in sellers:
+        customers = seller.customers.order_by(Customer.name).all()
+        seller_customers[seller.id] = [
+            {'id': c.id, 'name': c.name, 'tpid': c.tpid} 
+            for c in customers
+        ]
+    
+    return render_template('customer_form.html', 
+                         customer=customer, 
+                         sellers=sellers, 
+                         territories=territories,
+                         seller_customers=seller_customers,
+                         referrer='')
 
 
 @app.route('/seller/create-inline', methods=['POST'])
