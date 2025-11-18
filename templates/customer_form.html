@@ -6,7 +6,7 @@
 <h1 class="mb-4">{{ 'Edit' if customer else 'New' }} Customer</h1>
 
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-md-6">
         <div class="card">
             <div class="card-body">
                 <form method="POST">
@@ -78,6 +78,26 @@
             </div>
         </div>
     </div>
+    
+    <div class="col-md-6">
+        <div class="card" id="existingCustomersCard" style="display: none;">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Existing Customers for This Seller</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Review this list to avoid creating duplicate customers:</p>
+                <div id="existingCustomersList" class="list-group">
+                    <!-- Dynamically populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+        <div class="card" id="noSellerCard">
+            <div class="card-body text-center text-muted">
+                <i class="bi bi-info-circle" style="font-size: 2rem;"></i>
+                <p class="mt-2">Select a seller to see their existing customers</p>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- New Seller Modal -->
@@ -108,6 +128,9 @@
 
 {% block extra_js %}
 <script>
+// Seller customers data from backend (FR030)
+const sellerCustomers = {{ seller_customers|tojson|safe }};
+
 // Auto-select territory when seller is chosen (FR003)
 document.getElementById('seller_id').addEventListener('change', function() {
     const selectedOption = this.options[this.selectedIndex];
@@ -121,6 +144,45 @@ document.getElementById('seller_id').addEventListener('change', function() {
     } else {
         autoMsg.style.display = 'none';
     }
+    
+    // Update existing customers list (FR030)
+    updateExistingCustomersList();
+});
+
+function updateExistingCustomersList() {
+    const sellerId = document.getElementById('seller_id').value;
+    const existingCard = document.getElementById('existingCustomersCard');
+    const noSellerCard = document.getElementById('noSellerCard');
+    const customersList = document.getElementById('existingCustomersList');
+    
+    if (!sellerId || !sellerCustomers[sellerId] || sellerCustomers[sellerId].length === 0) {
+        // No seller selected or no customers
+        existingCard.style.display = 'none';
+        noSellerCard.style.display = 'block';
+        return;
+    }
+    
+    // Show existing customers
+    const customers = sellerCustomers[sellerId];
+    customersList.innerHTML = customers.map(customer => 
+        `<a href="/customer/${customer.id}" target="_blank" class="list-group-item list-group-item-action">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <strong>${customer.name}</strong><br>
+                    <small class="text-muted">TPID: ${customer.tpid}</small>
+                </div>
+                <i class="bi bi-box-arrow-up-right"></i>
+            </div>
+        </a>`
+    ).join('');
+    
+    existingCard.style.display = 'block';
+    noSellerCard.style.display = 'none';
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateExistingCustomersList();
 });
 </script>
 {% endblock %}

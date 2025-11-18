@@ -435,6 +435,15 @@ def customer_create():
     sellers = Seller.query.order_by(Seller.name).all()
     territories = Territory.query.order_by(Territory.name).all()
     
+    # Build seller customers map for duplicate prevention (FR030)
+    seller_customers = {}
+    for seller in sellers:
+        customers = seller.customers.order_by(Customer.name).all()
+        seller_customers[seller.id] = [
+            {'id': c.id, 'name': c.name, 'tpid': c.tpid} 
+            for c in customers
+        ]
+    
     # Pre-select seller and territory from query params
     preselect_seller_id = request.args.get('seller_id', type=int)
     preselect_territory_id = None
@@ -449,6 +458,7 @@ def customer_create():
                          customer=None, 
                          sellers=sellers, 
                          territories=territories,
+                         seller_customers=seller_customers,
                          preselect_seller_id=preselect_seller_id,
                          preselect_territory_id=preselect_territory_id)
 
