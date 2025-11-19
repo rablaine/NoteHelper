@@ -16,7 +16,7 @@
             <a href="{{ url_for('topic_view', id=topic.id) }}" class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
                     <h5 class="mb-1">{{ topic.name }}</h5>
-                    <small class="text-muted">{{ topic.call_logs.count() }} calls</small>
+                    <small class="text-muted">{{ topic.call_logs|length }} calls</small>
                 </div>
                 {% if topic.description %}
                     <p class="mb-1 text-muted">{{ topic.description|truncate(150) }}</p>

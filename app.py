@@ -67,9 +67,9 @@ class Territory(db.Model):
         'Seller',
         secondary=sellers_territories,
         back_populates='territories',
-        lazy='dynamic'
+        lazy='select'
     )
-    customers = db.relationship('Customer', back_populates='territory', lazy='dynamic')
+    customers = db.relationship('Customer', back_populates='territory', lazy='select')
     
     def __repr__(self) -> str:
         return f'<Territory {self.name}>'
@@ -90,9 +90,9 @@ class Seller(db.Model):
         'Territory',
         secondary=sellers_territories,
         back_populates='sellers',
-        lazy='dynamic'
+        lazy='select'
     )
-    customers = db.relationship('Customer', back_populates='seller', lazy='dynamic')
+    customers = db.relationship('Customer', back_populates='seller', lazy='select')
     call_logs = db.relationship('CallLog', back_populates='seller', lazy='dynamic')
     
     def __repr__(self) -> str:
@@ -114,15 +114,17 @@ class Customer(db.Model):
     # Relationships
     seller = db.relationship('Seller', back_populates='customers')
     territory = db.relationship('Territory', back_populates='customers')
-    call_logs = db.relationship('CallLog', back_populates='customer', lazy='dynamic')
+    call_logs = db.relationship('CallLog', back_populates='customer', lazy='select')
     
     def __repr__(self) -> str:
         return f'<Customer {self.name} ({self.tpid})>'
     
     def get_most_recent_call_date(self) -> Optional[datetime]:
         """Get the date of the most recent call log for this customer."""
-        most_recent = self.call_logs.order_by(CallLog.call_date.desc()).first()
-        return most_recent.call_date if most_recent else None
+        if not self.call_logs:
+            return None
+        most_recent = max(self.call_logs, key=lambda x: x.call_date)
+        return most_recent.call_date
     
     def get_display_name_with_tpid(self) -> str:
         """Get customer name with TPID for display."""
@@ -143,7 +145,7 @@ class Topic(db.Model):
         'CallLog',
         secondary=call_logs_topics,
         back_populates='topics',
-        lazy='dynamic'
+        lazy='select'
     )
     
     def __repr__(self) -> str:
@@ -166,11 +168,12 @@ class CallLog(db.Model):
     # Relationships
     customer = db.relationship('Customer', back_populates='call_logs')
     seller = db.relationship('Seller', back_populates='call_logs')
+    territory = db.relationship('Territory')
     topics = db.relationship(
         'Topic',
         secondary=call_logs_topics,
         back_populates='call_logs',
-        lazy='dynamic'
+        lazy='select'
     )
     
     def __repr__(self) -> str:
@@ -215,7 +218,10 @@ def index():
 @app.route('/territories')
 def territories_list():
     """List all territories."""
-    territories = Territory.query.order_by(Territory.name).all()
+    territories = Territory.query.options(
+        db.joinedload(Territory.sellers),
+        db.joinedload(Territory.customers)
+    ).order_by(Territory.name).all()
     return render_template('territories_list.html', territories=territories)
 
 
@@ -305,7 +311,10 @@ def territory_edit(id):
 @app.route('/sellers')
 def sellers_list():
     """List all sellers."""
-    sellers = Seller.query.order_by(Seller.name).all()
+    sellers = Seller.query.options(
+        db.joinedload(Seller.territories),
+        db.joinedload(Seller.customers)
+    ).order_by(Seller.name).all()
     return render_template('sellers_list.html', sellers=sellers)
 
 
@@ -443,14 +452,25 @@ def territory_create_inline():
 
 @app.route('/customers')
 def customers_list():
+    """List all customers in alphabetical order."""
+    customers = Customer.query.order_by(Customer.name).all()
+    return render_template('customers_list.html', customers=customers)
+
+
+@app.route('/customers/grouped')
+def customers_grouped():
     """List all customers grouped by seller (FR033)."""
     # Get all sellers with their customers
-    sellers = Seller.query.order_by(Seller.name).all()
+    sellers = Seller.query.options(
+        db.joinedload(Seller.customers).joinedload(Customer.call_logs),
+        db.joinedload(Seller.customers).joinedload(Customer.territory),
+        db.joinedload(Seller.territories)
+    ).order_by(Seller.name).all()
     
     # Build grouped data structure
     grouped_customers = []
     for seller in sellers:
-        customers = seller.customers.order_by(Customer.name).all()
+        customers = sorted(seller.customers, key=lambda c: c.name)
         if customers:
             grouped_customers.append({
                 'seller': seller,
@@ -458,9 +478,12 @@ def customers_list():
             })
     
     # Get customers without a seller
-    customers_without_seller = Customer.query.filter_by(seller_id=None).order_by(Customer.name).all()
+    customers_without_seller = Customer.query.options(
+        db.joinedload(Customer.call_logs),
+        db.joinedload(Customer.territory)
+    ).filter_by(seller_id=None).order_by(Customer.name).all()
     
-    return render_template('customers_list.html', 
+    return render_template('customers_grouped.html', 
                          grouped_customers=grouped_customers,
                          customers_without_seller=customers_without_seller)
 
@@ -641,7 +664,7 @@ def seller_create_inline():
 @app.route('/topics')
 def topics_list():
     """List all topics (FR009)."""
-    topics = Topic.query.order_by(Topic.name).all()
+    topics = Topic.query.options(db.joinedload(Topic.call_logs)).order_by(Topic.name).all()
     return render_template('topics_list.html', topics=topics)
 
 
@@ -772,7 +795,12 @@ def topic_delete(id):
 @app.route('/call-logs')
 def call_logs_list():
     """List all call logs (FR010)."""
-    call_logs = CallLog.query.order_by(CallLog.call_date.desc()).all()
+    call_logs = CallLog.query.options(
+        db.joinedload(CallLog.customer),
+        db.joinedload(CallLog.seller),
+        db.joinedload(CallLog.territory),
+        db.joinedload(CallLog.topics)
+    ).order_by(CallLog.call_date.desc()).all()
     return render_template('call_logs_list.html', call_logs=call_logs)
 
 

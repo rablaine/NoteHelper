@@ -10,85 +10,36 @@
     </a>
 </div>
 
-{% if grouped_customers or customers_without_seller %}
-    {% for group in grouped_customers %}
-        <div class="mb-4">
-            <h4 class="mb-3">
-                <i class="bi bi-person"></i> <a href="{{ url_for('seller_view', id=group.seller.id) }}" class="text-decoration-none">{{ group.seller.name }}</a>
-                {% if group.seller.territories.count() > 0 %}
-                    {% for territory in group.seller.territories.order_by('name').all() %}
-                        <span class="badge bg-info ms-2"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
-                    {% endfor %}
-                {% endif %}
-                <span class="text-muted ms-2" style="font-size: 0.9rem;">({{ group.customers|length }} customers)</span>
-            </h4>
-            <div class="list-group">
-                {% for customer in group.customers %}
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between align-items-start mb-2">
-                            <h5 class="mb-0">
-                                <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
-                                {% if customer.tpid_url %}
-                                    (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
-                                {% else %}
-                                    ({{ customer.tpid }})
-                                {% endif %}
-                            </h5>
-                            <div class="d-flex align-items-center gap-2">
-                                <small class="text-muted text-nowrap">{{ customer.call_logs.count() }} calls</small>
-                                <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success">
-                                    <i class="bi bi-plus-circle"></i> New Call Log
-                                </a>
-                            </div>
-                        </div>
-                        <div>
-                            {% if customer.territory %}
-                                {% if group.seller.territories.count() != 1 %}
-                                    <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
-                                {% endif %}
-                            {% endif %}
-                        </div>
+{% if customers %}
+    <div class="list-group">
+        {% for customer in customers %}
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                    <h5 class="mb-0">
+                        <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
+                        {% if customer.tpid_url %}
+                            (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
+                        {% else %}
+                            ({{ customer.tpid }})
+                        {% endif %}
+                    </h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white">
+                            <i class="bi bi-plus-circle"></i> New Call Log
+                        </a>
                     </div>
-                {% endfor %}
+                </div>
+                <div>
+                    {% if customer.seller %}
+                        <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ customer.seller.name }}</span>
+                    {% endif %}
+                    {% if customer.territory %}
+                        <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
+                    {% endif %}
+                </div>
             </div>
-        </div>
-    {% endfor %}
-    
-    {% if customers_without_seller %}
-        <div class="mb-4">
-            <h4 class="mb-3">
-                <i class="bi bi-question-circle"></i> No Seller Assigned
-                <span class="text-muted ms-2" style="font-size: 0.9rem;">({{ customers_without_seller|length }} customers)</span>
-            </h4>
-            <div class="list-group">
-                {% for customer in customers_without_seller %}
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between align-items-start mb-2">
-                            <h5 class="mb-0">
-                                <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
-                                {% if customer.tpid_url %}
-                                    (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
-                                {% else %}
-                                    ({{ customer.tpid }})
-                                {% endif %}
-                            </h5>
-                            <div class="d-flex align-items-center gap-2">
-                                <small class="text-muted text-nowrap">{{ customer.call_logs.count() }} calls</small>
-                                <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success">
-                                    <i class="bi bi-plus-circle"></i> New Call Log
-                                </a>
-                            </div>
-                        </div>
-                        <div>
-                            {% if customer.territory %}
-                                <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-        </div>
-    {% endif %}
+        {% endfor %}
+    </div>
 {% else %}
     <div class="alert alert-info">
         <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!

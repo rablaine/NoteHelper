@@ -20,8 +20,8 @@
                             <h5 class="mb-1">{{ seller.name }}</h5>
                         </a>
                         <p class="mb-1">
-                            {% if seller.territories.count() > 0 %}
-                                {% for territory in seller.territories.order_by('name').all() %}
+                            {% if seller.territories %}
+                                {% for territory in seller.territories|sort(attribute='name') %}
                                     <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
                                 {% endfor %}
                             {% else %}
@@ -30,8 +30,8 @@
                         </p>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <small class="text-muted text-nowrap">{{ seller.customers.count() }} customers</small>
-                        <a href="{{ url_for('customer_create', seller_id=seller.id) }}" class="btn btn-sm btn-success">
+                        <small class="text-muted text-nowrap">{{ seller.customers|length }} customers</small>
+                        <a href="{{ url_for('customer_create', seller_id=seller.id) }}" class="btn btn-sm btn-success text-white">
                             <i class="bi bi-plus-circle"></i> New Customer
                         </a>
                     </div>

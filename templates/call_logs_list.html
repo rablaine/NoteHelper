@@ -30,7 +30,7 @@
                     <small class="text-muted text-nowrap ms-3">{{ call.call_date.strftime('%b %d, %Y') }}</small>
                 </div>
                 <p class="mb-2">
-                    <a href="{{ url_for('call_log_view', id=call.id) }}" class="text-decoration-none text-dark">
+                    <a href="{{ url_for('call_log_view', id=call.id) }}" class="text-decoration-none">
                         {{ call.content|striptags|truncate(200) }}
                     </a>
                 </p>
@@ -41,8 +41,8 @@
                     {% if call.territory %}
                         <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>
                     {% endif %}
-                    {% for topic in call.topics.all() %}
-                        <span class="badge bg-warning text-dark"><i class="bi bi-tag"></i> {{ topic.name }}</span>
+                    {% for topic in call.topics %}
+                        <span class="badge bg-warning"><i class="bi bi-tag"></i> {{ topic.name }}</span>
                     {% endfor %}
                 </div>
             </div>
