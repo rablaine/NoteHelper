@@ -5,9 +5,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-building"></i> Customers</h1>
-    <a href="{{ url_for('customer_create') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> New Customer
-    </a>
+    <div class="d-flex align-items-center gap-2">
+        <a href="{{ url_for('customers_grouped') }}" class="btn btn-outline-secondary btn-sm" title="Switch to grouped view">
+            <i class="bi bi-collection"></i> Grouped
+        </a>
+        <a href="{{ url_for('customer_create') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Customer
+        </a>
+    </div>
 </div>
 
 {% if customers %}
@@ -24,6 +29,7 @@
                         {% endif %}
                     </h5>
                     <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
                         <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white">
                             <i class="bi bi-plus-circle"></i> New Call Log
                         </a>
@@ -45,4 +51,28 @@
         <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!
     </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Handle grouped view toggle
+document.addEventListener('DOMContentLoaded', function() {
+    const groupedButton = document.querySelector('a[href="{{ url_for('customers_grouped') }}"]');
+    if (groupedButton) {
+        groupedButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            // Save preference
+            fetch('/api/preferences/customer-view', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ customer_view_grouped: true })
+            }).then(() => {
+                window.location.href = '{{ url_for('customers_grouped') }}';
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

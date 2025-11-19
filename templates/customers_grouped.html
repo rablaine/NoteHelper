@@ -5,9 +5,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-building"></i> Customers (Grouped by Seller)</h1>
-    <a href="{{ url_for('customer_create') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> New Customer
-    </a>
+    <div class="d-flex align-items-center gap-2">
+        <a href="{{ url_for('customers_list') }}" class="btn btn-outline-secondary btn-sm" title="Switch to alphabetical view">
+            <i class="bi bi-sort-alpha-down"></i> Alphabetical
+        </a>
+        <a href="{{ url_for('customer_create') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Customer
+        </a>
+    </div>
 </div>
 
 {% if grouped_customers or customers_without_seller %}
@@ -94,4 +99,28 @@
         <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!
     </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Handle alphabetical view toggle
+document.addEventListener('DOMContentLoaded', function() {
+    const alphabeticalButton = document.querySelector('a[href="{{ url_for('customers_list') }}"]');
+    if (alphabeticalButton) {
+        alphabeticalButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            // Save preference
+            fetch('/api/preferences/customer-view', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ customer_view_grouped: false })
+            }).then(() => {
+                window.location.href = '{{ url_for('customers_list') }}';
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

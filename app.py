@@ -181,17 +181,18 @@ class CallLog(db.Model):
 
 
 class UserPreference(db.Model):
-    """User preferences including dark mode setting."""
+    """User preferences including dark mode and customer view settings."""
     __tablename__ = 'user_preferences'
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, nullable=False, default=1)  # Single user system
     dark_mode = db.Column(db.Boolean, default=False, nullable=False)
+    customer_view_grouped = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     def __repr__(self) -> str:
-        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode}>'
+        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped}>'
 
 
 # =============================================================================
@@ -452,8 +453,20 @@ def territory_create_inline():
 
 @app.route('/customers')
 def customers_list():
-    """List all customers in alphabetical order."""
-    customers = Customer.query.order_by(Customer.name).all()
+    """List all customers - redirect based on preference."""
+    user_id = 1  # Single user system
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    
+    # Redirect to grouped view if preference is set
+    if pref and pref.customer_view_grouped:
+        return redirect(url_for('customers_grouped'))
+    
+    # Show alphabetical view
+    customers = Customer.query.options(
+        db.joinedload(Customer.seller),
+        db.joinedload(Customer.territory),
+        db.joinedload(Customer.call_logs)
+    ).order_by(Customer.name).all()
     return render_template('customers_list.html', customers=customers)
 
 
@@ -1105,17 +1118,48 @@ def dark_mode_preference():
     return jsonify({'dark_mode': pref.dark_mode}), 200
 
 
+@app.route('/api/preferences/customer-view', methods=['GET', 'POST'])
+def customer_view_preference():
+    """Get or set customer view preference (alphabetical vs grouped)."""
+    user_id = 1  # Single user system
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        customer_view_grouped = data.get('customer_view_grouped', False)
+        
+        # Get or create user preference
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = UserPreference(user_id=user_id, customer_view_grouped=customer_view_grouped)
+            db.session.add(pref)
+        else:
+            pref.customer_view_grouped = customer_view_grouped
+        
+        db.session.commit()
+        return jsonify({'customer_view_grouped': pref.customer_view_grouped}), 200
+    
+    # GET request
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, customer_view_grouped=False)
+        db.session.add(pref)
+        db.session.commit()
+    
+    return jsonify({'customer_view_grouped': pref.customer_view_grouped}), 200
+
+
 # =============================================================================
 # Context Processor
 # =============================================================================
 
 @app.context_processor
-def inject_dark_mode():
-    """Inject dark mode preference into all templates."""
+def inject_preferences():
+    """Inject user preferences into all templates."""
     user_id = 1  # Single user system
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     dark_mode = pref.dark_mode if pref else False
-    return dict(dark_mode=dark_mode)
+    customer_view_grouped = pref.customer_view_grouped if pref else False
+    return dict(dark_mode=dark_mode, customer_view_grouped=customer_view_grouped)
 
 
 if __name__ == '__main__':
