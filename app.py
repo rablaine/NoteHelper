@@ -765,7 +765,8 @@ def topic_create():
 def topic_view(id):
     """View topic details (FR009)."""
     topic = Topic.query.get_or_404(id)
-    call_logs = topic.call_logs.order_by(CallLog.call_date.desc()).all()
+    # Sort call logs in-memory since they're eager-loaded
+    call_logs = sorted(topic.call_logs, key=lambda c: c.call_date, reverse=True)
     return render_template('topic_view.html', topic=topic, call_logs=call_logs)
 
 

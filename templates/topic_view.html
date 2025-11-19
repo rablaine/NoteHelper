@@ -74,15 +74,17 @@
                                     <h6 class="mb-1">{{ call.call_date.strftime('%b %d, %Y') }}</h6>
                                     <small class="text-muted">
                                         {% if call.customer %}
-                                            {{ call.customer.name }}
+                                            <span style="cursor: pointer;" onclick="event.preventDefault(); event.stopPropagation(); window.location='{{ url_for('customer_view', id=call.customer.id) }}';">{{ call.customer.name }}</span>
                                         {% endif %}
                                     </small>
                                 </div>
                                 <p class="mb-1">{{ call.content|striptags|truncate(150) }}</p>
                                 {% if call.seller %}
-                                    <small class="text-muted">
-                                        <i class="bi bi-person"></i> {{ call.seller.name }}
-                                    </small>
+                                    <div onclick="event.stopPropagation();">
+                                        <span class="badge bg-secondary" style="cursor: pointer;" onclick="event.preventDefault(); event.stopPropagation(); window.location='{{ url_for('seller_view', id=call.seller.id) }}';">
+                                            <i class="bi bi-person"></i> {{ call.seller.name }}
+                                        </span>
+                                    </div>
                                 {% endif %}
                             </a>
                         {% endfor %}
