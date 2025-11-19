@@ -1491,6 +1491,250 @@ def data_management_clear():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/data-management/export/json', methods=['GET'])
+def export_full_json():
+    """Export complete database as JSON for disaster recovery."""
+    import json
+    from datetime import datetime
+    
+    data = {
+        'export_date': datetime.now(timezone.utc).isoformat(),
+        'version': '1.0',
+        'pods': [{'id': p.id, 'name': p.name} for p in POD.query.all()],
+        'territories': [{'id': t.id, 'name': t.name, 'pod_id': t.pod_id} for t in Territory.query.all()],
+        'sellers': [{'id': s.id, 'name': s.name, 'alias': s.alias, 'seller_type': s.seller_type, 
+                     'territory_ids': [t.id for t in s.territories]} for s in Seller.query.all()],
+        'solution_engineers': [{'id': se.id, 'name': se.name, 'alias': se.alias, 'specialty': se.specialty,
+                               'pod_ids': [p.id for p in se.pods]} for se in SolutionEngineer.query.all()],
+        'verticals': [{'id': v.id, 'name': v.name} for v in Vertical.query.all()],
+        'customers': [{'id': c.id, 'name': c.name, 'nickname': c.nickname, 'tpid': c.tpid, 
+                       'tpid_url': c.tpid_url, 'territory_id': c.territory_id, 'seller_id': c.seller_id,
+                       'vertical_ids': [v.id for v in c.verticals]} for c in Customer.query.all()],
+        'topics': [{'id': t.id, 'name': t.name, 'description': t.description} for t in Topic.query.all()],
+        'call_logs': [{'id': cl.id, 'customer_id': cl.customer_id, 'seller_id': cl.seller_id,
+                       'territory_id': cl.territory_id, 'call_date': cl.call_date.isoformat(),
+                       'content': cl.content, 'topic_ids': [t.id for t in cl.topics],
+                       'created_at': cl.created_at.isoformat()} for cl in CallLog.query.all()]
+    }
+    
+    response = app.response_class(
+        response=json.dumps(data, indent=2),
+        status=200,
+        mimetype='application/json'
+    )
+    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_backup_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.json'
+    return response
+
+
+@app.route('/api/data-management/export/csv', methods=['GET'])
+def export_full_csv():
+    """Export complete database as CSV files in ZIP for spreadsheet analysis."""
+    import csv
+    import io
+    import zipfile
+    from datetime import datetime
+    
+    # Create in-memory ZIP file
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # PODs
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'name'])
+        for p in POD.query.all():
+            writer.writerow([p.id, p.name])
+        zip_file.writestr('pods.csv', csv_buffer.getvalue())
+        
+        # Territories
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'name', 'pod_id', 'pod_name'])
+        for t in Territory.query.options(db.joinedload(Territory.pod)).all():
+            writer.writerow([t.id, t.name, t.pod_id, t.pod.name if t.pod else ''])
+        zip_file.writestr('territories.csv', csv_buffer.getvalue())
+        
+        # Sellers
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'name', 'alias', 'seller_type', 'territories'])
+        for s in Seller.query.all():
+            territories = ', '.join([t.name for t in s.territories])
+            writer.writerow([s.id, s.name, s.alias, s.seller_type, territories])
+        zip_file.writestr('sellers.csv', csv_buffer.getvalue())
+        
+        # Solution Engineers
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'name', 'alias', 'specialty', 'pods'])
+        for se in SolutionEngineer.query.all():
+            pods = ', '.join([p.name for p in se.pods])
+            writer.writerow([se.id, se.name, se.alias, se.specialty, pods])
+        zip_file.writestr('solution_engineers.csv', csv_buffer.getvalue())
+        
+        # Verticals
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'name'])
+        for v in Vertical.query.all():
+            writer.writerow([v.id, v.name])
+        zip_file.writestr('verticals.csv', csv_buffer.getvalue())
+        
+        # Customers
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'name', 'nickname', 'tpid', 'tpid_url', 'territory', 'seller', 'verticals'])
+        for c in Customer.query.options(
+            db.joinedload(Customer.territory),
+            db.joinedload(Customer.seller)
+        ).all():
+            verticals = ', '.join([v.name for v in c.verticals])
+            writer.writerow([c.id, c.name, c.nickname, c.tpid, c.tpid_url,
+                           c.territory.name if c.territory else '',
+                           c.seller.name if c.seller else '',
+                           verticals])
+        zip_file.writestr('customers.csv', csv_buffer.getvalue())
+        
+        # Topics
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'name', 'description'])
+        for t in Topic.query.all():
+            writer.writerow([t.id, t.name, t.description])
+        zip_file.writestr('topics.csv', csv_buffer.getvalue())
+        
+        # Call Logs
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['id', 'call_date', 'customer', 'seller', 'territory', 'content', 'topics', 'created_at'])
+        for cl in CallLog.query.options(
+            db.joinedload(CallLog.customer),
+            db.joinedload(CallLog.seller),
+            db.joinedload(CallLog.territory)
+        ).all():
+            topics = ', '.join([t.name for t in cl.topics])
+            writer.writerow([cl.id, cl.call_date.isoformat(),
+                           cl.customer.name if cl.customer else '',
+                           cl.seller.name if cl.seller else '',
+                           cl.territory.name if cl.territory else '',
+                           cl.content, topics, cl.created_at.isoformat()])
+        zip_file.writestr('call_logs.csv', csv_buffer.getvalue())
+    
+    zip_buffer.seek(0)
+    response = app.response_class(
+        response=zip_buffer.getvalue(),
+        status=200,
+        mimetype='application/zip'
+    )
+    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_backup_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.zip'
+    return response
+
+
+@app.route('/api/data-management/export/call-logs-json', methods=['GET'])
+def export_call_logs_json():
+    """Export call logs with enriched data as JSON for external analysis/LLM processing."""
+    import json
+    from datetime import datetime
+    
+    call_logs = CallLog.query.options(
+        db.joinedload(CallLog.customer).joinedload(Customer.verticals),
+        db.joinedload(CallLog.seller),
+        db.joinedload(CallLog.territory).joinedload(Territory.pod)
+    ).order_by(CallLog.call_date.desc()).all()
+    
+    data = {
+        'export_date': datetime.now(timezone.utc).isoformat(),
+        'export_type': 'call_logs',
+        'total_calls': len(call_logs),
+        'call_logs': []
+    }
+    
+    for cl in call_logs:
+        call_data = {
+            'id': cl.id,
+            'call_date': cl.call_date.isoformat(),
+            'content': cl.content,
+            'customer': {
+                'name': cl.customer.name if cl.customer else None,
+                'nickname': cl.customer.nickname if cl.customer else None,
+                'tpid': cl.customer.tpid if cl.customer else None,
+                'verticals': [v.name for v in cl.customer.verticals] if cl.customer else []
+            },
+            'seller': {
+                'name': cl.seller.name if cl.seller else None,
+                'alias': cl.seller.alias if cl.seller else None,
+                'email': f"{cl.seller.alias}@microsoft.com" if cl.seller and cl.seller.alias else None,
+                'type': cl.seller.seller_type if cl.seller else None
+            },
+            'territory': {
+                'name': cl.territory.name if cl.territory else None,
+                'pod': cl.territory.pod.name if cl.territory and cl.territory.pod else None
+            },
+            'topics': [t.name for t in cl.topics],
+            'created_at': cl.created_at.isoformat()
+        }
+        data['call_logs'].append(call_data)
+    
+    response = app.response_class(
+        response=json.dumps(data, indent=2),
+        status=200,
+        mimetype='application/json'
+    )
+    response.headers['Content-Disposition'] = f'attachment; filename=call_logs_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.json'
+    return response
+
+
+@app.route('/api/data-management/export/call-logs-csv', methods=['GET'])
+def export_call_logs_csv():
+    """Export call logs with enriched data as CSV for spreadsheet analysis."""
+    import csv
+    import io
+    from datetime import datetime
+    
+    call_logs = CallLog.query.options(
+        db.joinedload(CallLog.customer).joinedload(Customer.verticals),
+        db.joinedload(CallLog.seller),
+        db.joinedload(CallLog.territory).joinedload(Territory.pod)
+    ).order_by(CallLog.call_date.desc()).all()
+    
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    
+    # Header
+    writer.writerow([
+        'Call Date', 'Customer Name', 'Customer Nickname', 'Customer TPID', 'Customer Verticals',
+        'Seller Name', 'Seller Email', 'Seller Type',
+        'Territory', 'POD',
+        'Topics', 'Call Content', 'Created At'
+    ])
+    
+    # Data
+    for cl in call_logs:
+        writer.writerow([
+            cl.call_date.strftime('%Y-%m-%d'),
+            cl.customer.name if cl.customer else '',
+            cl.customer.nickname if cl.customer else '',
+            cl.customer.tpid if cl.customer else '',
+            ', '.join([v.name for v in cl.customer.verticals]) if cl.customer else '',
+            cl.seller.name if cl.seller else '',
+            f"{cl.seller.alias}@microsoft.com" if cl.seller and cl.seller.alias else '',
+            cl.seller.seller_type if cl.seller else '',
+            cl.territory.name if cl.territory else '',
+            cl.territory.pod.name if cl.territory and cl.territory.pod else '',
+            ', '.join([t.name for t in cl.topics]),
+            cl.content,
+            cl.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        ])
+    
+    response = app.response_class(
+        response=csv_buffer.getvalue(),
+        status=200,
+        mimetype='text/csv'
+    )
+    response.headers['Content-Disposition'] = f'attachment; filename=call_logs_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.csv'
+    return response
+
+
 # Import the streaming import endpoint
 from import_api import create_import_endpoint
 create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Vertical, Customer)

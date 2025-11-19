@@ -12,8 +12,10 @@
             </a>
         </div>
 
-        <div class="alert alert-info">
-            <i class="bi bi-info-circle"></i> Import and export your NoteHelper data for backup or migration purposes.
+        <div class="alert alert-info mb-4">
+            <h6 class="alert-heading"><i class="bi bi-info-circle"></i> About Data Management</h6>
+            <p class="mb-2"><strong>Import Alignment Sheet:</strong> Use this to load your organizational structure (PODs, territories, sellers, solution engineers, customers, and verticals) from your CRM system's export.</p>
+            <p class="mb-0"><strong>Export Data:</strong> Create backups for disaster recovery or export call log data for external analysis (e.g., LLM-powered year-end summaries).</p>
         </div>
 
         <!-- Export Section -->
@@ -22,14 +24,15 @@
                 <h5 class="mb-0"><i class="bi bi-download"></i> Export Data</h5>
             </div>
             <div class="card-body">
-                <p class="text-muted">Download your data in JSON or CSV format for backup or analysis.</p>
+                <h6 class="mb-3">Full Database Backup</h6>
+                <p class="text-muted small">Complete backup of all data for disaster recovery. Can be re-imported to restore everything.</p>
                 
-                <div class="row g-3">
+                <div class="row g-3 mb-4">
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-body">
-                                <h6 class="card-title"><i class="bi bi-file-earmark-code"></i> Export as JSON</h6>
-                                <p class="card-text small text-muted">Complete backup including all relationships. Best for reimporting later.</p>
+                                <h6 class="card-title"><i class="bi bi-file-earmark-code"></i> Full Backup (JSON)</h6>
+                                <p class="card-text small text-muted">Complete database backup with all relationships preserved. Best for disaster recovery.</p>
                                 <button class="btn btn-primary btn-sm" id="exportJsonBtn">
                                     <i class="bi bi-download"></i> Download JSON
                                 </button>
@@ -39,10 +42,40 @@
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-body">
-                                <h6 class="card-title"><i class="bi bi-file-earmark-spreadsheet"></i> Export as CSV</h6>
-                                <p class="card-text small text-muted">Separate CSV files for each data type. Best for analysis in Excel/Sheets.</p>
+                                <h6 class="card-title"><i class="bi bi-file-earmark-spreadsheet"></i> Full Backup (CSV)</h6>
+                                <p class="card-text small text-muted">Separate CSV files for each table in a ZIP archive. Good for spreadsheet analysis.</p>
                                 <button class="btn btn-primary btn-sm" id="exportCsvBtn">
                                     <i class="bi bi-download"></i> Download CSV (ZIP)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <h6 class="mb-3">Call Logs for External Analysis</h6>
+                <p class="text-muted small">Export call logs with enriched data (customer, seller, territory, topics) for external analysis or LLM processing.</p>
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-file-earmark-code"></i> Call Logs (JSON)</h6>
+                                <p class="card-text small text-muted">Structured format with all relationships. Perfect for programmatic analysis or LLMs.</p>
+                                <button class="btn btn-success btn-sm" id="exportCallLogsJsonBtn">
+                                    <i class="bi bi-download"></i> Download JSON
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-file-earmark-spreadsheet"></i> Call Logs (CSV)</h6>
+                                <p class="card-text small text-muted">Flat format with topics as comma-separated list. Easy to open in Excel/Sheets.</p>
+                                <button class="btn btn-success btn-sm" id="exportCallLogsCsvBtn">
+                                    <i class="bi bi-download"></i> Download CSV
                                 </button>
                             </div>
                         </div>
@@ -78,18 +111,22 @@
         <!-- Import Section -->
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-upload"></i> Import Data</h5>
+                <h5 class="mb-0"><i class="bi bi-upload"></i> Import Alignment Sheet</h5>
             </div>
             <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> <strong>CRM Data Import:</strong> This imports organizational structure from your CRM system's alignment sheet export (PODs, territories, sellers, solution engineers, customers, verticals).
+                </div>
+                
                 <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle"></i> <strong>Warning:</strong> Importing data will add to existing data. To replace all data, export first for backup, then clear the database before importing.
+                    <i class="bi bi-exclamation-triangle"></i> <strong>Warning:</strong> Importing will add to existing data. To replace all organizational data, export a backup first, then clear the database before importing.
                 </div>
 
                 <form id="importForm" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label for="importFile" class="form-label">Select Alignment Sheet CSV</label>
+                        <label for="importFile" class="form-label">Select Alignment Sheet CSV from CRM Export</label>
                         <input type="file" class="form-control" id="importFile" name="file" accept=".csv" required>
-                        <div class="form-text">Upload your alignment sheet CSV containing organizational structure and customer data.</div>
+                        <div class="form-text">Upload the alignment sheet CSV exported from your CRM system. This should include PODs, territories, sellers, solution engineers, customers, and verticals.</div>
                     </div>
 
                     <button type="submit" class="btn btn-success">
@@ -188,6 +225,16 @@
     // Export CSV
     document.getElementById('exportCsvBtn').addEventListener('click', function() {
         window.location.href = '/api/data-management/export/csv';
+    });
+
+    // Export Call Logs JSON
+    document.getElementById('exportCallLogsJsonBtn').addEventListener('click', function() {
+        window.location.href = '/api/data-management/export/call-logs-json';
+    });
+
+    // Export Call Logs CSV
+    document.getElementById('exportCallLogsCsvBtn').addEventListener('click', function() {
+        window.location.href = '/api/data-management/export/call-logs-csv';
     });
 
     // Import form handling with real-time progress
