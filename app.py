@@ -188,11 +188,12 @@ class UserPreference(db.Model):
     user_id = db.Column(db.Integer, nullable=False, default=1)  # Single user system
     dark_mode = db.Column(db.Boolean, default=False, nullable=False)
     customer_view_grouped = db.Column(db.Boolean, default=False, nullable=False)
+    topic_sort_by_calls = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     def __repr__(self) -> str:
-        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped}>'
+        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} topic_sort_by_calls={self.topic_sort_by_calls}>'
 
 
 # =============================================================================
@@ -202,7 +203,14 @@ class UserPreference(db.Model):
 @app.route('/')
 def index():
     """Home page showing recent activity and stats."""
-    recent_calls = CallLog.query.order_by(CallLog.call_date.desc()).limit(10).all()
+    # Eager load relationships for recent calls to avoid N+1 queries
+    recent_calls = CallLog.query.options(
+        db.joinedload(CallLog.customer),
+        db.joinedload(CallLog.seller),
+        db.joinedload(CallLog.territory)
+    ).order_by(CallLog.call_date.desc()).limit(10).all()
+    
+    # Count queries are fast on these small tables
     stats = {
         'call_logs': CallLog.query.count(),
         'customers': Customer.query.count(),
@@ -677,7 +685,20 @@ def seller_create_inline():
 @app.route('/topics')
 def topics_list():
     """List all topics (FR009)."""
-    topics = Topic.query.options(db.joinedload(Topic.call_logs)).order_by(Topic.name).all()
+    user_id = 1  # Single user system
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    
+    # Load topics with eager loading
+    topics = Topic.query.options(db.joinedload(Topic.call_logs)).all()
+    
+    # Sort based on preference
+    if pref and pref.topic_sort_by_calls:
+        # Sort by number of calls (descending), then by name
+        topics = sorted(topics, key=lambda t: (-len(t.call_logs), t.name.lower()))
+    else:
+        # Sort alphabetically
+        topics = sorted(topics, key=lambda t: t.name.lower())
+    
     return render_template('topics_list.html', topics=topics)
 
 
@@ -1148,6 +1169,36 @@ def customer_view_preference():
     return jsonify({'customer_view_grouped': pref.customer_view_grouped}), 200
 
 
+@app.route('/api/preferences/topic-sort', methods=['GET', 'POST'])
+def topic_sort_preference():
+    """Get or set topic sort preference (alphabetical vs by calls)."""
+    user_id = 1  # Single user system
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        topic_sort_by_calls = data.get('topic_sort_by_calls', False)
+        
+        # Get or create user preference
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = UserPreference(user_id=user_id, topic_sort_by_calls=topic_sort_by_calls)
+            db.session.add(pref)
+        else:
+            pref.topic_sort_by_calls = topic_sort_by_calls
+        
+        db.session.commit()
+        return jsonify({'topic_sort_by_calls': pref.topic_sort_by_calls}), 200
+    
+    # GET request
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, topic_sort_by_calls=False)
+        db.session.add(pref)
+        db.session.commit()
+    
+    return jsonify({'topic_sort_by_calls': pref.topic_sort_by_calls}), 200
+
+
 # =============================================================================
 # Context Processor
 # =============================================================================
@@ -1159,7 +1210,8 @@ def inject_preferences():
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     dark_mode = pref.dark_mode if pref else False
     customer_view_grouped = pref.customer_view_grouped if pref else False
-    return dict(dark_mode=dark_mode, customer_view_grouped=customer_view_grouped)
+    topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
+    return dict(dark_mode=dark_mode, customer_view_grouped=customer_view_grouped, topic_sort_by_calls=topic_sort_by_calls)
 
 
 if __name__ == '__main__':

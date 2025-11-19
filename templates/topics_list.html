@@ -5,9 +5,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-tags"></i> Topics</h1>
-    <a href="{{ url_for('topic_create') }}" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> New Topic
-    </a>
+    <div class="d-flex align-items-center gap-2">
+        <button id="sortToggle" class="btn btn-outline-secondary btn-sm" title="Toggle sort order">
+            <i class="bi bi-sort-alpha-down"></i> <span id="sortLabel">By Calls</span>
+        </button>
+        <a href="{{ url_for('topic_create') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Topic
+        </a>
+    </div>
 </div>
 
 {% if topics %}
@@ -29,4 +34,58 @@
         <i class="bi bi-info-circle"></i> No topics yet. <a href="{{ url_for('topic_create') }}">Create your first topic</a>!
     </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Handle sort toggle
+document.addEventListener('DOMContentLoaded', function() {
+    const sortToggle = document.getElementById('sortToggle');
+    const sortLabel = document.getElementById('sortLabel');
+    
+    // Get current preference
+    fetch('/api/preferences/topic-sort')
+        .then(response => response.json())
+        .then(data => {
+            updateButtonLabel(data.topic_sort_by_calls);
+        });
+    
+    sortToggle.addEventListener('click', function() {
+        // Get current state
+        fetch('/api/preferences/topic-sort')
+            .then(response => response.json())
+            .then(data => {
+                const newSortByCalls = !data.topic_sort_by_calls;
+                
+                // Save new preference
+                return fetch('/api/preferences/topic-sort', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ topic_sort_by_calls: newSortByCalls })
+                });
+            })
+            .then(response => response.json())
+            .then(() => {
+                // Reload page to show new sort order
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error toggling sort preference:', error);
+                window.location.reload();
+            });
+    });
+    
+    function updateButtonLabel(sortByCalls) {
+        if (sortByCalls) {
+            sortLabel.textContent = 'Alphabetical';
+            sortToggle.querySelector('i').className = 'bi bi-sort-numeric-down';
+        } else {
+            sortLabel.textContent = 'By Calls';
+            sortToggle.querySelector('i').className = 'bi bi-sort-alpha-down';
+        }
+    }
+});
+</script>
 {% endblock %}

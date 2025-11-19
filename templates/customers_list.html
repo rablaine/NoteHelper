@@ -68,7 +68,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ customer_view_grouped: true })
-            }).then(() => {
+            })
+            .then(response => response.json())
+            .then(() => {
+                window.location.href = '{{ url_for('customers_grouped') }}';
+            })
+            .catch(error => {
+                console.error('Error saving preference:', error);
+                // Navigate anyway if API call fails
                 window.location.href = '{{ url_for('customers_grouped') }}';
             });
         });
