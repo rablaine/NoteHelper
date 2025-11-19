@@ -227,12 +227,15 @@ pytest --cov=app tests/  # with coverage
 - **Phase 2 (Future):** Refactor to blueprints when complexity grows
 - **Phase 3 (Optional):** Add Azure AD OAuth as additional login method
 
-**Key Features to Implement:**
-- Create/edit/delete notes
-- Tag notes with technologies, customers, sellers
+**Key Features:**
+- Create/edit/delete notes (call logs)
+- Tag notes with technologies, customers, sellers, territories
 - Search and filter notes by multiple criteria
 - Associate notes with customer accounts
 - Track who created each note and when
+- Data import/export for backup and migration (JSON and CSV formats)
+- User preferences (dark mode, view options)
+- Clickable UI elements throughout for improved navigation
 
 **Open Source:**
 - This project is open source and intended to be easy for others to contribute to
@@ -241,4 +244,4 @@ pytest --cov=app tests/  # with coverage
 
 ---
 
-**Last Updated:** November 17, 2025
+**Last Updated:** November 19, 2025

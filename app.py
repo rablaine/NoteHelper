@@ -25,6 +25,21 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+# SAFETY CHECK: Ensure we have a valid database URL
+if not app.config.get('SQLALCHEMY_DATABASE_URI'):
+    raise RuntimeError(
+        "CRITICAL: No DATABASE_URL configured!\n"
+        "Check your .env file or environment variables."
+    )
+
+# SAFETY CHECK: Prevent accidental test database usage in production
+if not os.getenv('TESTING') and 'sqlite' in str(app.config.get('SQLALCHEMY_DATABASE_URI', '')).lower():
+    raise RuntimeError(
+        "CRITICAL: Attempting to run production app with SQLite database!\n"
+        "This usually means DATABASE_URL environment variable was not loaded correctly.\n"
+        "Check your .env file and ensure DATABASE_URL points to PostgreSQL."
+    )
+
 
 # =============================================================================
 # Helper Functions
@@ -1111,6 +1126,12 @@ def search():
 def preferences():
     """User preferences page."""
     return render_template('preferences.html')
+
+
+@app.route('/data-management')
+def data_management():
+    """Data import/export management page."""
+    return render_template('data_management.html')
 
 
 # =============================================================================

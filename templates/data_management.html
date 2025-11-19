@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+
+{% block title %}Data Management - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 mx-auto">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="bi bi-database"></i> Data Management</h1>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Home
+            </a>
+        </div>
+
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> Import and export your NoteHelper data for backup or migration purposes.
+        </div>
+
+        <!-- Export Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-download"></i> Export Data</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Download your data in JSON or CSV format for backup or analysis.</p>
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-file-earmark-code"></i> Export as JSON</h6>
+                                <p class="card-text small text-muted">Complete backup including all relationships. Best for reimporting later.</p>
+                                <button class="btn btn-primary btn-sm" id="exportJsonBtn">
+                                    <i class="bi bi-download"></i> Download JSON
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="bi bi-file-earmark-spreadsheet"></i> Export as CSV</h6>
+                                <p class="card-text small text-muted">Separate CSV files for each data type. Best for analysis in Excel/Sheets.</p>
+                                <button class="btn btn-primary btn-sm" id="exportCsvBtn">
+                                    <i class="bi bi-download"></i> Download CSV (ZIP)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <h6>Export Statistics</h6>
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-people"></i> <strong id="customerCount">-</strong> Customers</li>
+                        <li><i class="bi bi-person-badge"></i> <strong id="sellerCount">-</strong> Sellers</li>
+                        <li><i class="bi bi-geo-alt"></i> <strong id="territoryCount">-</strong> Territories</li>
+                        <li><i class="bi bi-tags"></i> <strong id="topicCount">-</strong> Topics</li>
+                        <li><i class="bi bi-telephone"></i> <strong id="callLogCount">-</strong> Call Logs</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Import Section -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-upload"></i> Import Data</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> <strong>Warning:</strong> Importing data will add to existing data. To replace all data, export first for backup, then clear the database before importing.
+                </div>
+
+                <form id="importForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">Select JSON file to import</label>
+                        <input type="file" class="form-control" id="importFile" name="file" accept=".json" required>
+                        <div class="form-text">Must be a JSON file exported from NoteHelper.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="skipDuplicates" name="skip_duplicates" checked>
+                            <label class="form-check-label" for="skipDuplicates">
+                                Skip duplicate entries (based on names/identifiers)
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-upload"></i> Import Data
+                    </button>
+                </form>
+
+                <div id="importProgress" class="mt-3 d-none">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <p class="text-muted mt-2 mb-0">Processing import...</p>
+                </div>
+
+                <div id="importResults" class="mt-3 d-none">
+                    <!-- Results will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="card border-danger mt-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Danger Zone</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Irreversible actions that affect your entire database.</p>
+                <button class="btn btn-danger" id="clearDataBtn" data-bs-toggle="modal" data-bs-target="#clearDataModal">
+                    <i class="bi bi-trash"></i> Clear All Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clear Data Confirmation Modal -->
+<div class="modal fade" id="clearDataModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Confirm Clear All Data</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>This will permanently delete ALL data:</strong></p>
+                <ul>
+                    <li>All customers</li>
+                    <li>All sellers</li>
+                    <li>All territories</li>
+                    <li>All topics</li>
+                    <li>All call logs</li>
+                </ul>
+                <p class="text-danger"><strong>This action cannot be undone!</strong></p>
+                <p>Type <code>DELETE ALL DATA</code> to confirm:</p>
+                <input type="text" class="form-control" id="confirmDeleteText" placeholder="DELETE ALL DATA">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmClearBtn" disabled>
+                    <i class="bi bi-trash"></i> Yes, Delete Everything
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Load export statistics on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadExportStats();
+    });
+
+    async function loadExportStats() {
+        try {
+            const response = await fetch('/api/data-management/stats');
+            const data = await response.json();
+            
+            document.getElementById('customerCount').textContent = data.customers;
+            document.getElementById('sellerCount').textContent = data.sellers;
+            document.getElementById('territoryCount').textContent = data.territories;
+            document.getElementById('topicCount').textContent = data.topics;
+            document.getElementById('callLogCount').textContent = data.call_logs;
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+
+    // Export JSON
+    document.getElementById('exportJsonBtn').addEventListener('click', function() {
+        window.location.href = '/api/data-management/export/json';
+    });
+
+    // Export CSV
+    document.getElementById('exportCsvBtn').addEventListener('click', function() {
+        window.location.href = '/api/data-management/export/csv';
+    });
+
+    // Import form handling
+    document.getElementById('importForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const importProgress = document.getElementById('importProgress');
+        const importResults = document.getElementById('importResults');
+        
+        // Show progress, hide previous results
+        importProgress.classList.remove('d-none');
+        importResults.classList.add('d-none');
+        
+        try {
+            const response = await fetch('/api/data-management/import', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            // Hide progress
+            importProgress.classList.add('d-none');
+            
+            // Show results
+            importResults.classList.remove('d-none');
+            
+            if (response.ok) {
+                importResults.innerHTML = `
+                    <div class="alert alert-success">
+                        <h6><i class="bi bi-check-circle"></i> Import Successful!</h6>
+                        <ul class="mb-0">
+                            <li>Customers: ${result.imported.customers} imported, ${result.skipped.customers} skipped</li>
+                            <li>Sellers: ${result.imported.sellers} imported, ${result.skipped.sellers} skipped</li>
+                            <li>Territories: ${result.imported.territories} imported, ${result.skipped.territories} skipped</li>
+                            <li>Topics: ${result.imported.topics} imported, ${result.skipped.topics} skipped</li>
+                            <li>Call Logs: ${result.imported.call_logs} imported, ${result.skipped.call_logs} skipped</li>
+                        </ul>
+                    </div>
+                `;
+                
+                // Reload stats
+                loadExportStats();
+                
+                // Reset form
+                this.reset();
+            } else {
+                importResults.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle"></i> <strong>Import Failed:</strong> ${result.error || 'Unknown error occurred'}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            importProgress.classList.add('d-none');
+            importResults.classList.remove('d-none');
+            importResults.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-x-circle"></i> <strong>Error:</strong> ${error.message}
+                </div>
+            `;
+        }
+    });
+
+    // Clear data confirmation
+    const confirmDeleteText = document.getElementById('confirmDeleteText');
+    const confirmClearBtn = document.getElementById('confirmClearBtn');
+    
+    confirmDeleteText.addEventListener('input', function() {
+        confirmClearBtn.disabled = this.value !== 'DELETE ALL DATA';
+    });
+    
+    confirmClearBtn.addEventListener('click', async function() {
+        try {
+            const response = await fetch('/api/data-management/clear', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('clearDataModal'));
+                modal.hide();
+                
+                // Show success message
+                alert('All data has been cleared successfully.');
+                
+                // Reload page
+                window.location.reload();
+            } else {
+                alert('Error clearing data: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+    
+    // Reset confirmation text when modal is closed
+    document.getElementById('clearDataModal').addEventListener('hidden.bs.modal', function() {
+        confirmDeleteText.value = '';
+        confirmClearBtn.disabled = true;
+    });
+</script>
+
+{% endblock %}

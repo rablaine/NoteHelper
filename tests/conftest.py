@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 @pytest.fixture(scope='session')
 def app():
     """Create application for testing with isolated database."""
+    # Save original environment variables to restore later
+    original_database_url = os.environ.get('DATABASE_URL')
+    original_testing = os.environ.get('TESTING')
+    
     # Create a temporary database file for testing
     db_fd, db_path = tempfile.mkstemp(suffix='.db')
     
@@ -49,10 +53,15 @@ def app():
         # Windows may keep the file locked; it will be cleaned up by OS temp cleanup
         pass
     
-    # Restore original environment
-    if 'DATABASE_URL' in os.environ:
+    # Restore original environment variables
+    if original_database_url is not None:
+        os.environ['DATABASE_URL'] = original_database_url
+    elif 'DATABASE_URL' in os.environ:
         del os.environ['DATABASE_URL']
-    if 'TESTING' in os.environ:
+    
+    if original_testing is not None:
+        os.environ['TESTING'] = original_testing
+    elif 'TESTING' in os.environ:
         del os.environ['TESTING']
 
 
@@ -155,6 +164,14 @@ def reset_db(app):
     """Reset database between tests."""
     with app.app_context():
         from app import db, UserPreference
+        
+        # SAFETY CHECK: Ensure we're using SQLite for tests
+        db_uri = str(db.engine.url)
+        if 'sqlite' not in db_uri.lower():
+            raise RuntimeError(
+                f"CRITICAL: Tests attempted to run against non-SQLite database: {db_uri}\n"
+                f"This could destroy production data! Tests must only use SQLite."
+            )
         
         # Drop and recreate all tables for clean slate
         db.drop_all()
