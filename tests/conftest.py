@@ -41,7 +41,13 @@ def app():
         db.session.remove()
         db.drop_all()
     os.close(db_fd)
-    os.unlink(db_path)
+    
+    # Try to delete temp file, but ignore Windows file locking errors
+    try:
+        os.unlink(db_path)
+    except (PermissionError, OSError):
+        # Windows may keep the file locked; it will be cleaned up by OS temp cleanup
+        pass
     
     # Restore original environment
     if 'DATABASE_URL' in os.environ:
