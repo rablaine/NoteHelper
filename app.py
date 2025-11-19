@@ -21,6 +21,14 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# PostgreSQL connection pool settings to handle idle connections
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,  # Verify connections before using them
+    'pool_recycle': 300,    # Recycle connections after 5 minutes
+    'pool_size': 10,        # Connection pool size
+    'max_overflow': 5       # Max overflow connections
+}
+
 # Initialize extensions
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
