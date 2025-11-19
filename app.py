@@ -208,6 +208,7 @@ class Customer(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
+    nickname = db.Column(db.String(200), nullable=True)
     tpid = db.Column(db.BigInteger, nullable=False)
     tpid_url = db.Column(db.String(500), nullable=True)
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
@@ -238,6 +239,10 @@ class Customer(db.Model):
     def get_display_name_with_tpid(self) -> str:
         """Get customer name with TPID for display."""
         return f"{self.name} ({self.tpid})"
+    
+    def get_display_name(self) -> str:
+        """Get customer name for display, using nickname if available."""
+        return self.nickname if self.nickname else self.name
     
     def get_account_type(self) -> str:
         """Get account type (Acquisition/Growth) from assigned seller."""
