@@ -349,7 +349,8 @@ def territories_list():
     """List all territories."""
     territories = Territory.query.options(
         db.joinedload(Territory.sellers),
-        db.joinedload(Territory.customers)
+        db.joinedload(Territory.customers),
+        db.joinedload(Territory.pod)
     ).order_by(Territory.name).all()
     return render_template('territories_list.html', territories=territories)
 
@@ -385,7 +386,9 @@ def territory_create():
 @app.route('/territory/<int:id>')
 def territory_view(id):
     """View territory details (FR006)."""
-    territory = Territory.query.get_or_404(id)
+    territory = Territory.query.options(
+        db.joinedload(Territory.pod)
+    ).get_or_404(id)
     # Sort sellers in-memory since they're eager-loaded
     sellers = sorted(territory.sellers, key=lambda s: s.name)
     
@@ -432,6 +435,73 @@ def territory_edit(id):
     
     existing_territories = Territory.query.filter(Territory.id != id).order_by(Territory.name).all()
     return render_template('territory_form.html', territory=territory, existing_territories=existing_territories)
+
+
+# =============================================================================
+# POD Routes
+# =============================================================================
+
+@app.route('/pods')
+def pods_list():
+    """List all PODs."""
+    pods = POD.query.options(
+        db.joinedload(POD.territories),
+        db.joinedload(POD.solution_engineers)
+    ).order_by(POD.name).all()
+    return render_template('pods_list.html', pods=pods)
+
+
+@app.route('/pod/<int:id>')
+def pod_view(id):
+    """View POD details with territories, sellers, and solution engineers."""
+    pod = POD.query.options(
+        db.joinedload(POD.territories).joinedload(Territory.sellers),
+        db.joinedload(POD.solution_engineers)
+    ).get_or_404(id)
+    
+    # Get all sellers from all territories in this POD
+    sellers = set()
+    for territory in pod.territories:
+        for seller in territory.sellers:
+            sellers.add(seller)
+    sellers = sorted(list(sellers), key=lambda s: s.name)
+    
+    # Sort territories and solution engineers
+    territories = sorted(pod.territories, key=lambda t: t.name)
+    solution_engineers = sorted(pod.solution_engineers, key=lambda se: se.name)
+    
+    return render_template('pod_view.html',
+                         pod=pod,
+                         territories=territories,
+                         sellers=sellers,
+                         solution_engineers=solution_engineers)
+
+
+@app.route('/pod/<int:id>/edit', methods=['GET', 'POST'])
+def pod_edit(id):
+    """Edit POD name."""
+    pod = POD.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        
+        if not name:
+            flash('POD name is required.', 'danger')
+            return redirect(url_for('pod_edit', id=id))
+        
+        # Check for duplicate
+        existing = POD.query.filter(POD.name == name, POD.id != id).first()
+        if existing:
+            flash(f'POD "{name}" already exists.', 'warning')
+            return redirect(url_for('pod_view', id=existing.id))
+        
+        pod.name = name
+        db.session.commit()
+        
+        flash(f'POD "{name}" updated successfully!', 'success')
+        return redirect(url_for('pod_view', id=pod.id))
+    
+    return render_template('pod_form.html', pod=pod)
 
 
 # =============================================================================
