@@ -141,12 +141,11 @@ class SolutionEngineer(db.Model):
 
 
 class Vertical(db.Model):
-    """Industry vertical and category for customer classification."""
+    """Industry vertical for customer classification."""
     __tablename__ = 'verticals'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)  # e.g., "Financial Services"
-    category = db.Column(db.String(200), nullable=True)  # e.g., "Banking"
+    name = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -158,8 +157,6 @@ class Vertical(db.Model):
     )
     
     def __repr__(self) -> str:
-        if self.category:
-            return f'<Vertical {self.name} - {self.category}>'
         return f'<Vertical {self.name}>'
 
 
