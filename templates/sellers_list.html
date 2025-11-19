@@ -26,6 +26,12 @@
                             {% if seller.seller_type %}
                                 <span class="badge {% if seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ seller.seller_type }}</span>
                             {% endif %}
+                            {% set pods = seller.territories|map(attribute='pod')|select|unique|list %}
+                            {% if pods %}
+                                {% for pod in pods|sort(attribute='name') %}
+                                    <span class="badge bg-primary"><i class="bi bi-diagram-3"></i> {{ pod.name }}</span>
+                                {% endfor %}
+                            {% endif %}
                             {% if seller.territories %}
                                 {% for territory in seller.territories|sort(attribute='name') %}
                                     <span class="badge bg-secondary"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>

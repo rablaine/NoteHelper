@@ -3,10 +3,14 @@
 {% block title %}{{ 'Edit' if customer else 'New' }} Customer - NoteHelper{% endblock %}
 
 {% block content %}
-<h1 class="mb-4">{{ 'Edit' if customer else 'New' }} Customer</h1>
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <h1 class="mb-4">{{ 'Edit' if customer else 'New' }} Customer</h1>
+    </div>
+</div>
 
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-md-8 offset-md-2">
         <div class="card">
             <div class="card-body">
                 <form method="POST">
@@ -97,25 +101,6 @@
             </div>
         </div>
     </div>
-    
-    <div class="col-md-4">
-        <div class="card" id="existingCustomersCard" style="display: none;">
-            <div class="card-header">
-                <h6 class="mb-0">Existing Customers</h6>
-            </div>
-            <div class="card-body">
-                <div id="existingCustomersList" class="list-group">
-                    <!-- Dynamically populated by JavaScript -->
-                </div>
-            </div>
-        </div>
-        <div class="card" id="noSellerCard">
-            <div class="card-body text-center text-muted">
-                <i class="bi bi-info-circle" style="font-size: 2rem;"></i>
-                <p class="mt-2" id="noSellerMessage">Select a seller to see their existing customers</p>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- New Seller Modal -->
@@ -146,9 +131,6 @@
 
 {% block extra_js %}
 <script>
-// Seller customers data from backend (FR030)
-const sellerCustomers = {{ seller_customers|tojson|safe }};
-
 // Filter territories based on selected seller
 function filterTerritories() {
     const sellerSelect = document.getElementById('seller_id');
@@ -238,7 +220,6 @@ function filterSellers() {
 // Seller change handler
 document.getElementById('seller_id').addEventListener('change', function() {
     filterTerritories();
-    updateExistingCustomersList();
 });
 
 // Territory change handler

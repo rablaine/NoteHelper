@@ -511,9 +511,10 @@ def pods_list():
 @app.route('/pod/<int:id>')
 def pod_view(id):
     """View POD details with territories, sellers, and solution engineers."""
+    # Use selectinload for better performance with collections
     pod = POD.query.options(
-        db.joinedload(POD.territories).joinedload(Territory.sellers),
-        db.joinedload(POD.solution_engineers)
+        db.selectinload(POD.territories).selectinload(Territory.sellers),
+        db.selectinload(POD.solution_engineers)
     ).get_or_404(id)
     
     # Get all sellers from all territories in this POD
@@ -536,11 +537,16 @@ def pod_view(id):
 
 @app.route('/pod/<int:id>/edit', methods=['GET', 'POST'])
 def pod_edit(id):
-    """Edit POD name."""
-    pod = POD.query.get_or_404(id)
+    """Edit POD with territories, sellers, and solution engineers."""
+    pod = POD.query.options(
+        db.selectinload(POD.territories),
+        db.selectinload(POD.solution_engineers)
+    ).get_or_404(id)
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        territory_ids = request.form.getlist('territory_ids')
+        se_ids = request.form.getlist('se_ids')
         
         if not name:
             flash('POD name is required.', 'danger')
@@ -553,17 +559,47 @@ def pod_edit(id):
             return redirect(url_for('pod_view', id=existing.id))
         
         pod.name = name
+        
+        # Update territories
+        pod.territories.clear()
+        for territory_id in territory_ids:
+            territory = Territory.query.get(int(territory_id))
+            if territory:
+                pod.territories.append(territory)
+        
+        # Update solution engineers
+        pod.solution_engineers.clear()
+        for se_id in se_ids:
+            se = SolutionEngineer.query.get(int(se_id))
+            if se:
+                pod.solution_engineers.append(se)
+        
         db.session.commit()
         
         flash(f'POD "{name}" updated successfully!', 'success')
         return redirect(url_for('pod_view', id=pod.id))
     
-    return render_template('pod_form.html', pod=pod)
+    # Get all territories and solution engineers for the form
+    all_territories = Territory.query.options(
+        db.selectinload(Territory.sellers)
+    ).order_by(Territory.name).all()
+    all_ses = SolutionEngineer.query.order_by(SolutionEngineer.name).all()
+    
+    return render_template('pod_form.html', pod=pod, all_territories=all_territories, all_ses=all_ses)
 
 
 # =============================================================================
 # Solution Engineer Routes
 # =============================================================================
+
+@app.route('/solution-engineers')
+def solution_engineers_list():
+    """List all solution engineers."""
+    ses = SolutionEngineer.query.options(
+        db.joinedload(SolutionEngineer.pods)
+    ).order_by(SolutionEngineer.name).all()
+    return render_template('solution_engineers_list.html', solution_engineers=ses)
+
 
 @app.route('/solution-engineer/<int:id>')
 def solution_engineer_view(id):
@@ -626,7 +662,7 @@ def solution_engineer_edit(id):
 def sellers_list():
     """List all sellers."""
     sellers = Seller.query.options(
-        db.joinedload(Seller.territories),
+        db.joinedload(Seller.territories).joinedload(Territory.pod),
         db.joinedload(Seller.customers)
     ).order_by(Seller.name).all()
     return render_template('sellers_list.html', sellers=sellers)
@@ -858,16 +894,6 @@ def customer_create():
     sellers = Seller.query.order_by(Seller.name).all()
     territories = Territory.query.order_by(Territory.name).all()
     
-    # Build seller customers map for duplicate prevention (FR030)
-    seller_customers = {}
-    for seller in sellers:
-        # Sort customers in-memory since they're eager-loaded
-        customers = sorted(seller.customers, key=lambda c: c.name)
-        seller_customers[seller.id] = [
-            {'id': c.id, 'name': c.name, 'tpid': c.tpid} 
-            for c in customers
-        ]
-    
     # Pre-select seller and territory from query params (FR032)
     preselect_seller_id = request.args.get('seller_id', type=int)
     preselect_territory_id = request.args.get('territory_id', type=int)
@@ -894,7 +920,6 @@ def customer_create():
                          customer=None, 
                          sellers=sellers, 
                          territories=territories,
-                         seller_customers=seller_customers,
                          preselect_seller_id=preselect_seller_id,
                          preselect_territory_id=preselect_territory_id,
                          referrer=referrer)
@@ -950,21 +975,10 @@ def customer_edit(id):
     sellers = Seller.query.order_by(Seller.name).all()
     territories = Territory.query.order_by(Territory.name).all()
     
-    # Build seller customers map for duplicate prevention (FR030)
-    seller_customers = {}
-    for seller in sellers:
-        # Sort customers in-memory since they're eager-loaded
-        customers = sorted(seller.customers, key=lambda c: c.name)
-        seller_customers[seller.id] = [
-            {'id': c.id, 'name': c.name, 'tpid': c.tpid} 
-            for c in customers
-        ]
-    
     return render_template('customer_form.html', 
                          customer=customer, 
                          sellers=sellers, 
                          territories=territories,
-                         seller_customers=seller_customers,
                          referrer='')
 
 
