@@ -83,6 +83,13 @@ customers_verticals = db.Table(
     db.Column('vertical_id', db.Integer, db.ForeignKey('verticals.id'), primary_key=True)
 )
 
+# Association table for many-to-many relationship between SolutionEngineer and POD
+solution_engineers_pods = db.Table(
+    'solution_engineers_pods',
+    db.Column('solution_engineer_id', db.Integer, db.ForeignKey('solution_engineers.id'), primary_key=True),
+    db.Column('pod_id', db.Integer, db.ForeignKey('pods.id'), primary_key=True)
+)
+
 
 class POD(db.Model):
     """POD (Practice Operating Division) - organizational grouping of territories and personnel."""
@@ -94,7 +101,12 @@ class POD(db.Model):
     
     # Relationships
     territories = db.relationship('Territory', back_populates='pod', lazy='select')
-    solution_engineers = db.relationship('SolutionEngineer', back_populates='pod', lazy='select')
+    solution_engineers = db.relationship(
+        'SolutionEngineer',
+        secondary=solution_engineers_pods,
+        back_populates='pods',
+        lazy='select'
+    )
     
     def __repr__(self) -> str:
         return f'<POD {self.name}>'
@@ -108,11 +120,15 @@ class SolutionEngineer(db.Model):
     name = db.Column(db.String(200), nullable=False)
     alias = db.Column(db.String(100), nullable=True)  # Microsoft email alias
     specialty = db.Column(db.String(50), nullable=True)  # Azure Data, Azure Core and Infra, Azure Apps and AI
-    pod_id = db.Column(db.Integer, db.ForeignKey('pods.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
-    pod = db.relationship('POD', back_populates='solution_engineers')
+    pods = db.relationship(
+        'POD',
+        secondary=solution_engineers_pods,
+        back_populates='solution_engineers',
+        lazy='select'
+    )
     
     def __repr__(self) -> str:
         return f'<SolutionEngineer {self.name} ({self.specialty})>'

@@ -145,87 +145,96 @@ def import_alignment_sheet(csv_path: str):
         
         # Step 6: Create Solution Engineers - Data
         print("\n=== Creating Data Solution Engineers ===")
-        data_se_names = set()
+        # Collect SE info with all their PODs
+        data_se_info = {}  # {se_name: {'alias': str, 'pods': set()}}
         for row in rows:
             se_name = row.get('Data SE', '').strip()
             if se_name:
-                data_se_names.add(se_name)
-        
-        for se_name in sorted(data_se_names):
-            if se_name not in solution_engineers_map:
-                # Find row with this SE to get alias and POD
-                se_row = next((r for r in rows if r.get('Data SE', '').strip() == se_name), None)
+                if se_name not in data_se_info:
+                    alias = row.get('Primary Cloud & AI Data DSE', '').strip().lower()
+                    data_se_info[se_name] = {'alias': alias, 'pods': set()}
                 
-                if se_row:
-                    alias = se_row.get('Primary Cloud & AI Data DSE', '').strip().lower()
-                    pod_name = se_row.get('SME&C POD', '').strip()
-                    pod = pods_map.get(pod_name) if pod_name else None
-                    
-                    se = SolutionEngineer(
-                        name=se_name,
-                        alias=alias if alias else None,
-                        specialty='Azure Data',
-                        pod=pod
-                    )
-                    db.session.add(se)
-                    solution_engineers_map[se_name] = se
-                    print(f"Created Data SE: {se_name} (alias: {alias}, POD: {pod_name})")
+                pod_name = row.get('SME&C POD', '').strip()
+                if pod_name and pod_name in pods_map:
+                    data_se_info[se_name]['pods'].add(pod_name)
+        
+        for se_name, info in sorted(data_se_info.items()):
+            if se_name not in solution_engineers_map:
+                se = SolutionEngineer(
+                    name=se_name,
+                    alias=info['alias'] if info['alias'] else None,
+                    specialty='Azure Data'
+                )
+                # Associate with all PODs
+                for pod_name in info['pods']:
+                    se.pods.append(pods_map[pod_name])
+                
+                db.session.add(se)
+                solution_engineers_map[se_name] = se
+                pods_list = ', '.join(sorted(info['pods']))
+                print(f"Created Data SE: {se_name} (alias: {info['alias']}, PODs: {pods_list})")
         
         # Step 7: Create Solution Engineers - Infra
         print("\n=== Creating Infra Solution Engineers ===")
-        infra_se_names = set()
+        # Collect SE info with all their PODs
+        infra_se_info = {}  # {se_name: {'alias': str, 'pods': set()}}
         for row in rows:
             se_name = row.get('Infra SE', '').strip()
             if se_name:
-                infra_se_names.add(se_name)
-        
-        for se_name in sorted(infra_se_names):
-            if se_name not in solution_engineers_map:
-                # Find row with this SE to get alias and POD
-                se_row = next((r for r in rows if r.get('Infra SE', '').strip() == se_name), None)
+                if se_name not in infra_se_info:
+                    alias = row.get('Primary Cloud & AI Infrastructure DSE', '').strip().lower()
+                    infra_se_info[se_name] = {'alias': alias, 'pods': set()}
                 
-                if se_row:
-                    alias = se_row.get('Primary Cloud & AI Infrastructure DSE', '').strip().lower()
-                    pod_name = se_row.get('SME&C POD', '').strip()
-                    pod = pods_map.get(pod_name) if pod_name else None
-                    
-                    se = SolutionEngineer(
-                        name=se_name,
-                        alias=alias if alias else None,
-                        specialty='Azure Core and Infra',
-                        pod=pod
-                    )
-                    db.session.add(se)
-                    solution_engineers_map[se_name] = se
-                    print(f"Created Infra SE: {se_name} (alias: {alias}, POD: {pod_name})")
+                pod_name = row.get('SME&C POD', '').strip()
+                if pod_name and pod_name in pods_map:
+                    infra_se_info[se_name]['pods'].add(pod_name)
+        
+        for se_name, info in sorted(infra_se_info.items()):
+            if se_name not in solution_engineers_map:
+                se = SolutionEngineer(
+                    name=se_name,
+                    alias=info['alias'] if info['alias'] else None,
+                    specialty='Azure Core and Infra'
+                )
+                # Associate with all PODs
+                for pod_name in info['pods']:
+                    se.pods.append(pods_map[pod_name])
+                
+                db.session.add(se)
+                solution_engineers_map[se_name] = se
+                pods_list = ', '.join(sorted(info['pods']))
+                print(f"Created Infra SE: {se_name} (alias: {info['alias']}, PODs: {pods_list})")
         
         # Step 8: Create Solution Engineers - Apps
         print("\n=== Creating Apps Solution Engineers ===")
-        apps_se_names = set()
+        # Collect SE info with all their PODs
+        apps_se_info = {}  # {se_name: {'alias': str, 'pods': set()}}
         for row in rows:
             se_name = row.get('Apps SE', '').strip()
             if se_name:
-                apps_se_names.add(se_name)
-        
-        for se_name in sorted(apps_se_names):
-            if se_name not in solution_engineers_map:
-                # Find row with this SE to get alias and POD
-                se_row = next((r for r in rows if r.get('Apps SE', '').strip() == se_name), None)
+                if se_name not in apps_se_info:
+                    alias = row.get('Primary Cloud & AI Apps DSE', '').strip().lower()
+                    apps_se_info[se_name] = {'alias': alias, 'pods': set()}
                 
-                if se_row:
-                    alias = se_row.get('Primary Cloud & AI Apps DSE', '').strip().lower()
-                    pod_name = se_row.get('SME&C POD', '').strip()
-                    pod = pods_map.get(pod_name) if pod_name else None
-                    
-                    se = SolutionEngineer(
-                        name=se_name,
-                        alias=alias if alias else None,
-                        specialty='Azure Apps and AI',
-                        pod=pod
-                    )
-                    db.session.add(se)
-                    solution_engineers_map[se_name] = se
-                    print(f"Created Apps SE: {se_name} (alias: {alias}, POD: {pod_name})")
+                pod_name = row.get('SME&C POD', '').strip()
+                if pod_name and pod_name in pods_map:
+                    apps_se_info[se_name]['pods'].add(pod_name)
+        
+        for se_name, info in sorted(apps_se_info.items()):
+            if se_name not in solution_engineers_map:
+                se = SolutionEngineer(
+                    name=se_name,
+                    alias=info['alias'] if info['alias'] else None,
+                    specialty='Azure Apps and AI'
+                )
+                # Associate with all PODs
+                for pod_name in info['pods']:
+                    se.pods.append(pods_map[pod_name])
+                
+                db.session.add(se)
+                solution_engineers_map[se_name] = se
+                pods_list = ', '.join(sorted(info['pods']))
+                print(f"Created Apps SE: {se_name} (alias: {info['alias']}, PODs: {pods_list})")
         
         db.session.flush()
         

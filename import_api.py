@@ -165,56 +165,92 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                 yield "data: " + json.dumps({"message": "Processing solution engineers (Data)..."}) + "\n\n"
                 
                 # Create Solution Engineers - Data
-                data_se_names = set(row.get('Data SE', '').strip() for row in rows if row.get('Data SE', '').strip())
-                for se_name in data_se_names:
+                data_se_info = {}  # {se_name: {'alias': str, 'pods': set()}}
+                for row in rows:
+                    se_name = row.get('Data SE', '').strip()
+                    if se_name:
+                        if se_name not in data_se_info:
+                            alias = row.get('Primary Cloud & AI Data DSE', '').strip().lower()
+                            data_se_info[se_name] = {'alias': alias, 'pods': set()}
+                        pod_name = row.get('SME&C POD', '').strip()
+                        if pod_name and pod_name in pods_map:
+                            data_se_info[se_name]['pods'].add(pod_name)
+                
+                for se_name, info in data_se_info.items():
                     existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Data').first()
                     if existing:
                         solution_engineers_map[se_name] = existing
-                    else:
-                        se_row = next((r for r in rows if r.get('Data SE', '').strip() == se_name), None)
-                        if se_row:
-                            alias = se_row.get('Primary Cloud & AI Data DSE', '').strip().lower()
-                            pod_name = se_row.get('SME&C POD', '').strip()
+                        # Update POD associations for existing SE
+                        for pod_name in info['pods']:
                             pod = pods_map.get(pod_name)
-                            se = SolutionEngineer(name=se_name, alias=alias if alias else None, specialty='Azure Data', pod=pod)
-                            db.session.add(se)
-                            solution_engineers_map[se_name] = se
+                            if pod and pod not in existing.pods:
+                                existing.pods.append(pod)
+                    else:
+                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Data')
+                        for pod_name in info['pods']:
+                            se.pods.append(pods_map[pod_name])
+                        db.session.add(se)
+                        solution_engineers_map[se_name] = se
                 
                 yield "data: " + json.dumps({"message": "Processing solution engineers (Infra)..."}) + "\n\n"
                 
                 # Create Solution Engineers - Infra
-                infra_se_names = set(row.get('Infra SE', '').strip() for row in rows if row.get('Infra SE', '').strip())
-                for se_name in infra_se_names:
+                infra_se_info = {}  # {se_name: {'alias': str, 'pods': set()}}
+                for row in rows:
+                    se_name = row.get('Infra SE', '').strip()
+                    if se_name:
+                        if se_name not in infra_se_info:
+                            alias = row.get('Primary Cloud & AI Infrastructure DSE', '').strip().lower()
+                            infra_se_info[se_name] = {'alias': alias, 'pods': set()}
+                        pod_name = row.get('SME&C POD', '').strip()
+                        if pod_name and pod_name in pods_map:
+                            infra_se_info[se_name]['pods'].add(pod_name)
+                
+                for se_name, info in infra_se_info.items():
                     existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Core and Infra').first()
                     if existing:
                         solution_engineers_map[se_name] = existing
-                    else:
-                        se_row = next((r for r in rows if r.get('Infra SE', '').strip() == se_name), None)
-                        if se_row:
-                            alias = se_row.get('Primary Cloud & AI Infrastructure DSE', '').strip().lower()
-                            pod_name = se_row.get('SME&C POD', '').strip()
+                        # Update POD associations for existing SE
+                        for pod_name in info['pods']:
                             pod = pods_map.get(pod_name)
-                            se = SolutionEngineer(name=se_name, alias=alias if alias else None, specialty='Azure Core and Infra', pod=pod)
-                            db.session.add(se)
-                            solution_engineers_map[se_name] = se
+                            if pod and pod not in existing.pods:
+                                existing.pods.append(pod)
+                    else:
+                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Core and Infra')
+                        for pod_name in info['pods']:
+                            se.pods.append(pods_map[pod_name])
+                        db.session.add(se)
+                        solution_engineers_map[se_name] = se
                 
                 yield "data: " + json.dumps({"message": "Processing solution engineers (Apps)..."}) + "\n\n"
                 
                 # Create Solution Engineers - Apps
-                apps_se_names = set(row.get('Apps SE', '').strip() for row in rows if row.get('Apps SE', '').strip())
-                for se_name in apps_se_names:
+                apps_se_info = {}  # {se_name: {'alias': str, 'pods': set()}}
+                for row in rows:
+                    se_name = row.get('Apps SE', '').strip()
+                    if se_name:
+                        if se_name not in apps_se_info:
+                            alias = row.get('Primary Cloud & AI Apps DSE', '').strip().lower()
+                            apps_se_info[se_name] = {'alias': alias, 'pods': set()}
+                        pod_name = row.get('SME&C POD', '').strip()
+                        if pod_name and pod_name in pods_map:
+                            apps_se_info[se_name]['pods'].add(pod_name)
+                
+                for se_name, info in apps_se_info.items():
                     existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Apps and AI').first()
                     if existing:
                         solution_engineers_map[se_name] = existing
-                    else:
-                        se_row = next((r for r in rows if r.get('Apps SE', '').strip() == se_name), None)
-                        if se_row:
-                            alias = se_row.get('Primary Cloud & AI Apps DSE', '').strip().lower()
-                            pod_name = se_row.get('SME&C POD', '').strip()
+                        # Update POD associations for existing SE
+                        for pod_name in info['pods']:
                             pod = pods_map.get(pod_name)
-                            se = SolutionEngineer(name=se_name, alias=alias if alias else None, specialty='Azure Apps and AI', pod=pod)
-                            db.session.add(se)
-                            solution_engineers_map[se_name] = se
+                            if pod and pod not in existing.pods:
+                                existing.pods.append(pod)
+                    else:
+                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Apps and AI')
+                        for pod_name in info['pods']:
+                            se.pods.append(pods_map[pod_name])
+                        db.session.add(se)
+                        solution_engineers_map[se_name] = se
                 
                 db.session.flush()
                 msg = f"Created/found {len(solution_engineers_map)} solution engineers"
