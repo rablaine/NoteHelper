@@ -93,17 +93,28 @@
             color: #ffffff !important;
             font-weight: 600;
         }
+        /* User menu button styling with border and shadow */
+        .navbar .btn-light {
+            border: 1px solid rgba(0, 0, 0, 0.15) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+        }
+        .navbar .btn-light:hover,
+        .navbar .btn-light:focus {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+        }
         /* Tone down user menu button in dark mode */
         [data-bs-theme="dark"] .btn-light {
-            background-color: #495057 !important;
-            border-color: #495057 !important;
-            color: #dee2e6 !important;
+            background-color: rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            color: rgba(255, 255, 255, 0.85) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
         }
         [data-bs-theme="dark"] .btn-light:hover,
         [data-bs-theme="dark"] .btn-light:focus {
-            background-color: #5a6268 !important;
-            border-color: #5a6268 !important;
+            background-color: rgba(255, 255, 255, 0.12) !important;
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
             color: #ffffff !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) !important;
         }
     </style>
     
