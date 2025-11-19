@@ -22,11 +22,41 @@
                 <h5 class="mb-0">Details</h5>
             </div>
             <div class="card-body">
+                {% if seller.alias %}
+                    <p><strong>Email:</strong> <a href="mailto:{{ seller.alias }}@microsoft.com">{{ seller.alias }}@microsoft.com</a></p>
+                {% endif %}
+                {% if seller.seller_type %}
+                    <p><strong>Type:</strong> <span class="badge bg-secondary">{{ seller.seller_type }}</span></p>
+                {% endif %}
+                
+                <p><strong>PODs:</strong></p>
+                {% if seller.territories|length > 0 %}
+                    {% set pods = [] %}
+                    {% for territory in seller.territories %}
+                        {% if territory.pod and territory.pod not in pods %}
+                            {% set _ = pods.append(territory.pod) %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if pods|length > 0 %}
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            {% for pod in pods|sort(attribute='name') %}
+                                <a href="{{ url_for('pod_view', id=pod.id) }}" class="badge bg-info text-dark text-decoration-none">
+                                    <i class="bi bi-diagram-3"></i> {{ pod.name }}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No PODs assigned</p>
+                    {% endif %}
+                {% else %}
+                    <p class="text-muted">No territories/PODs assigned</p>
+                {% endif %}
+                
                 <p><strong>Territories:</strong></p>
                 {% if seller.territories|length > 0 %}
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         {% for territory in seller.territories|sort(attribute='name') %}
-                            <a href="{{ url_for('territory_view', id=territory.id) }}" class="badge bg-info text-dark text-decoration-none">
+                            <a href="{{ url_for('territory_view', id=territory.id) }}" class="badge bg-secondary text-decoration-none">
                                 <i class="bi bi-geo-alt"></i> {{ territory.name }}
                             </a>
                         {% endfor %}

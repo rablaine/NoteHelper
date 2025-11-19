@@ -44,7 +44,7 @@
                                 <div>
                                     <a href="{{ url_for('seller_view', id=seller.id) }}">{{ seller.name }}</a>
                                     {% if seller.alias %}
-                                        <br><small class="text-muted">{{ seller.alias }}</small>
+                                        <br><small class="text-muted"><i class="bi bi-envelope"></i> {{ seller.alias }}@microsoft.com</small>
                                     {% endif %}
                                     {% if seller.seller_type %}
                                         <span class="badge bg-secondary ms-2">{{ seller.seller_type }}</span>
@@ -75,7 +75,7 @@
                                     <div>
                                         <strong>{{ se.name }}</strong>
                                         {% if se.alias %}
-                                            <br><small class="text-muted"><i class="bi bi-envelope"></i> {{ se.alias }}</small>
+                                            <br><small class="text-muted"><i class="bi bi-envelope"></i> {{ se.alias }}@microsoft.com</small>
                                         {% endif %}
                                     </div>
                                     {% if se.specialty %}
