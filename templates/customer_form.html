@@ -15,6 +15,14 @@
                         <label for="name" class="form-label">Customer Name *</label>
                         <input type="text" class="form-control" id="name" name="name" 
                                value="{{ customer.name if customer else '' }}" required>
+                        <div class="form-text">Official customer name from CRM</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="nickname" class="form-label">Nickname</label>
+                        <input type="text" class="form-control" id="nickname" name="nickname" 
+                               value="{{ customer.nickname|default('', true) if customer else '' }}" maxlength="200">
+                        <div class="form-text">Optional: Shorter or preferred name for display</div>
                     </div>
                     
                     <div class="mb-3">
@@ -28,7 +36,7 @@
                     <div class="mb-3">
                         <label for="tpid_url" class="form-label">MSX Account URL</label>
                         <input type="url" class="form-control" id="tpid_url" name="tpid_url" 
-                               value="{{ customer.tpid_url if customer else '' }}" 
+                               value="{{ customer.tpid_url|default('', true) if customer else '' }}" 
                                maxlength="500" placeholder="https://example.com/customer-details">
                         <div class="form-text">Optional: Link to MSX account for this customer</div>
                     </div>

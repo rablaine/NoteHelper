@@ -815,6 +815,7 @@ def customer_create():
     """Create a new customer (FR003, FR031)."""
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        nickname = request.form.get('nickname', '').strip()
         tpid = request.form.get('tpid', '').strip()
         tpid_url = request.form.get('tpid_url', '').strip()
         seller_id = request.form.get('seller_id')
@@ -837,6 +838,7 @@ def customer_create():
         
         customer = Customer(
             name=name,
+            nickname=nickname if nickname else None,
             tpid=tpid_value,
             tpid_url=tpid_url if tpid_url else None,
             seller_id=int(seller_id) if seller_id else None,
@@ -914,6 +916,7 @@ def customer_edit(id):
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        nickname = request.form.get('nickname', '').strip()
         tpid = request.form.get('tpid', '').strip()
         tpid_url = request.form.get('tpid_url', '').strip()
         seller_id = request.form.get('seller_id')
@@ -934,6 +937,7 @@ def customer_edit(id):
             return redirect(url_for('customer_edit', id=id))
         
         customer.name = name
+        customer.nickname = nickname if nickname else None
         customer.tpid = tpid_value
         customer.tpid_url = tpid_url if tpid_url else None
         customer.seller_id = int(seller_id) if seller_id else None
