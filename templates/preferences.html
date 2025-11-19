@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Preferences - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <h1 class="mb-4"><i class="bi bi-gear"></i> Preferences</h1>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Appearance</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+                    <div>
+                        <h6 class="mb-1">Dark Mode</h6>
+                        <small class="text-muted">Use dark theme throughout the application</small>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="darkModeSwitch" 
+                               {{ 'checked' if dark_mode else '' }} style="width: 3em; height: 1.5em;">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">View Preferences</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+                    <div>
+                        <h6 class="mb-1">Customer View</h6>
+                        <small class="text-muted">How to display customers list</small>
+                    </div>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="customerView" id="customerAlpha" value="false" 
+                               {{ 'checked' if not customer_view_grouped else '' }}>
+                        <label class="btn btn-outline-primary" for="customerAlpha">
+                            <i class="bi bi-sort-alpha-down"></i> Alphabetical
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="customerView" id="customerGrouped" value="true" 
+                               {{ 'checked' if customer_view_grouped else '' }}>
+                        <label class="btn btn-outline-primary" for="customerGrouped">
+                            <i class="bi bi-collection"></i> Grouped
+                        </label>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1">Topic Sort</h6>
+                        <small class="text-muted">How to sort topics list</small>
+                    </div>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="topicSort" id="topicAlpha" value="false" 
+                               {{ 'checked' if not topic_sort_by_calls else '' }}>
+                        <label class="btn btn-outline-primary" for="topicAlpha">
+                            <i class="bi bi-sort-alpha-down"></i> Alphabetical
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="topicSort" id="topicByCalls" value="true" 
+                               {{ 'checked' if topic_sort_by_calls else '' }}>
+                        <label class="btn btn-outline-primary" for="topicByCalls">
+                            <i class="bi bi-sort-numeric-down"></i> By Calls
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-success d-none" id="saveSuccess">
+            <i class="bi bi-check-circle"></i> Preferences saved successfully!
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const darkModeSwitch = document.getElementById('darkModeSwitch');
+    const customerViewRadios = document.querySelectorAll('input[name="customerView"]');
+    const topicSortRadios = document.querySelectorAll('input[name="topicSort"]');
+    const saveSuccess = document.getElementById('saveSuccess');
+    
+    // Dark mode toggle
+    darkModeSwitch.addEventListener('change', function() {
+        const darkMode = this.checked;
+        
+        fetch('/api/preferences/dark-mode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ dark_mode: darkMode })
+        })
+        .then(response => response.json())
+        .then(() => {
+            showSuccess();
+            // Update UI immediately
+            document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
+        })
+        .catch(error => {
+            console.error('Error saving dark mode preference:', error);
+        });
+    });
+    
+    // Customer view preference
+    customerViewRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                const customerViewGrouped = this.value === 'true';
+                
+                fetch('/api/preferences/customer-view', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ customer_view_grouped: customerViewGrouped })
+                })
+                .then(response => response.json())
+                .then(() => {
+                    showSuccess();
+                })
+                .catch(error => {
+                    console.error('Error saving customer view preference:', error);
+                });
+            }
+        });
+    });
+    
+    // Topic sort preference
+    topicSortRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                const topicSortByCalls = this.value === 'true';
+                
+                fetch('/api/preferences/topic-sort', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ topic_sort_by_calls: topicSortByCalls })
+                })
+                .then(response => response.json())
+                .then(() => {
+                    showSuccess();
+                })
+                .catch(error => {
+                    console.error('Error saving topic sort preference:', error);
+                });
+            }
+        });
+    });
+    
+    function showSuccess() {
+        saveSuccess.classList.remove('d-none');
+        setTimeout(() => {
+            saveSuccess.classList.add('d-none');
+        }, 3000);
+    }
+});
+</script>
+{% endblock %}

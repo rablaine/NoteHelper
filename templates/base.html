@@ -93,6 +93,18 @@
             color: #ffffff !important;
             font-weight: 600;
         }
+        /* Tone down user menu button in dark mode */
+        [data-bs-theme="dark"] .btn-light {
+            background-color: #495057 !important;
+            border-color: #495057 !important;
+            color: #dee2e6 !important;
+        }
+        [data-bs-theme="dark"] .btn-light:hover,
+        [data-bs-theme="dark"] .btn-light:focus {
+            background-color: #5a6268 !important;
+            border-color: #5a6268 !important;
+            color: #ffffff !important;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -149,9 +161,17 @@
                     <span class="dark-mode-toggle" id="darkModeToggle" title="Toggle Dark Mode">
                         <i class="bi {{ 'bi-moon-fill' if dark_mode else 'bi-sun-fill' }}" id="darkModeIcon"></i>
                     </span>
-                    <a href="{{ url_for('call_log_create') }}" class="btn btn-light">
-                        <i class="bi bi-plus-circle"></i> New Call Log
-                    </a>
+                    <div class="dropdown">
+                        <button class="btn btn-light dropdown-toggle" type="button" id="userMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('preferences') }}"><i class="bi bi-gear"></i> Preferences</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item disabled" href="#"><i class="bi bi-person"></i> User Profile</a></li>
+                            <li><a class="dropdown-item disabled" href="#"><i class="bi bi-box-arrow-right"></i> Log Out</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>

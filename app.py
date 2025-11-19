@@ -1099,6 +1099,12 @@ def search():
                          topics=topics)
 
 
+@app.route('/preferences')
+def preferences():
+    """User preferences page."""
+    return render_template('preferences.html')
+
+
 # =============================================================================
 # USER PREFERENCE ROUTES
 # =============================================================================
