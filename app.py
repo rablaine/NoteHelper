@@ -1239,6 +1239,68 @@ def data_management():
     return render_template('data_management.html')
 
 
+@app.route('/api/data-management/stats', methods=['GET'])
+def data_management_stats():
+    """Get database statistics for data management page."""
+    stats = {
+        'pods': POD.query.count(),
+        'territories': Territory.query.count(),
+        'sellers': Seller.query.count(),
+        'solution_engineers': SolutionEngineer.query.count(),
+        'customers': Customer.query.count(),
+        'verticals': Vertical.query.count(),
+        'topics': Topic.query.count(),
+        'call_logs': CallLog.query.count()
+    }
+    return jsonify(stats), 200
+
+
+@app.route('/api/data-management/clear', methods=['POST'])
+def data_management_clear():
+    """Clear all data from the database."""
+    try:
+        # Delete in correct order to handle foreign key constraints
+        # Delete call logs first (depends on customers and topics)
+        CallLog.query.delete()
+        
+        # Delete customer-vertical associations
+        db.session.execute(customers_verticals.delete())
+        
+        # Delete customers
+        Customer.query.delete()
+        
+        # Delete solution engineers (depends on PODs)
+        SolutionEngineer.query.delete()
+        
+        # Delete verticals
+        Vertical.query.delete()
+        
+        # Delete topics
+        Topic.query.delete()
+        
+        # Delete seller-territory associations
+        db.session.execute(sellers_territories.delete())
+        
+        # Delete sellers and territories (territories depend on PODs)
+        Seller.query.delete()
+        Territory.query.delete()
+        
+        # Delete PODs
+        POD.query.delete()
+        
+        db.session.commit()
+        return jsonify({'success': True}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# Import the streaming import endpoint
+from import_api import create_import_endpoint
+create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Vertical, Customer)
+
+
 # =============================================================================
 # USER PREFERENCE ROUTES
 # =============================================================================

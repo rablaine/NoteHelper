@@ -50,14 +50,27 @@
                 </div>
 
                 <div class="mt-3">
-                    <h6>Export Statistics</h6>
-                    <ul class="list-unstyled">
-                        <li><i class="bi bi-people"></i> <strong id="customerCount">-</strong> Customers</li>
-                        <li><i class="bi bi-person-badge"></i> <strong id="sellerCount">-</strong> Sellers</li>
-                        <li><i class="bi bi-geo-alt"></i> <strong id="territoryCount">-</strong> Territories</li>
-                        <li><i class="bi bi-tags"></i> <strong id="topicCount">-</strong> Topics</li>
-                        <li><i class="bi bi-telephone"></i> <strong id="callLogCount">-</strong> Call Logs</li>
-                    </ul>
+                    <h6>Database Statistics</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="text-muted mb-1 small">Organizational Structure</p>
+                            <ul class="list-unstyled">
+                                <li><i class="bi bi-diagram-3"></i> <strong id="podCount">-</strong> PODs</li>
+                                <li><i class="bi bi-geo-alt"></i> <strong id="territoryCount">-</strong> Territories</li>
+                                <li><i class="bi bi-person-badge"></i> <strong id="sellerCount">-</strong> Sellers</li>
+                                <li><i class="bi bi-person-workspace"></i> <strong id="solutionEngineerCount">-</strong> Solution Engineers</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="text-muted mb-1 small">Customer Data</p>
+                            <ul class="list-unstyled">
+                                <li><i class="bi bi-building"></i> <strong id="customerCount">-</strong> Customers</li>
+                                <li><i class="bi bi-tags"></i> <strong id="verticalCount">-</strong> Verticals</li>
+                                <li><i class="bi bi-tag"></i> <strong id="topicCount">-</strong> Topics</li>
+                                <li><i class="bi bi-telephone"></i> <strong id="callLogCount">-</strong> Call Logs</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -74,22 +87,13 @@
 
                 <form id="importForm" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label for="importFile" class="form-label">Select JSON file to import</label>
-                        <input type="file" class="form-control" id="importFile" name="file" accept=".json" required>
-                        <div class="form-text">Must be a JSON file exported from NoteHelper.</div>
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="skipDuplicates" name="skip_duplicates" checked>
-                            <label class="form-check-label" for="skipDuplicates">
-                                Skip duplicate entries (based on names/identifiers)
-                            </label>
-                        </div>
+                        <label for="importFile" class="form-label">Select Alignment Sheet CSV</label>
+                        <input type="file" class="form-control" id="importFile" name="file" accept=".csv" required>
+                        <div class="form-text">Upload your alignment sheet CSV containing organizational structure and customer data.</div>
                     </div>
 
                     <button type="submit" class="btn btn-success">
-                        <i class="bi bi-upload"></i> Import Data
+                        <i class="bi bi-upload"></i> Import Alignment Sheet
                     </button>
                 </form>
 
@@ -163,11 +167,14 @@
             const response = await fetch('/api/data-management/stats');
             const data = await response.json();
             
-            document.getElementById('customerCount').textContent = data.customers;
-            document.getElementById('sellerCount').textContent = data.sellers;
-            document.getElementById('territoryCount').textContent = data.territories;
-            document.getElementById('topicCount').textContent = data.topics;
-            document.getElementById('callLogCount').textContent = data.call_logs;
+            document.getElementById('podCount').textContent = data.pods || 0;
+            document.getElementById('territoryCount').textContent = data.territories || 0;
+            document.getElementById('sellerCount').textContent = data.sellers || 0;
+            document.getElementById('solutionEngineerCount').textContent = data.solution_engineers || 0;
+            document.getElementById('customerCount').textContent = data.customers || 0;
+            document.getElementById('verticalCount').textContent = data.verticals || 0;
+            document.getElementById('topicCount').textContent = data.topics || 0;
+            document.getElementById('callLogCount').textContent = data.call_logs || 0;
         } catch (error) {
             console.error('Error loading stats:', error);
         }
@@ -183,25 +190,68 @@
         window.location.href = '/api/data-management/export/csv';
     });
 
-    // Import form handling
+    // Import form handling with real-time progress
     document.getElementById('importForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
         const formData = new FormData(this);
         const importProgress = document.getElementById('importProgress');
         const importResults = document.getElementById('importResults');
+        const progressText = importProgress.querySelector('p');
         
         // Show progress, hide previous results
         importProgress.classList.remove('d-none');
         importResults.classList.add('d-none');
+        progressText.innerHTML = '<i class="bi bi-hourglass-split"></i> Starting import...';
         
         try {
+            // Start the import and get the stream
             const response = await fetch('/api/data-management/import', {
                 method: 'POST',
                 body: formData
             });
             
-            const result = await response.json();
+            if (!response.ok) {
+                throw new Error('Failed to start import');
+            }
+            
+            // Read the stream for progress updates
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let finalResult = null;
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // Keep incomplete line in buffer
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            
+                            if (data.error) {
+                                throw new Error(data.error);
+                            }
+                            
+                            if (data.message) {
+                                progressText.innerHTML = `<i class="bi bi-hourglass-split"></i> ${data.message}`;
+                            }
+                            
+                            if (data.result) {
+                                finalResult = data.result;
+                            }
+                        } catch (parseError) {
+                            console.error('Error parsing SSE data:', parseError);
+                        }
+                    }
+                }
+            }
             
             // Hide progress
             importProgress.classList.add('d-none');
@@ -209,16 +259,17 @@
             // Show results
             importResults.classList.remove('d-none');
             
-            if (response.ok) {
+            if (finalResult) {
                 importResults.innerHTML = `
                     <div class="alert alert-success">
                         <h6><i class="bi bi-check-circle"></i> Import Successful!</h6>
                         <ul class="mb-0">
-                            <li>Customers: ${result.imported.customers} imported, ${result.skipped.customers} skipped</li>
-                            <li>Sellers: ${result.imported.sellers} imported, ${result.skipped.sellers} skipped</li>
-                            <li>Territories: ${result.imported.territories} imported, ${result.skipped.territories} skipped</li>
-                            <li>Topics: ${result.imported.topics} imported, ${result.skipped.topics} skipped</li>
-                            <li>Call Logs: ${result.imported.call_logs} imported, ${result.skipped.call_logs} skipped</li>
+                            <li>PODs: ${finalResult.pods || 0}</li>
+                            <li>Territories: ${finalResult.territories || 0}</li>
+                            <li>Sellers: ${finalResult.sellers || 0}</li>
+                            <li>Solution Engineers: ${finalResult.solution_engineers || 0}</li>
+                            <li>Verticals: ${finalResult.verticals || 0}</li>
+                            <li>Customers: ${finalResult.customers_created || 0} created, ${finalResult.customers_skipped || 0} skipped</li>
                         </ul>
                     </div>
                 `;
@@ -229,11 +280,7 @@
                 // Reset form
                 this.reset();
             } else {
-                importResults.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-x-circle"></i> <strong>Import Failed:</strong> ${result.error || 'Unknown error occurred'}
-                    </div>
-                `;
+                throw new Error('Import completed but no results received');
             }
         } catch (error) {
             importProgress.classList.add('d-none');
