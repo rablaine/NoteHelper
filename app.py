@@ -325,11 +325,12 @@ class UserPreference(db.Model):
     dark_mode = db.Column(db.Boolean, default=False, nullable=False)
     customer_view_grouped = db.Column(db.Boolean, default=False, nullable=False)
     topic_sort_by_calls = db.Column(db.Boolean, default=False, nullable=False)
+    territory_view_accounts = db.Column(db.Boolean, default=False, nullable=False)  # False = recent calls, True = accounts
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     def __repr__(self) -> str:
-        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} topic_sort_by_calls={self.topic_sort_by_calls}>'
+        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts}>'
 
 
 # =============================================================================
@@ -408,18 +409,58 @@ def territory_view(id):
     # Sort sellers in-memory since they're eager-loaded
     sellers = sorted(territory.sellers, key=lambda s: s.name)
     
-    # Get calls from last 7 days
-    from datetime import timedelta
-    week_ago = utc_now() - timedelta(days=7)
-    recent_calls = CallLog.query.filter(
-        CallLog.territory_id == id,
-        CallLog.call_date >= week_ago
-    ).order_by(CallLog.call_date.desc()).all()
+    # Get user preference for territory view
+    user_id = 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    show_accounts = pref.territory_view_accounts if pref else False
+    
+    recent_calls = []
+    growth_customers = []
+    acquisition_customers = []
+    
+    if show_accounts:
+        # Get all customers in this territory with call counts
+        from sqlalchemy import func
+        customers_with_counts = db.session.query(
+            Customer,
+            func.count(CallLog.id).label('call_count')
+        ).join(
+            Seller, Customer.seller_id == Seller.id
+        ).filter(
+            Seller.territories.any(Territory.id == id)
+        ).outerjoin(
+            CallLog, Customer.id == CallLog.customer_id
+        ).group_by(Customer.id, Seller.id, Seller.seller_type).all()
+        
+        # Group by seller type and sort by call count
+        for customer, call_count in customers_with_counts:
+            customer.call_count = call_count  # Attach count for template
+            # Determine customer type by their seller
+            if customer.seller:
+                if customer.seller.seller_type == 'Growth':
+                    growth_customers.append(customer)
+                elif customer.seller.seller_type == 'Acquisition':
+                    acquisition_customers.append(customer)
+        
+        # Sort by call count descending
+        growth_customers.sort(key=lambda c: c.call_count, reverse=True)
+        acquisition_customers.sort(key=lambda c: c.call_count, reverse=True)
+    else:
+        # Get calls from last 7 days
+        from datetime import timedelta
+        week_ago = utc_now() - timedelta(days=7)
+        recent_calls = CallLog.query.filter(
+            CallLog.territory_id == id,
+            CallLog.call_date >= week_ago
+        ).order_by(CallLog.call_date.desc()).all()
     
     return render_template('territory_view.html', 
                          territory=territory, 
                          sellers=sellers, 
-                         recent_calls=recent_calls)
+                         recent_calls=recent_calls,
+                         show_accounts=show_accounts,
+                         growth_customers=growth_customers,
+                         acquisition_customers=acquisition_customers)
 
 
 @app.route('/territory/<int:id>/edit', methods=['GET', 'POST'])
@@ -1373,7 +1414,18 @@ def search():
 @app.route('/preferences')
 def preferences():
     """User preferences page."""
-    return render_template('preferences.html')
+    user_id = 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id)
+        db.session.add(pref)
+        db.session.commit()
+    
+    return render_template('preferences.html', 
+                         dark_mode=pref.dark_mode,
+                         customer_view_grouped=pref.customer_view_grouped,
+                         topic_sort_by_calls=pref.topic_sort_by_calls,
+                         territory_view_accounts=pref.territory_view_accounts)
 
 
 @app.route('/data-management')
@@ -1536,6 +1588,36 @@ def topic_sort_preference():
         db.session.commit()
     
     return jsonify({'topic_sort_by_calls': pref.topic_sort_by_calls}), 200
+
+
+@app.route('/api/preferences/territory-view', methods=['GET', 'POST'])
+def territory_view_preference():
+    """Get or set territory view preference (recent calls vs accounts)."""
+    user_id = 1  # Single user system
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        territory_view_accounts = data.get('territory_view_accounts', False)
+        
+        # Get or create user preference
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = UserPreference(user_id=user_id, territory_view_accounts=territory_view_accounts)
+            db.session.add(pref)
+        else:
+            pref.territory_view_accounts = territory_view_accounts
+        
+        db.session.commit()
+        return jsonify({'territory_view_accounts': pref.territory_view_accounts}), 200
+    
+    # GET request
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, territory_view_accounts=False)
+        db.session.add(pref)
+        db.session.commit()
+    
+    return jsonify({'territory_view_accounts': pref.territory_view_accounts}), 200
 
 
 # =============================================================================

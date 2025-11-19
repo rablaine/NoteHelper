@@ -42,22 +42,71 @@
     
     <div class="col-md-6">
         <div class="card mb-3">
-            <div class="card-header">
-                <h5 class="mb-0">Recent Calls (Last 7 Days)</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    {% if show_accounts %}
+                        Accounts in Territory
+                    {% else %}
+                        Recent Calls (Last 7 Days)
+                    {% endif %}
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <input type="radio" class="btn-check" name="territoryViewToggle" id="viewCalls" 
+                           {{ 'checked' if not show_accounts else '' }}>
+                    <label class="btn btn-outline-secondary" for="viewCalls" title="Recent Calls">
+                        <i class="bi bi-telephone"></i>
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="territoryViewToggle" id="viewAccounts" 
+                           {{ 'checked' if show_accounts else '' }}>
+                    <label class="btn btn-outline-secondary" for="viewAccounts" title="Accounts">
+                        <i class="bi bi-building"></i>
+                    </label>
+                </div>
             </div>
             <div class="card-body">
-                {% if recent_calls %}
-                    <ul class="list-group list-group-flush">
-                        {% for call in recent_calls %}
-                            <li class="list-group-item">
-                                <a href="{{ url_for('call_log_view', id=call.id) }}">{{ call.customer.name }}</a>
-                                <br>
-                                <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
-                            </li>
-                        {% endfor %}
-                    </ul>
+                {% if show_accounts %}
+                    {% if growth_customers or acquisition_customers %}
+                        {% if growth_customers %}
+                            <h6 class="mb-2"><span class="badge bg-success">Growth</span></h6>
+                            <ul class="list-group list-group-flush mb-3">
+                                {% for customer in growth_customers %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <a href="{{ url_for('customer_view', id=customer.id) }}">{{ customer.name }}</a>
+                                        <span class="badge bg-primary rounded-pill">{{ customer.call_count }} calls</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                        
+                        {% if acquisition_customers %}
+                            <h6 class="mb-2"><span class="badge bg-info">Acquisition</span></h6>
+                            <ul class="list-group list-group-flush">
+                                {% for customer in acquisition_customers %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <a href="{{ url_for('customer_view', id=customer.id) }}">{{ customer.name }}</a>
+                                        <span class="badge bg-primary rounded-pill">{{ customer.call_count }} calls</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted">No accounts in this territory yet.</p>
+                    {% endif %}
                 {% else %}
-                    <p class="text-muted">No recent calls in this territory.</p>
+                    {% if recent_calls %}
+                        <ul class="list-group list-group-flush">
+                            {% for call in recent_calls %}
+                                <li class="list-group-item">
+                                    <a href="{{ url_for('call_log_view', id=call.id) }}">{{ call.customer.name }}</a>
+                                    <br>
+                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted">No recent calls in this territory.</p>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -69,4 +118,36 @@
         <i class="bi bi-arrow-left"></i> Back to Territories
     </a>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const territoryViewToggle = document.querySelectorAll('input[name="territoryViewToggle"]');
+    
+    territoryViewToggle.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                const territoryViewAccounts = this.id === 'viewAccounts';
+                
+                fetch('/api/preferences/territory-view', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ territory_view_accounts: territoryViewAccounts })
+                })
+                .then(response => response.json())
+                .then(() => {
+                    // Reload page to show updated view
+                    window.location.reload();
+                })
+                .catch(error => {
+                    console.error('Error saving territory view preference:', error);
+                });
+            }
+        });
+    });
+});
+</script>
 {% endblock %}
