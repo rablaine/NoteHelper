@@ -550,6 +550,7 @@ def solution_engineer_edit(id):
         name = request.form.get('name', '').strip()
         alias = request.form.get('alias', '').strip()
         specialty = request.form.get('specialty', '').strip()
+        pod_ids = request.form.getlist('pod_ids')
         
         if not name:
             flash('Solution Engineer name is required.', 'danger')
@@ -559,12 +560,21 @@ def solution_engineer_edit(id):
         se.alias = alias if alias else None
         se.specialty = specialty if specialty else None
         
+        # Update POD associations
+        se.pods.clear()
+        for pod_id in pod_ids:
+            pod = POD.query.get(int(pod_id))
+            if pod:
+                se.pods.append(pod)
+        
         db.session.commit()
         
         flash(f'Solution Engineer "{name}" updated successfully!', 'success')
         return redirect(url_for('solution_engineer_view', id=se.id))
     
-    return render_template('solution_engineer_form.html', solution_engineer=se)
+    # Get all PODs for the form
+    all_pods = POD.query.order_by(POD.name).all()
+    return render_template('solution_engineer_form.html', solution_engineer=se, all_pods=all_pods)
 
 
 # =============================================================================

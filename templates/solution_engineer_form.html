@@ -37,8 +37,24 @@
                         </select>
                     </div>
                     
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> <strong>Note:</strong> POD assignments are managed through the CSV import process and cannot be edited here.
+                    <div class="mb-3">
+                        <label class="form-label">POD Assignments</label>
+                        {% if all_pods %}
+                            <div class="border rounded p-3">
+                                {% for pod in all_pods %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="pod_ids" value="{{ pod.id }}" id="pod_{{ pod.id }}" 
+                                               {% if pod in solution_engineer.pods %}checked{% endif %}>
+                                        <label class="form-check-label" for="pod_{{ pod.id }}">
+                                            {{ pod.name }}
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <small class="form-text text-muted">Select all PODs this Solution Engineer supports</small>
+                        {% else %}
+                            <p class="text-muted">No PODs available. Create PODs through the CSV import process.</p>
+                        {% endif %}
                     </div>
                     
                     <div class="d-flex justify-content-between">
