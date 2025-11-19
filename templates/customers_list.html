@@ -125,7 +125,7 @@
                     </div>
                     <div>
                         {% if customer.seller %}
-                            <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ customer.seller.name }}</span>
+                            <a href="{{ url_for('seller_view', id=customer.seller.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
                         {% endif %}
                         {% if customer.territory %}
                             <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>

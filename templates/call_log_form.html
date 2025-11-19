@@ -81,7 +81,7 @@
                         
                         <div id="selected_topics" class="mt-2 d-flex flex-wrap gap-2">
                             {% if call_log %}
-                                {% for topic in call_log.topics.all() %}
+                                {% for topic in call_log.topics %}
                                     <span class="badge bg-warning text-dark d-flex align-items-center" data-topic-id="{{ topic.id }}">
                                         <i class="bi bi-tag me-1"></i> {{ topic.name }}
                                         <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTopic({{ topic.id }})"></button>

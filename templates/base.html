@@ -69,17 +69,6 @@
             background-color: #a02834 !important;
             border-color: #a02834 !important;
         }
-        .dark-mode-toggle {
-            cursor: pointer;
-            font-size: 1.2rem;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            transition: background-color 0.2s;
-        }
-        .dark-mode-toggle:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
         /* Improve navbar link contrast */
         .navbar-dark .navbar-nav .nav-link {
             color: rgba(255, 255, 255, 0.85) !important;
@@ -115,6 +104,10 @@
             border: 1px solid rgba(255, 255, 255, 0.25) !important;
             color: #ffffff !important;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+        }
+        /* Dark mode toggle in dropdown */
+        #darkModeToggle {
+            cursor: pointer;
         }
     </style>
     
@@ -169,14 +162,18 @@
                     </li>
                 </ul>
                 <div class="d-flex align-items-center gap-3">
-                    <span class="dark-mode-toggle" id="darkModeToggle" title="Toggle Dark Mode">
-                        <i class="bi {{ 'bi-moon-fill' if dark_mode else 'bi-sun-fill' }}" id="darkModeIcon"></i>
-                    </span>
                     <div class="dropdown">
                         <button class="btn btn-light dropdown-toggle" type="button" id="userMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuDropdown">
+                            <li>
+                                <a class="dropdown-item" href="#" id="darkModeToggle">
+                                    <i class="bi {{ 'bi-moon-fill' if dark_mode else 'bi-sun-fill' }}" id="darkModeIcon"></i> 
+                                    <span id="darkModeLabel">{{ 'Dark Mode' if not dark_mode else 'Light Mode' }}</span>
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('preferences') }}"><i class="bi bi-gear"></i> Preferences</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item disabled" href="#"><i class="bi bi-person"></i> User Profile</a></li>
@@ -221,9 +218,12 @@
     <script>
         const darkModeToggle = document.getElementById('darkModeToggle');
         const darkModeIcon = document.getElementById('darkModeIcon');
+        const darkModeLabel = document.getElementById('darkModeLabel');
         const htmlElement = document.documentElement;
         
-        darkModeToggle.addEventListener('click', async function() {
+        darkModeToggle.addEventListener('click', async function(e) {
+            e.preventDefault();
+            
             // Get current theme
             const currentTheme = htmlElement.getAttribute('data-bs-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -231,6 +231,7 @@
             // Update UI immediately
             htmlElement.setAttribute('data-bs-theme', newTheme);
             darkModeIcon.className = newTheme === 'dark' ? 'bi bi-moon-fill' : 'bi bi-sun-fill';
+            darkModeLabel.textContent = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
             
             // Save preference to server
             try {

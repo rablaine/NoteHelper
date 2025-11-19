@@ -371,8 +371,10 @@ def seller_view(id):
     
     # Get customers with their most recent call log
     customers_data = []
-    for customer in seller.customers.order_by(Customer.name).all():
-        most_recent_call = customer.call_logs.order_by(CallLog.call_date.desc()).first()
+    for customer in sorted(seller.customers, key=lambda c: c.name):
+        # Get most recent call log (sort in-memory since already loaded)
+        sorted_calls = sorted(customer.call_logs, key=lambda c: c.call_date, reverse=True)
+        most_recent_call = sorted_calls[0] if sorted_calls else None
         customers_data.append({
             'customer': customer,
             'last_call': most_recent_call
@@ -593,7 +595,8 @@ def customer_create():
 def customer_view(id):
     """View customer details (FR008)."""
     customer = Customer.query.get_or_404(id)
-    call_logs = customer.call_logs.order_by(CallLog.call_date.desc()).all()
+    # Sort call logs by date (descending) - customer.call_logs is already loaded as a list
+    call_logs = sorted(customer.call_logs, key=lambda c: c.call_date, reverse=True)
     return render_template('customer_view.html', customer=customer, call_logs=call_logs)
 
 

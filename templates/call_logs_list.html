@@ -36,7 +36,7 @@
                 </p>
                 <div>
                     {% if call.seller %}
-                        <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ call.seller.name }}</span>
+                        <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                     {% endif %}
                     {% if call.territory %}
                         <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>

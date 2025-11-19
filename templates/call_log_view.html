@@ -57,8 +57,8 @@
                 </p>
                 
                 <p><strong>Topics:</strong><br>
-                    {% if call_log.topics.count() > 0 %}
-                        {% for topic in call_log.topics.all() %}
+                    {% if call_log.topics|length > 0 %}
+                        {% for topic in call_log.topics %}
                             <a href="{{ url_for('topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none">
                                 <i class="bi bi-tag"></i> {{ topic.name }}
                             </a>

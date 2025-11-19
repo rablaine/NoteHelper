@@ -22,7 +22,7 @@
                         <p class="mb-1">
                             {% if territory.sellers %}
                                 {% for seller in territory.sellers|sort(attribute='name') %}
-                                    <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ seller.name }}</span>
+                                    <a href="{{ url_for('seller_view', id=seller.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-person"></i> {{ seller.name }}</a>
                                 {% endfor %}
                             {% else %}
                                 <span class="badge bg-secondary text-muted">No sellers</span>

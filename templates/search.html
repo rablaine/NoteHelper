@@ -131,7 +131,7 @@
                                         {% if call.territory %}
                                             <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>
                                         {% endif %}
-                                        {% for topic in call.topics.all() %}
+                                        {% for topic in call.topics %}
                                             <span class="badge bg-warning text-dark"><i class="bi bi-tag"></i> {{ topic.name }}</span>
                                         {% endfor %}
                                     </small>
