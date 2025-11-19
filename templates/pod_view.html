@@ -20,8 +20,8 @@
                 {% if territories %}
                     <ul class="list-group list-group-flush">
                         {% for territory in territories %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <a href="{{ url_for('territory_view', id=territory.id) }}">{{ territory.name }}</a>
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="window.location='{{ url_for('territory_view', id=territory.id) }}'">
+                                <span>{{ territory.name }}</span>
                                 <span class="badge bg-primary rounded-pill">{{ territory.customers|length }} customers</span>
                             </li>
                         {% endfor %}
@@ -40,9 +40,9 @@
                 {% if sellers %}
                     <ul class="list-group list-group-flush">
                         {% for seller in sellers %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="window.location='{{ url_for('seller_view', id=seller.id) }}'">
                                 <div>
-                                    <a href="{{ url_for('seller_view', id=seller.id) }}">{{ seller.name }}</a>
+                                    <span>{{ seller.name }}</span>
                                     {% if seller.alias %}
                                         <br><small class="text-muted"><i class="bi bi-envelope"></i> {{ seller.alias }}@microsoft.com</small>
                                     {% endif %}
@@ -70,7 +70,7 @@
                 {% if solution_engineers %}
                     <ul class="list-group list-group-flush">
                         {% for se in solution_engineers %}
-                            <li class="list-group-item">
+                            <li class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('solution_engineer_view', id=se.id) }}'">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
                                         <strong>{{ se.name }}</strong>

@@ -521,6 +521,53 @@ def pod_edit(id):
 
 
 # =============================================================================
+# Solution Engineer Routes
+# =============================================================================
+
+@app.route('/solution-engineer/<int:id>')
+def solution_engineer_view(id):
+    """View solution engineer details."""
+    se = SolutionEngineer.query.options(
+        db.joinedload(SolutionEngineer.pods)
+    ).get_or_404(id)
+    
+    # Sort PODs
+    pods = sorted(se.pods, key=lambda p: p.name)
+    
+    return render_template('solution_engineer_view.html',
+                         solution_engineer=se,
+                         pods=pods)
+
+
+@app.route('/solution-engineer/<int:id>/edit', methods=['GET', 'POST'])
+def solution_engineer_edit(id):
+    """Edit solution engineer details."""
+    se = SolutionEngineer.query.options(
+        db.joinedload(SolutionEngineer.pods)
+    ).get_or_404(id)
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        alias = request.form.get('alias', '').strip()
+        specialty = request.form.get('specialty', '').strip()
+        
+        if not name:
+            flash('Solution Engineer name is required.', 'danger')
+            return redirect(url_for('solution_engineer_edit', id=id))
+        
+        se.name = name
+        se.alias = alias if alias else None
+        se.specialty = specialty if specialty else None
+        
+        db.session.commit()
+        
+        flash(f'Solution Engineer "{name}" updated successfully!', 'success')
+        return redirect(url_for('solution_engineer_view', id=se.id))
+    
+    return render_template('solution_engineer_form.html', solution_engineer=se)
+
+
+# =============================================================================
 # Seller Routes (FR002, FR007)
 # =============================================================================
 

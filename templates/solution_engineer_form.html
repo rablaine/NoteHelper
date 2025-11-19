@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Solution Engineer - NoteHelper{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Edit Solution Engineer</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ solution_engineer.name }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="alias" class="form-label">Email Alias</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="alias" name="alias" 
+                                   value="{{ solution_engineer.alias if solution_engineer.alias else '' }}" 
+                                   placeholder="e.g., jsmith">
+                            <span class="input-group-text">@microsoft.com</span>
+                        </div>
+                        <small class="form-text text-muted">Just the part before @microsoft.com</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="specialty" class="form-label">Specialty</label>
+                        <select class="form-select" id="specialty" name="specialty">
+                            <option value="">-- Select Specialty --</option>
+                            <option value="Azure Data" {% if solution_engineer.specialty == 'Azure Data' %}selected{% endif %}>Azure Data</option>
+                            <option value="Azure Core and Infra" {% if solution_engineer.specialty == 'Azure Core and Infra' %}selected{% endif %}>Azure Core and Infra</option>
+                            <option value="Azure Apps and AI" {% if solution_engineer.specialty == 'Azure Apps and AI' %}selected{% endif %}>Azure Apps and AI</option>
+                        </select>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> <strong>Note:</strong> POD assignments are managed through the CSV import process and cannot be edited here.
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save Solution Engineer
+                        </button>
+                        <a href="{{ url_for('solution_engineer_view', id=solution_engineer.id) }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

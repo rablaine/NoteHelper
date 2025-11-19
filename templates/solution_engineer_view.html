@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}{{ solution_engineer.name }} - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-person-badge"></i> {{ solution_engineer.name }}</h1>
+    <a href="{{ url_for('solution_engineer_edit', id=solution_engineer.id) }}" class="btn btn-primary">
+        <i class="bi bi-pencil"></i> Edit Solution Engineer
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Details</h5>
+            </div>
+            <div class="card-body">
+                {% if solution_engineer.alias %}
+                    <p><strong>Email:</strong> <a href="mailto:{{ solution_engineer.alias }}@microsoft.com">{{ solution_engineer.alias }}@microsoft.com</a></p>
+                {% endif %}
+                {% if solution_engineer.specialty %}
+                    <p><strong>Specialty:</strong> <span class="badge bg-success">{{ solution_engineer.specialty }}</span></p>
+                {% endif %}
+                
+                <p><strong>PODs:</strong></p>
+                {% if pods %}
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        {% for pod in pods %}
+                            <a href="{{ url_for('pod_view', id=pod.id) }}" class="badge bg-info text-dark text-decoration-none">
+                                <i class="bi bi-diagram-3"></i> {{ pod.name }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">Not assigned to any PODs</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Territories in PODs</h5>
+            </div>
+            <div class="card-body">
+                {% if pods %}
+                    {% set all_territories = [] %}
+                    {% for pod in pods %}
+                        {% for territory in pod.territories %}
+                            {% if territory not in all_territories %}
+                                {% set _ = all_territories.append(territory) %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                    
+                    {% if all_territories %}
+                        <ul class="list-group list-group-flush">
+                            {% for territory in all_territories|sort(attribute='name') %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="window.location='{{ url_for('territory_view', id=territory.id) }}'">
+                                    <span>{{ territory.name }}</span>
+                                    <span class="badge bg-primary rounded-pill">{{ territory.customers|length }} customers</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted">No territories in assigned PODs</p>
+                    {% endif %}
+                {% else %}
+                    <p class="text-muted">Not assigned to any PODs</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('pods_list') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to PODs
+    </a>
+</div>
+{% endblock %}
