@@ -68,8 +68,8 @@
                     
                     <div class="mb-3">
                         <label for="call_date" class="form-label">Call Date *</label>
-                        <input type="datetime-local" class="form-control" id="call_date" name="call_date" 
-                               value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}" 
+                        <input type="date" class="form-control" id="call_date" name="call_date" 
+                               value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% endif %}" 
                                required>
                     </div>
                     
@@ -377,29 +377,15 @@ function createNewTopic(topicName) {
     });
 }
 
-// Set current date/time as default if creating new call log
+// Set current date as default if creating new call log
 {% if not call_log %}
 document.addEventListener('DOMContentLoaded', function() {
     var now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    document.getElementById('call_date').value = now.toISOString().slice(0, 16);
+    var year = now.getFullYear();
+    var month = String(now.getMonth() + 1).padStart(2, '0');
+    var day = String(now.getDate()).padStart(2, '0');
+    document.getElementById('call_date').value = year + '-' + month + '-' + day;
 });
 {% endif %}
-
-// Auto-set time to noon when date is changed
-document.getElementById('call_date').addEventListener('change', function() {
-    const currentValue = this.value;
-    if (currentValue) {
-        const date = new Date(currentValue);
-        const today = new Date();
-        
-        // Check if the selected date is different from today
-        if (date.toDateString() !== today.toDateString()) {
-            // Set time to 12:00 PM (noon)
-            const dateOnly = currentValue.split('T')[0];
-            this.value = dateOnly + 'T12:00';
-        }
-    }
-});
 </script>
 {% endblock %}

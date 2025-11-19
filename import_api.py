@@ -258,23 +258,26 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                 
                 yield "data: " + json.dumps({"message": "Processing verticals..."}) + "\n\n"
                 
-                # Create Verticals
-                vertical_combinations = set()
+                # Create Verticals - collect all unique vertical names from both columns
+                vertical_names = set()
                 for row in rows:
                     vertical = row.get('Vertical', '').strip()
                     category = row.get('Vertical Category', '').strip()
-                    if vertical:
-                        vertical_combinations.add((vertical, category if category else None))
+                    # Add Vertical if not N/A
+                    if vertical and vertical.upper() != 'N/A':
+                        vertical_names.add(vertical)
+                    # Add Vertical Category as separate vertical if not N/A
+                    if category and category.upper() != 'N/A':
+                        vertical_names.add(category)
                 
-                for vertical_name, category in vertical_combinations:
-                    key = f"{vertical_name}|{category}" if category else vertical_name
-                    existing = Vertical.query.filter_by(name=vertical_name, category=category).first()
+                for vertical_name in vertical_names:
+                    existing = Vertical.query.filter_by(name=vertical_name).first()
                     if existing:
-                        verticals_map[key] = existing
+                        verticals_map[vertical_name] = existing
                     else:
-                        vertical = Vertical(name=vertical_name, category=category)
+                        vertical = Vertical(name=vertical_name, category=None)
                         db.session.add(vertical)
-                        verticals_map[key] = vertical
+                        verticals_map[vertical_name] = vertical
                 
                 db.session.flush()
                 msg = f"Created/found {len(verticals_map)} verticals"
@@ -318,10 +321,15 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                         seller=sellers_map.get(seller_name)
                     )
                     
-                    if vertical_name:
-                        key = f"{vertical_name}|{category}" if category else vertical_name
-                        vertical = verticals_map.get(key)
+                    # Associate both verticals if they exist and aren't N/A
+                    if vertical_name and vertical_name.upper() != 'N/A':
+                        vertical = verticals_map.get(vertical_name)
                         if vertical:
+                            customer.verticals.append(vertical)
+                    
+                    if category and category.upper() != 'N/A':
+                        vertical = verticals_map.get(category)
+                        if vertical and vertical not in customer.verticals:
                             customer.verticals.append(vertical)
                     
                     db.session.add(customer)

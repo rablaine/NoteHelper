@@ -19,12 +19,8 @@
                 <h5 class="mb-0">Call Details</h5>
             </div>
             <div class="card-body">
-                <p><strong>{% if call_log.call_date.hour == 12 and call_log.call_date.minute == 0 %}Date{% else %}Date & Time{% endif %}:</strong><br>
-                    {% if call_log.call_date.hour == 12 and call_log.call_date.minute == 0 %}
-                        {{ call_log.call_date.strftime('%B %d, %Y') }}
-                    {% else %}
-                        {{ call_log.call_date.strftime('%B %d, %Y at %I:%M %p') }}
-                    {% endif %}
+                <p><strong>Date:</strong><br>
+                    {{ call_log.call_date.strftime('%B %d, %Y') }}
                 </p>
                 
                 <p><strong>Customer:</strong><br>

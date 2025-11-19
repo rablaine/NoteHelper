@@ -3,7 +3,7 @@ NoteHelper - A note-taking application for Azure technical sellers.
 Single-user Flask application for tracking customer call notes.
 """
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Optional
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
@@ -296,7 +296,7 @@ class CallLog(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
-    call_date = db.Column(db.DateTime, nullable=False, default=utc_now)
+    call_date = db.Column(db.Date, nullable=False, default=lambda: date.today())
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
@@ -722,16 +722,11 @@ def seller_view(id):
         })
     
     # Sort by most recent call date (nulls last)
-    # Use timezone-aware min datetime for comparison
-    min_datetime = datetime.min.replace(tzinfo=timezone.utc)
+    min_date = date.min
     def get_sort_key(x):
         if not x['last_call']:
-            return min_datetime
-        call_date = x['last_call'].call_date
-        # Ensure call_date is timezone-aware
-        if call_date.tzinfo is None:
-            call_date = call_date.replace(tzinfo=timezone.utc)
-        return call_date
+            return min_date
+        return x['last_call'].call_date
     customers_data.sort(key=get_sort_key, reverse=True)
     
     return render_template('seller_view.html', seller=seller, customers=customers_data)
@@ -1188,7 +1183,7 @@ def call_log_create():
         
         # Parse call date
         try:
-            call_date = datetime.strptime(call_date_str, '%Y-%m-%dT%H:%M')
+            call_date = datetime.strptime(call_date_str, '%Y-%m-%d').date()
         except ValueError:
             flash('Invalid date format.', 'danger')
             return redirect(url_for('call_log_create'))
@@ -1295,7 +1290,7 @@ def call_log_edit(id):
         
         # Parse call date
         try:
-            call_date = datetime.strptime(call_date_str, '%Y-%m-%dT%H:%M')
+            call_date = datetime.strptime(call_date_str, '%Y-%m-%d').date()
         except ValueError:
             flash('Invalid date format.', 'danger')
             return redirect(url_for('call_log_edit', id=id))
