@@ -19,10 +19,16 @@
                         <a href="{{ url_for('seller_view', id=seller.id) }}" class="text-decoration-none">
                             <h5 class="mb-1">{{ seller.name }}</h5>
                         </a>
+                        {% if seller.alias %}
+                            <p class="mb-1"><small class="text-muted"><i class="bi bi-envelope"></i> {{ seller.alias }}@microsoft.com</small></p>
+                        {% endif %}
                         <p class="mb-1">
+                            {% if seller.seller_type %}
+                                <span class="badge {% if seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ seller.seller_type }}</span>
+                            {% endif %}
                             {% if seller.territories %}
                                 {% for territory in seller.territories|sort(attribute='name') %}
-                                    <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
+                                    <span class="badge bg-secondary"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
                                 {% endfor %}
                             {% else %}
                                 <span class="badge bg-secondary">No territory</span>

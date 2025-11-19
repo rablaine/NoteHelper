@@ -22,9 +22,12 @@
             <div class="mb-4">
                 <h4 class="mb-3">
                     <i class="bi bi-person"></i> <a href="{{ url_for('seller_view', id=group.seller.id) }}" class="text-decoration-none">{{ group.seller.name }}</a>
+                    {% if group.seller.seller_type %}
+                        <span class="badge {% if group.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %} ms-2">{{ group.seller.seller_type }}</span>
+                    {% endif %}
                     {% if group.seller.territories %}
                         {% for territory in group.seller.territories|sort(attribute='name') %}
-                            <span class="badge bg-info ms-2"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
+                            <span class="badge bg-secondary ms-2"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
                         {% endfor %}
                     {% endif %}
                     <span class="text-muted ms-2" style="font-size: 0.9rem;">({{ group.customers|length }} customers)</span>
@@ -126,9 +129,12 @@
                     <div>
                         {% if customer.seller %}
                             <a href="{{ url_for('seller_view', id=customer.seller.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
+                            {% if customer.seller.seller_type %}
+                                <span class="badge {% if customer.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ customer.seller.seller_type }}</span>
+                            {% endif %}
                         {% endif %}
                         {% if customer.territory %}
-                            <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
+                            <span class="badge bg-secondary"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
                         {% endif %}
                     </div>
                 </div>
