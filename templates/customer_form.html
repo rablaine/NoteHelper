@@ -39,15 +39,19 @@
                             <option value="">-- No seller --</option>
                             {% for seller in sellers %}
                                 <option value="{{ seller.id }}" 
-                                    data-territory-id="{{ seller.territories.first().id if seller.territories.count() == 1 else '' }}"
+                                    data-territory-ids="{% for t in seller.territories %}{{ t.id }}{% if not loop.last %},{% endif %}{% endfor %}"
+                                    data-territory-id="{{ seller.territories[0].id if seller.territories|length == 1 else '' }}"
                                     {% if (customer and customer.seller_id == seller.id) or (preselect_seller_id and preselect_seller_id == seller.id) %}selected{% endif %}>
                                     {{ seller.name }}
-                                    {% if seller.territories.count() == 1 %} ({{ seller.territories.first().name }})
-                                    {% elif seller.territories.count() > 1 %} ({{ seller.territories.count() }} territories)
+                                    {% if seller.territories|length == 1 %} ({{ seller.territories[0].name }})
+                                    {% elif seller.territories|length > 1 %} ({{ seller.territories|length }} territories)
                                     {% endif %}
                                 </option>
                             {% endfor %}
                         </select>
+                        <div class="form-text" id="seller-auto-msg" style="display:none;">
+                            <span class="text-info"><i class="bi bi-info-circle"></i> Seller auto-selected based on territory</span>
+                        </div>
                         <div class="form-text">
                             Or <a href="#" data-bs-toggle="modal" data-bs-target="#newSellerModal">create a new seller</a>
                         </div>
@@ -59,6 +63,7 @@
                             <option value="">-- No territory --</option>
                             {% for territory in territories %}
                                 <option value="{{ territory.id }}"
+                                    data-seller-ids="{% for s in territory.sellers %}{{ s.id }}{% if not loop.last %},{% endif %}{% endfor %}"
                                     {% if (customer and customer.territory_id == territory.id) or (preselect_territory_id and preselect_territory_id == territory.id) %}selected{% endif %}>
                                     {{ territory.name }}
                                 </option>
@@ -66,6 +71,9 @@
                         </select>
                         <div class="form-text" id="territory-auto-msg" style="display:none;">
                             <span class="text-info"><i class="bi bi-info-circle"></i> Territory auto-selected based on seller</span>
+                        </div>
+                        <div class="form-text">
+                            Or <a href="{{ url_for('territory_create') }}" target="_blank">create a new territory</a>
                         </div>
                     </div>
                     
@@ -133,22 +141,101 @@
 // Seller customers data from backend (FR030)
 const sellerCustomers = {{ seller_customers|tojson|safe }};
 
-// Auto-select territory when seller is chosen (FR003)
-document.getElementById('seller_id').addEventListener('change', function() {
-    const selectedOption = this.options[this.selectedIndex];
-    const territoryId = selectedOption.getAttribute('data-territory-id');
+// Filter territories based on selected seller
+function filterTerritories() {
+    const sellerSelect = document.getElementById('seller_id');
     const territorySelect = document.getElementById('territory_id');
+    const selectedOption = sellerSelect.options[sellerSelect.selectedIndex];
+    const territoryIds = selectedOption.getAttribute('data-territory-ids');
     const autoMsg = document.getElementById('territory-auto-msg');
     
-    if (territoryId) {
-        territorySelect.value = territoryId;
+    // Get all territory options except the first (placeholder)
+    const territoryOptions = Array.from(territorySelect.options).slice(1);
+    
+    if (!sellerSelect.value || !territoryIds) {
+        // No seller selected or seller has no territories - show all territories
+        territoryOptions.forEach(opt => opt.style.display = '');
+        autoMsg.style.display = 'none';
+        return;
+    }
+    
+    const validTerritoryIds = territoryIds.split(',');
+    
+    // Hide territories not assigned to this seller
+    territoryOptions.forEach(opt => {
+        if (validTerritoryIds.includes(opt.value)) {
+            opt.style.display = '';
+        } else {
+            opt.style.display = 'none';
+            // Deselect if currently selected but not valid
+            if (opt.selected) {
+                territorySelect.value = '';
+            }
+        }
+    });
+    
+    // Auto-select if only one territory
+    if (validTerritoryIds.length === 1) {
+        territorySelect.value = validTerritoryIds[0];
         autoMsg.style.display = 'block';
     } else {
         autoMsg.style.display = 'none';
     }
+}
+
+// Filter sellers based on selected territory
+function filterSellers() {
+    const territorySelect = document.getElementById('territory_id');
+    const sellerSelect = document.getElementById('seller_id');
+    const selectedOption = territorySelect.options[territorySelect.selectedIndex];
+    const sellerIds = selectedOption.getAttribute('data-seller-ids');
+    const sellerAutoMsg = document.getElementById('seller-auto-msg');
     
-    // Update existing customers list (FR030)
+    // Get all seller options except the first (placeholder)
+    const sellerOptions = Array.from(sellerSelect.options).slice(1);
+    
+    if (!territorySelect.value || !sellerIds) {
+        // No territory selected or territory has no sellers - show all sellers
+        sellerOptions.forEach(opt => opt.style.display = '');
+        sellerAutoMsg.style.display = 'none';
+        return;
+    }
+    
+    const validSellerIds = sellerIds.split(',');
+    
+    // Hide sellers not assigned to this territory
+    sellerOptions.forEach(opt => {
+        if (validSellerIds.includes(opt.value)) {
+            opt.style.display = '';
+        } else {
+            opt.style.display = 'none';
+            // Deselect if currently selected but not valid
+            if (opt.selected) {
+                sellerSelect.value = '';
+                updateExistingCustomersList();
+            }
+        }
+    });
+    
+    // Auto-select if only one seller
+    if (validSellerIds.length === 1) {
+        sellerSelect.value = validSellerIds[0];
+        sellerAutoMsg.style.display = 'block';
+        updateExistingCustomersList();
+    } else {
+        sellerAutoMsg.style.display = 'none';
+    }
+}
+
+// Seller change handler
+document.getElementById('seller_id').addEventListener('change', function() {
+    filterTerritories();
     updateExistingCustomersList();
+});
+
+// Territory change handler
+document.getElementById('territory_id').addEventListener('change', function() {
+    filterSellers();
 });
 
 function updateExistingCustomersList() {
@@ -194,6 +281,13 @@ function updateExistingCustomersList() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Apply filters based on pre-selected values
+    if (document.getElementById('seller_id').value) {
+        filterTerritories();
+    }
+    if (document.getElementById('territory_id').value) {
+        filterSellers();
+    }
     updateExistingCustomersList();
 });
 </script>

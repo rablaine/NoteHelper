@@ -266,7 +266,8 @@ def territory_create():
 def territory_view(id):
     """View territory details (FR006)."""
     territory = Territory.query.get_or_404(id)
-    sellers = territory.sellers.order_by(Seller.name).all()
+    # Sort sellers in-memory since they're eager-loaded
+    sellers = sorted(territory.sellers, key=lambda s: s.name)
     
     # Get calls from last 7 days
     from datetime import timedelta
@@ -554,7 +555,8 @@ def customer_create():
     # Build seller customers map for duplicate prevention (FR030)
     seller_customers = {}
     for seller in sellers:
-        customers = seller.customers.order_by(Customer.name).all()
+        # Sort customers in-memory since they're eager-loaded
+        customers = sorted(seller.customers, key=lambda c: c.name)
         seller_customers[seller.id] = [
             {'id': c.id, 'name': c.name, 'tpid': c.tpid} 
             for c in customers
@@ -574,7 +576,8 @@ def customer_create():
     if preselect_territory_id and not preselect_seller_id:
         territory = Territory.query.get(preselect_territory_id)
         if territory:
-            territory_sellers = territory.sellers.all()
+            # territory.sellers is already a list from eager loading
+            territory_sellers = territory.sellers
             if len(territory_sellers) == 1:
                 preselect_seller_id = territory_sellers[0].id
     
@@ -642,7 +645,8 @@ def customer_edit(id):
     # Build seller customers map for duplicate prevention (FR030)
     seller_customers = {}
     for seller in sellers:
-        customers = seller.customers.order_by(Customer.name).all()
+        # Sort customers in-memory since they're eager-loaded
+        customers = sorted(seller.customers, key=lambda c: c.name)
         seller_customers[seller.id] = [
             {'id': c.id, 'name': c.name, 'tpid': c.tpid} 
             for c in customers
