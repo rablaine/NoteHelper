@@ -177,6 +177,20 @@ class CallLog(db.Model):
         return f'<CallLog {self.id} for {self.customer.name}>'
 
 
+class UserPreference(db.Model):
+    """User preferences including dark mode setting."""
+    __tablename__ = 'user_preferences'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False, default=1)  # Single user system
+    dark_mode = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    
+    def __repr__(self) -> str:
+        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode}>'
+
+
 # =============================================================================
 # Routes
 # =============================================================================
@@ -1027,6 +1041,53 @@ def search():
                          sellers=sellers,
                          territories=territories,
                          topics=topics)
+
+
+# =============================================================================
+# USER PREFERENCE ROUTES
+# =============================================================================
+
+@app.route('/api/preferences/dark-mode', methods=['GET', 'POST'])
+def dark_mode_preference():
+    """Get or set dark mode preference."""
+    user_id = 1  # Single user system
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        dark_mode = data.get('dark_mode', False)
+        
+        # Get or create user preference
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = UserPreference(user_id=user_id, dark_mode=dark_mode)
+            db.session.add(pref)
+        else:
+            pref.dark_mode = dark_mode
+        
+        db.session.commit()
+        return jsonify({'dark_mode': pref.dark_mode}), 200
+    
+    # GET request
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, dark_mode=False)
+        db.session.add(pref)
+        db.session.commit()
+    
+    return jsonify({'dark_mode': pref.dark_mode}), 200
+
+
+# =============================================================================
+# Context Processor
+# =============================================================================
+
+@app.context_processor
+def inject_dark_mode():
+    """Inject dark mode preference into all templates."""
+    user_id = 1  # Single user system
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    dark_mode = pref.dark_mode if pref else False
+    return dict(dark_mode=dark_mode)
 
 
 if __name__ == '__main__':
