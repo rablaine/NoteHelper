@@ -1441,7 +1441,13 @@ def preferences():
 @app.route('/data-management')
 def data_management():
     """Data import/export management page."""
-    return render_template('data_management.html')
+    # Check if database has any data
+    has_data = (Customer.query.count() > 0 or 
+                CallLog.query.count() > 0 or 
+                POD.query.count() > 0 or
+                Territory.query.count() > 0 or
+                Seller.query.count() > 0)
+    return render_template('data_management.html', has_data=has_data)
 
 
 @app.route('/api/data-management/stats', methods=['GET'])

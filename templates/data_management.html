@@ -18,6 +18,43 @@
             <p class="mb-0"><strong>Export Data:</strong> Create backups for disaster recovery or export call log data for external analysis (e.g., LLM-powered year-end summaries).</p>
         </div>
 
+        {% if not has_data %}
+        <!-- Import Section (shown first when no data) -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-upload"></i> Import Alignment Sheet</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> <strong>Get Started:</strong> Import your organizational structure from your CRM system's alignment sheet export to begin using NoteHelper.
+                </div>
+
+                <form id="importForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">Select Alignment Sheet CSV from CRM Export</label>
+                        <input type="file" class="form-control" id="importFile" name="file" accept=".csv" required>
+                        <div class="form-text">Upload the alignment sheet CSV exported from your CRM system. This should include PODs, territories, sellers, solution engineers, customers, and verticals.</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-upload"></i> Import Alignment Sheet
+                    </button>
+                </form>
+
+                <div id="importProgress" class="mt-3 d-none">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <p class="text-muted mt-2 mb-0">Processing import...</p>
+                </div>
+
+                <div id="importResults" class="mt-3 d-none">
+                    <!-- Results will be inserted here -->
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Export Section -->
         <div class="card mb-4">
             <div class="card-header">
@@ -108,8 +145,9 @@
             </div>
         </div>
 
-        <!-- Import Section -->
-        <div class="card">
+        {% if has_data %}
+        <!-- Import Section (shown last when data exists) -->
+        <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-upload"></i> Import Alignment Sheet</h5>
             </div>
@@ -146,6 +184,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <!-- Danger Zone -->
         <div class="card border-danger mt-4">
