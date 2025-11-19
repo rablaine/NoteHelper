@@ -76,6 +76,76 @@ sellers_territories = db.Table(
     db.Column('territory_id', db.Integer, db.ForeignKey('territories.id'), primary_key=True)
 )
 
+# Association table for many-to-many relationship between Customer and Vertical
+customers_verticals = db.Table(
+    'customers_verticals',
+    db.Column('customer_id', db.Integer, db.ForeignKey('customers.id'), primary_key=True),
+    db.Column('vertical_id', db.Integer, db.ForeignKey('verticals.id'), primary_key=True)
+)
+
+
+class POD(db.Model):
+    """POD (Practice Operating Division) - organizational grouping of territories and personnel."""
+    __tablename__ = 'pods'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    # Relationships
+    territories = db.relationship('Territory', back_populates='pod', lazy='select')
+    solution_engineers = db.relationship('SolutionEngineer', back_populates='pod', lazy='select')
+    
+    def __repr__(self) -> str:
+        return f'<POD {self.name}>'
+
+
+class SolutionEngineer(db.Model):
+    """Solution Engineer (Azure Technical Seller) assigned to a POD with a specific specialty."""
+    __tablename__ = 'solution_engineers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    alias = db.Column(db.String(100), nullable=True)  # Microsoft email alias
+    specialty = db.Column(db.String(50), nullable=True)  # Azure Data, Azure Core and Infra, Azure Apps and AI
+    pod_id = db.Column(db.Integer, db.ForeignKey('pods.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    # Relationships
+    pod = db.relationship('POD', back_populates='solution_engineers')
+    
+    def __repr__(self) -> str:
+        return f'<SolutionEngineer {self.name} ({self.specialty})>'
+    
+    def get_email(self) -> Optional[str]:
+        """Get email address from alias."""
+        if self.alias:
+            return f"{self.alias}@microsoft.com"
+        return None
+
+
+class Vertical(db.Model):
+    """Industry vertical and category for customer classification."""
+    __tablename__ = 'verticals'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)  # e.g., "Financial Services"
+    category = db.Column(db.String(200), nullable=True)  # e.g., "Banking"
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    # Relationships
+    customers = db.relationship(
+        'Customer',
+        secondary=customers_verticals,
+        back_populates='verticals',
+        lazy='select'
+    )
+    
+    def __repr__(self) -> str:
+        if self.category:
+            return f'<Vertical {self.name} - {self.category}>'
+        return f'<Vertical {self.name}>'
+
 
 class Territory(db.Model):
     """Geographic or organizational territory for organizing customers and sellers."""
@@ -83,9 +153,11 @@ class Territory(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
+    pod_id = db.Column(db.Integer, db.ForeignKey('pods.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
+    pod = db.relationship('POD', back_populates='territories')
     sellers = db.relationship(
         'Seller',
         secondary=sellers_territories,
@@ -104,6 +176,8 @@ class Seller(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
+    alias = db.Column(db.String(100), nullable=True)  # Microsoft email alias
+    seller_type = db.Column(db.String(20), nullable=False, default='Growth')  # Acquisition or Growth
     # Note: territory_id column kept for backwards compatibility but will be deprecated
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
@@ -119,7 +193,13 @@ class Seller(db.Model):
     call_logs = db.relationship('CallLog', back_populates='seller', lazy='dynamic')
     
     def __repr__(self) -> str:
-        return f'<Seller {self.name}>'
+        return f'<Seller {self.name} ({self.seller_type})>'
+    
+    def get_email(self) -> Optional[str]:
+        """Get email address from alias."""
+        if self.alias:
+            return f"{self.alias}@microsoft.com"
+        return None
 
 
 class Customer(db.Model):
@@ -138,6 +218,12 @@ class Customer(db.Model):
     seller = db.relationship('Seller', back_populates='customers')
     territory = db.relationship('Territory', back_populates='customers')
     call_logs = db.relationship('CallLog', back_populates='customer', lazy='select')
+    verticals = db.relationship(
+        'Vertical',
+        secondary=customers_verticals,
+        back_populates='customers',
+        lazy='select'
+    )
     
     def __repr__(self) -> str:
         return f'<Customer {self.name} ({self.tpid})>'
@@ -152,6 +238,12 @@ class Customer(db.Model):
     def get_display_name_with_tpid(self) -> str:
         """Get customer name with TPID for display."""
         return f"{self.name} ({self.tpid})"
+    
+    def get_account_type(self) -> str:
+        """Get account type (Acquisition/Growth) from assigned seller."""
+        if self.seller:
+            return self.seller.seller_type
+        return "Unknown"
 
 
 class Topic(db.Model):
