@@ -4,82 +4,173 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1><i class="bi bi-building"></i> Customers</h1>
+    <h1><i class="bi bi-building"></i> Customers{% if is_grouped %} (Grouped by Seller){% endif %}</h1>
     <div class="d-flex align-items-center gap-2">
-        <a href="{{ url_for('customers_grouped') }}" class="btn btn-outline-secondary btn-sm" title="Switch to grouped view">
-            <i class="bi bi-collection"></i> Grouped
-        </a>
+        <button id="viewToggle" class="btn btn-outline-secondary btn-sm" title="Toggle view">
+            <i class="bi bi-sort-alpha-down"></i> <span id="viewLabel">{{ 'Alphabetical' if is_grouped else 'Grouped' }}</span>
+        </button>
         <a href="{{ url_for('customer_create') }}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> New Customer
         </a>
     </div>
 </div>
 
-{% if customers %}
-    <div class="list-group">
-        {% for customer in customers %}
-            <div class="list-group-item">
-                <div class="d-flex w-100 justify-content-between align-items-start mb-2">
-                    <h5 class="mb-0">
-                        <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
-                        {% if customer.tpid_url %}
-                            (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
-                        {% else %}
-                            ({{ customer.tpid }})
-                        {% endif %}
-                    </h5>
-                    <div class="d-flex align-items-center gap-2">
-                        <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
-                        <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white">
-                            <i class="bi bi-plus-circle"></i> New Call Log
-                        </a>
-                    </div>
-                </div>
-                <div>
-                    {% if customer.seller %}
-                        <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ customer.seller.name }}</span>
+{% if is_grouped %}
+    {# Grouped View #}
+    {% if grouped_customers or customers_without_seller %}
+        {% for group in grouped_customers %}
+            <div class="mb-4">
+                <h4 class="mb-3">
+                    <i class="bi bi-person"></i> <a href="{{ url_for('seller_view', id=group.seller.id) }}" class="text-decoration-none">{{ group.seller.name }}</a>
+                    {% if group.seller.territories %}
+                        {% for territory in group.seller.territories|sort(attribute='name') %}
+                            <span class="badge bg-info ms-2"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
+                        {% endfor %}
                     {% endif %}
-                    {% if customer.territory %}
-                        <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
-                    {% endif %}
+                    <span class="text-muted ms-2" style="font-size: 0.9rem;">({{ group.customers|length }} customers)</span>
+                </h4>
+                <div class="list-group">
+                    {% for customer in group.customers %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                                <h5 class="mb-0">
+                                    <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
+                                    {% if customer.tpid_url %}
+                                        (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
+                                    {% else %}
+                                        ({{ customer.tpid }})
+                                    {% endif %}
+                                </h5>
+                                <div class="d-flex align-items-center gap-2">
+                                    <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
+                                    <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white">
+                                        <i class="bi bi-plus-circle"></i> New Call Log
+                                    </a>
+                                </div>
+                            </div>
+                            <div>
+                                {% if customer.territory %}
+                                    {% if group.seller.territories|length != 1 %}
+                                        <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
                 </div>
             </div>
         {% endfor %}
-    </div>
+        
+        {% if customers_without_seller %}
+            <div class="mb-4">
+                <h4 class="mb-3">
+                    <i class="bi bi-question-circle"></i> No Seller Assigned
+                    <span class="text-muted ms-2" style="font-size: 0.9rem;">({{ customers_without_seller|length }} customers)</span>
+                </h4>
+                <div class="list-group">
+                    {% for customer in customers_without_seller %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                                <h5 class="mb-0">
+                                    <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
+                                    {% if customer.tpid_url %}
+                                        (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
+                                    {% else %}
+                                        ({{ customer.tpid }})
+                                    {% endif %}
+                                </h5>
+                                <div class="d-flex align-items-center gap-2">
+                                    <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
+                                    <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white">
+                                        <i class="bi bi-plus-circle"></i> New Call Log
+                                    </a>
+                                </div>
+                            </div>
+                            <div>
+                                {% if customer.territory %}
+                                    <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!
+        </div>
+    {% endif %}
 {% else %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!
-    </div>
+    {# Alphabetical View #}
+    {% if customers %}
+        <div class="list-group">
+            {% for customer in customers %}
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between align-items-start mb-2">
+                        <h5 class="mb-0">
+                            <a href="{{ url_for('customer_view', id=customer.id) }}" class="text-decoration-none">{{ customer.name }}</a>
+                            {% if customer.tpid_url %}
+                                (<a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>)
+                            {% else %}
+                                ({{ customer.tpid }})
+                            {% endif %}
+                        </h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
+                            <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white">
+                                <i class="bi bi-plus-circle"></i> New Call Log
+                            </a>
+                        </div>
+                    </div>
+                    <div>
+                        {% if customer.seller %}
+                            <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ customer.seller.name }}</span>
+                        {% endif %}
+                        {% if customer.territory %}
+                            <span class="badge bg-info"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!
+        </div>
+    {% endif %}
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Handle grouped view toggle
+// Handle view toggle
 document.addEventListener('DOMContentLoaded', function() {
-    const groupedButton = document.querySelector('a[href="{{ url_for('customers_grouped') }}"]');
-    if (groupedButton) {
-        groupedButton.addEventListener('click', function(e) {
-            e.preventDefault();
-            // Save preference
-            fetch('/api/preferences/customer-view', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ customer_view_grouped: true })
-            })
-            .then(response => response.json())
-            .then(() => {
-                window.location.href = '{{ url_for('customers_grouped') }}';
-            })
-            .catch(error => {
-                console.error('Error saving preference:', error);
-                // Navigate anyway if API call fails
-                window.location.href = '{{ url_for('customers_grouped') }}';
-            });
+    const viewToggle = document.getElementById('viewToggle');
+    const viewLabel = document.getElementById('viewLabel');
+    const isGrouped = {{ 'true' if is_grouped else 'false' }};
+    
+    viewToggle.addEventListener('click', function() {
+        const newGroupedValue = !isGrouped;
+        
+        // Save preference
+        fetch('/api/preferences/customer-view', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ customer_view_grouped: newGroupedValue })
+        })
+        .then(response => response.json())
+        .then(() => {
+            // Reload page to show new view
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error saving preference:', error);
+            window.location.reload();
         });
-    }
+    });
 });
 </script>
 {% endblock %}

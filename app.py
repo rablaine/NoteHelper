@@ -461,52 +461,46 @@ def territory_create_inline():
 
 @app.route('/customers')
 def customers_list():
-    """List all customers - redirect based on preference."""
+    """List all customers - alphabetical or grouped by seller based on preference."""
     user_id = 1  # Single user system
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     
-    # Redirect to grouped view if preference is set
     if pref and pref.customer_view_grouped:
-        return redirect(url_for('customers_grouped'))
-    
-    # Show alphabetical view
-    customers = Customer.query.options(
-        db.joinedload(Customer.seller),
-        db.joinedload(Customer.territory),
-        db.joinedload(Customer.call_logs)
-    ).order_by(Customer.name).all()
-    return render_template('customers_list.html', customers=customers)
-
-
-@app.route('/customers/grouped')
-def customers_grouped():
-    """List all customers grouped by seller (FR033)."""
-    # Get all sellers with their customers
-    sellers = Seller.query.options(
-        db.joinedload(Seller.customers).joinedload(Customer.call_logs),
-        db.joinedload(Seller.customers).joinedload(Customer.territory),
-        db.joinedload(Seller.territories)
-    ).order_by(Seller.name).all()
-    
-    # Build grouped data structure
-    grouped_customers = []
-    for seller in sellers:
-        customers = sorted(seller.customers, key=lambda c: c.name)
-        if customers:
-            grouped_customers.append({
-                'seller': seller,
-                'customers': customers
-            })
-    
-    # Get customers without a seller
-    customers_without_seller = Customer.query.options(
-        db.joinedload(Customer.call_logs),
-        db.joinedload(Customer.territory)
-    ).filter_by(seller_id=None).order_by(Customer.name).all()
-    
-    return render_template('customers_grouped.html', 
-                         grouped_customers=grouped_customers,
-                         customers_without_seller=customers_without_seller)
+        # Grouped view - get all sellers with their customers
+        sellers = Seller.query.options(
+            db.joinedload(Seller.customers).joinedload(Customer.call_logs),
+            db.joinedload(Seller.customers).joinedload(Customer.territory),
+            db.joinedload(Seller.territories)
+        ).order_by(Seller.name).all()
+        
+        # Build grouped data structure
+        grouped_customers = []
+        for seller in sellers:
+            customers = sorted(seller.customers, key=lambda c: c.name)
+            if customers:
+                grouped_customers.append({
+                    'seller': seller,
+                    'customers': customers
+                })
+        
+        # Get customers without a seller
+        customers_without_seller = Customer.query.options(
+            db.joinedload(Customer.call_logs),
+            db.joinedload(Customer.territory)
+        ).filter_by(seller_id=None).order_by(Customer.name).all()
+        
+        return render_template('customers_list.html', 
+                             grouped_customers=grouped_customers,
+                             customers_without_seller=customers_without_seller,
+                             is_grouped=True)
+    else:
+        # Alphabetical view
+        customers = Customer.query.options(
+            db.joinedload(Customer.seller),
+            db.joinedload(Customer.territory),
+            db.joinedload(Customer.call_logs)
+        ).order_by(Customer.name).all()
+        return render_template('customers_list.html', customers=customers, is_grouped=False)
 
 
 @app.route('/customer/new', methods=['GET', 'POST'])
