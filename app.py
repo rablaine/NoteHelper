@@ -1465,32 +1465,22 @@ def data_management_clear():
     """Clear all data from the database."""
     try:
         # Delete in correct order to handle foreign key constraints
-        # Delete call logs first (depends on customers and topics)
+        # Delete association tables first
+        db.session.execute(db.text('DELETE FROM call_logs_topics'))
+        db.session.execute(db.text('DELETE FROM customers_verticals'))
+        db.session.execute(db.text('DELETE FROM sellers_territories'))
+        db.session.execute(db.text('DELETE FROM solution_engineers_pods'))
+        
+        # Delete dependent tables
         CallLog.query.delete()
-        
-        # Delete customer-vertical associations
-        db.session.execute(customers_verticals.delete())
-        
-        # Delete customers
         Customer.query.delete()
-        
-        # Delete solution engineers (depends on PODs)
-        SolutionEngineer.query.delete()
-        
-        # Delete verticals
-        Vertical.query.delete()
-        
-        # Delete topics
         Topic.query.delete()
-        
-        # Delete seller-territory associations
-        db.session.execute(sellers_territories.delete())
-        
-        # Delete sellers and territories (territories depend on PODs)
+        Vertical.query.delete()
+        SolutionEngineer.query.delete()
         Seller.query.delete()
-        Territory.query.delete()
         
-        # Delete PODs
+        # Delete parent tables
+        Territory.query.delete()
         POD.query.delete()
         
         db.session.commit()
