@@ -1,0 +1,162 @@
+"""
+Pytest configuration and fixtures for NoteHelper tests.
+"""
+import pytest
+import tempfile
+import os
+from datetime import datetime, timezone
+
+
+@pytest.fixture(scope='session')
+def app():
+    """Create application for testing with isolated database."""
+    # Create a temporary database file for testing
+    db_fd, db_path = tempfile.mkstemp(suffix='.db')
+    
+    # Set test database URI BEFORE importing app
+    os.environ['DATABASE_URL'] = f'sqlite:///{db_path}'
+    os.environ['TESTING'] = 'true'
+    
+    # NOW import app - it will use the test database URI
+    from app import app as flask_app, db, UserPreference
+    
+    # Configure additional test settings
+    flask_app.config['TESTING'] = True
+    flask_app.config['WTF_CSRF_ENABLED'] = False
+    flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # Create tables
+    with flask_app.app_context():
+        db.create_all()
+        
+        # Create default user preference
+        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False)
+        db.session.add(pref)
+        db.session.commit()
+    
+    yield flask_app
+    
+    # Cleanup
+    with flask_app.app_context():
+        db.session.remove()
+        db.drop_all()
+    os.close(db_fd)
+    os.unlink(db_path)
+    
+    # Restore original environment
+    if 'DATABASE_URL' in os.environ:
+        del os.environ['DATABASE_URL']
+    if 'TESTING' in os.environ:
+        del os.environ['TESTING']
+
+
+@pytest.fixture
+def client(app):
+    """Create a test client."""
+    return app.test_client()
+
+
+@pytest.fixture
+def runner(app):
+    """Create a test CLI runner."""
+    return app.test_cli_runner()
+
+
+@pytest.fixture
+def sample_data(app):
+    """Create sample data for tests."""
+    with app.app_context():
+        from app import db, Territory, Seller, Customer, Topic, CallLog
+        
+        # Create territories
+        territory1 = Territory(name='West Region')
+        territory2 = Territory(name='East Region')
+        db.session.add_all([territory1, territory2])
+        db.session.flush()
+        
+        # Create sellers
+        seller1 = Seller(name='Alice Smith')
+        seller2 = Seller(name='Bob Jones')
+        db.session.add_all([seller1, seller2])
+        db.session.flush()
+        
+        # Associate sellers with territories
+        seller1.territories.append(territory1)
+        seller2.territories.append(territory2)
+        
+        # Create customers - Note: tpid is BigInteger so use numbers
+        customer1 = Customer(
+            name='Acme Corp',
+            tpid=1001,  # Numeric TPID
+            tpid_url='https://example.com/acme',
+            seller_id=seller1.id,
+            territory_id=territory1.id
+        )
+        customer2 = Customer(
+            name='Globex Inc',
+            tpid=1002,  # Numeric TPID
+            seller_id=seller2.id,
+            territory_id=territory2.id
+        )
+        db.session.add_all([customer1, customer2])
+        db.session.flush()
+        
+        # Create topics
+        topic1 = Topic(name='Azure VM', description='Virtual Machines')
+        topic2 = Topic(name='Storage', description='Azure Storage')
+        db.session.add_all([topic1, topic2])
+        db.session.flush()
+        
+        # Create call logs - Use correct field name 'content'
+        call1 = CallLog(
+            customer_id=customer1.id,
+            seller_id=seller1.id,
+            territory_id=territory1.id,
+            call_date=datetime.now(timezone.utc),
+            content='Discussed VM migration strategy and cloud architecture options.'
+        )
+        call1.topics.append(topic1)
+        
+        call2 = CallLog(
+            customer_id=customer2.id,
+            seller_id=seller2.id,
+            territory_id=territory2.id,
+            call_date=datetime.now(timezone.utc),
+            content='Storage optimization review with focus on blob storage.'
+        )
+        call2.topics.append(topic2)
+        
+        db.session.add_all([call1, call2])
+        db.session.commit()
+        
+        # Return IDs for use in tests
+        return {
+            'territory1_id': territory1.id,
+            'territory2_id': territory2.id,
+            'seller1_id': seller1.id,
+            'seller2_id': seller2.id,
+            'customer1_id': customer1.id,
+            'customer2_id': customer2.id,
+            'topic1_id': topic1.id,
+            'topic2_id': topic2.id,
+            'call1_id': call1.id,
+            'call2_id': call2.id,
+        }
+
+
+@pytest.fixture(autouse=True)
+def reset_db(app):
+    """Reset database between tests."""
+    with app.app_context():
+        from app import db, UserPreference
+        
+        # Drop and recreate all tables for clean slate
+        db.drop_all()
+        db.create_all()
+        
+        # Recreate default user preference
+        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False)
+        db.session.add(pref)
+        db.session.commit()
+    
+    yield

@@ -569,8 +569,8 @@ def customer_create():
     # If seller is pre-selected and has exactly one territory, auto-select it
     if preselect_seller_id:
         seller = Seller.query.get(preselect_seller_id)
-        if seller and seller.territories.count() == 1:
-            preselect_territory_id = seller.territories.first().id
+        if seller and len(seller.territories) == 1:
+            preselect_territory_id = seller.territories[0].id
     
     # If territory is pre-selected and has only one seller, auto-select it (FR032)
     if preselect_territory_id and not preselect_seller_id:

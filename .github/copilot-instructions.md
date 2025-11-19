@@ -95,11 +95,15 @@
 
 ### Testing
 - Use pytest for all tests
+- **Write tests as you implement features** - Don't wait until later
 - Write unit tests for business logic and database operations
 - Use Flask test client for route testing
-- Mock database calls in unit tests
+- Tests use isolated SQLite database (configured in `tests/conftest.py`)
+- Never run tests against production PostgreSQL database
 - Aim for 70%+ code coverage
 - Test file naming: `test_*.py` or `*_test.py`
+- **Run tests before committing** - Ensure all tests pass with `pytest tests/`
+- Add tests for any bugs discovered to prevent regression
 
 ## Architecture Patterns
 
@@ -203,10 +207,18 @@ pytest --cov=app tests/  # with coverage
 - `refactor:` - Code refactoring
 - `test:` - Test additions or changes
 
+**Commit Workflow:**
+1. Write code and corresponding tests together
+2. Run `pytest tests/` to verify all tests pass
+3. Stage changes with `git add`
+4. Commit with descriptive message
+5. Push to remote when ready
+
 **Pull Request Requirements:**
-- All tests must pass
+- All tests must pass (`pytest tests/`)
 - Code follows PEP 8 standards
 - No secrets or .env file committed
+- Tests included for new features or bug fixes
 
 ## Additional Notes
 

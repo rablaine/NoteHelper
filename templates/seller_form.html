@@ -24,7 +24,7 @@
                         
                         <div id="selected_territories" class="mt-2 d-flex flex-wrap gap-2">
                             {% if seller %}
-                                {% for territory in seller.territories.order_by('name').all() %}
+                                {% for territory in seller.territories|sort(attribute='name') %}
                                     <span class="badge bg-info text-dark d-flex align-items-center" data-territory-id="{{ territory.id }}">
                                         <i class="bi bi-geo-alt me-1"></i> {{ territory.name }}
                                         <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTerritory({{ territory.id }})"></button>
