@@ -69,12 +69,31 @@ def test_seller_view_with_territories(client, sample_data):
 
 
 def test_territory_view_loads(client, sample_data):
-    """Test territory page loads with sorted sellers."""
+    """Test territory page loads with sorted sellers (recent calls view)."""
     territory_id = sample_data['territory1_id']
     response = client.get(f'/territory/{territory_id}')
     assert response.status_code == 200
     assert b'West Region' in response.data
     assert b'Alice Smith' in response.data
+    assert b'Recent Calls' in response.data
+
+
+def test_territory_view_accounts(client, sample_data, app):
+    """Test territory page loads with accounts view grouped by seller type."""
+    from app import db, UserPreference
+    
+    with app.app_context():
+        # Set preference to show accounts view
+        pref = UserPreference.query.filter_by(user_id=1).first()
+        pref.territory_view_accounts = True
+        db.session.commit()
+    
+    territory_id = sample_data['territory1_id']
+    response = client.get(f'/territory/{territory_id}')
+    assert response.status_code == 200
+    assert b'West Region' in response.data
+    assert b'Accounts in Territory' in response.data
+    assert b'Acme Corp' in response.data
 
 
 def test_topic_view_loads(client, sample_data):

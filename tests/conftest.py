@@ -34,7 +34,7 @@ def app():
         db.create_all()
         
         # Create default user preference
-        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False)
+        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False, territory_view_accounts=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -90,8 +90,8 @@ def sample_data(app):
         db.session.flush()
         
         # Create sellers
-        seller1 = Seller(name='Alice Smith')
-        seller2 = Seller(name='Bob Jones')
+        seller1 = Seller(name='Alice Smith', alias='alices', seller_type='Growth')
+        seller2 = Seller(name='Bob Jones', alias='bobj', seller_type='Acquisition')
         db.session.add_all([seller1, seller2])
         db.session.flush()
         
@@ -178,7 +178,7 @@ def reset_db(app):
         db.create_all()
         
         # Recreate default user preference
-        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False)
+        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False, territory_view_accounts=False)
         db.session.add(pref)
         db.session.commit()
     
