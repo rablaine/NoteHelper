@@ -34,10 +34,10 @@ def app():
     with flask_app.app_context():
         db.create_all()
         
-        # Create test user
+        # Create test user with Microsoft account
         test_user = User(
-            azure_id='test-user-12345',
-            email='test@example.com',
+            microsoft_azure_id='test-user-12345',
+            email='test@microsoft.com',
             name='Test User'
         )
         db.session.add(test_user)
@@ -187,8 +187,8 @@ def reset_db(app):
         # Recreate test user and preferences
         from app import User
         test_user = User(
-            azure_id='test-user-12345',
-            email='test@example.com',
+            microsoft_azure_id='test-user-12345',
+            email='test@microsoft.com',
             name='Test User'
         )
         db.session.add(test_user)

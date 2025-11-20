@@ -19,16 +19,51 @@
                 </div>
 
                 <div class="row mb-3">
-                    <div class="col-md-3 fw-bold">Email:</div>
+                    <div class="col-md-3 fw-bold">Primary Email:</div>
                     <div class="col-md-9">{{ user.email }}</div>
                 </div>
 
+                <hr>
+
+                <h6 class="text-muted mb-3">Linked Accounts</h6>
+
+                {% if user.microsoft_azure_id %}
                 <div class="row mb-3">
-                    <div class="col-md-3 fw-bold">Entra Object ID:</div>
+                    <div class="col-md-3 fw-bold">Microsoft Account:</div>
                     <div class="col-md-9">
-                        <code>{{ user.azure_id }}</code>
+                        <i class="bi bi-check-circle-fill text-success"></i> Linked
+                        <br>
+                        <small class="text-muted">Object ID: <code>{{ user.microsoft_azure_id }}</code></small>
                     </div>
                 </div>
+                {% else %}
+                <div class="row mb-3">
+                    <div class="col-md-3 fw-bold">Microsoft Account:</div>
+                    <div class="col-md-9">
+                        <i class="bi bi-x-circle text-muted"></i> Not linked
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if user.external_azure_id %}
+                <div class="row mb-3">
+                    <div class="col-md-3 fw-bold">External Account:</div>
+                    <div class="col-md-9">
+                        <i class="bi bi-check-circle-fill text-success"></i> Linked
+                        <br>
+                        <small class="text-muted">Object ID: <code>{{ user.external_azure_id }}</code></small>
+                    </div>
+                </div>
+                {% else %}
+                <div class="row mb-3">
+                    <div class="col-md-3 fw-bold">External Account:</div>
+                    <div class="col-md-9">
+                        <i class="bi bi-x-circle text-muted"></i> Not linked
+                    </div>
+                </div>
+                {% endif %}
+
+                <hr>
 
                 <div class="row mb-3">
                     <div class="col-md-3 fw-bold">Account Created:</div>

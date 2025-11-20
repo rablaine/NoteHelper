@@ -106,12 +106,20 @@ solution_engineers_pods = db.Table(
 
 
 class User(db.Model):
-    """User model for Entra ID (Azure AD) authentication."""
+    """User model for Entra ID (Azure AD) authentication.
+    
+    Supports multiple account types:
+    - microsoft_azure_id: Corporate @microsoft.com account
+    - external_azure_id: External tenant account (e.g., partner tenant)
+    
+    Users can log in with either account and will be associated with the same User record.
+    """
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
-    azure_id = db.Column(db.String(255), unique=True, nullable=False)  # Entra ID object ID
-    email = db.Column(db.String(255), unique=True, nullable=False)
+    microsoft_azure_id = db.Column(db.String(255), unique=True, nullable=True)  # @microsoft.com Entra object ID
+    external_azure_id = db.Column(db.String(255), unique=True, nullable=True)  # External tenant Entra object ID
+    email = db.Column(db.String(255), nullable=False)  # Primary email (not necessarily unique if using both account types)
     name = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     last_login = db.Column(db.DateTime, default=utc_now, nullable=False)
@@ -142,6 +150,7 @@ class POD(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -165,6 +174,7 @@ class SolutionEngineer(db.Model):
     name = db.Column(db.String(200), nullable=False)
     alias = db.Column(db.String(100), nullable=True)  # Microsoft email alias
     specialty = db.Column(db.String(50), nullable=True)  # Azure Data, Azure Core and Infra, Azure Apps and AI
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -191,6 +201,7 @@ class Vertical(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -212,6 +223,7 @@ class Territory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     pod_id = db.Column(db.Integer, db.ForeignKey('pods.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -238,6 +250,7 @@ class Seller(db.Model):
     seller_type = db.Column(db.String(20), nullable=False, default='Growth')  # Acquisition or Growth
     # Note: territory_id column kept for backwards compatibility but will be deprecated
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -271,6 +284,7 @@ class Customer(db.Model):
     tpid_url = db.Column(db.String(500), nullable=True)
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -316,6 +330,7 @@ class Topic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     
     # Relationships
@@ -338,6 +353,7 @@ class CallLog(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
     call_date = db.Column(db.Date, nullable=False, default=lambda: date.today())
     content = db.Column(db.Text, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
@@ -483,26 +499,42 @@ def auth_callback():
     email = user_info.get('mail') or user_info.get('userPrincipalName')
     name = user_info.get('displayName', email)
     
-    # Find or create user
-    user = User.query.filter_by(azure_id=azure_id).first()
+    # Determine account type based on email domain
+    is_microsoft_account = email.lower().endswith('@microsoft.com')
+    
+    # Find existing user by the appropriate azure_id field
+    if is_microsoft_account:
+        user = User.query.filter_by(microsoft_azure_id=azure_id).first()
+    else:
+        user = User.query.filter_by(external_azure_id=azure_id).first()
+    
     if not user:
-        user = User(
-            azure_id=azure_id,
-            email=email,
-            name=name
-        )
+        # Create new user with appropriate account type
+        if is_microsoft_account:
+            user = User(
+                microsoft_azure_id=azure_id,
+                email=email,
+                name=name
+            )
+        else:
+            user = User(
+                external_azure_id=azure_id,
+                email=email,
+                name=name
+            )
         db.session.add(user)
+        flash(f'Welcome, {name}! Your account has been created.', 'success')
     else:
         # Update last login
         user.last_login = utc_now()
         user.name = name  # Update name in case it changed
-        user.email = email  # Update email in case it changed
+        user.email = email  # Update primary email
+        flash(f'Welcome back, {user.name}!', 'success')
     
     db.session.commit()
     
     # Log user in
     login_user(user)
-    flash(f'Welcome, {user.name}!', 'success')
     
     return redirect(url_for('index'))
 
@@ -581,7 +613,7 @@ def territory_create():
             flash(f'Territory "{name}" already exists.', 'warning')
             return redirect(url_for('territory_view', id=existing.id))
         
-        territory = Territory(name=name)
+        territory = Territory(name=name, user_id=current_user.id)
         db.session.add(territory)
         db.session.commit()
         
@@ -603,8 +635,7 @@ def territory_view(id):
     sellers = sorted(territory.sellers, key=lambda s: s.name)
     
     # Get user preference for territory view
-    user_id = 1
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     show_accounts = pref.territory_view_accounts if pref else False
     
     recent_calls = []
@@ -878,7 +909,7 @@ def seller_create():
             flash(f'Seller "{name}" already exists.', 'warning')
             return redirect(url_for('seller_view', id=existing.id))
         
-        seller = Seller(name=name)
+        seller = Seller(name=name, user_id=current_user.id)
         
         # Add territories to many-to-many relationship
         if territory_ids:
@@ -978,7 +1009,7 @@ def territory_create_inline():
     if name:
         existing = Territory.query.filter_by(name=name).first()
         if not existing:
-            territory = Territory(name=name)
+            territory = Territory(name=name, user_id=current_user.id)
             db.session.add(territory)
             db.session.commit()
             flash(f'Territory "{name}" created successfully!', 'success')
@@ -995,8 +1026,7 @@ def territory_create_inline():
 @app.route('/customers')
 def customers_list():
     """List all customers - alphabetical, grouped by seller, or sorted by call count based on preference."""
-    user_id = 1  # Single user system
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     
     # Determine sort method - check new field first, fall back to old grouped field for backwards compatibility
     sort_by = pref.customer_sort_by if pref else 'alphabetical'
@@ -1086,7 +1116,8 @@ def customer_create():
             tpid=tpid_value,
             tpid_url=tpid_url if tpid_url else None,
             seller_id=int(seller_id) if seller_id else None,
-            territory_id=int(territory_id) if territory_id else None
+            territory_id=int(territory_id) if territory_id else None,
+            user_id=current_user.id
         )
         db.session.add(customer)
         db.session.commit()
@@ -1199,7 +1230,7 @@ def seller_create_inline():
     if name:
         existing = Seller.query.filter_by(name=name).first()
         if not existing:
-            seller = Seller(name=name)
+            seller = Seller(name=name, user_id=current_user.id)
             db.session.add(seller)
             db.session.commit()
             flash(f'Seller "{name}" created successfully!', 'success')
@@ -1216,8 +1247,7 @@ def seller_create_inline():
 @app.route('/topics')
 def topics_list():
     """List all topics (FR009)."""
-    user_id = 1  # Single user system
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     
     # Load topics with eager loading
     topics = Topic.query.options(db.joinedload(Topic.call_logs)).all()
@@ -1253,7 +1283,7 @@ def api_topic_create():
         }), 200
     
     # Create new topic
-    topic = Topic(name=name, description=None)
+    topic = Topic(name=name, description=None, user_id=current_user.id)
     db.session.add(topic)
     db.session.commit()
     
@@ -1284,7 +1314,8 @@ def topic_create():
         
         topic = Topic(
             name=name,
-            description=description if description else None
+            description=description if description else None,
+            user_id=current_user.id
         )
         db.session.add(topic)
         db.session.commit()
@@ -1416,10 +1447,9 @@ def call_log_create():
         # Create call log
         call_log = CallLog(
             customer_id=int(customer_id),
-            seller_id=int(seller_id) if seller_id else None,
-            territory_id=territory_id,
             call_date=call_date,
-            content=content
+            content=content,
+            user_id=current_user.id
         )
         
         # Add topics
@@ -1649,10 +1679,9 @@ def search():
 @app.route('/preferences')
 def preferences():
     """User preferences page."""
-    user_id = 1
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     if not pref:
-        pref = UserPreference(user_id=user_id)
+        pref = UserPreference(user_id=current_user.id)
         db.session.add(pref)
         db.session.commit()
     
@@ -1979,16 +2008,14 @@ create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Vertic
 @app.route('/api/preferences/dark-mode', methods=['GET', 'POST'])
 def dark_mode_preference():
     """Get or set dark mode preference."""
-    user_id = 1  # Single user system
-    
     if request.method == 'POST':
         data = request.get_json()
         dark_mode = data.get('dark_mode', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
         if not pref:
-            pref = UserPreference(user_id=user_id, dark_mode=dark_mode)
+            pref = UserPreference(user_id=current_user.id, dark_mode=dark_mode)
             db.session.add(pref)
         else:
             pref.dark_mode = dark_mode
@@ -1997,9 +2024,9 @@ def dark_mode_preference():
         return jsonify({'dark_mode': pref.dark_mode}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     if not pref:
-        pref = UserPreference(user_id=user_id, dark_mode=False)
+        pref = UserPreference(user_id=current_user.id, dark_mode=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2060,16 +2087,14 @@ def tpid_workflow_update():
 @app.route('/api/preferences/customer-view', methods=['GET', 'POST'])
 def customer_view_preference():
     """Get or set customer view preference (alphabetical vs grouped)."""
-    user_id = 1  # Single user system
-    
     if request.method == 'POST':
         data = request.get_json()
         customer_view_grouped = data.get('customer_view_grouped', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
         if not pref:
-            pref = UserPreference(user_id=user_id, customer_view_grouped=customer_view_grouped)
+            pref = UserPreference(user_id=current_user.id, customer_view_grouped=customer_view_grouped)
             db.session.add(pref)
         else:
             pref.customer_view_grouped = customer_view_grouped
@@ -2078,9 +2103,9 @@ def customer_view_preference():
         return jsonify({'customer_view_grouped': pref.customer_view_grouped}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     if not pref:
-        pref = UserPreference(user_id=user_id, customer_view_grouped=False)
+        pref = UserPreference(user_id=current_user.id, customer_view_grouped=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2090,16 +2115,14 @@ def customer_view_preference():
 @app.route('/api/preferences/topic-sort', methods=['GET', 'POST'])
 def topic_sort_preference():
     """Get or set topic sort preference (alphabetical vs by calls)."""
-    user_id = 1  # Single user system
-    
     if request.method == 'POST':
         data = request.get_json()
         topic_sort_by_calls = data.get('topic_sort_by_calls', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
         if not pref:
-            pref = UserPreference(user_id=user_id, topic_sort_by_calls=topic_sort_by_calls)
+            pref = UserPreference(user_id=current_user.id, topic_sort_by_calls=topic_sort_by_calls)
             db.session.add(pref)
         else:
             pref.topic_sort_by_calls = topic_sort_by_calls
@@ -2108,9 +2131,9 @@ def topic_sort_preference():
         return jsonify({'topic_sort_by_calls': pref.topic_sort_by_calls}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     if not pref:
-        pref = UserPreference(user_id=user_id, topic_sort_by_calls=False)
+        pref = UserPreference(user_id=current_user.id, topic_sort_by_calls=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2120,16 +2143,14 @@ def topic_sort_preference():
 @app.route('/api/preferences/territory-view', methods=['GET', 'POST'])
 def territory_view_preference():
     """Get or set territory view preference (recent calls vs accounts)."""
-    user_id = 1  # Single user system
-    
     if request.method == 'POST':
         data = request.get_json()
         territory_view_accounts = data.get('territory_view_accounts', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
         if not pref:
-            pref = UserPreference(user_id=user_id, territory_view_accounts=territory_view_accounts)
+            pref = UserPreference(user_id=current_user.id, territory_view_accounts=territory_view_accounts)
             db.session.add(pref)
         else:
             pref.territory_view_accounts = territory_view_accounts
@@ -2138,9 +2159,9 @@ def territory_view_preference():
         return jsonify({'territory_view_accounts': pref.territory_view_accounts}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     if not pref:
-        pref = UserPreference(user_id=user_id, territory_view_accounts=False)
+        pref = UserPreference(user_id=current_user.id, territory_view_accounts=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2150,16 +2171,14 @@ def territory_view_preference():
 @app.route('/api/preferences/colored-sellers', methods=['GET', 'POST'])
 def colored_sellers_preference():
     """Get or set colored sellers preference (grey vs colored badges)."""
-    user_id = 1  # Single user system
-    
     if request.method == 'POST':
         data = request.get_json()
         colored_sellers = data.get('colored_sellers', True)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
         if not pref:
-            pref = UserPreference(user_id=user_id, colored_sellers=colored_sellers)
+            pref = UserPreference(user_id=current_user.id, colored_sellers=colored_sellers)
             db.session.add(pref)
         else:
             pref.colored_sellers = colored_sellers
@@ -2168,9 +2187,9 @@ def colored_sellers_preference():
         return jsonify({'colored_sellers': pref.colored_sellers}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     if not pref:
-        pref = UserPreference(user_id=user_id, colored_sellers=True)
+        pref = UserPreference(user_id=current_user.id, colored_sellers=True)
         db.session.add(pref)
         db.session.commit()
     
@@ -2180,8 +2199,6 @@ def colored_sellers_preference():
 @app.route('/api/preferences/customer-sort-by', methods=['GET', 'POST'])
 def customer_sort_by_preference():
     """Get or set customer sorting preference (alphabetical, grouped, or by_calls)."""
-    user_id = 1  # Single user system
-    
     if request.method == 'POST':
         data = request.get_json()
         customer_sort_by = data.get('customer_sort_by', 'alphabetical')
@@ -2192,9 +2209,9 @@ def customer_sort_by_preference():
             return jsonify({'error': 'Invalid sort option'}), 400
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
         if not pref:
-            pref = UserPreference(user_id=user_id, customer_sort_by=customer_sort_by)
+            pref = UserPreference(user_id=current_user.id, customer_sort_by=customer_sort_by)
             db.session.add(pref)
         else:
             pref.customer_sort_by = customer_sort_by
@@ -2203,9 +2220,9 @@ def customer_sort_by_preference():
         return jsonify({'customer_sort_by': pref.customer_sort_by}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
     if not pref:
-        pref = UserPreference(user_id=user_id, customer_sort_by='alphabetical')
+        pref = UserPreference(user_id=current_user.id, customer_sort_by='alphabetical')
         db.session.add(pref)
         db.session.commit()
     
@@ -2246,8 +2263,7 @@ def get_seller_color(seller_id: int, use_colors: bool = True) -> str:
 @app.context_processor
 def inject_preferences():
     """Inject user preferences into all templates."""
-    user_id = 1  # Single user system
-    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    pref = UserPreference.query.filter_by(user_id=current_user.id).first() if current_user.is_authenticated else None
     dark_mode = pref.dark_mode if pref else False
     customer_view_grouped = pref.customer_view_grouped if pref else False
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
