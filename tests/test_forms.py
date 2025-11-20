@@ -91,8 +91,15 @@ def test_topic_edit_form_loads(client, sample_data):
 
 
 def test_call_log_create_form_loads(client, sample_data):
-    """Test call log creation form loads."""
+    """Test call log creation form loads (now requires customer_id)."""
+    # Without customer_id, should redirect to customers list
     response = client.get('/call-log/new')
+    assert response.status_code == 302
+    assert '/customers' in response.location
+    
+    # With customer_id, should load form
+    customer_id = sample_data['customer1_id']
+    response = client.get(f'/call-log/new?customer_id={customer_id}')
     assert response.status_code == 200
     assert b'New Call Log' in response.data
     assert b'Acme Corp' in response.data  # Customer dropdown

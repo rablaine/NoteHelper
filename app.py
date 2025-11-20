@@ -348,7 +348,8 @@ def index():
     # Eager load relationships for recent calls to avoid N+1 queries
     recent_calls = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
-        db.joinedload(CallLog.customer).joinedload(Customer.territory)
+        db.joinedload(CallLog.customer).joinedload(Customer.territory),
+        db.joinedload(CallLog.topics)
     ).order_by(CallLog.call_date.desc()).limit(10).all()
     
     # Count queries are fast on these small tables
@@ -1248,18 +1249,26 @@ def call_log_create():
         return redirect(url_for('call_log_view', id=call_log.id))
     
     # GET request - load form
+    # Require customer_id to be specified
+    preselect_customer_id = request.args.get('customer_id', type=int)
+    
+    if not preselect_customer_id:
+        # Redirect to customers list to select a customer first
+        flash('Please select a customer before creating a call log.', 'info')
+        return redirect(url_for('customers_list'))
+    
+    # Load customer and their previous call logs
+    preselect_customer = Customer.query.get_or_404(preselect_customer_id)
+    previous_calls = CallLog.query.filter_by(customer_id=preselect_customer_id).options(
+        db.joinedload(CallLog.topics)
+    ).order_by(CallLog.call_date.desc()).all()
+    
     customers = Customer.query.order_by(Customer.name).all()
     sellers = Seller.query.order_by(Seller.name).all()
     topics = Topic.query.order_by(Topic.name).all()
     
-    # Pre-select customer/topic from query params
-    preselect_customer_id = request.args.get('customer_id', type=int)
+    # Pre-select topic from query params
     preselect_topic_id = request.args.get('topic_id', type=int)
-    
-    # Pre-select customer object if customer_id provided
-    preselect_customer = None
-    if preselect_customer_id:
-        preselect_customer = Customer.query.get(preselect_customer_id)
     
     # Capture referrer for redirect after creation
     referrer = request.referrer or ''
@@ -1272,6 +1281,7 @@ def call_log_create():
                          preselect_customer_id=preselect_customer_id,
                          preselect_customer=preselect_customer,
                          preselect_topic_id=preselect_topic_id,
+                         previous_calls=previous_calls,
                          referrer=referrer)
 
 
@@ -1359,66 +1369,72 @@ def search():
     territory_id = request.args.get('territory_id', type=int)
     topic_ids = request.args.getlist('topic_ids', type=int)
     
-    # Start with base query
-    query = CallLog.query
+    # Check if any search criteria provided
+    has_search = bool(search_text or customer_id or seller_id or territory_id or topic_ids)
     
-    # Apply filters
-    if search_text:
-        query = query.filter(CallLog.content.ilike(f'%{search_text}%'))
-    
-    if customer_id:
-        query = query.filter(CallLog.customer_id == customer_id)
-    
-    if seller_id:
-        query = query.join(Customer).filter(Customer.seller_id == seller_id)
-    
-    if territory_id:
-        if not seller_id:  # Avoid duplicate join
-            query = query.join(Customer)
-        query = query.filter(Customer.territory_id == territory_id)
-    
-    if topic_ids:
-        # Filter by topics (call logs that have ANY of the selected topics)
-        query = query.join(CallLog.topics).filter(Topic.id.in_(topic_ids))
-    
-    # Get filtered call logs
-    call_logs = query.order_by(CallLog.call_date.desc()).all()
-    
-    # Group call logs by Seller → Customer structure (FR011)
-    # Structure: { seller_id: { 'seller': Seller, 'customers': { customer_id: { 'customer': Customer, 'calls': [CallLog] } } } }
+    call_logs = []
     grouped_data = {}
     
-    for call in call_logs:
-        seller_id_key = call.seller.id if call.seller else 0  # 0 = no seller
-        customer_id_key = call.customer_id if call.customer_id else 0  # 0 = no customer
+    # Only perform search if criteria provided
+    if has_search:
+        # Start with base query
+        query = CallLog.query
         
-        # Initialize seller group
-        if seller_id_key not in grouped_data:
-            grouped_data[seller_id_key] = {
-                'seller': call.seller,
-                'customers': {}
-            }
+        # Apply filters
+        if search_text:
+            query = query.filter(CallLog.content.ilike(f'%{search_text}%'))
         
-        # Initialize customer group
-        if customer_id_key not in grouped_data[seller_id_key]['customers']:
-            grouped_data[seller_id_key]['customers'][customer_id_key] = {
-                'customer': call.customer,
-                'calls': [],
-                'most_recent_date': call.call_date
-            }
+        if customer_id:
+            query = query.filter(CallLog.customer_id == customer_id)
         
-        # Add call to customer group
-        grouped_data[seller_id_key]['customers'][customer_id_key]['calls'].append(call)
+        if seller_id:
+            query = query.join(Customer).filter(Customer.seller_id == seller_id)
         
-        # Update most recent date
-        if call.call_date > grouped_data[seller_id_key]['customers'][customer_id_key]['most_recent_date']:
-            grouped_data[seller_id_key]['customers'][customer_id_key]['most_recent_date'] = call.call_date
-    
-    # Sort customers by most recent call within each seller
-    for seller_id_key in grouped_data:
-        customers_list = list(grouped_data[seller_id_key]['customers'].values())
-        customers_list.sort(key=lambda x: x['most_recent_date'], reverse=True)
-        grouped_data[seller_id_key]['customers_sorted'] = customers_list
+        if territory_id:
+            if not seller_id:  # Avoid duplicate join
+                query = query.join(Customer)
+            query = query.filter(Customer.territory_id == territory_id)
+        
+        if topic_ids:
+            # Filter by topics (call logs that have ANY of the selected topics)
+            query = query.join(CallLog.topics).filter(Topic.id.in_(topic_ids))
+        
+        # Get filtered call logs
+        call_logs = query.order_by(CallLog.call_date.desc()).all()
+        
+        # Group call logs by Seller → Customer structure (FR011)
+        # Structure: { seller_id: { 'seller': Seller, 'customers': { customer_id: { 'customer': Customer, 'calls': [CallLog] } } } }
+        for call in call_logs:
+            seller_id_key = call.seller.id if call.seller else 0  # 0 = no seller
+            customer_id_key = call.customer_id if call.customer_id else 0  # 0 = no customer
+            
+            # Initialize seller group
+            if seller_id_key not in grouped_data:
+                grouped_data[seller_id_key] = {
+                    'seller': call.seller,
+                    'customers': {}
+                }
+            
+            # Initialize customer group
+            if customer_id_key not in grouped_data[seller_id_key]['customers']:
+                grouped_data[seller_id_key]['customers'][customer_id_key] = {
+                    'customer': call.customer,
+                    'calls': [],
+                    'most_recent_date': call.call_date
+                }
+            
+            # Add call to customer group
+            grouped_data[seller_id_key]['customers'][customer_id_key]['calls'].append(call)
+            
+            # Update most recent date
+            if call.call_date > grouped_data[seller_id_key]['customers'][customer_id_key]['most_recent_date']:
+                grouped_data[seller_id_key]['customers'][customer_id_key]['most_recent_date'] = call.call_date
+        
+        # Sort customers by most recent call within each seller
+        for seller_id_key in grouped_data:
+            customers_list = list(grouped_data[seller_id_key]['customers'].values())
+            customers_list.sort(key=lambda x: x['most_recent_date'], reverse=True)
+            grouped_data[seller_id_key]['customers_sorted'] = customers_list
     
     # Get all filter options for dropdowns
     customers = Customer.query.order_by(Customer.name).all()

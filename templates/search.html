@@ -143,14 +143,10 @@
             </div>
         </div>
     {% endfor %}
-{% else %}
-    <div class="alert alert-secondary">
+{% elif search_text or selected_customer_id or selected_seller_id or selected_territory_id or selected_topic_ids %}
+    <div class="alert alert-warning">
         <i class="bi bi-inbox"></i> 
-        {% if search_text or selected_customer_id or selected_seller_id or selected_territory_id or selected_topic_ids %}
-            No call logs match your search criteria. Try adjusting your filters.
-        {% else %}
-            No call logs yet. <a href="{{ url_for('call_log_create') }}">Create your first call log</a>!
-        {% endif %}
+        No call logs match your search criteria. Try adjusting your filters.
     </div>
 {% endif %}
 {% endblock %}
