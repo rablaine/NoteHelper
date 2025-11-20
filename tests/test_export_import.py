@@ -213,24 +213,28 @@ def test_export_enriched_derives_from_customer(client, sample_data):
 
 def test_export_import_roundtrip_preserves_data(app, client):
     """Test that exporting and re-importing data preserves all information."""
-    from app import db, POD, Territory, Seller, Customer, Topic, CallLog, Vertical
+    from app import db, POD, Territory, Seller, Customer, Topic, CallLog, Vertical, User
     
     with app.app_context():
-        # Create test data
-        pod = POD(name='Test POD')
+        # Get test user (created by conftest.py)
+        user = User.query.first()
+        assert user is not None, "Test user should exist"
+        
+        # Create test data with user_id
+        pod = POD(name='Test POD', user_id=user.id)
         db.session.add(pod)
         db.session.flush()
         
-        territory = Territory(name='Test Territory', pod_id=pod.id)
+        territory = Territory(name='Test Territory', pod_id=pod.id, user_id=user.id)
         db.session.add(territory)
         db.session.flush()
         
-        seller = Seller(name='Test Seller', alias='tseller', seller_type='Growth')
+        seller = Seller(name='Test Seller', alias='tseller', seller_type='Growth', user_id=user.id)
         seller.territories.append(territory)
         db.session.add(seller)
         db.session.flush()
         
-        vertical = Vertical(name='Test Vertical')
+        vertical = Vertical(name='Test Vertical', user_id=user.id)
         db.session.add(vertical)
         db.session.flush()
         
@@ -238,20 +242,22 @@ def test_export_import_roundtrip_preserves_data(app, client):
             name='Test Customer',
             tpid=9999,
             seller_id=seller.id,
-            territory_id=territory.id
+            territory_id=territory.id,
+            user_id=user.id
         )
         customer.verticals.append(vertical)
         db.session.add(customer)
         db.session.flush()
         
-        topic = Topic(name='Test Topic', description='Test Description')
+        topic = Topic(name='Test Topic', description='Test Description', user_id=user.id)
         db.session.add(topic)
         db.session.flush()
         
         call_log = CallLog(
             customer_id=customer.id,
             call_date=datetime.now(timezone.utc),
-            content='Test call log content'
+            content='Test call log content',
+            user_id=user.id
         )
         call_log.topics.append(topic)
         db.session.add(call_log)
