@@ -327,6 +327,7 @@ class UserPreference(db.Model):
     user_id = db.Column(db.Integer, nullable=False, default=1)  # Single user system
     dark_mode = db.Column(db.Boolean, default=False, nullable=False)
     customer_view_grouped = db.Column(db.Boolean, default=False, nullable=False)
+    customer_sort_by = db.Column(db.String(20), default='alphabetical', nullable=False)  # 'alphabetical', 'grouped', or 'by_calls'
     topic_sort_by_calls = db.Column(db.Boolean, default=False, nullable=False)
     territory_view_accounts = db.Column(db.Boolean, default=False, nullable=False)  # False = recent calls, True = accounts
     colored_sellers = db.Column(db.Boolean, default=True, nullable=False)  # False = grey sellers, True = colored sellers
@@ -334,7 +335,7 @@ class UserPreference(db.Model):
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     def __repr__(self) -> str:
-        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} colored_sellers={self.colored_sellers}>'
+        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} customer_sort_by={self.customer_sort_by} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} colored_sellers={self.colored_sellers}>'
 
 
 # =============================================================================
@@ -802,11 +803,16 @@ def territory_create_inline():
 
 @app.route('/customers')
 def customers_list():
-    """List all customers - alphabetical or grouped by seller based on preference."""
+    """List all customers - alphabetical, grouped by seller, or sorted by call count based on preference."""
     user_id = 1  # Single user system
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     
-    if pref and pref.customer_view_grouped:
+    # Determine sort method - check new field first, fall back to old grouped field for backwards compatibility
+    sort_by = pref.customer_sort_by if pref else 'alphabetical'
+    if sort_by == 'grouped' or (pref and pref.customer_view_grouped and sort_by == 'alphabetical'):
+        sort_by = 'grouped'
+    
+    if sort_by == 'grouped':
         # Grouped view - get all sellers with their customers
         sellers = Seller.query.options(
             db.joinedload(Seller.customers).joinedload(Customer.call_logs),
@@ -833,15 +839,28 @@ def customers_list():
         return render_template('customers_list.html', 
                              grouped_customers=grouped_customers,
                              customers_without_seller=customers_without_seller,
-                             is_grouped=True)
+                             sort_by='grouped')
+    
+    elif sort_by == 'by_calls':
+        # Sort by number of calls (descending)
+        customers = Customer.query.options(
+            db.joinedload(Customer.seller),
+            db.joinedload(Customer.territory),
+            db.joinedload(Customer.call_logs)
+        ).outerjoin(CallLog).group_by(Customer.id).order_by(
+            func.count(CallLog.id).desc(),
+            Customer.name
+        ).all()
+        return render_template('customers_list.html', customers=customers, sort_by='by_calls')
+    
     else:
-        # Alphabetical view
+        # Alphabetical view (default)
         customers = Customer.query.options(
             db.joinedload(Customer.seller),
             db.joinedload(Customer.territory),
             db.joinedload(Customer.call_logs)
         ).order_by(Customer.name).all()
-        return render_template('customers_list.html', customers=customers, is_grouped=False)
+        return render_template('customers_list.html', customers=customers, sort_by='alphabetical')
 
 
 @app.route('/customer/new', methods=['GET', 'POST'])
@@ -1434,8 +1453,10 @@ def preferences():
     return render_template('preferences.html', 
                          dark_mode=pref.dark_mode,
                          customer_view_grouped=pref.customer_view_grouped,
+                         customer_sort_by=pref.customer_sort_by,
                          topic_sort_by_calls=pref.topic_sort_by_calls,
-                         territory_view_accounts=pref.territory_view_accounts)
+                         territory_view_accounts=pref.territory_view_accounts,
+                         colored_sellers=pref.colored_sellers)
 
 
 @app.route('/data-management')
@@ -1948,6 +1969,41 @@ def colored_sellers_preference():
         db.session.commit()
     
     return jsonify({'colored_sellers': pref.colored_sellers}), 200
+
+
+@app.route('/api/preferences/customer-sort-by', methods=['GET', 'POST'])
+def customer_sort_by_preference():
+    """Get or set customer sorting preference (alphabetical, grouped, or by_calls)."""
+    user_id = 1  # Single user system
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        customer_sort_by = data.get('customer_sort_by', 'alphabetical')
+        
+        # Validate the sort option
+        valid_options = ['alphabetical', 'grouped', 'by_calls']
+        if customer_sort_by not in valid_options:
+            return jsonify({'error': 'Invalid sort option'}), 400
+        
+        # Get or create user preference
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = UserPreference(user_id=user_id, customer_sort_by=customer_sort_by)
+            db.session.add(pref)
+        else:
+            pref.customer_sort_by = customer_sort_by
+        
+        db.session.commit()
+        return jsonify({'customer_sort_by': pref.customer_sort_by}), 200
+    
+    # GET request
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, customer_sort_by='alphabetical')
+        db.session.add(pref)
+        db.session.commit()
+    
+    return jsonify({'customer_sort_by': pref.customer_sort_by}), 200
 
 
 # =============================================================================

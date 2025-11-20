@@ -80,22 +80,24 @@
                     {% set all_same_seller = call_logs|selectattr('seller.id', 'equalto', customer.seller.id)|list|length == call_logs|length if customer.seller else false %}
                     <div class="list-group">
                         {% for call in call_logs %}
-                            <a href="{{ url_for('call_log_view', id=call.id) }}" class="list-group-item list-group-item-action">
-                                <div class="d-flex w-100 justify-content-between">
-                                    <h6 class="mb-1">{{ call.call_date.strftime('%b %d, %Y') }}</h6>
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between mb-2">
+                                    <h6 class="mb-0">
+                                        <a href="{{ url_for('call_log_view', id=call.id) }}" class="text-decoration-none">{{ call.call_date.strftime('%b %d, %Y') }}</a>
+                                    </h6>
                                     {% if call.seller and not all_same_seller %}
-                                        <small class="text-muted">{{ call.seller.name }}</small>
+                                        <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                                     {% endif %}
                                 </div>
-                                <p class="mb-1">{{ call.content|striptags|truncate(150) }}</p>
+                                <div class="mb-2">{{ call.content|safe }}</div>
                                 {% if call.topics|length > 0 %}
-                                    <small>
+                                    <div>
                                         {% for topic in call.topics %}
-                                            <span class="badge bg-warning text-dark">{{ topic.name }}</span>
+                                            <a href="{{ url_for('topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none"><i class="bi bi-tag"></i> {{ topic.name }}</a>
                                         {% endfor %}
-                                    </small>
+                                    </div>
                                 {% endif %}
-                            </a>
+                            </div>
                         {% endfor %}
                     </div>
                 {% else %}

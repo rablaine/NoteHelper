@@ -4,18 +4,33 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1><i class="bi bi-building"></i> Customers{% if is_grouped %} (Grouped by Seller){% endif %}</h1>
+    <h1>
+        <i class="bi bi-building"></i> Customers
+        {% if sort_by == 'grouped' %}
+            <small class="text-muted">(Grouped by Seller)</small>
+        {% elif sort_by == 'by_calls' %}
+            <small class="text-muted">(Sorted by Calls)</small>
+        {% endif %}
+    </h1>
     <div class="d-flex align-items-center gap-2">
-        <button id="viewToggle" class="btn btn-outline-secondary btn-sm" title="Toggle view">
-            <i class="bi bi-sort-alpha-down"></i> <span id="viewLabel">{{ 'Alphabetical' if is_grouped else 'Grouped' }}</span>
-        </button>
+        <div class="btn-group" role="group" aria-label="Sort customers">
+            <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'alphabetical' else 'btn-outline-secondary' }}" data-sort="alphabetical" title="Sort alphabetically">
+                <i class="bi bi-sort-alpha-down"></i> A-Z
+            </button>
+            <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'grouped' else 'btn-outline-secondary' }}" data-sort="grouped" title="Group by seller">
+                <i class="bi bi-people"></i> Grouped
+            </button>
+            <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'by_calls' else 'btn-outline-secondary' }}" data-sort="by_calls" title="Sort by number of calls">
+                <i class="bi bi-telephone"></i> By Calls
+            </button>
+        </div>
         <a href="{{ url_for('customer_create') }}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> New Customer
         </a>
     </div>
 </div>
 
-{% if is_grouped %}
+{% if sort_by == 'grouped' %}
     {# Grouped View #}
     {% if grouped_customers or customers_without_seller %}
         {% for group in grouped_customers %}
@@ -150,31 +165,31 @@
 
 {% block extra_js %}
 <script>
-// Handle view toggle
+// Handle sort button clicks
 document.addEventListener('DOMContentLoaded', function() {
-    const viewToggle = document.getElementById('viewToggle');
-    const viewLabel = document.getElementById('viewLabel');
-    const isGrouped = {{ 'true' if is_grouped else 'false' }};
+    const sortButtons = document.querySelectorAll('[data-sort]');
     
-    viewToggle.addEventListener('click', function() {
-        const newGroupedValue = !isGrouped;
-        
-        // Save preference
-        fetch('/api/preferences/customer-view', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ customer_view_grouped: newGroupedValue })
-        })
-        .then(response => response.json())
-        .then(() => {
-            // Reload page to show new view
-            window.location.reload();
-        })
-        .catch(error => {
-            console.error('Error saving preference:', error);
-            window.location.reload();
+    sortButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const sortBy = this.getAttribute('data-sort');
+            
+            // Save preference
+            fetch('/api/preferences/customer-sort-by', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ customer_sort_by: sortBy })
+            })
+            .then(response => response.json())
+            .then(() => {
+                // Reload page to show new sorting
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error saving preference:', error);
+                window.location.reload();
+            });
         });
     });
 });

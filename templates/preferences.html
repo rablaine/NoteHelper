@@ -32,20 +32,26 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
                     <div>
-                        <h6 class="mb-1">Customer View</h6>
-                        <small class="text-muted">How to display customers list</small>
+                        <h6 class="mb-1">Customer Sort</h6>
+                        <small class="text-muted">How to sort and display customers list</small>
                     </div>
                     <div class="btn-group" role="group">
-                        <input type="radio" class="btn-check" name="customerView" id="customerAlpha" value="false" 
-                               {{ 'checked' if not customer_view_grouped else '' }}>
+                        <input type="radio" class="btn-check" name="customerSort" id="customerAlpha" value="alphabetical" 
+                               {{ 'checked' if customer_sort_by == 'alphabetical' else '' }}>
                         <label class="btn btn-outline-primary" for="customerAlpha">
-                            <i class="bi bi-sort-alpha-down"></i> Alphabetical
+                            <i class="bi bi-sort-alpha-down"></i> A-Z
                         </label>
                         
-                        <input type="radio" class="btn-check" name="customerView" id="customerGrouped" value="true" 
-                               {{ 'checked' if customer_view_grouped else '' }}>
+                        <input type="radio" class="btn-check" name="customerSort" id="customerGrouped" value="grouped" 
+                               {{ 'checked' if customer_sort_by == 'grouped' else '' }}>
                         <label class="btn btn-outline-primary" for="customerGrouped">
-                            <i class="bi bi-collection"></i> Grouped
+                            <i class="bi bi-people"></i> Grouped
+                        </label>
+
+                        <input type="radio" class="btn-check" name="customerSort" id="customerByCalls" value="by_calls" 
+                               {{ 'checked' if customer_sort_by == 'by_calls' else '' }}>
+                        <label class="btn btn-outline-primary" for="customerByCalls">
+                            <i class="bi bi-telephone"></i> By Calls
                         </label>
                     </div>
                 </div>
@@ -114,7 +120,6 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const darkModeSwitch = document.getElementById('darkModeSwitch');
-    const customerViewRadios = document.querySelectorAll('input[name="customerView"]');
     const topicSortRadios = document.querySelectorAll('input[name="topicSort"]');
     const saveSuccess = document.getElementById('saveSuccess');
     
@@ -140,25 +145,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Customer view preference
-    customerViewRadios.forEach(radio => {
+    // Customer sort preference
+    const customerSortRadios = document.querySelectorAll('input[name="customerSort"]');
+    customerSortRadios.forEach(radio => {
         radio.addEventListener('change', function() {
             if (this.checked) {
-                const customerViewGrouped = this.value === 'true';
+                const customerSortBy = this.value;
                 
-                fetch('/api/preferences/customer-view', {
+                fetch('/api/preferences/customer-sort-by', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ customer_view_grouped: customerViewGrouped })
+                    body: JSON.stringify({ customer_sort_by: customerSortBy })
                 })
                 .then(response => response.json())
                 .then(() => {
                     showSuccess();
                 })
                 .catch(error => {
-                    console.error('Error saving customer view preference:', error);
+                    console.error('Error saving customer sort preference:', error);
                 });
             }
         });
