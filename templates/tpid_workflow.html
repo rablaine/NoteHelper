@@ -26,6 +26,10 @@
         cursor: pointer;
         user-select: all;
         white-space: nowrap;
+        width: 125px;
+        display: inline-block;
+        text-align: center;
+        flex-shrink: 0;
     }
     [data-bs-theme="dark"] .tpid-display {
         background-color: #343a40;
@@ -94,10 +98,10 @@
                 <h5 class="mb-2"><i class="bi bi-info-circle"></i> Quick Workflow Guide</h5>
                 <ol class="mb-0">
                     <li><strong>Click "Open MSX"</strong> to open Microsoft Sales Experience in a new window</li>
-                    <li><strong>Click the TPID</strong> to copy it to clipboard (auto-focuses URL field)</li>
+                    <li><strong>Click the first TPID</strong> to copy it to clipboard (auto-focuses URL field)</li>
                     <li><strong>Alt+Tab</strong> to MSX, paste the TPID in search, and copy the account URL</li>
-                    <li><strong>Alt+Tab</strong> back and <strong>Ctrl+V</strong> to paste (field is already focused)</li>
-                    <li><strong>Enter or Tab</strong> to move to next customer automatically</li>
+                    <li><strong>Alt+Tab</strong> back and <strong>Ctrl+V</strong> to paste the URL</li>
+                    <li><strong>Next TPID auto-copies!</strong> Just <strong>Alt+Tab</strong> and paste in MSX, then repeat</li>
                     <li><strong>Save progress</strong> anytime - only filled URLs are submitted</li>
                 </ol>
                 <p class="mb-0 mt-2"><strong>Shortcuts:</strong> Click "Skip" or press <kbd>Tab</kbd> to skip a customer</p>
@@ -114,7 +118,7 @@
                         <div class="col-md-3">
                             <div class="d-flex align-items-center gap-2">
                                 <div 
-                                    class="tpid-display" 
+                                    class="tpid-display flex-shrink-0" 
                                     data-tpid="{{ customer.tpid }}"
                                     data-customer-id="{{ customer.id }}"
                                     title="Click to copy TPID: {{ customer.name }}"
@@ -123,8 +127,8 @@
                                     <i class="bi bi-clipboard copy-btn"></i>
                                     {{ customer.tpid }}
                                 </div>
-                                <a href="{{ url_for('customer_view', id=customer.id) }}" target="_blank" class="text-decoration-none small" title="{{ customer.name }}">
-                                    {{ customer.name[:30] }}{% if customer.name|length > 30 %}...{% endif %}
+                                <a href="{{ url_for('customer_view', id=customer.id) }}" target="_blank" class="text-decoration-none small text-truncate" title="{{ customer.name }}">
+                                    {{ customer.name }}
                                 </a>
                             </div>
                         </div>
@@ -241,13 +245,32 @@
         }
     }
 
-    // Auto-advance to next field on Enter
+    // Auto-advance to next field on Enter or paste
     document.addEventListener('DOMContentLoaded', function() {
         const inputs = document.querySelectorAll('.url-input');
+        const tpidCards = document.querySelectorAll('.tpid-card');
         
         inputs.forEach((input, index) => {
             // Update count on input
             input.addEventListener('input', updateFilledCount);
+            
+            // Handle paste event - auto-advance to next TPID
+            input.addEventListener('paste', function(e) {
+                // Wait a tiny bit for paste to complete
+                setTimeout(() => {
+                    // Move to next customer if exists
+                    if (index < inputs.length - 1) {
+                        // Get the next customer's TPID display element
+                        const nextCard = tpidCards[index + 1];
+                        const nextTpidDisplay = nextCard.querySelector('.tpid-display');
+                        
+                        // Copy next TPID to clipboard
+                        if (nextTpidDisplay) {
+                            copyTPID(nextTpidDisplay);
+                        }
+                    }
+                }, 50);
+            });
             
             // Handle Enter key
             input.addEventListener('keydown', function(e) {

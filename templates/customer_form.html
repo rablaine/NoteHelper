@@ -41,8 +41,8 @@
                         <label for="tpid_url" class="form-label">MSX Account URL</label>
                         <input type="url" class="form-control" id="tpid_url" name="tpid_url" 
                                value="{{ customer.tpid_url|default('', true) if customer else '' }}" 
-                               maxlength="500" placeholder="https://example.com/customer-details">
-                        <div class="form-text">Optional: Link to MSX account for this customer</div>
+                               maxlength="500" placeholder="https://microsoftsales.crm.dynamics.com/main.aspx?appid=...&id=...">
+                        <div class="form-text">Link to this customer's account record in Microsoft Sales Experience (MSX)</div>
                     </div>
                     
                     <div class="mb-3">
