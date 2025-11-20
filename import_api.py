@@ -275,7 +275,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                     if existing:
                         verticals_map[vertical_name] = existing
                     else:
-                        vertical = Vertical(name=vertical_name, category=None)
+                        vertical = Vertical(name=vertical_name)
                         db.session.add(vertical)
                         verticals_map[vertical_name] = vertical
                 
