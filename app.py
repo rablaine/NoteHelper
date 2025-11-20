@@ -1923,6 +1923,31 @@ def territory_view_preference():
 # Context Processor
 # =============================================================================
 
+def get_seller_color(seller_id: int) -> str:
+    """
+    Generate a consistent, visually distinct color for a seller based on their ID.
+    Returns a CSS color class name.
+    """
+    # Define a palette of distinct, accessible colors
+    # Avoiding pure red (danger), pure green (success), and using muted tones
+    color_classes = [
+        'seller-color-1',   # Purple
+        'seller-color-2',   # Teal
+        'seller-color-3',   # Orange
+        'seller-color-4',   # Pink
+        'seller-color-5',   # Indigo
+        'seller-color-6',   # Cyan
+        'seller-color-7',   # Brown
+        'seller-color-8',   # Deep Orange
+        'seller-color-9',   # Blue-Grey
+        'seller-color-10',  # Lime
+    ]
+    
+    # Use modulo to cycle through colors if we have more sellers than colors
+    color_index = (seller_id - 1) % len(color_classes)
+    return color_classes[color_index]
+
+
 @app.context_processor
 def inject_preferences():
     """Inject user preferences into all templates."""
@@ -1931,7 +1956,12 @@ def inject_preferences():
     dark_mode = pref.dark_mode if pref else False
     customer_view_grouped = pref.customer_view_grouped if pref else False
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
-    return dict(dark_mode=dark_mode, customer_view_grouped=customer_view_grouped, topic_sort_by_calls=topic_sort_by_calls)
+    return dict(
+        dark_mode=dark_mode, 
+        customer_view_grouped=customer_view_grouped, 
+        topic_sort_by_calls=topic_sort_by_calls,
+        get_seller_color=get_seller_color
+    )
 
 
 if __name__ == '__main__':

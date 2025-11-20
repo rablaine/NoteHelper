@@ -128,13 +128,13 @@
                     </div>
                     <div>
                         {% if customer.seller %}
-                            <a href="{{ url_for('seller_view', id=customer.seller.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
+                            <a href="{{ url_for('seller_view', id=customer.seller.id) }}" class="badge {{ get_seller_color(customer.seller.id) }} text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
                             {% if customer.seller.seller_type %}
                                 <span class="badge {% if customer.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ customer.seller.seller_type }}</span>
                             {% endif %}
                         {% endif %}
                         {% if customer.territory %}
-                            <span class="badge bg-secondary"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
+                            <span class="badge bg-info text-dark"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</span>
                         {% endif %}
                     </div>
                 </div>

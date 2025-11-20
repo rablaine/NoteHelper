@@ -81,7 +81,7 @@
                                 <p class="mb-1">{{ call.content|striptags|truncate(150) }}</p>
                                 {% if call.seller %}
                                     <div onclick="event.stopPropagation();">
-                                        <span class="badge bg-secondary" style="cursor: pointer;" onclick="event.preventDefault(); event.stopPropagation(); window.location='{{ url_for('seller_view', id=call.seller.id) }}';">
+                                        <span class="badge {{ get_seller_color(call.seller.id) }}" style="cursor: pointer;" onclick="event.preventDefault(); event.stopPropagation(); window.location='{{ url_for('seller_view', id=call.seller.id) }}';">
                                             <i class="bi bi-person"></i> {{ call.seller.name }}
                                         </span>
                                     </div>
