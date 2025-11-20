@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="{{ 'dark' if dark_mode else 'light' }}">
+<html lang="en" data-bs-theme="{{ 'dark' if dark_mode else 'light' }}" data-colored-sellers="{{ 'true' if colored_sellers else 'false' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -111,28 +111,44 @@
         }
         
         /* Seller color palette for visual grouping */
-        .badge.seller-color-1 { background-color: #7c3aed !important; color: #fff !important; } /* Purple */
-        .badge.seller-color-2 { background-color: #0891b2 !important; color: #fff !important; } /* Teal */
-        .badge.seller-color-3 { background-color: #dc2626 !important; color: #fff !important; } /* Red */
-        .badge.seller-color-4 { background-color: #db2777 !important; color: #fff !important; } /* Pink */
-        .badge.seller-color-5 { background-color: #2563eb !important; color: #fff !important; } /* Blue */
-        .badge.seller-color-6 { background-color: #059669 !important; color: #fff !important; } /* Emerald */
-        .badge.seller-color-7 { background-color: #ca8a04 !important; color: #fff !important; } /* Yellow */
-        .badge.seller-color-8 { background-color: #ea580c !important; color: #fff !important; } /* Orange */
-        .badge.seller-color-9 { background-color: #64748b !important; color: #fff !important; } /* Slate */
-        .badge.seller-color-10 { background-color: #7c2d12 !important; color: #fff !important; } /* Brown */
+        /* When colors are enabled (default), show colors */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-1 { background-color: #7c3aed !important; color: #fff !important; } /* Purple */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-2 { background-color: #0891b2 !important; color: #fff !important; } /* Teal */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-3 { background-color: #dc2626 !important; color: #fff !important; } /* Red */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-4 { background-color: #db2777 !important; color: #fff !important; } /* Pink */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-5 { background-color: #2563eb !important; color: #fff !important; } /* Blue */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-6 { background-color: #059669 !important; color: #fff !important; } /* Emerald */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-7 { background-color: #ca8a04 !important; color: #fff !important; } /* Yellow */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-8 { background-color: #ea580c !important; color: #fff !important; } /* Orange */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-9 { background-color: #64748b !important; color: #fff !important; } /* Slate */
+        html:not([data-colored-sellers="false"]) .badge.seller-color-10 { background-color: #7c2d12 !important; color: #fff !important; } /* Brown */
         
         /* Dark mode adjustments for seller colors - slightly lighter for better contrast */
-        [data-bs-theme="dark"] .badge.seller-color-1 { background-color: #8b5cf6 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-2 { background-color: #06b6d4 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-3 { background-color: #ef4444 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-4 { background-color: #ec4899 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-5 { background-color: #3b82f6 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-6 { background-color: #10b981 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-7 { background-color: #eab308 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-8 { background-color: #f97316 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-9 { background-color: #94a3b8 !important; }
-        [data-bs-theme="dark"] .badge.seller-color-10 { background-color: #a16207 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-1 { background-color: #8b5cf6 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-2 { background-color: #06b6d4 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-3 { background-color: #ef4444 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-4 { background-color: #ec4899 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-5 { background-color: #3b82f6 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-6 { background-color: #10b981 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-7 { background-color: #eab308 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-8 { background-color: #f97316 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-9 { background-color: #94a3b8 !important; }
+        html:not([data-colored-sellers="false"])[data-bs-theme="dark"] .badge.seller-color-10 { background-color: #a16207 !important; }
+        
+        /* When colors are disabled, all seller badges use secondary (gray) */
+        html[data-colored-sellers="false"] .badge.seller-color-1,
+        html[data-colored-sellers="false"] .badge.seller-color-2,
+        html[data-colored-sellers="false"] .badge.seller-color-3,
+        html[data-colored-sellers="false"] .badge.seller-color-4,
+        html[data-colored-sellers="false"] .badge.seller-color-5,
+        html[data-colored-sellers="false"] .badge.seller-color-6,
+        html[data-colored-sellers="false"] .badge.seller-color-7,
+        html[data-colored-sellers="false"] .badge.seller-color-8,
+        html[data-colored-sellers="false"] .badge.seller-color-9,
+        html[data-colored-sellers="false"] .badge.seller-color-10 {
+            background-color: #6c757d !important; /* Bootstrap secondary */
+            color: #fff !important;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -297,9 +313,14 @@
         coloredSellersToggle.addEventListener('click', async function(e) {
             e.preventDefault();
             
-            // Toggle state
-            const currentlyColored = coloredSellersIcon.classList.contains('bi-palette-fill');
+            // Get current state
+            const currentlyColored = htmlElement.getAttribute('data-colored-sellers') === 'true';
             const newColored = !currentlyColored;
+            
+            // Update UI immediately
+            htmlElement.setAttribute('data-colored-sellers', newColored ? 'true' : 'false');
+            coloredSellersIcon.className = newColored ? 'bi bi-palette-fill' : 'bi bi-palette';
+            coloredSellersLabel.textContent = newColored ? 'Gray Sellers' : 'Colored Sellers';
             
             // Save preference to server
             try {
@@ -310,9 +331,6 @@
                     },
                     body: JSON.stringify({ colored_sellers: newColored })
                 });
-                
-                // Reload page to apply color changes
-                window.location.reload();
             } catch (error) {
                 console.error('Failed to save colored sellers preference:', error);
             }

@@ -167,7 +167,8 @@ function filterTerritories() {
     // Auto-select if only one territory
     if (validTerritoryIds.length === 1) {
         territorySelect.value = validTerritoryIds[0];
-        autoMsg.style.display = 'block';
+        // Only show message if user manually changed the seller
+        autoMsg.style.display = sellerChangedByUser ? 'block' : 'none';
     } else {
         autoMsg.style.display = 'none';
     }
@@ -210,20 +211,27 @@ function filterSellers() {
     // Auto-select if only one seller
     if (validSellerIds.length === 1) {
         sellerSelect.value = validSellerIds[0];
-        sellerAutoMsg.style.display = 'block';
+        // Only show message if user manually changed the territory
+        sellerAutoMsg.style.display = territoryChangedByUser ? 'block' : 'none';
         updateExistingCustomersList();
     } else {
         sellerAutoMsg.style.display = 'none';
     }
 }
 
+// Track if user manually changed fields (don't show auto-messages on page load)
+let sellerChangedByUser = false;
+let territoryChangedByUser = false;
+
 // Seller change handler
 document.getElementById('seller_id').addEventListener('change', function() {
+    sellerChangedByUser = true;
     filterTerritories();
 });
 
 // Territory change handler
 document.getElementById('territory_id').addEventListener('change', function() {
+    territoryChangedByUser = true;
     filterSellers();
 });
 
