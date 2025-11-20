@@ -1778,6 +1778,57 @@ def dark_mode_preference():
     return jsonify({'dark_mode': pref.dark_mode}), 200
 
 
+@app.route('/tpid-workflow')
+def tpid_workflow():
+    """TPID URL workflow page - helps fill in missing TPID URLs efficiently."""
+    # Get all customers without TPID URLs, ordered by seller/territory for grouping
+    customers = Customer.query.filter(
+        or_(Customer.tpid_url == None, Customer.tpid_url == '')
+    ).options(
+        db.joinedload(Customer.seller),
+        db.joinedload(Customer.territory)
+    ).order_by(
+        Customer.seller_id.asc(),
+        Customer.territory_id.asc(),
+        Customer.name.asc()
+    ).all()
+    
+    return render_template('tpid_workflow.html', customers=customers)
+
+
+@app.route('/tpid-workflow/update', methods=['POST'])
+def tpid_workflow_update():
+    """Update TPID URLs from the workflow page."""
+    try:
+        # Get all form fields that start with 'tpid_url_'
+        updates = {}
+        for key, value in request.form.items():
+            if key.startswith('tpid_url_') and value.strip():
+                customer_id = int(key.replace('tpid_url_', ''))
+                updates[customer_id] = value.strip()
+        
+        if not updates:
+            flash('No TPID URLs to update.', 'warning')
+            return redirect(url_for('tpid_workflow'))
+        
+        # Update customers
+        updated_count = 0
+        for customer_id, tpid_url in updates.items():
+            customer = Customer.query.get(customer_id)
+            if customer:
+                customer.tpid_url = tpid_url
+                updated_count += 1
+        
+        db.session.commit()
+        flash(f'Successfully updated {updated_count} TPID URL{"s" if updated_count != 1 else ""}.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating TPID URLs: {str(e)}', 'danger')
+    
+    return redirect(url_for('tpid_workflow'))
+
+
 @app.route('/api/preferences/customer-view', methods=['GET', 'POST'])
 def customer_view_preference():
     """Get or set customer view preference (alphabetical vs grouped)."""

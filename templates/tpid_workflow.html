@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+
+{% block title %}TPID URL Workflow - NoteHelper{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Workflow-specific styles */
+    .tpid-card {
+        border: none;
+        border-left: 2px solid transparent;
+    }
+    .tpid-card:focus-within {
+        border-left-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+    [data-bs-theme="dark"] .tpid-card:focus-within {
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+    .tpid-display {
+        font-family: 'Courier New', monospace;
+        font-size: 0.95rem;
+        font-weight: 600;
+        padding: 0.25rem 0.5rem;
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        user-select: all;
+        white-space: nowrap;
+    }
+    [data-bs-theme="dark"] .tpid-display {
+        background-color: #343a40;
+    }
+    .tpid-display:hover {
+        background-color: #e9ecef;
+    }
+    [data-bs-theme="dark"] .tpid-display:hover {
+        background-color: #495057;
+    }
+    .copy-btn {
+        opacity: 0.6;
+    }
+    .url-input {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+    }
+    .workflow-help {
+        background-color: #fff3cd;
+        border-left: 3px solid #ffc107;
+    }
+    [data-bs-theme="dark"] .workflow-help {
+        background-color: rgba(255, 193, 7, 0.15);
+        border-left-color: #ffc107;
+    }
+    .skip-btn {
+        opacity: 0;
+    }
+    .tpid-card:hover .skip-btn,
+    .skip-btn:focus {
+        opacity: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="bi bi-link-45deg"></i> TPID URL Workflow</h2>
+                    <p class="text-muted mb-0">
+                        Fill in missing TPID URLs for {{ customers|length }} customer{{ 's' if customers|length != 1 else '' }}
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ url_for('customers_list') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-lg"></i> Cancel
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if customers %}
+    <!-- Workflow Instructions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="workflow-help p-3 rounded">
+                <h5 class="mb-2"><i class="bi bi-info-circle"></i> Quick Workflow Guide</h5>
+                <ol class="mb-0">
+                    <li><strong>Click the TPID</strong> to copy it to clipboard (auto-focuses URL field)</li>
+                    <li><strong>Alt+Tab</strong> to your CRM, paste the TPID, and copy the result URL</li>
+                    <li><strong>Alt+Tab</strong> back and <strong>Ctrl+V</strong> to paste (field is already focused)</li>
+                    <li><strong>Enter or Tab</strong> to move to next customer automatically</li>
+                    <li><strong>Save progress</strong> anytime - only filled URLs are submitted</li>
+                </ol>
+                <p class="mb-0 mt-2"><strong>Shortcuts:</strong> Click "Skip" or press <kbd>Tab</kbd> to skip a customer</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Form -->
+    <form method="POST" action="{{ url_for('tpid_workflow_update') }}" id="tpidWorkflowForm">
+        {% for customer in customers %}
+            <div class="card tpid-card mb-2" data-customer-id="{{ customer.id }}">
+                <div class="card-body py-2">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <div 
+                                    class="tpid-display" 
+                                    data-tpid="{{ customer.tpid }}"
+                                    data-customer-id="{{ customer.id }}"
+                                    title="Click to copy TPID: {{ customer.name }}"
+                                    onclick="copyTPID(this)"
+                                >
+                                    <i class="bi bi-clipboard copy-btn"></i>
+                                    {{ customer.tpid }}
+                                </div>
+                                <a href="{{ url_for('customer_view', id=customer.id) }}" target="_blank" class="text-decoration-none small" title="{{ customer.name }}">
+                                    {{ customer.name[:30] }}{% if customer.name|length > 30 %}...{% endif %}
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-9">
+                            <div class="input-group input-group-sm">
+                                <input 
+                                    type="url" 
+                                    class="form-control url-input" 
+                                    id="tpid_url_{{ customer.id }}"
+                                    name="tpid_url_{{ customer.id }}"
+                                    placeholder="Paste TPID URL here..."
+                                    data-customer-id="{{ customer.id }}"
+                                >
+                                <button 
+                                    class="btn btn-outline-secondary skip-btn" 
+                                    type="button" 
+                                    onclick="skipCustomer({{ customer.id }})"
+                                    title="Skip (Tab)"
+                                >
+                                    <i class="bi bi-arrow-down"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+
+        <!-- Sticky Submit Bar -->
+        <div class="row mt-4" style="position: sticky; bottom: 0; background: var(--bs-body-bg); padding: 1rem 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 100;">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted">
+                            <span id="filledCount">0</span> of {{ customers|length }} filled
+                        </span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.location.href='{{ url_for('customers_list') }}'">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Progress
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {% else %}
+    <!-- No customers without TPID URLs -->
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-success">
+                <h4 class="alert-heading"><i class="bi bi-check-circle"></i> All Done!</h4>
+                <p class="mb-0">All customers have TPID URLs. Nice work!</p>
+                <hr>
+                <a href="{{ url_for('customers_list') }}" class="btn btn-success">
+                    <i class="bi bi-building"></i> Back to Customers
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if customers %}
+<script>
+    // Track filled count
+    function updateFilledCount() {
+        const inputs = document.querySelectorAll('.url-input');
+        const filled = Array.from(inputs).filter(input => input.value.trim().length > 0).length;
+        document.getElementById('filledCount').textContent = filled;
+    }
+
+    // Copy TPID to clipboard and focus URL input
+    function copyTPID(element) {
+        const tpid = element.dataset.tpid;
+        const customerId = element.dataset.customerId;
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(tpid).then(() => {
+            // Visual feedback
+            const icon = element.querySelector('.copy-btn');
+            icon.classList.remove('bi-clipboard');
+            icon.classList.add('bi-check2');
+            
+            setTimeout(() => {
+                icon.classList.remove('bi-check2');
+                icon.classList.add('bi-clipboard');
+            }, 1000);
+            
+            // Focus the URL input for this customer
+            const urlInput = document.getElementById('tpid_url_' + customerId);
+            if (urlInput) {
+                urlInput.focus();
+                urlInput.select();
+            }
+        }).catch(err => {
+            console.error('Failed to copy TPID:', err);
+            alert('Failed to copy TPID. Please copy manually: ' + tpid);
+        });
+    }
+
+    // Skip to next customer
+    function skipCustomer(customerId) {
+        const currentInput = document.getElementById('tpid_url_' + customerId);
+        const allInputs = Array.from(document.querySelectorAll('.url-input'));
+        const currentIndex = allInputs.indexOf(currentInput);
+        
+        if (currentIndex >= 0 && currentIndex < allInputs.length - 1) {
+            allInputs[currentIndex + 1].focus();
+        }
+    }
+
+    // Auto-advance to next field on Enter
+    document.addEventListener('DOMContentLoaded', function() {
+        const inputs = document.querySelectorAll('.url-input');
+        
+        inputs.forEach((input, index) => {
+            // Update count on input
+            input.addEventListener('input', updateFilledCount);
+            
+            // Handle Enter key
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    
+                    // Move to next input if exists
+                    if (index < inputs.length - 1) {
+                        inputs[index + 1].focus();
+                    } else {
+                        // Last input - focus submit button
+                        document.querySelector('button[type="submit"]').focus();
+                    }
+                }
+            });
+        });
+        
+        // Initial count
+        updateFilledCount();
+        
+        // Focus first input on page load
+        if (inputs.length > 0) {
+            setTimeout(() => inputs[0].focus(), 100);
+        }
+    });
+
+    // Warn before leaving if there are unsaved changes
+    let formChanged = false;
+    document.querySelectorAll('.url-input').forEach(input => {
+        input.addEventListener('input', () => {
+            formChanged = true;
+        });
+    });
+
+    document.getElementById('tpidWorkflowForm').addEventListener('submit', () => {
+        formChanged = false;
+    });
+
+    window.addEventListener('beforeunload', (e) => {
+        if (formChanged) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}
