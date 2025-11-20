@@ -88,6 +88,9 @@
         transform: translateY(-5px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
+    html[data-bs-theme="dark"] .card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
 </style>
 
 <div class="row mt-5">
@@ -101,15 +104,18 @@
                             <h5 class="mb-1">{{ call.customer.name }}</h5>
                             <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
                         </div>
-                        <div class="mb-1">
+                        <div class="mb-2">
                             {% if call.seller %}
                                 <span class="badge {{ get_seller_color(call.seller.id) }}" style="cursor: pointer;" onclick="event.preventDefault(); event.stopPropagation(); window.location='{{ url_for('seller_view', id=call.seller.id) }}';"><i class="bi bi-person"></i> {{ call.seller.name }}</span>
                             {% endif %}
                             {% if call.territory %}
                                 <span class="badge bg-info text-dark"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>
                             {% endif %}
+                            {% for topic in call.topics %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-tag"></i> {{ topic.name }}</span>
+                            {% endfor %}
                         </div>
-                        <div class="text-muted">{{ call.content|striptags|truncate(100) }}</div>
+                        <div class="text-muted">{{ call.content|striptags|truncate(200) }}</div>
                     </a>
                 {% endfor %}
             </div>
