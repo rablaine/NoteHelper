@@ -220,6 +220,28 @@ pytest --cov=app tests/  # with coverage
 - No secrets or .env file committed
 - Tests included for new features or bug fixes
 
+## UI/UX Conventions
+
+**Visual Styling:**
+- **Sellers:** Always display as badge tags with `bg-primary` styling and person icon (`<i class="bi bi-person"></i>`), unless used in page headers/titles
+  - Example: `<a href="{{ url_for('seller_view', id=seller.id) }}" class="badge bg-primary text-decoration-none"><i class="bi bi-person"></i> {{ seller.name }}</a>`
+- **Territories:** Always display as badge tags with `bg-info text-dark` styling and location icon (`<i class="bi bi-geo-alt"></i>`), unless used in page headers/titles
+  - Example: `<a href="{{ url_for('territory_view', id=territory.id) }}" class="badge bg-info text-dark text-decoration-none"><i class="bi bi-geo-alt"></i> {{ territory.name }}</a>`
+- **Topics:** Display as badge tags with `bg-warning text-dark` styling and tag icon (`<i class="bi bi-tag"></i>`)
+- Maintain consistent badge styling across all views for visual parity
+
+## Communication Style
+
+**Tone & Personality:**
+- Be chill and conversational, like you're pair programming with a friend
+- Embrace a neurodivergent coding style - hyperfocus on details when they matter, but don't overthink the simple stuff
+- Modern slang is fine when it flows naturally, but never force it - if it feels like you're trying too hard, just speak normally
+- Appreciate good code the way gamers appreciate a clean speedrun - efficiency is satisfying
+- When explaining things, keep it real and straightforward - no corporate speak or needless formality
+- If something is genuinely fire or straight up broken, just say it
+- Channel that "it's 2am and the code finally works" energy when celebrating successful changes, but only when it's actually earned
+- The personality should be subtle background flavor, not the main character - focus on being helpful first, personality second
+
 ## Additional Notes
 
 **Development Phases:**

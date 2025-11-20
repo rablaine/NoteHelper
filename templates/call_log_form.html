@@ -5,26 +5,6 @@
 {% block extra_css %}
 <!-- Quill Rich Text Editor -->
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-<style>
-    /* Readonly seller field styling */
-    .seller-readonly {
-        cursor: not-allowed;
-        opacity: 0.7;
-    }
-    
-    /* Light mode */
-    [data-bs-theme="light"] .seller-readonly {
-        background-color: #e9ecef;
-        color: #6c757d;
-    }
-    
-    /* Dark mode */
-    [data-bs-theme="dark"] .seller-readonly {
-        background-color: #343a40;
-        color: #adb5bd;
-        border-color: #495057;
-    }
-</style>
 {% endblock %}
 
 {% block content %}
@@ -36,34 +16,22 @@
             <div class="card-body">
                 <form method="POST" id="callLogForm">
                     <input type="hidden" name="referrer" value="{{ referrer if referrer else '' }}">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="customer_id" class="form-label">Customer *</label>
-                            <select class="form-select" id="customer_id" name="customer_id" required>
-                                <option value="">-- Select customer --</option>
-                                {% for customer in customers %}
-                                    <option value="{{ customer.id }}"
-                                        data-seller-id="{{ customer.seller_id if customer.seller_id else '' }}"
-                                        {% if (call_log and call_log.customer_id == customer.id) or (preselect_customer_id and preselect_customer_id == customer.id) %}selected{% endif %}>
-                                        {{ customer.name }} ({{ customer.tpid }})
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
-                            <label for="seller_id" class="form-label">Seller <small class="text-muted">(auto-populated from customer)</small></label>
-                            <select class="form-select seller-readonly" id="seller_id" name="seller_id" disabled>
-                                <option value="">-- No seller --</option>
-                                {% for seller in sellers %}
-                                    <option value="{{ seller.id }}"
-                                        {% if (call_log and call_log.seller_id == seller.id) or (preselect_seller_id and preselect_seller_id == seller.id) %}selected{% endif %}>
-                                        {{ seller.name }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <input type="hidden" id="seller_id_hidden" name="seller_id" value="{% if call_log %}{{ call_log.seller_id }}{% elif preselect_seller_id %}{{ preselect_seller_id }}{% endif %}">
-                        </div>
+                    <div class="mb-3">
+                        <label for="customer_id" class="form-label">Customer *</label>
+                        <select class="form-select" id="customer_id" name="customer_id" required>
+                            <option value="">-- Select customer --</option>
+                            {% for customer in customers %}
+                                <option value="{{ customer.id }}"
+                                    {% if (call_log and call_log.customer_id == customer.id) or (preselect_customer_id and preselect_customer_id == customer.id) %}selected{% endif %}>
+                                    {{ customer.name }} ({{ customer.tpid }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        {% if call_log and call_log.customer and call_log.customer.seller %}
+                            <div class="form-text">Seller: <strong>{{ call_log.customer.seller.name }}</strong></div>
+                        {% elif preselect_customer and preselect_customer.seller %}
+                            <div class="form-text">Seller: <strong>{{ preselect_customer.seller.name }}</strong></div>
+                        {% endif %}
                     </div>
                     
                     <div class="mb-3">
@@ -163,22 +131,6 @@ document.getElementById('callLogForm').onsubmit = function(e) {
     
     return true;
 };
-
-// Auto-select seller when customer is chosen
-document.getElementById('customer_id').addEventListener('change', function() {
-    const selectedOption = this.options[this.selectedIndex];
-    const sellerId = selectedOption.getAttribute('data-seller-id');
-    const sellerSelect = document.getElementById('seller_id');
-    const sellerHidden = document.getElementById('seller_id_hidden');
-    
-    if (sellerId) {
-        sellerSelect.value = sellerId;
-        sellerHidden.value = sellerId;
-    } else {
-        sellerSelect.value = '';
-        sellerHidden.value = '';
-    }
-});
 
 // Topic search and selection functionality
 const allTopics = [

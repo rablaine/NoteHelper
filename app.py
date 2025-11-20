@@ -203,7 +203,7 @@ class Seller(db.Model):
         lazy='select'
     )
     customers = db.relationship('Customer', back_populates='seller', lazy='select')
-    call_logs = db.relationship('CallLog', back_populates='seller', lazy='dynamic')
+    # Call logs can be accessed via Customer relationship
     
     def __repr__(self) -> str:
         return f'<Seller {self.name} ({self.seller_type})>'
@@ -291,8 +291,6 @@ class CallLog(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
-    seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
-    territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     call_date = db.Column(db.Date, nullable=False, default=lambda: date.today())
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
@@ -300,14 +298,22 @@ class CallLog(db.Model):
     
     # Relationships
     customer = db.relationship('Customer', back_populates='call_logs')
-    seller = db.relationship('Seller', back_populates='call_logs')
-    territory = db.relationship('Territory')
     topics = db.relationship(
         'Topic',
         secondary=call_logs_topics,
         back_populates='call_logs',
         lazy='select'
     )
+    
+    @property
+    def seller(self):
+        """Get seller from customer relationship."""
+        return self.customer.seller if self.customer else None
+    
+    @property
+    def territory(self):
+        """Get territory from customer relationship."""
+        return self.customer.territory if self.customer else None
     
     def __repr__(self) -> str:
         return f'<CallLog {self.id} for {self.customer.name}>'
@@ -339,9 +345,8 @@ def index():
     """Home page showing recent activity and stats."""
     # Eager load relationships for recent calls to avoid N+1 queries
     recent_calls = CallLog.query.options(
-        db.joinedload(CallLog.customer),
-        db.joinedload(CallLog.seller),
-        db.joinedload(CallLog.territory)
+        db.joinedload(CallLog.customer).joinedload(Customer.seller),
+        db.joinedload(CallLog.customer).joinedload(Customer.territory)
     ).order_by(CallLog.call_date.desc()).limit(10).all()
     
     # Count queries are fast on these small tables
@@ -446,8 +451,8 @@ def territory_view(id):
         # Get calls from last 7 days
         from datetime import timedelta
         week_ago = utc_now() - timedelta(days=7)
-        recent_calls = CallLog.query.filter(
-            CallLog.territory_id == id,
+        recent_calls = CallLog.query.join(Customer).filter(
+            Customer.territory_id == id,
             CallLog.call_date >= week_ago
         ).order_by(CallLog.call_date.desc()).all()
     
@@ -1146,9 +1151,8 @@ def topic_delete(id):
 def call_logs_list():
     """List all call logs (FR010)."""
     call_logs = CallLog.query.options(
-        db.joinedload(CallLog.customer),
-        db.joinedload(CallLog.seller),
-        db.joinedload(CallLog.territory),
+        db.joinedload(CallLog.customer).joinedload(Customer.seller),
+        db.joinedload(CallLog.customer).joinedload(Customer.territory),
         db.joinedload(CallLog.topics)
     ).order_by(CallLog.call_date.desc()).all()
     return render_template('call_logs_list.html', call_logs=call_logs)
@@ -1232,12 +1236,10 @@ def call_log_create():
     preselect_customer_id = request.args.get('customer_id', type=int)
     preselect_topic_id = request.args.get('topic_id', type=int)
     
-    # Pre-select seller if customer is pre-selected and has a seller
-    preselect_seller_id = None
+    # Pre-select customer object if customer_id provided
+    preselect_customer = None
     if preselect_customer_id:
-        customer = Customer.query.get(preselect_customer_id)
-        if customer and customer.seller_id:
-            preselect_seller_id = customer.seller_id
+        preselect_customer = Customer.query.get(preselect_customer_id)
     
     # Capture referrer for redirect after creation
     referrer = request.referrer or ''
@@ -1248,7 +1250,7 @@ def call_log_create():
                          sellers=sellers,
                          topics=topics,
                          preselect_customer_id=preselect_customer_id,
-                         preselect_seller_id=preselect_seller_id,
+                         preselect_customer=preselect_customer,
                          preselect_topic_id=preselect_topic_id,
                          referrer=referrer)
 
@@ -1292,14 +1294,9 @@ def call_log_edit(id):
             flash('Invalid date format.', 'danger')
             return redirect(url_for('call_log_edit', id=id))
         
-        # Get customer and update territory
-        customer = Customer.query.get(int(customer_id))
-        territory_id = customer.territory_id if customer else None
-        
         # Update call log
         call_log.customer_id = int(customer_id)
-        call_log.seller_id = int(seller_id) if seller_id else None
-        call_log.territory_id = territory_id
+        # Seller and territory are now derived from customer
         call_log.call_date = call_date
         call_log.content = content
         
@@ -1353,10 +1350,12 @@ def search():
         query = query.filter(CallLog.customer_id == customer_id)
     
     if seller_id:
-        query = query.filter(CallLog.seller_id == seller_id)
+        query = query.join(Customer).filter(Customer.seller_id == seller_id)
     
     if territory_id:
-        query = query.filter(CallLog.territory_id == territory_id)
+        if not seller_id:  # Avoid duplicate join
+            query = query.join(Customer)
+        query = query.filter(Customer.territory_id == territory_id)
     
     if topic_ids:
         # Filter by topics (call logs that have ANY of the selected topics)
@@ -1370,7 +1369,7 @@ def search():
     grouped_data = {}
     
     for call in call_logs:
-        seller_id_key = call.seller_id if call.seller_id else 0  # 0 = no seller
+        seller_id_key = call.seller.id if call.seller else 0  # 0 = no seller
         customer_id_key = call.customer_id if call.customer_id else 0  # 0 = no customer
         
         # Initialize seller group
@@ -1614,9 +1613,8 @@ def export_full_csv():
         writer = csv.writer(csv_buffer)
         writer.writerow(['id', 'call_date', 'customer', 'seller', 'territory', 'content', 'topics', 'created_at'])
         for cl in CallLog.query.options(
-            db.joinedload(CallLog.customer),
-            db.joinedload(CallLog.seller),
-            db.joinedload(CallLog.territory)
+            db.joinedload(CallLog.customer).joinedload(Customer.seller),
+            db.joinedload(CallLog.customer).joinedload(Customer.territory)
         ).all():
             topics = ', '.join([t.name for t in cl.topics])
             writer.writerow([cl.id, cl.call_date.isoformat(),
@@ -1644,8 +1642,8 @@ def export_call_logs_json():
     
     call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.verticals),
-        db.joinedload(CallLog.seller),
-        db.joinedload(CallLog.territory).joinedload(Territory.pod)
+        db.joinedload(CallLog.customer).joinedload(Customer.seller),
+        db.joinedload(CallLog.customer).joinedload(Customer.territory).joinedload(Territory.pod)
     ).order_by(CallLog.call_date.desc()).all()
     
     data = {
@@ -1699,8 +1697,8 @@ def export_call_logs_csv():
     
     call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.verticals),
-        db.joinedload(CallLog.seller),
-        db.joinedload(CallLog.territory).joinedload(Territory.pod)
+        db.joinedload(CallLog.customer).joinedload(Customer.seller),
+        db.joinedload(CallLog.customer).joinedload(Customer.territory).joinedload(Territory.pod)
     ).order_by(CallLog.call_date.desc()).all()
     
     csv_buffer = io.StringIO()

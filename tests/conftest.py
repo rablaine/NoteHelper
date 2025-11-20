@@ -123,10 +123,9 @@ def sample_data(app):
         db.session.flush()
         
         # Create call logs - Use correct field name 'content'
+        # Note: seller and territory are now derived from customer relationship
         call1 = CallLog(
             customer_id=customer1.id,
-            seller_id=seller1.id,
-            territory_id=territory1.id,
             call_date=datetime.now(timezone.utc),
             content='Discussed VM migration strategy and cloud architecture options.'
         )
@@ -134,8 +133,6 @@ def sample_data(app):
         
         call2 = CallLog(
             customer_id=customer2.id,
-            seller_id=seller2.id,
-            territory_id=territory2.id,
             call_date=datetime.now(timezone.utc),
             content='Storage optimization review with focus on blob storage.'
         )

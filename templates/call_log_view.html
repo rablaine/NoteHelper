@@ -38,7 +38,9 @@
                 
                 <p><strong>Seller:</strong><br>
                     {% if call_log.seller %}
-                        <a href="{{ url_for('seller_view', id=call_log.seller.id) }}">{{ call_log.seller.name }}</a>
+                        <a href="{{ url_for('seller_view', id=call_log.seller.id) }}" class="badge bg-primary text-decoration-none">
+                            <i class="bi bi-person"></i> {{ call_log.seller.name }}
+                        </a>
                     {% else %}
                         <span class="text-muted">Not specified</span>
                     {% endif %}
@@ -46,7 +48,9 @@
                 
                 <p><strong>Territory:</strong><br>
                     {% if call_log.territory %}
-                        <a href="{{ url_for('territory_view', id=call_log.territory.id) }}">{{ call_log.territory.name }}</a>
+                        <a href="{{ url_for('territory_view', id=call_log.territory.id) }}" class="badge bg-info text-dark text-decoration-none">
+                            <i class="bi bi-geo-alt"></i> {{ call_log.territory.name }}
+                        </a>
                     {% else %}
                         <span class="text-muted">Not specified</span>
                     {% endif %}
