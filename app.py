@@ -1516,8 +1516,8 @@ def export_full_json():
                        'tpid_url': c.tpid_url, 'territory_id': c.territory_id, 'seller_id': c.seller_id,
                        'vertical_ids': [v.id for v in c.verticals]} for c in Customer.query.all()],
         'topics': [{'id': t.id, 'name': t.name, 'description': t.description} for t in Topic.query.all()],
-        'call_logs': [{'id': cl.id, 'customer_id': cl.customer_id, 'seller_id': cl.seller_id,
-                       'territory_id': cl.territory_id, 'call_date': cl.call_date.isoformat(),
+        'call_logs': [{'id': cl.id, 'customer_id': cl.customer_id,
+                       'call_date': cl.call_date.isoformat(),
                        'content': cl.content, 'topic_ids': [t.id for t in cl.topics],
                        'created_at': cl.created_at.isoformat()} for cl in CallLog.query.all()]
     }
