@@ -6,11 +6,14 @@ import os
 from datetime import datetime, timezone, date
 from typing import Optional
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from sqlalchemy import func, or_
 from dotenv import load_dotenv
+import msal
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -29,9 +32,20 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'max_overflow': 5       # Max overflow connections
 }
 
+# Entra ID (Azure AD) OAuth configuration
+app.config['AZURE_CLIENT_ID'] = os.getenv('AZURE_CLIENT_ID')
+app.config['AZURE_CLIENT_SECRET'] = os.getenv('AZURE_CLIENT_SECRET')
+app.config['AZURE_TENANT_ID'] = os.getenv('AZURE_TENANT_ID')
+app.config['AZURE_REDIRECT_URI'] = os.getenv('AZURE_REDIRECT_URI', 'http://localhost:5000/auth/callback')
+app.config['AZURE_AUTHORITY'] = f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID', 'common')}"
+app.config['AZURE_SCOPE'] = ['User.Read']
+
 # Initialize extensions
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please sign in with your Microsoft account to access this page.'
 
 # SAFETY CHECK: Ensure we have a valid database URL
 if not app.config.get('SQLALCHEMY_DATABASE_URI'):
@@ -89,6 +103,37 @@ solution_engineers_pods = db.Table(
     db.Column('solution_engineer_id', db.Integer, db.ForeignKey('solution_engineers.id'), primary_key=True),
     db.Column('pod_id', db.Integer, db.ForeignKey('pods.id'), primary_key=True)
 )
+
+
+class User(db.Model):
+    """User model for Entra ID (Azure AD) authentication."""
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    azure_id = db.Column(db.String(255), unique=True, nullable=False)  # Entra ID object ID
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    last_login = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    # Flask-Login required properties
+    @property
+    def is_authenticated(self):
+        return True
+    
+    @property
+    def is_active(self):
+        return True
+    
+    @property
+    def is_anonymous(self):
+        return False
+    
+    def get_id(self):
+        return str(self.id)
+    
+    def __repr__(self) -> str:
+        return f'<User {self.email}>'
 
 
 class POD(db.Model):
@@ -336,6 +381,149 @@ class UserPreference(db.Model):
     
     def __repr__(self) -> str:
         return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} customer_sort_by={self.customer_sort_by} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} colored_sellers={self.colored_sellers}>'
+
+
+# =============================================================================
+# Flask-Login Configuration
+# =============================================================================
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user by ID for Flask-Login."""
+    return User.query.get(int(user_id))
+
+
+@app.before_request
+def require_login():
+    """Require login for all routes except auth routes and static files."""
+    # Skip auth check if LOGIN_DISABLED is set (for testing)
+    if app.config.get('LOGIN_DISABLED'):
+        return None
+    
+    # Allow access to auth routes and static files
+    allowed_routes = ['login', 'auth_callback', 'static']
+    
+    if request.endpoint not in allowed_routes and not current_user.is_authenticated:
+        return redirect(url_for('login'))
+
+
+# =============================================================================
+# Authentication Routes
+# =============================================================================
+
+@app.route('/login')
+def login():
+    """Show login page or redirect to Entra ID login."""
+    # If already authenticated, redirect to home
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    # Check if Entra ID is configured
+    if not app.config.get('AZURE_CLIENT_ID') or app.config['AZURE_CLIENT_ID'] == 'your-azure-client-id':
+        # Entra ID not configured - show login page with instructions
+        flash('Entra ID authentication is not configured. Please set up your Entra ID credentials in .env file.', 'warning')
+        return render_template('login.html')
+    
+    # Create MSAL confidential client
+    msal_app = msal.ConfidentialClientApplication(
+        app.config['AZURE_CLIENT_ID'],
+        authority=app.config['AZURE_AUTHORITY'],
+        client_credential=app.config['AZURE_CLIENT_SECRET']
+    )
+    
+    # Generate auth URL
+    auth_url = msal_app.get_authorization_request_url(
+        scopes=app.config['AZURE_SCOPE'],
+        redirect_uri=app.config['AZURE_REDIRECT_URI']
+    )
+    
+    return redirect(auth_url)
+
+
+@app.route('/auth/callback')
+def auth_callback():
+    """Handle Entra ID OAuth callback."""
+    # Get authorization code from query params
+    code = request.args.get('code')
+    if not code:
+        flash('Authentication failed: No authorization code received.', 'danger')
+        return redirect(url_for('login'))
+    
+    # Create MSAL confidential client
+    msal_app = msal.ConfidentialClientApplication(
+        app.config['AZURE_CLIENT_ID'],
+        authority=app.config['AZURE_AUTHORITY'],
+        client_credential=app.config['AZURE_CLIENT_SECRET']
+    )
+    
+    # Exchange code for token
+    result = msal_app.acquire_token_by_authorization_code(
+        code,
+        scopes=app.config['AZURE_SCOPE'],
+        redirect_uri=app.config['AZURE_REDIRECT_URI']
+    )
+    
+    if 'error' in result:
+        flash(f"Authentication failed: {result.get('error_description', 'Unknown error')}", 'danger')
+        return redirect(url_for('login'))
+    
+    # Get user info from Microsoft Graph
+    access_token = result['access_token']
+    graph_response = requests.get(
+        'https://graph.microsoft.com/v1.0/me',
+        headers={'Authorization': f'Bearer {access_token}'}
+    )
+    
+    if graph_response.status_code != 200:
+        flash('Failed to retrieve user information from Microsoft Graph.', 'danger')
+        return redirect(url_for('login'))
+    
+    user_info = graph_response.json()
+    azure_id = user_info['id']
+    email = user_info.get('mail') or user_info.get('userPrincipalName')
+    name = user_info.get('displayName', email)
+    
+    # Find or create user
+    user = User.query.filter_by(azure_id=azure_id).first()
+    if not user:
+        user = User(
+            azure_id=azure_id,
+            email=email,
+            name=name
+        )
+        db.session.add(user)
+    else:
+        # Update last login
+        user.last_login = utc_now()
+        user.name = name  # Update name in case it changed
+        user.email = email  # Update email in case it changed
+    
+    db.session.commit()
+    
+    # Log user in
+    login_user(user)
+    flash(f'Welcome, {user.name}!', 'success')
+    
+    return redirect(url_for('index'))
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Log out the current user."""
+    logout_user()
+    flash('You have been logged out.', 'info')
+    
+    # Redirect to Entra ID logout (optional - clears Entra ID session too)
+    logout_url = f"{app.config['AZURE_AUTHORITY']}/oauth2/v2.0/logout?post_logout_redirect_uri={request.host_url}"
+    return redirect(logout_url)
+
+
+@app.route('/profile')
+@login_required
+def user_profile():
+    """Display current user's profile information."""
+    return render_template('user_profile.html', user=current_user)
 
 
 # =============================================================================

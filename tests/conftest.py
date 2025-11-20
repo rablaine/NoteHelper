@@ -22,19 +22,29 @@ def app():
     os.environ['TESTING'] = 'true'
     
     # NOW import app - it will use the test database URI
-    from app import app as flask_app, db, UserPreference
+    from app import app as flask_app, db, UserPreference, User, login_manager
     
     # Configure additional test settings
     flask_app.config['TESTING'] = True
     flask_app.config['WTF_CSRF_ENABLED'] = False
     flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    flask_app.config['LOGIN_DISABLED'] = True  # Disable login requirement for tests
     
     # Create tables
     with flask_app.app_context():
         db.create_all()
         
+        # Create test user
+        test_user = User(
+            azure_id='test-user-12345',
+            email='test@example.com',
+            name='Test User'
+        )
+        db.session.add(test_user)
+        db.session.flush()
+        
         # Create default user preference
-        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False, territory_view_accounts=False)
+        pref = UserPreference(user_id=test_user.id, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False, territory_view_accounts=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -174,8 +184,17 @@ def reset_db(app):
         db.drop_all()
         db.create_all()
         
-        # Recreate default user preference
-        pref = UserPreference(user_id=1, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False, territory_view_accounts=False)
+        # Recreate test user and preferences
+        from app import User
+        test_user = User(
+            azure_id='test-user-12345',
+            email='test@example.com',
+            name='Test User'
+        )
+        db.session.add(test_user)
+        db.session.flush()
+        
+        pref = UserPreference(user_id=test_user.id, dark_mode=False, customer_view_grouped=False, topic_sort_by_calls=False, territory_view_accounts=False)
         db.session.add(pref)
         db.session.commit()
     

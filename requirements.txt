@@ -10,6 +10,8 @@ psycopg2-binary==2.9.11
 
 # Authentication
 Flask-Login==0.6.3
+msal==1.31.1
+requests==2.32.3
 
 # Environment & Configuration
 python-dotenv==1.0.0
