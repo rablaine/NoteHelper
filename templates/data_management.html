@@ -177,6 +177,36 @@
                         <div class="form-text">Upload the alignment sheet CSV exported from your CRM system. This should include PODs, territories, sellers, solution engineers, customers, and verticals.</div>
                     </div>
 
+                    <div class="mb-3">
+                        <details class="text-muted small">
+                            <summary style="cursor: pointer;" class="mb-2"><i class="bi bi-info-circle"></i> Show example CSV format</summary>
+                            <div class="p-3 bg-light rounded">
+                                <p class="mb-2"><strong>Required columns:</strong></p>
+                                <code class="d-block mb-3" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;">Data SE,Infra SE,Apps SE,DSS (Growth/Acq),TPID,Customer Name,SME&C POD,Sales Territory,Vertical,Vertical Category,Primary Cloud & AI DSS,Primary Cloud & AI-Acq DSS,Primary Cloud & AI Apps DSE,Primary Cloud & AI Data DSE,Primary Cloud & AI Infrastructure DSE</code>
+                                <p class="mb-2"><strong>Example row:</strong></p>
+                                <code class="d-block mb-3" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;">John Smith,John Doe,Busy Body,Mary Kay,12345678,BIG SALES CUSTOMER,East POD 06,East.SMECC.SDP.0603,IT Services & Business Advisory,Management Consulting,MARYKAY,,BUSYBOD,JOHNSMI,JOHNDOE</code>
+                                <p class="mt-2 mb-0"><strong>Column descriptions:</strong></p>
+                                <ul class="mb-0" style="font-size: 0.9em;">
+                                    <li><strong>SME&C POD:</strong> Pod name (e.g., "Enterprise West")</li>
+                                    <li><strong>Sales Territory:</strong> Territory name (e.g., "CA North")</li>
+                                    <li><strong>DSS (Growth/Acq):</strong> Seller full name (determines seller)</li>
+                                    <li><strong>Primary Cloud & AI DSS:</strong> Growth seller alias (leave empty if Acquisition)</li>
+                                    <li><strong>Primary Cloud & AI-Acq DSS:</strong> Acquisition seller alias (leave empty if Growth)</li>
+                                    <li><strong>Data SE:</strong> Data solution engineer name</li>
+                                    <li><strong>Primary Cloud & AI Data DSE:</strong> Data SE alias</li>
+                                    <li><strong>Infra SE:</strong> Infrastructure solution engineer name</li>
+                                    <li><strong>Primary Cloud & AI Infrastructure DSE:</strong> Infra SE alias</li>
+                                    <li><strong>Apps SE:</strong> Apps solution engineer name</li>
+                                    <li><strong>Primary Cloud & AI Apps DSE:</strong> Apps SE alias</li>
+                                    <li><strong>Customer Name:</strong> Full customer/account name</li>
+                                    <li><strong>TPID:</strong> 7-9 digit Top Parent ID number</li>
+                                    <li><strong>Vertical:</strong> Industry vertical (or "N/A")</li>
+                                    <li><strong>Vertical Category:</strong> Industry category (or "N/A")</li>
+                                </ul>
+                            </div>
+                        </details>
+                    </div>
+
                     <button type="submit" class="btn btn-success">
                         <i class="bi bi-upload"></i> Import Alignment Sheet
                     </button>
