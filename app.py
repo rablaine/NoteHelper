@@ -329,11 +329,12 @@ class UserPreference(db.Model):
     customer_view_grouped = db.Column(db.Boolean, default=False, nullable=False)
     topic_sort_by_calls = db.Column(db.Boolean, default=False, nullable=False)
     territory_view_accounts = db.Column(db.Boolean, default=False, nullable=False)  # False = recent calls, True = accounts
+    colored_sellers = db.Column(db.Boolean, default=True, nullable=False)  # False = grey sellers, True = colored sellers
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     def __repr__(self) -> str:
-        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts}>'
+        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} colored_sellers={self.colored_sellers}>'
 
 
 # =============================================================================
@@ -1919,28 +1920,60 @@ def territory_view_preference():
     return jsonify({'territory_view_accounts': pref.territory_view_accounts}), 200
 
 
+@app.route('/api/preferences/colored-sellers', methods=['GET', 'POST'])
+def colored_sellers_preference():
+    """Get or set colored sellers preference (grey vs colored badges)."""
+    user_id = 1  # Single user system
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        colored_sellers = data.get('colored_sellers', True)
+        
+        # Get or create user preference
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = UserPreference(user_id=user_id, colored_sellers=colored_sellers)
+            db.session.add(pref)
+        else:
+            pref.colored_sellers = colored_sellers
+        
+        db.session.commit()
+        return jsonify({'colored_sellers': pref.colored_sellers}), 200
+    
+    # GET request
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, colored_sellers=True)
+        db.session.add(pref)
+        db.session.commit()
+    
+    return jsonify({'colored_sellers': pref.colored_sellers}), 200
+
+
 # =============================================================================
 # Context Processor
 # =============================================================================
 
-def get_seller_color(seller_id: int) -> str:
+def get_seller_color(seller_id: int, use_colors: bool = True) -> str:
     """
     Generate a consistent, visually distinct color for a seller based on their ID.
-    Returns a CSS color class name.
+    Returns a CSS color class name. If use_colors is False, returns 'bg-secondary'.
     """
+    if not use_colors:
+        return 'bg-secondary'
+    
     # Define a palette of distinct, accessible colors
-    # Avoiding pure red (danger), pure green (success), and using muted tones
     color_classes = [
         'seller-color-1',   # Purple
         'seller-color-2',   # Teal
-        'seller-color-3',   # Orange
+        'seller-color-3',   # Red
         'seller-color-4',   # Pink
-        'seller-color-5',   # Indigo
-        'seller-color-6',   # Cyan
-        'seller-color-7',   # Brown
-        'seller-color-8',   # Deep Orange
-        'seller-color-9',   # Blue-Grey
-        'seller-color-10',  # Lime
+        'seller-color-5',   # Blue
+        'seller-color-6',   # Emerald
+        'seller-color-7',   # Yellow
+        'seller-color-8',   # Orange
+        'seller-color-9',   # Slate
+        'seller-color-10',  # Brown
     ]
     
     # Use modulo to cycle through colors if we have more sellers than colors
@@ -1956,11 +1989,18 @@ def inject_preferences():
     dark_mode = pref.dark_mode if pref else False
     customer_view_grouped = pref.customer_view_grouped if pref else False
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
+    colored_sellers = pref.colored_sellers if pref else True
+    
+    # Create a wrapper function that includes the colored_sellers preference
+    def get_seller_color_with_pref(seller_id: int) -> str:
+        return get_seller_color(seller_id, colored_sellers)
+    
     return dict(
         dark_mode=dark_mode, 
         customer_view_grouped=customer_view_grouped, 
         topic_sort_by_calls=topic_sort_by_calls,
-        get_seller_color=get_seller_color
+        colored_sellers=colored_sellers,
+        get_seller_color=get_seller_color_with_pref
     )
 
 
