@@ -1781,8 +1781,8 @@ def dark_mode_preference():
 
 @app.route('/tpid-workflow')
 def tpid_workflow():
-    """TPID URL workflow page - helps fill in missing TPID URLs efficiently."""
-    # Get all customers without TPID URLs, ordered by seller/territory for grouping
+    """MSX Account URL workflow page - helps fill in missing MSX Account URLs efficiently."""
+    # Get all customers without MSX Account URLs, ordered by seller/territory for grouping
     customers = Customer.query.filter(
         or_(Customer.tpid_url == None, Customer.tpid_url == '')
     ).options(
@@ -1799,7 +1799,7 @@ def tpid_workflow():
 
 @app.route('/tpid-workflow/update', methods=['POST'])
 def tpid_workflow_update():
-    """Update TPID URLs from the workflow page."""
+    """Update MSX Account URLs from the workflow page."""
     try:
         # Get all form fields that start with 'tpid_url_'
         updates = {}
@@ -1809,7 +1809,7 @@ def tpid_workflow_update():
                 updates[customer_id] = value.strip()
         
         if not updates:
-            flash('No TPID URLs to update.', 'warning')
+            flash('No MSX Account URLs to update.', 'warning')
             return redirect(url_for('tpid_workflow'))
         
         # Update customers
@@ -1821,11 +1821,11 @@ def tpid_workflow_update():
                 updated_count += 1
         
         db.session.commit()
-        flash(f'Successfully updated {updated_count} TPID URL{"s" if updated_count != 1 else ""}.', 'success')
+        flash(f'Successfully updated {updated_count} MSX Account URL{"s" if updated_count != 1 else ""}.', 'success')
         
     except Exception as e:
         db.session.rollback()
-        flash(f'Error updating TPID URLs: {str(e)}', 'danger')
+        flash(f'Error updating MSX Account URLs: {str(e)}', 'danger')
     
     return redirect(url_for('tpid_workflow'))
 

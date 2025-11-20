@@ -67,12 +67,17 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h2><i class="bi bi-link-45deg"></i> TPID URL Workflow</h2>
+                    <h2><i class="bi bi-link-45deg"></i> MSX Account URL Workflow</h2>
                     <p class="text-muted mb-0">
-                        Fill in missing TPID URLs for {{ customers|length }} customer{{ 's' if customers|length != 1 else '' }}
+                        Fill in missing MSX Account URLs for {{ customers|length }} customer{{ 's' if customers|length != 1 else '' }}
                     </p>
                 </div>
-                <div>
+                <div class="d-flex gap-2">
+                    <a href="https://microsoftsales.crm.dynamics.com/main.aspx?appid=fe0c3504-3700-e911-a849-000d3a10b7cc&pagetype=entitylist&etn=account&viewid=3defa8ef-4147-e311-9405-00155db3ba1e&viewType=1039" 
+                       target="_blank" 
+                       class="btn btn-primary">
+                        <i class="bi bi-box-arrow-up-right"></i> Open MSX
+                    </a>
                     <a href="{{ url_for('customers_list') }}" class="btn btn-outline-secondary">
                         <i class="bi bi-x-lg"></i> Cancel
                     </a>
@@ -88,8 +93,9 @@
             <div class="workflow-help p-3 rounded">
                 <h5 class="mb-2"><i class="bi bi-info-circle"></i> Quick Workflow Guide</h5>
                 <ol class="mb-0">
+                    <li><strong>Click "Open MSX"</strong> to open Microsoft Sales Experience in a new window</li>
                     <li><strong>Click the TPID</strong> to copy it to clipboard (auto-focuses URL field)</li>
-                    <li><strong>Alt+Tab</strong> to your CRM, paste the TPID, and copy the result URL</li>
+                    <li><strong>Alt+Tab</strong> to MSX, paste the TPID in search, and copy the account URL</li>
                     <li><strong>Alt+Tab</strong> back and <strong>Ctrl+V</strong> to paste (field is already focused)</li>
                     <li><strong>Enter or Tab</strong> to move to next customer automatically</li>
                     <li><strong>Save progress</strong> anytime - only filled URLs are submitted</li>
@@ -129,7 +135,7 @@
                                     class="form-control url-input" 
                                     id="tpid_url_{{ customer.id }}"
                                     name="tpid_url_{{ customer.id }}"
-                                    placeholder="Paste TPID URL here..."
+                                    placeholder="Paste MSX Account URL here..."
                                     data-customer-id="{{ customer.id }}"
                                 >
                                 <button 
@@ -170,12 +176,12 @@
     </form>
 
     {% else %}
-    <!-- No customers without TPID URLs -->
+    <!-- No customers without MSX Account URLs -->
     <div class="row">
         <div class="col-12">
             <div class="alert alert-success">
                 <h4 class="alert-heading"><i class="bi bi-check-circle"></i> All Done!</h4>
-                <p class="mb-0">All customers have TPID URLs. Nice work!</p>
+                <p class="mb-0">All customers have MSX Account URLs. Nice work!</p>
                 <hr>
                 <a href="{{ url_for('customers_list') }}" class="btn btn-success">
                     <i class="bi bi-building"></i> Back to Customers

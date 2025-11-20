@@ -207,10 +207,16 @@
                                     <span id="darkModeLabel">{{ 'Dark Mode' if not dark_mode else 'Light Mode' }}</span>
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item" href="#" id="coloredSellersToggle">
+                                    <i class="bi {{ 'bi-palette-fill' if colored_sellers else 'bi-palette' }}" id="coloredSellersIcon"></i> 
+                                    <span id="coloredSellersLabel">{{ 'Colored Sellers' if not colored_sellers else 'Grey Sellers' }}</span>
+                                </a>
+                            </li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('preferences') }}"><i class="bi bi-gear"></i> Preferences</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('data_management') }}"><i class="bi bi-database"></i> Data Management</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('tpid_workflow') }}"><i class="bi bi-link-45deg"></i> TPID URL Workflow</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('tpid_workflow') }}"><i class="bi bi-link-45deg"></i> MSX Account URLs</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item disabled" href="#"><i class="bi bi-person"></i> User Profile</a></li>
                             <li><a class="dropdown-item disabled" href="#"><i class="bi bi-box-arrow-right"></i> Log Out</a></li>
@@ -250,7 +256,7 @@
     <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Dark Mode Toggle Script -->
+    <!-- Dark Mode and Colored Sellers Toggle Scripts -->
     <script>
         const darkModeToggle = document.getElementById('darkModeToggle');
         const darkModeIcon = document.getElementById('darkModeIcon');
@@ -280,6 +286,35 @@
                 });
             } catch (error) {
                 console.error('Failed to save dark mode preference:', error);
+            }
+        });
+        
+        // Colored Sellers Toggle
+        const coloredSellersToggle = document.getElementById('coloredSellersToggle');
+        const coloredSellersIcon = document.getElementById('coloredSellersIcon');
+        const coloredSellersLabel = document.getElementById('coloredSellersLabel');
+        
+        coloredSellersToggle.addEventListener('click', async function(e) {
+            e.preventDefault();
+            
+            // Toggle state
+            const currentlyColored = coloredSellersIcon.classList.contains('bi-palette-fill');
+            const newColored = !currentlyColored;
+            
+            // Save preference to server
+            try {
+                await fetch('/api/preferences/colored-sellers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ colored_sellers: newColored })
+                });
+                
+                // Reload page to apply color changes
+                window.location.reload();
+            } catch (error) {
+                console.error('Failed to save colored sellers preference:', error);
             }
         });
     </script>
