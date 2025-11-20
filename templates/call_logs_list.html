@@ -57,10 +57,10 @@
                         <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                     {% endif %}
                     {% if call.territory %}
-                        <span class="badge bg-info text-dark"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>
+                        <a href="{{ url_for('territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
                     {% endif %}
                     {% for topic in call.topics %}
-                        <span class="badge bg-warning"><i class="bi bi-tag"></i> {{ topic.name }}</span>
+                        <a href="{{ url_for('topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
                     {% endfor %}
                 </div>
             </div>

@@ -99,24 +99,28 @@
         {% if recent_calls %}
             <div class="list-group">
                 {% for call in recent_calls %}
-                    <a href="{{ url_for('call_log_view', id=call.id) }}" class="list-group-item list-group-item-action">
+                    <div class="list-group-item list-group-item-action" style="cursor: pointer;" onclick="window.location.href='{{ url_for('call_log_view', id=call.id) }}';">
                         <div class="d-flex w-100 justify-content-between">
-                            <h5 class="mb-1">{{ call.customer.name }}</h5>
+                            <h5 class="mb-1">
+                                <a href="{{ url_for('customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">
+                                    {{ call.customer.name }}
+                                </a>
+                            </h5>
                             <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
                         </div>
                         <div class="mb-2">
                             {% if call.seller %}
-                                <span class="badge {{ get_seller_color(call.seller.id) }}" style="cursor: pointer;" onclick="event.preventDefault(); event.stopPropagation(); window.location='{{ url_for('seller_view', id=call.seller.id) }}';"><i class="bi bi-person"></i> {{ call.seller.name }}</span>
+                                <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                             {% endif %}
                             {% if call.territory %}
-                                <span class="badge bg-info text-dark"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>
+                                <a href="{{ url_for('territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
                             {% endif %}
                             {% for topic in call.topics %}
-                                <span class="badge bg-warning text-dark"><i class="bi bi-tag"></i> {{ topic.name }}</span>
+                                <a href="{{ url_for('topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
                             {% endfor %}
                         </div>
                         <div class="text-muted">{{ call.content|striptags|truncate(200) }}</div>
-                    </a>
+                    </div>
                 {% endfor %}
             </div>
         {% else %}

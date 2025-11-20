@@ -713,7 +713,9 @@ def seller_create():
 @app.route('/seller/<int:id>')
 def seller_view(id):
     """View seller details (FR007)."""
-    seller = Seller.query.get_or_404(id)
+    seller = Seller.query.options(
+        db.joinedload(Seller.customers).joinedload(Customer.call_logs)
+    ).get_or_404(id)
     
     # Get customers with their most recent call log
     customers_data = []
