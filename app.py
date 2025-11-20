@@ -121,6 +121,7 @@ class User(db.Model):
     external_azure_id = db.Column(db.String(255), unique=True, nullable=True)  # External tenant Entra object ID
     email = db.Column(db.String(255), nullable=False)  # Primary email (not necessarily unique if using both account types)
     name = db.Column(db.String(255), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)  # Admin flag for privileged users
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     last_login = db.Column(db.DateTime, default=utc_now, nullable=False)
     
@@ -559,14 +560,76 @@ def user_profile():
 
 
 # =============================================================================
+# Admin Routes
+# =============================================================================
+
+@app.route('/admin')
+@login_required
+def admin_panel():
+    """Admin control panel for managing users and system-wide operations."""
+    if not current_user.is_admin:
+        flash('You do not have permission to access the admin panel.', 'danger')
+        return redirect(url_for('index'))
+    
+    # Get all users
+    users = User.query.order_by(User.created_at.desc()).all()
+    
+    # Get system-wide statistics
+    stats = {
+        'total_users': User.query.count(),
+        'total_pods': POD.query.count(),
+        'total_territories': Territory.query.count(),
+        'total_sellers': Seller.query.count(),
+        'total_customers': Customer.query.count(),
+        'total_topics': Topic.query.count(),
+        'total_call_logs': CallLog.query.count()
+    }
+    
+    return render_template('admin_panel.html', users=users, stats=stats)
+
+
+@app.route('/api/admin/grant-admin/<int:user_id>', methods=['POST'])
+@login_required
+def api_grant_admin(user_id):
+    """Grant admin privileges to a user."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    user = User.query.get_or_404(user_id)
+    user.is_admin = True
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': f'{user.name} is now an admin'})
+
+
+@app.route('/api/admin/revoke-admin/<int:user_id>', methods=['POST'])
+@login_required
+def api_revoke_admin(user_id):
+    """Revoke admin privileges from a user."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    # Prevent revoking your own admin
+    if user_id == current_user.id:
+        return jsonify({'error': 'You cannot revoke your own admin privileges'}), 400
+    
+    user = User.query.get_or_404(user_id)
+    user.is_admin = False
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': f'{user.name} is no longer an admin'})
+
+
+# =============================================================================
 # Routes
 # =============================================================================
 
 @app.route('/')
+@login_required
 def index():
     """Home page showing recent activity and stats."""
     # Eager load relationships for recent calls to avoid N+1 queries
-    recent_calls = CallLog.query.options(
+    recent_calls = CallLog.query.filter_by(user_id=current_user.id).options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory),
         db.joinedload(CallLog.topics)
@@ -574,10 +637,10 @@ def index():
     
     # Count queries are fast on these small tables
     stats = {
-        'call_logs': CallLog.query.count(),
-        'customers': Customer.query.count(),
-        'sellers': Seller.query.count(),
-        'topics': Topic.query.count()
+        'call_logs': CallLog.query.filter_by(user_id=current_user.id).count(),
+        'customers': Customer.query.filter_by(user_id=current_user.id).count(),
+        'sellers': Seller.query.filter_by(user_id=current_user.id).count(),
+        'topics': Topic.query.filter_by(user_id=current_user.id).count()
     }
     return render_template('index.html', recent_calls=recent_calls, stats=stats)
 
@@ -589,7 +652,7 @@ def index():
 @app.route('/territories')
 def territories_list():
     """List all territories."""
-    territories = Territory.query.options(
+    territories = Territory.query.filter_by(user_id=current_user.id).options(
         db.joinedload(Territory.sellers),
         db.joinedload(Territory.customers),
         db.joinedload(Territory.pod)
@@ -608,7 +671,7 @@ def territory_create():
             return redirect(url_for('territory_create'))
         
         # Check for duplicate
-        existing = Territory.query.filter_by(name=name).first()
+        existing = Territory.query.filter_by(name=name, user_id=current_user.id).first()
         if existing:
             flash(f'Territory "{name}" already exists.', 'warning')
             return redirect(url_for('territory_view', id=existing.id))
@@ -621,21 +684,22 @@ def territory_create():
         return redirect(url_for('territories_list'))
     
     # Show existing territories to prevent duplicates
-    existing_territories = Territory.query.order_by(Territory.name).all()
+    existing_territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
     return render_template('territory_form.html', territory=None, existing_territories=existing_territories)
 
 
 @app.route('/territory/<int:id>')
 def territory_view(id):
     """View territory details (FR006)."""
-    territory = Territory.query.options(
+    territory = Territory.query.filter_by(user_id=current_user.id).options(
         db.joinedload(Territory.pod)
-    ).get_or_404(id)
+    ).filter_by(id=id).first_or_404()
     # Sort sellers in-memory since they're eager-loaded
     sellers = sorted(territory.sellers, key=lambda s: s.name)
     
     # Get user preference for territory view
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    user_id = current_user.id if current_user.is_authenticated else 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     show_accounts = pref.territory_view_accounts if pref else False
     
     recent_calls = []
@@ -673,7 +737,7 @@ def territory_view(id):
         # Get calls from last 7 days
         from datetime import timedelta
         week_ago = utc_now() - timedelta(days=7)
-        recent_calls = CallLog.query.join(Customer).filter(
+        recent_calls = CallLog.query.filter_by(user_id=current_user.id).join(Customer).filter(
             Customer.territory_id == id,
             CallLog.call_date >= week_ago
         ).order_by(CallLog.call_date.desc()).all()
@@ -690,7 +754,7 @@ def territory_view(id):
 @app.route('/territory/<int:id>/edit', methods=['GET', 'POST'])
 def territory_edit(id):
     """Edit territory (FR006)."""
-    territory = Territory.query.get_or_404(id)
+    territory = Territory.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -700,7 +764,7 @@ def territory_edit(id):
             return redirect(url_for('territory_edit', id=id))
         
         # Check for duplicate (excluding current territory)
-        existing = Territory.query.filter(
+        existing = Territory.query.filter_by(user_id=current_user.id).filter(
             Territory.name == name,
             Territory.id != id
         ).first()
@@ -714,7 +778,7 @@ def territory_edit(id):
         flash(f'Territory "{name}" updated successfully!', 'success')
         return redirect(url_for('territory_view', id=territory.id))
     
-    existing_territories = Territory.query.filter(Territory.id != id).order_by(Territory.name).all()
+    existing_territories = Territory.query.filter_by(user_id=current_user.id).filter(Territory.id != id).order_by(Territory.name).all()
     return render_template('territory_form.html', territory=territory, existing_territories=existing_territories)
 
 
@@ -725,7 +789,7 @@ def territory_edit(id):
 @app.route('/pods')
 def pods_list():
     """List all PODs."""
-    pods = POD.query.options(
+    pods = POD.query.filter_by(user_id=current_user.id).options(
         db.joinedload(POD.territories),
         db.joinedload(POD.solution_engineers)
     ).order_by(POD.name).all()
@@ -736,10 +800,10 @@ def pods_list():
 def pod_view(id):
     """View POD details with territories, sellers, and solution engineers."""
     # Use selectinload for better performance with collections
-    pod = POD.query.options(
+    pod = POD.query.filter_by(user_id=current_user.id).options(
         db.selectinload(POD.territories).selectinload(Territory.sellers),
         db.selectinload(POD.solution_engineers)
-    ).get_or_404(id)
+    ).filter_by(id=id).first_or_404()
     
     # Get all sellers from all territories in this POD
     sellers = set()
@@ -762,10 +826,10 @@ def pod_view(id):
 @app.route('/pod/<int:id>/edit', methods=['GET', 'POST'])
 def pod_edit(id):
     """Edit POD with territories, sellers, and solution engineers."""
-    pod = POD.query.options(
+    pod = POD.query.filter_by(user_id=current_user.id).options(
         db.selectinload(POD.territories),
         db.selectinload(POD.solution_engineers)
-    ).get_or_404(id)
+    ).filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -777,7 +841,7 @@ def pod_edit(id):
             return redirect(url_for('pod_edit', id=id))
         
         # Check for duplicate
-        existing = POD.query.filter(POD.name == name, POD.id != id).first()
+        existing = POD.query.filter_by(user_id=current_user.id).filter(POD.name == name, POD.id != id).first()
         if existing:
             flash(f'POD "{name}" already exists.', 'warning')
             return redirect(url_for('pod_view', id=existing.id))
@@ -787,14 +851,14 @@ def pod_edit(id):
         # Update territories
         pod.territories.clear()
         for territory_id in territory_ids:
-            territory = Territory.query.get(int(territory_id))
+            territory = Territory.query.filter_by(user_id=current_user.id).get(int(territory_id))
             if territory:
                 pod.territories.append(territory)
         
         # Update solution engineers
         pod.solution_engineers.clear()
         for se_id in se_ids:
-            se = SolutionEngineer.query.get(int(se_id))
+            se = SolutionEngineer.query.filter_by(user_id=current_user.id).get(int(se_id))
             if se:
                 pod.solution_engineers.append(se)
         
@@ -804,10 +868,10 @@ def pod_edit(id):
         return redirect(url_for('pod_view', id=pod.id))
     
     # Get all territories and solution engineers for the form
-    all_territories = Territory.query.options(
+    all_territories = Territory.query.filter_by(user_id=current_user.id).options(
         db.selectinload(Territory.sellers)
     ).order_by(Territory.name).all()
-    all_ses = SolutionEngineer.query.order_by(SolutionEngineer.name).all()
+    all_ses = SolutionEngineer.query.filter_by(user_id=current_user.id).order_by(SolutionEngineer.name).all()
     
     return render_template('pod_form.html', pod=pod, all_territories=all_territories, all_ses=all_ses)
 
@@ -819,7 +883,7 @@ def pod_edit(id):
 @app.route('/solution-engineers')
 def solution_engineers_list():
     """List all solution engineers."""
-    ses = SolutionEngineer.query.options(
+    ses = SolutionEngineer.query.filter_by(user_id=current_user.id).options(
         db.joinedload(SolutionEngineer.pods)
     ).order_by(SolutionEngineer.name).all()
     return render_template('solution_engineers_list.html', solution_engineers=ses)
@@ -828,9 +892,9 @@ def solution_engineers_list():
 @app.route('/solution-engineer/<int:id>')
 def solution_engineer_view(id):
     """View solution engineer details."""
-    se = SolutionEngineer.query.options(
+    se = SolutionEngineer.query.filter_by(user_id=current_user.id).options(
         db.joinedload(SolutionEngineer.pods)
-    ).get_or_404(id)
+    ).filter_by(id=id).first_or_404()
     
     # Sort PODs
     pods = sorted(se.pods, key=lambda p: p.name)
@@ -843,9 +907,9 @@ def solution_engineer_view(id):
 @app.route('/solution-engineer/<int:id>/edit', methods=['GET', 'POST'])
 def solution_engineer_edit(id):
     """Edit solution engineer details."""
-    se = SolutionEngineer.query.options(
+    se = SolutionEngineer.query.filter_by(user_id=current_user.id).options(
         db.joinedload(SolutionEngineer.pods)
-    ).get_or_404(id)
+    ).filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -864,7 +928,7 @@ def solution_engineer_edit(id):
         # Update POD associations
         se.pods.clear()
         for pod_id in pod_ids:
-            pod = POD.query.get(int(pod_id))
+            pod = POD.query.filter_by(user_id=current_user.id).get(int(pod_id))
             if pod:
                 se.pods.append(pod)
         
@@ -874,7 +938,7 @@ def solution_engineer_edit(id):
         return redirect(url_for('solution_engineer_view', id=se.id))
     
     # Get all PODs for the form
-    all_pods = POD.query.order_by(POD.name).all()
+    all_pods = POD.query.filter_by(user_id=current_user.id).order_by(POD.name).all()
     return render_template('solution_engineer_form.html', solution_engineer=se, all_pods=all_pods)
 
 
@@ -885,7 +949,7 @@ def solution_engineer_edit(id):
 @app.route('/sellers')
 def sellers_list():
     """List all sellers."""
-    sellers = Seller.query.options(
+    sellers = Seller.query.filter_by(user_id=current_user.id).options(
         db.joinedload(Seller.territories).joinedload(Territory.pod),
         db.joinedload(Seller.customers)
     ).order_by(Seller.name).all()
@@ -904,7 +968,7 @@ def seller_create():
             return redirect(url_for('seller_create'))
         
         # Check for duplicate
-        existing = Seller.query.filter_by(name=name).first()
+        existing = Seller.query.filter_by(name=name, user_id=current_user.id).first()
         if existing:
             flash(f'Seller "{name}" already exists.', 'warning')
             return redirect(url_for('seller_view', id=existing.id))
@@ -914,7 +978,7 @@ def seller_create():
         # Add territories to many-to-many relationship
         if territory_ids:
             for territory_id in territory_ids:
-                territory = Territory.query.get(int(territory_id))
+                territory = Territory.query.filter_by(user_id=current_user.id).get(int(territory_id))
                 if territory:
                     seller.territories.append(territory)
         
@@ -924,17 +988,17 @@ def seller_create():
         flash(f'Seller "{name}" created successfully!', 'success')
         return redirect(url_for('sellers_list'))
     
-    territories = Territory.query.order_by(Territory.name).all()
-    existing_sellers = Seller.query.order_by(Seller.name).all()
+    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
+    existing_sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
     return render_template('seller_form.html', seller=None, territories=territories, existing_sellers=existing_sellers)
 
 
 @app.route('/seller/<int:id>')
 def seller_view(id):
     """View seller details (FR007)."""
-    seller = Seller.query.options(
+    seller = Seller.query.filter_by(user_id=current_user.id).options(
         db.joinedload(Seller.customers).joinedload(Customer.call_logs)
-    ).get_or_404(id)
+    ).filter_by(id=id).first_or_404()
     
     # Get customers with their most recent call log
     customers_data = []
@@ -961,7 +1025,7 @@ def seller_view(id):
 @app.route('/seller/<int:id>/edit', methods=['GET', 'POST'])
 def seller_edit(id):
     """Edit seller (FR007)."""
-    seller = Seller.query.get_or_404(id)
+    seller = Seller.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -972,7 +1036,7 @@ def seller_edit(id):
             return redirect(url_for('seller_edit', id=id))
         
         # Check for duplicate (excluding current seller)
-        existing = Seller.query.filter(
+        existing = Seller.query.filter_by(user_id=current_user.id).filter(
             Seller.name == name,
             Seller.id != id
         ).first()
@@ -986,7 +1050,7 @@ def seller_edit(id):
         seller.territories = []
         if territory_ids:
             for territory_id in territory_ids:
-                territory = Territory.query.get(int(territory_id))
+                territory = Territory.query.filter_by(user_id=current_user.id).get(int(territory_id))
                 if territory:
                     seller.territories.append(territory)
         
@@ -995,8 +1059,8 @@ def seller_edit(id):
         flash(f'Seller "{name}" updated successfully!', 'success')
         return redirect(url_for('seller_view', id=seller.id))
     
-    territories = Territory.query.order_by(Territory.name).all()
-    existing_sellers = Seller.query.filter(Seller.id != id).order_by(Seller.name).all()
+    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
+    existing_sellers = Seller.query.filter_by(user_id=current_user.id).filter(Seller.id != id).order_by(Seller.name).all()
     return render_template('seller_form.html', seller=seller, territories=territories, existing_sellers=existing_sellers)
 
 
@@ -1007,7 +1071,7 @@ def territory_create_inline():
     redirect_to = request.form.get('redirect_to', url_for('territories_list'))
     
     if name:
-        existing = Territory.query.filter_by(name=name).first()
+        existing = Territory.query.filter_by(name=name, user_id=current_user.id).first()
         if not existing:
             territory = Territory(name=name, user_id=current_user.id)
             db.session.add(territory)
@@ -1026,7 +1090,8 @@ def territory_create_inline():
 @app.route('/customers')
 def customers_list():
     """List all customers - alphabetical, grouped by seller, or sorted by call count based on preference."""
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    user_id = current_user.id if current_user.is_authenticated else 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     
     # Determine sort method - check new field first, fall back to old grouped field for backwards compatibility
     sort_by = pref.customer_sort_by if pref else 'alphabetical'
@@ -1035,7 +1100,7 @@ def customers_list():
     
     if sort_by == 'grouped':
         # Grouped view - get all sellers with their customers
-        sellers = Seller.query.options(
+        sellers = Seller.query.filter_by(user_id=current_user.id).options(
             db.joinedload(Seller.customers).joinedload(Customer.call_logs),
             db.joinedload(Seller.customers).joinedload(Customer.territory),
             db.joinedload(Seller.territories)
@@ -1052,7 +1117,7 @@ def customers_list():
                 })
         
         # Get customers without a seller
-        customers_without_seller = Customer.query.options(
+        customers_without_seller = Customer.query.filter_by(user_id=current_user.id).options(
             db.joinedload(Customer.call_logs),
             db.joinedload(Customer.territory)
         ).filter_by(seller_id=None).order_by(Customer.name).all()
@@ -1064,7 +1129,7 @@ def customers_list():
     
     elif sort_by == 'by_calls':
         # Sort by number of calls (descending)
-        customers = Customer.query.options(
+        customers = Customer.query.filter_by(user_id=current_user.id).options(
             db.joinedload(Customer.seller),
             db.joinedload(Customer.territory),
             db.joinedload(Customer.call_logs)
@@ -1076,7 +1141,7 @@ def customers_list():
     
     else:
         # Alphabetical view (default)
-        customers = Customer.query.options(
+        customers = Customer.query.filter_by(user_id=current_user.id).options(
             db.joinedload(Customer.seller),
             db.joinedload(Customer.territory),
             db.joinedload(Customer.call_logs)
@@ -1130,8 +1195,8 @@ def customer_create():
         
         return redirect(url_for('customer_view', id=customer.id))
     
-    sellers = Seller.query.order_by(Seller.name).all()
-    territories = Territory.query.order_by(Territory.name).all()
+    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
+    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
     
     # Pre-select seller and territory from query params (FR032)
     preselect_seller_id = request.args.get('seller_id', type=int)
@@ -1139,13 +1204,13 @@ def customer_create():
     
     # If seller is pre-selected and has exactly one territory, auto-select it
     if preselect_seller_id:
-        seller = Seller.query.get(preselect_seller_id)
+        seller = Seller.query.filter_by(user_id=current_user.id).filter_by(id=preselect_seller_id).first()
         if seller and len(seller.territories) == 1:
             preselect_territory_id = seller.territories[0].id
     
     # If territory is pre-selected and has only one seller, auto-select it (FR032)
     if preselect_territory_id and not preselect_seller_id:
-        territory = Territory.query.get(preselect_territory_id)
+        territory = Territory.query.filter_by(user_id=current_user.id).filter_by(id=preselect_territory_id).first()
         if territory:
             # territory.sellers is already a list from eager loading
             territory_sellers = territory.sellers
@@ -1167,7 +1232,7 @@ def customer_create():
 @app.route('/customer/<int:id>')
 def customer_view(id):
     """View customer details (FR008)."""
-    customer = Customer.query.get_or_404(id)
+    customer = Customer.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     # Sort call logs by date (descending) - customer.call_logs is already loaded as a list
     call_logs = sorted(customer.call_logs, key=lambda c: c.call_date, reverse=True)
     return render_template('customer_view.html', customer=customer, call_logs=call_logs)
@@ -1176,7 +1241,7 @@ def customer_view(id):
 @app.route('/customer/<int:id>/edit', methods=['GET', 'POST'])
 def customer_edit(id):
     """Edit customer (FR008)."""
-    customer = Customer.query.get_or_404(id)
+    customer = Customer.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -1211,8 +1276,8 @@ def customer_edit(id):
         flash(f'Customer "{name}" updated successfully!', 'success')
         return redirect(url_for('customer_view', id=customer.id))
     
-    sellers = Seller.query.order_by(Seller.name).all()
-    territories = Territory.query.order_by(Territory.name).all()
+    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
+    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
     
     return render_template('customer_form.html', 
                          customer=customer, 
@@ -1228,7 +1293,7 @@ def seller_create_inline():
     redirect_to = request.form.get('redirect_to', url_for('sellers_list'))
     
     if name:
-        existing = Seller.query.filter_by(name=name).first()
+        existing = Seller.query.filter_by(name=name, user_id=current_user.id).first()
         if not existing:
             seller = Seller(name=name, user_id=current_user.id)
             db.session.add(seller)
@@ -1247,10 +1312,11 @@ def seller_create_inline():
 @app.route('/topics')
 def topics_list():
     """List all topics (FR009)."""
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    user_id = current_user.id if current_user.is_authenticated else 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     
     # Load topics with eager loading
-    topics = Topic.query.options(db.joinedload(Topic.call_logs)).all()
+    topics = Topic.query.filter_by(user_id=current_user.id).options(db.joinedload(Topic.call_logs)).all()
     
     # Sort based on preference
     if pref and pref.topic_sort_by_calls:
@@ -1273,7 +1339,7 @@ def api_topic_create():
         return jsonify({'error': 'Topic name is required'}), 400
     
     # Check for duplicate topic names (case-insensitive)
-    existing = Topic.query.filter(func.lower(Topic.name) == func.lower(name)).first()
+    existing = Topic.query.filter_by(user_id=current_user.id).filter(func.lower(Topic.name) == func.lower(name)).first()
     if existing:
         return jsonify({
             'id': existing.id,
@@ -1307,7 +1373,7 @@ def topic_create():
             return redirect(url_for('topic_create'))
         
         # Check for duplicate topic names
-        existing = Topic.query.filter_by(name=name).first()
+        existing = Topic.query.filter_by(name=name, user_id=current_user.id).first()
         if existing:
             flash(f'Topic "{name}" already exists.', 'warning')
             return redirect(url_for('topic_view', id=existing.id))
@@ -1329,7 +1395,7 @@ def topic_create():
 @app.route('/topic/<int:id>')
 def topic_view(id):
     """View topic details (FR009)."""
-    topic = Topic.query.get_or_404(id)
+    topic = Topic.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     # Sort call logs in-memory since they're eager-loaded
     call_logs = sorted(topic.call_logs, key=lambda c: c.call_date, reverse=True)
     return render_template('topic_view.html', topic=topic, call_logs=call_logs)
@@ -1338,7 +1404,7 @@ def topic_view(id):
 @app.route('/topic/<int:id>/edit', methods=['GET', 'POST'])
 def topic_edit(id):
     """Edit topic (FR009)."""
-    topic = Topic.query.get_or_404(id)
+    topic = Topic.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -1349,7 +1415,7 @@ def topic_edit(id):
             return redirect(url_for('topic_edit', id=id))
         
         # Check for duplicate topic names (excluding current topic)
-        existing = Topic.query.filter(Topic.name == name, Topic.id != id).first()
+        existing = Topic.query.filter_by(user_id=current_user.id).filter(Topic.name == name, Topic.id != id).first()
         if existing:
             flash(f'Topic "{name}" already exists.', 'warning')
             return redirect(url_for('topic_edit', id=id))
@@ -1367,7 +1433,7 @@ def topic_edit(id):
 @app.route('/topic/<int:id>/delete', methods=['POST'])
 def topic_delete(id):
     """Delete topic and remove from all associated call logs."""
-    topic = Topic.query.get_or_404(id)
+    topic = Topic.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     topic_name = topic.name
     
     # Get all call logs associated with this topic
@@ -1392,7 +1458,7 @@ def topic_delete(id):
 @app.route('/call-logs')
 def call_logs_list():
     """List all call logs (FR010)."""
-    call_logs = CallLog.query.options(
+    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory),
         db.joinedload(CallLog.topics)
@@ -1432,14 +1498,14 @@ def call_log_create():
             return redirect(url_for('call_log_create'))
         
         # Get customer and auto-fill territory
-        customer = Customer.query.get(int(customer_id))
+        customer = Customer.query.filter_by(user_id=current_user.id).get(int(customer_id))
         territory_id = customer.territory_id if customer else None
         
         # If customer doesn't have a seller but one is selected, associate it
         if customer and not customer.seller_id and seller_id:
             customer.seller_id = int(seller_id)
             # Also update customer's territory if seller has one
-            seller = Seller.query.get(int(seller_id))
+            seller = Seller.query.filter_by(user_id=current_user.id).get(int(seller_id))
             if seller and seller.territory_id:
                 customer.territory_id = seller.territory_id
                 territory_id = seller.territory_id
@@ -1454,7 +1520,7 @@ def call_log_create():
         
         # Add topics
         if topic_ids:
-            topics = Topic.query.filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
+            topics = Topic.query.filter_by(user_id=current_user.id).filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
             call_log.topics.extend(topics)
         
         db.session.add(call_log)
@@ -1478,14 +1544,14 @@ def call_log_create():
         return redirect(url_for('customers_list'))
     
     # Load customer and their previous call logs
-    preselect_customer = Customer.query.get_or_404(preselect_customer_id)
-    previous_calls = CallLog.query.filter_by(customer_id=preselect_customer_id).options(
+    preselect_customer = Customer.query.filter_by(user_id=current_user.id).filter_by(id=preselect_customer_id).first_or_404()
+    previous_calls = CallLog.query.filter_by(user_id=current_user.id, customer_id=preselect_customer_id).options(
         db.joinedload(CallLog.topics)
     ).order_by(CallLog.call_date.desc()).all()
     
-    customers = Customer.query.order_by(Customer.name).all()
-    sellers = Seller.query.order_by(Seller.name).all()
-    topics = Topic.query.order_by(Topic.name).all()
+    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
+    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
+    topics = Topic.query.filter_by(user_id=current_user.id).order_by(Topic.name).all()
     
     # Pre-select topic from query params
     preselect_topic_id = request.args.get('topic_id', type=int)
@@ -1508,14 +1574,14 @@ def call_log_create():
 @app.route('/call-log/<int:id>')
 def call_log_view(id):
     """View call log details (FR010)."""
-    call_log = CallLog.query.get_or_404(id)
+    call_log = CallLog.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     return render_template('call_log_view.html', call_log=call_log)
 
 
 @app.route('/call-log/<int:id>/edit', methods=['GET', 'POST'])
 def call_log_edit(id):
     """Edit call log (FR010)."""
-    call_log = CallLog.query.get_or_404(id)
+    call_log = CallLog.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         customer_id = request.form.get('customer_id')
@@ -1553,7 +1619,7 @@ def call_log_edit(id):
         # Update topics - remove all existing associations first
         call_log.topics = []
         if topic_ids:
-            topics = Topic.query.filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
+            topics = Topic.query.filter_by(user_id=current_user.id).filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
             call_log.topics = topics
         
         db.session.commit()
@@ -1562,9 +1628,9 @@ def call_log_edit(id):
         return redirect(url_for('call_log_view', id=call_log.id))
     
     # GET request - load form
-    customers = Customer.query.order_by(Customer.name).all()
-    sellers = Seller.query.order_by(Seller.name).all()
-    topics = Topic.query.order_by(Topic.name).all()
+    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
+    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
+    topics = Topic.query.filter_by(user_id=current_user.id).order_by(Topic.name).all()
     
     return render_template('call_log_form.html',
                          call_log=call_log,
@@ -1597,8 +1663,8 @@ def search():
     
     # Only perform search if criteria provided
     if has_search:
-        # Start with base query
-        query = CallLog.query
+        # Start with base query filtered by user
+        query = CallLog.query.filter_by(user_id=current_user.id)
         
         # Apply filters
         if search_text:
@@ -1657,10 +1723,10 @@ def search():
             grouped_data[seller_id_key]['customers_sorted'] = customers_list
     
     # Get all filter options for dropdowns
-    customers = Customer.query.order_by(Customer.name).all()
-    sellers = Seller.query.order_by(Seller.name).all()
-    territories = Territory.query.order_by(Territory.name).all()
-    topics = Topic.query.order_by(Topic.name).all()
+    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
+    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
+    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
+    topics = Topic.query.filter_by(user_id=current_user.id).order_by(Topic.name).all()
     
     return render_template('search.html',
                          grouped_data=grouped_data,
@@ -1679,9 +1745,10 @@ def search():
 @app.route('/preferences')
 def preferences():
     """User preferences page."""
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    user_id = current_user.id if current_user.is_authenticated else 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
-        pref = UserPreference(user_id=current_user.id)
+        pref = UserPreference(user_id=user_id)
         db.session.add(pref)
         db.session.commit()
     
@@ -1897,7 +1964,7 @@ def export_call_logs_json():
     import json
     from datetime import datetime
     
-    call_logs = CallLog.query.options(
+    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
         db.joinedload(CallLog.customer).joinedload(Customer.verticals),
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory).joinedload(Territory.pod)
@@ -1952,7 +2019,7 @@ def export_call_logs_csv():
     import io
     from datetime import datetime
     
-    call_logs = CallLog.query.options(
+    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
         db.joinedload(CallLog.customer).joinedload(Customer.verticals),
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory).joinedload(Territory.pod)
@@ -2008,14 +2075,17 @@ create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Vertic
 @app.route('/api/preferences/dark-mode', methods=['GET', 'POST'])
 def dark_mode_preference():
     """Get or set dark mode preference."""
+    # Get user ID (handle testing mode where login is disabled)
+    user_id = current_user.id if current_user.is_authenticated else 1
+    
     if request.method == 'POST':
         data = request.get_json()
         dark_mode = data.get('dark_mode', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
         if not pref:
-            pref = UserPreference(user_id=current_user.id, dark_mode=dark_mode)
+            pref = UserPreference(user_id=user_id, dark_mode=dark_mode)
             db.session.add(pref)
         else:
             pref.dark_mode = dark_mode
@@ -2024,9 +2094,9 @@ def dark_mode_preference():
         return jsonify({'dark_mode': pref.dark_mode}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
-        pref = UserPreference(user_id=current_user.id, dark_mode=False)
+        pref = UserPreference(user_id=user_id, dark_mode=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2087,14 +2157,16 @@ def tpid_workflow_update():
 @app.route('/api/preferences/customer-view', methods=['GET', 'POST'])
 def customer_view_preference():
     """Get or set customer view preference (alphabetical vs grouped)."""
+    user_id = current_user.id if current_user.is_authenticated else 1
+    
     if request.method == 'POST':
         data = request.get_json()
         customer_view_grouped = data.get('customer_view_grouped', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
         if not pref:
-            pref = UserPreference(user_id=current_user.id, customer_view_grouped=customer_view_grouped)
+            pref = UserPreference(user_id=user_id, customer_view_grouped=customer_view_grouped)
             db.session.add(pref)
         else:
             pref.customer_view_grouped = customer_view_grouped
@@ -2103,9 +2175,9 @@ def customer_view_preference():
         return jsonify({'customer_view_grouped': pref.customer_view_grouped}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
-        pref = UserPreference(user_id=current_user.id, customer_view_grouped=False)
+        pref = UserPreference(user_id=user_id, customer_view_grouped=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2115,14 +2187,16 @@ def customer_view_preference():
 @app.route('/api/preferences/topic-sort', methods=['GET', 'POST'])
 def topic_sort_preference():
     """Get or set topic sort preference (alphabetical vs by calls)."""
+    user_id = current_user.id if current_user.is_authenticated else 1
+    
     if request.method == 'POST':
         data = request.get_json()
         topic_sort_by_calls = data.get('topic_sort_by_calls', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
         if not pref:
-            pref = UserPreference(user_id=current_user.id, topic_sort_by_calls=topic_sort_by_calls)
+            pref = UserPreference(user_id=user_id, topic_sort_by_calls=topic_sort_by_calls)
             db.session.add(pref)
         else:
             pref.topic_sort_by_calls = topic_sort_by_calls
@@ -2131,9 +2205,9 @@ def topic_sort_preference():
         return jsonify({'topic_sort_by_calls': pref.topic_sort_by_calls}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
-        pref = UserPreference(user_id=current_user.id, topic_sort_by_calls=False)
+        pref = UserPreference(user_id=user_id, topic_sort_by_calls=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2143,14 +2217,16 @@ def topic_sort_preference():
 @app.route('/api/preferences/territory-view', methods=['GET', 'POST'])
 def territory_view_preference():
     """Get or set territory view preference (recent calls vs accounts)."""
+    user_id = current_user.id if current_user.is_authenticated else 1
+    
     if request.method == 'POST':
         data = request.get_json()
         territory_view_accounts = data.get('territory_view_accounts', False)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
         if not pref:
-            pref = UserPreference(user_id=current_user.id, territory_view_accounts=territory_view_accounts)
+            pref = UserPreference(user_id=user_id, territory_view_accounts=territory_view_accounts)
             db.session.add(pref)
         else:
             pref.territory_view_accounts = territory_view_accounts
@@ -2159,9 +2235,9 @@ def territory_view_preference():
         return jsonify({'territory_view_accounts': pref.territory_view_accounts}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
-        pref = UserPreference(user_id=current_user.id, territory_view_accounts=False)
+        pref = UserPreference(user_id=user_id, territory_view_accounts=False)
         db.session.add(pref)
         db.session.commit()
     
@@ -2171,14 +2247,16 @@ def territory_view_preference():
 @app.route('/api/preferences/colored-sellers', methods=['GET', 'POST'])
 def colored_sellers_preference():
     """Get or set colored sellers preference (grey vs colored badges)."""
+    user_id = current_user.id if current_user.is_authenticated else 1
+    
     if request.method == 'POST':
         data = request.get_json()
         colored_sellers = data.get('colored_sellers', True)
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
         if not pref:
-            pref = UserPreference(user_id=current_user.id, colored_sellers=colored_sellers)
+            pref = UserPreference(user_id=user_id, colored_sellers=colored_sellers)
             db.session.add(pref)
         else:
             pref.colored_sellers = colored_sellers
@@ -2187,9 +2265,9 @@ def colored_sellers_preference():
         return jsonify({'colored_sellers': pref.colored_sellers}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
-        pref = UserPreference(user_id=current_user.id, colored_sellers=True)
+        pref = UserPreference(user_id=user_id, colored_sellers=True)
         db.session.add(pref)
         db.session.commit()
     
@@ -2199,6 +2277,8 @@ def colored_sellers_preference():
 @app.route('/api/preferences/customer-sort-by', methods=['GET', 'POST'])
 def customer_sort_by_preference():
     """Get or set customer sorting preference (alphabetical, grouped, or by_calls)."""
+    user_id = current_user.id if current_user.is_authenticated else 1
+    
     if request.method == 'POST':
         data = request.get_json()
         customer_sort_by = data.get('customer_sort_by', 'alphabetical')
@@ -2209,9 +2289,9 @@ def customer_sort_by_preference():
             return jsonify({'error': 'Invalid sort option'}), 400
         
         # Get or create user preference
-        pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
         if not pref:
-            pref = UserPreference(user_id=current_user.id, customer_sort_by=customer_sort_by)
+            pref = UserPreference(user_id=user_id, customer_sort_by=customer_sort_by)
             db.session.add(pref)
         else:
             pref.customer_sort_by = customer_sort_by
@@ -2220,9 +2300,9 @@ def customer_sort_by_preference():
         return jsonify({'customer_sort_by': pref.customer_sort_by}), 200
     
     # GET request
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first()
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
-        pref = UserPreference(user_id=current_user.id, customer_sort_by='alphabetical')
+        pref = UserPreference(user_id=user_id, customer_sort_by='alphabetical')
         db.session.add(pref)
         db.session.commit()
     

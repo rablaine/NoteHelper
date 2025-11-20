@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4"><i class="bi bi-shield-lock"></i> Admin Panel</h1>
+        
+        <!-- System Statistics -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> System Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h2>{{ stats.total_users }}</h2>
+                                <p class="mb-0">Users</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h2>{{ stats.total_call_logs }}</h2>
+                                <p class="mb-0">Call Logs</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center">
+                                <h2>{{ stats.total_customers }}</h2>
+                                <p class="mb-0">Customers</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card bg-warning text-dark">
+                            <div class="card-body text-center">
+                                <h2>{{ stats.total_sellers }}</h2>
+                                <p class="mb-0">Sellers</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h3>{{ stats.total_territories }}</h3>
+                                <p class="mb-0">Territories</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h3>{{ stats.total_topics }}</h3>
+                                <p class="mb-0">Topics</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h3>{{ stats.total_pods }}</h3>
+                                <p class="mb-0">PODs</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Management -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-people"></i> User Management</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Created</th>
+                                <th>Last Login</th>
+                                <th>Admin</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user.name }}</td>
+                                <td>{{ user.email }}</td>
+                                <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                                <td>{{ user.last_login.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if user.is_admin %}
+                                        <span class="badge bg-success"><i class="bi bi-shield-check"></i> Admin</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">User</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.id != current_user.id %}
+                                        {% if user.is_admin %}
+                                            <button class="btn btn-sm btn-warning revoke-admin-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.name }}">
+                                                <i class="bi bi-shield-x"></i> Revoke Admin
+                                            </button>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-success grant-admin-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.name }}">
+                                                <i class="bi bi-shield-plus"></i> Grant Admin
+                                            </button>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-primary">You</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- System-Wide Data Management -->
+        <div class="card mb-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> System-Wide Data Management</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">These operations affect all users in the system. Use with caution.</p>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5><i class="bi bi-download"></i> Export All Data</h5>
+                                <p class="text-muted">Export complete database as JSON or CSV (all users)</p>
+                                <a href="{{ url_for('export_full_json') }}" class="btn btn-primary me-2">
+                                    <i class="bi bi-filetype-json"></i> Export JSON
+                                </a>
+                                <a href="{{ url_for('export_full_csv') }}" class="btn btn-info">
+                                    <i class="bi bi-filetype-csv"></i> Export CSV
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card border-danger">
+                            <div class="card-body">
+                                <h5 class="text-danger"><i class="bi bi-trash"></i> Clear All Data</h5>
+                                <p class="text-muted">⚠️ This will delete ALL data from ALL users!</p>
+                                <button class="btn btn-danger" id="clearAllDataBtn">
+                                    <i class="bi bi-trash"></i> Clear All Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Grant Admin
+document.querySelectorAll('.grant-admin-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const userId = this.dataset.userId;
+        const userName = this.dataset.userName;
+        
+        if (confirm(`Grant admin privileges to ${userName}?`)) {
+            fetch(`/api/admin/grant-admin/${userId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+        }
+    });
+});
+
+// Revoke Admin
+document.querySelectorAll('.revoke-admin-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const userId = this.dataset.userId;
+        const userName = this.dataset.userName;
+        
+        if (confirm(`Revoke admin privileges from ${userName}?`)) {
+            fetch(`/api/admin/revoke-admin/${userId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+        }
+    });
+});
+
+// Clear All Data
+document.getElementById('clearAllDataBtn').addEventListener('click', function() {
+    const confirmation = prompt('⚠️ WARNING: This will delete ALL data from ALL users!\n\nType "DELETE ALL DATA" to confirm:');
+    if (confirmation === 'DELETE ALL DATA') {
+        fetch('/api/data-management/clear', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('All data has been cleared successfully.');
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+    } else if (confirmation !== null) {
+        alert('Confirmation text did not match. Operation cancelled.');
+    }
+});
+</script>
+{% endblock %}

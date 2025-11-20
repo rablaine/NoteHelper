@@ -77,8 +77,20 @@ def app():
 
 @pytest.fixture
 def client(app):
-    """Create a test client."""
-    return app.test_client()
+    """Create a test client with authenticated user."""
+    client = app.test_client()
+    
+    # Log in the test user for all tests
+    with app.app_context():
+        from app import User, login_user
+        test_user = User.query.first()
+        
+        with client.session_transaction() as sess:
+            # Manually set the user ID in the session to simulate login
+            sess['_user_id'] = str(test_user.id)
+            sess['_fresh'] = True
+    
+    return client
 
 
 @pytest.fixture
@@ -91,17 +103,20 @@ def runner(app):
 def sample_data(app):
     """Create sample data for tests."""
     with app.app_context():
-        from app import db, Territory, Seller, Customer, Topic, CallLog
+        from app import db, Territory, Seller, Customer, Topic, CallLog, User
+        
+        # Get the test user
+        test_user = User.query.first()
         
         # Create territories
-        territory1 = Territory(name='West Region')
-        territory2 = Territory(name='East Region')
+        territory1 = Territory(name='West Region', user_id=test_user.id)
+        territory2 = Territory(name='East Region', user_id=test_user.id)
         db.session.add_all([territory1, territory2])
         db.session.flush()
         
         # Create sellers
-        seller1 = Seller(name='Alice Smith', alias='alices', seller_type='Growth')
-        seller2 = Seller(name='Bob Jones', alias='bobj', seller_type='Acquisition')
+        seller1 = Seller(name='Alice Smith', alias='alices', seller_type='Growth', user_id=test_user.id)
+        seller2 = Seller(name='Bob Jones', alias='bobj', seller_type='Acquisition', user_id=test_user.id)
         db.session.add_all([seller1, seller2])
         db.session.flush()
         
@@ -115,20 +130,22 @@ def sample_data(app):
             tpid=1001,  # Numeric TPID
             tpid_url='https://example.com/acme',
             seller_id=seller1.id,
-            territory_id=territory1.id
+            territory_id=territory1.id,
+            user_id=test_user.id
         )
         customer2 = Customer(
             name='Globex Inc',
             tpid=1002,  # Numeric TPID
             seller_id=seller2.id,
-            territory_id=territory2.id
+            territory_id=territory2.id,
+            user_id=test_user.id
         )
         db.session.add_all([customer1, customer2])
         db.session.flush()
         
         # Create topics
-        topic1 = Topic(name='Azure VM', description='Virtual Machines')
-        topic2 = Topic(name='Storage', description='Azure Storage')
+        topic1 = Topic(name='Azure VM', description='Virtual Machines', user_id=test_user.id)
+        topic2 = Topic(name='Storage', description='Azure Storage', user_id=test_user.id)
         db.session.add_all([topic1, topic2])
         db.session.flush()
         
@@ -137,14 +154,16 @@ def sample_data(app):
         call1 = CallLog(
             customer_id=customer1.id,
             call_date=datetime.now(timezone.utc),
-            content='Discussed VM migration strategy and cloud architecture options.'
+            content='Discussed VM migration strategy and cloud architecture options.',
+            user_id=test_user.id
         )
         call1.topics.append(topic1)
         
         call2 = CallLog(
             customer_id=customer2.id,
             call_date=datetime.now(timezone.utc),
-            content='Storage optimization review with focus on blob storage.'
+            content='Storage optimization review with focus on blob storage.',
+            user_id=test_user.id
         )
         call2.topics.append(topic2)
         

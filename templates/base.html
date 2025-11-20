@@ -233,6 +233,10 @@
                             <li><a class="dropdown-item" href="{{ url_for('preferences') }}"><i class="bi bi-gear"></i> Preferences</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('data_management') }}"><i class="bi bi-database"></i> Data Management</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('tpid_workflow') }}"><i class="bi bi-link-45deg"></i> MSX Account URLs</a></li>
+                            {% if current_user.is_authenticated and current_user.is_admin %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('admin_panel') }}"><i class="bi bi-shield-lock"></i> Admin Panel</a></li>
+                            {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('user_profile') }}"><i class="bi bi-person"></i> {{ current_user.name if current_user.is_authenticated else 'Guest' }}</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Log Out</a></li>
