@@ -5,9 +5,31 @@
 {% block extra_css %}
 <!-- Quill Rich Text Editor -->
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+{% if not call_log and previous_calls %}
+<style>
+    /* Override container for full-width layout when showing previous calls */
+    main.container {
+        max-width: min(100%, 1900px) !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+        width: 100% !important;
+    }
+    
+    /* Previous calls section styling */
+    .previous-calls-card {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .previous-calls-body {
+        overflow-y: auto;
+    }
+</style>
+{% endif %}
 {% endblock %}
 
 {% block content %}
+
 <h1 class="mb-4">{{ 'Edit' if call_log else 'New' }} Call Log{% if not call_log and preselect_customer %} - {{ preselect_customer.name }}{% endif %}</h1>
 
 <div class="row">
@@ -18,7 +40,7 @@
                     <input type="hidden" name="referrer" value="{{ referrer if referrer else '' }}">
                     <div class="mb-3">
                         <label for="customer_id" class="form-label">Customer *</label>
-                        <select class="form-select" id="customer_id" name="customer_id" required>
+                        <select class="form-select" id="customer_id" name="customer_id" required {% if not call_log and preselect_customer_id %}disabled{% endif %}>
                             <option value="">-- Select customer --</option>
                             {% for customer in customers %}
                                 <option value="{{ customer.id }}"
@@ -27,6 +49,9 @@
                                 </option>
                             {% endfor %}
                         </select>
+                        {% if not call_log and preselect_customer_id %}
+                            <input type="hidden" name="customer_id" value="{{ preselect_customer_id }}">
+                        {% endif %}
                         {% if call_log and call_log.customer and call_log.customer.seller %}
                             <div class="form-text">Seller: <strong>{{ call_log.customer.seller.name }}</strong></div>
                         {% elif preselect_customer and preselect_customer.seller %}
@@ -93,11 +118,11 @@
     
     {% if not call_log and previous_calls %}
     <div class="col-md-6">
-        <div class="card">
+        <div class="card previous-calls-card">
             <div class="card-header">
                 <h5 class="mb-0">Previous Call Logs ({{ previous_calls|length }})</h5>
             </div>
-            <div class="card-body" style="max-height: 800px; overflow-y: auto;">
+            <div class="card-body previous-calls-body">
                 {% for call in previous_calls %}
                     <div class="mb-4 pb-3 {% if not loop.last %}border-bottom{% endif %}">
                         <div class="d-flex justify-content-between align-items-start mb-2">
@@ -367,6 +392,31 @@ document.addEventListener('DOMContentLoaded', function() {
     var month = String(now.getMonth() + 1).padStart(2, '0');
     var day = String(now.getDate()).padStart(2, '0');
     document.getElementById('call_date').value = year + '-' + month + '-' + day;
+    
+    {% if previous_calls %}
+    // Match previous calls card height to new call log card height
+    function matchCardHeights() {
+        const newCallCard = document.querySelector('.col-md-6:first-child .card');
+        const previousCallsCard = document.querySelector('.previous-calls-card');
+        const previousCallsBody = document.querySelector('.previous-calls-body');
+        
+        if (newCallCard && previousCallsCard && previousCallsBody) {
+            const newCallHeight = newCallCard.offsetHeight;
+            previousCallsCard.style.height = newCallHeight + 'px';
+            
+            // Calculate available height for scrollable body
+            const cardHeader = previousCallsCard.querySelector('.card-header');
+            const headerHeight = cardHeader ? cardHeader.offsetHeight : 0;
+            const bodyPadding = 32; // Card body padding
+            previousCallsBody.style.maxHeight = (newCallHeight - headerHeight - bodyPadding) + 'px';
+        }
+    }
+    
+    // Match heights on load and when Quill editor is initialized
+    matchCardHeights();
+    setTimeout(matchCardHeights, 100); // Retry after Quill loads
+    window.addEventListener('resize', matchCardHeights);
+    {% endif %}
 });
 {% endif %}
 </script>
