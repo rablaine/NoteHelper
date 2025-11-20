@@ -11,15 +11,35 @@
 </div>
 
 {% if call_logs %}
+    <style>
+        .clickable-call-log {
+            cursor: pointer;
+            position: relative;
+            transition: background-color 0.15s ease-in-out;
+        }
+        .clickable-call-log:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        html[data-bs-theme="dark"] .clickable-call-log:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+        .clickable-call-log .call-body-text {
+            color: var(--bs-body-color);
+        }
+        .clickable-call-log a {
+            position: relative;
+            z-index: 2;
+        }
+    </style>
     <div class="list-group">
         {% for call in call_logs %}
-            <div class="list-group-item">
+            <div class="list-group-item clickable-call-log" onclick="window.location.href='{{ url_for('call_log_view', id=call.id) }}';">
                 <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                     <h5 class="mb-0">
                         {% if call.customer %}
-                            <a href="{{ url_for('customer_view', id=call.customer.id) }}" class="text-decoration-none">{{ call.customer.name }}</a>
+                            <a href="{{ url_for('customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">{{ call.customer.name }}</a>
                             {% if call.customer.tpid_url %}
-                                (<a href="{{ call.customer.tpid_url }}" target="_blank">{{ call.customer.tpid }}</a>)
+                                (<a href="{{ call.customer.tpid_url }}" target="_blank" onclick="event.stopPropagation();">{{ call.customer.tpid }}</a>)
                             {% else %}
                                 ({{ call.customer.tpid }})
                             {% endif %}
@@ -29,14 +49,12 @@
                     </h5>
                     <small class="text-muted text-nowrap ms-3">{{ call.call_date.strftime('%b %d, %Y') }}</small>
                 </div>
-                <p class="mb-2">
-                    <a href="{{ url_for('call_log_view', id=call.id) }}" class="text-decoration-none">
-                        {{ call.content|striptags|truncate(200) }}
-                    </a>
+                <p class="mb-2 call-body-text">
+                    {{ call.content|striptags|truncate(200) }}
                 </p>
                 <div>
                     {% if call.seller %}
-                        <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
+                        <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                     {% endif %}
                     {% if call.territory %}
                         <span class="badge bg-info text-dark"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</span>
