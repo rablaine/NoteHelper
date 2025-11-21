@@ -142,9 +142,13 @@ def auth_callback():
         }
         return redirect(url_for('auth.first_time_flow'))
     
-    # User exists - update last login
+    # User exists - update last login and email
     user.last_login = utc_now()
     user.name = name  # Update name in case it changed
+    if is_microsoft_account:
+        user.microsoft_email = email
+    else:
+        user.external_email = email
     
     # If this is a stub account, remind them they need to complete linking
     if user.is_stub:
@@ -235,12 +239,14 @@ def first_time_new_user():
         user = User(
             microsoft_azure_id=pending_auth['azure_id'],
             email=pending_auth['email'],
+            microsoft_email=pending_auth['email'],
             name=pending_auth['name']
         )
     else:
         user = User(
             external_azure_id=pending_auth['azure_id'],
             email=pending_auth['email'],
+            external_email=pending_auth['email'],
             name=pending_auth['name']
         )
     
@@ -296,6 +302,7 @@ def first_time_link_request():
         stub_user = User(
             microsoft_azure_id=pending_auth['azure_id'],
             email=pending_auth['email'],
+            microsoft_email=pending_auth['email'],
             name=pending_auth['name'],
             is_stub=True
         )
@@ -303,6 +310,7 @@ def first_time_link_request():
         stub_user = User(
             external_azure_id=pending_auth['azure_id'],
             email=pending_auth['email'],
+            external_email=pending_auth['email'],
             name=pending_auth['name'],
             is_stub=True
         )
@@ -384,6 +392,8 @@ def account_link_approve(request_id):
     # Clear stub's azure_ids before merging to avoid UNIQUE constraint violation
     stub_microsoft_id = stub_user.microsoft_azure_id
     stub_external_id = stub_user.external_azure_id
+    stub_microsoft_email = stub_user.microsoft_email
+    stub_external_email = stub_user.external_email
     stub_user.microsoft_azure_id = None
     stub_user.external_azure_id = None
     db.session.flush()  # Flush to release the UNIQUE constraint
@@ -391,8 +401,10 @@ def account_link_approve(request_id):
     # Merge the accounts
     if stub_microsoft_id:
         current_user.microsoft_azure_id = stub_microsoft_id
+        current_user.microsoft_email = stub_microsoft_email
     if stub_external_id:
         current_user.external_azure_id = stub_external_id
+        current_user.external_email = stub_external_email
     
     current_user.linked_at = utc_now()
     

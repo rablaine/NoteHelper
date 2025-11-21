@@ -68,6 +68,8 @@ class User(db.Model):
     microsoft_azure_id = db.Column(db.String(255), unique=True, nullable=True)  # @microsoft.com Entra object ID
     external_azure_id = db.Column(db.String(255), unique=True, nullable=True)  # External tenant Entra object ID
     email = db.Column(db.String(255), nullable=False)  # Primary email (not necessarily unique if using both account types)
+    microsoft_email = db.Column(db.String(255), nullable=True)  # Email from Microsoft account
+    external_email = db.Column(db.String(255), nullable=True)  # Email from external account
     name = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)  # Admin flag for privileged users
     is_stub = db.Column(db.Boolean, default=False, nullable=False)  # True if this is a stub account awaiting linking
