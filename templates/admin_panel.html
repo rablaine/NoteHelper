@@ -342,21 +342,41 @@
                 <p class="text-muted">These operations affect all users in the system. Use with caution.</p>
                 
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <div class="card">
                             <div class="card-body">
                                 <h5><i class="bi bi-download"></i> Export All Data</h5>
-                                <p class="text-muted">Export complete database as JSON or CSV (all users)</p>
-                                <a href="{{ url_for('main.export_full_json') }}" class="btn btn-primary me-2">
+                                <p class="text-muted">Backup complete database (all users, includes ownership)</p>
+                                <a href="{{ url_for('main.export_full_json') }}" class="btn btn-primary me-2 mb-2">
                                     <i class="bi bi-filetype-json"></i> Export JSON
                                 </a>
                                 <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-info">
                                     <i class="bi bi-filetype-csv"></i> Export CSV
                                 </a>
+                                <div class="mt-2">
+                                    <small class="text-muted">JSON format includes user data for proper restore</small>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h5 class="text-warning"><i class="bi bi-upload"></i> Import/Restore Data</h5>
+                                <p class="text-muted">Restore from JSON backup (preserves user ownership)</p>
+                                <form id="importJsonForm" enctype="multipart/form-data">
+                                    <div class="mb-2">
+                                        <input type="file" class="form-control form-control-sm" id="importJsonFile" accept=".json" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-warning">
+                                        <i class="bi bi-upload"></i> Import JSON Backup
+                                    </button>
+                                </form>
+                                <div id="importJsonResult" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
                         <div class="card border-danger">
                             <div class="card-body">
                                 <h5 class="text-danger"><i class="bi bi-trash"></i> Clear All Data</h5>
@@ -689,6 +709,48 @@ document.addEventListener('click', async function(e) {
             console.error('Error:', error);
             alert('Failed to remove domain');
         }
+    }
+});
+
+// JSON Import
+document.getElementById('importJsonForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('importJsonFile');
+    const resultDiv = document.getElementById('importJsonResult');
+    
+    if (!fileInput.files[0]) {
+        resultDiv.innerHTML = '<div class="alert alert-danger mt-2">Please select a file</div>';
+        return;
+    }
+    
+    if (!confirm('⚠️ WARNING: This will import data and may create duplicate entries if not cleared first.\n\nAre you sure you want to proceed?')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    resultDiv.innerHTML = '<div class="alert alert-info">Importing... <div class="spinner-border spinner-border-sm ms-2"></div></div>';
+    
+    try {
+        const response = await fetch('/api/data-management/import/json', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            resultDiv.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle"></i> ${data.message}</div>`;
+            fileInput.value = '';
+            // Reload page after 2 seconds to show updated stats
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ${data.error}</div>`;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Import failed: ${error.message}</div>`;
     }
 });
 </script>

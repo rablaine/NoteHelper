@@ -16,9 +16,10 @@ def test_export_full_json_structure(client, sample_data):
     # Check top-level structure
     assert 'export_date' in data
     assert 'version' in data
-    assert data['version'] == '1.0'
+    assert data['version'] == '2.0'
     
-    # Check all entity types are present
+    # Check all entity types are present including users
+    assert 'users' in data
     assert 'pods' in data
     assert 'territories' in data
     assert 'sellers' in data
@@ -212,7 +213,7 @@ def test_export_enriched_derives_from_customer(client, sample_data):
 
 
 def test_export_import_roundtrip_preserves_data(app, client):
-    """Test that exporting and re-importing data preserves all information."""
+    """Test that exporting and re-importing data preserves all information including users."""
     from app.models import db, POD, Territory, Seller, Customer, Topic, CallLog, Vertical, User
     
     with app.app_context():
@@ -221,26 +222,26 @@ def test_export_import_roundtrip_preserves_data(app, client):
         assert user is not None, "Test user should exist"
         
         # Create test data with user_id
-        pod = POD(name='Test POD', user_id=user.id)
+        pod = POD(name='Roundtrip Test POD', user_id=user.id)
         db.session.add(pod)
         db.session.flush()
         
-        territory = Territory(name='Test Territory', pod_id=pod.id, user_id=user.id)
+        territory = Territory(name='Roundtrip Test Territory', pod_id=pod.id, user_id=user.id)
         db.session.add(territory)
         db.session.flush()
         
-        seller = Seller(name='Test Seller', alias='tseller', seller_type='Growth', user_id=user.id)
+        seller = Seller(name='Roundtrip Test Seller', alias='rtseller', seller_type='Growth', user_id=user.id)
         seller.territories.append(territory)
         db.session.add(seller)
         db.session.flush()
         
-        vertical = Vertical(name='Test Vertical', user_id=user.id)
+        vertical = Vertical(name='Roundtrip Test Vertical', user_id=user.id)
         db.session.add(vertical)
         db.session.flush()
         
         customer = Customer(
-            name='Test Customer',
-            tpid=9999,
+            name='Roundtrip Test Customer',
+            tpid=88888,
             seller_id=seller.id,
             territory_id=territory.id,
             user_id=user.id
@@ -249,29 +250,19 @@ def test_export_import_roundtrip_preserves_data(app, client):
         db.session.add(customer)
         db.session.flush()
         
-        topic = Topic(name='Test Topic', description='Test Description', user_id=user.id)
+        topic = Topic(name='Roundtrip Test Topic', description='Test Description', user_id=user.id)
         db.session.add(topic)
         db.session.flush()
         
         call_log = CallLog(
             customer_id=customer.id,
-            call_date=datetime.now(timezone.utc),
-            content='Test call log content',
+            call_date=datetime.now(timezone.utc).date(),
+            content='Roundtrip test call log content',
             user_id=user.id
         )
         call_log.topics.append(topic)
         db.session.add(call_log)
         db.session.commit()
-        
-        original_ids = {
-            'pod': pod.id,
-            'territory': territory.id,
-            'seller': seller.id,
-            'customer': customer.id,
-            'topic': topic.id,
-            'call_log': call_log.id,
-            'vertical': vertical.id
-        }
         
         # Export the data
         response = client.get('/api/data-management/export/json')
@@ -279,18 +270,18 @@ def test_export_import_roundtrip_preserves_data(app, client):
         export_data = json.loads(response.data)
         
         # Verify export contains our data
-        assert any(p['name'] == 'Test POD' for p in export_data['pods'])
-        assert any(t['name'] == 'Test Territory' for t in export_data['territories'])
-        assert any(s['name'] == 'Test Seller' for s in export_data['sellers'])
-        assert any(c['name'] == 'Test Customer' for c in export_data['customers'])
-        assert any(t['name'] == 'Test Topic' for t in export_data['topics'])
-        assert any(v['name'] == 'Test Vertical' for v in export_data['verticals'])
+        assert any(p['name'] == 'Roundtrip Test POD' for p in export_data['pods'])
+        assert any(t['name'] == 'Roundtrip Test Territory' for t in export_data['territories'])
+        assert any(s['name'] == 'Roundtrip Test Seller' for s in export_data['sellers'])
+        assert any(c['name'] == 'Roundtrip Test Customer' for c in export_data['customers'])
+        assert any(t['name'] == 'Roundtrip Test Topic' for t in export_data['topics'])
+        assert any(v['name'] == 'Roundtrip Test Vertical' for v in export_data['verticals'])
+        assert any(u['name'] == user.name for u in export_data['users'])
         
-        # Verify call log has only customer_id, not seller_id/territory_id
-        exported_call_log = next(cl for cl in export_data['call_logs'] if cl['customer_id'] == customer.id)
-        assert 'customer_id' in exported_call_log
-        assert 'seller_id' not in exported_call_log
-        assert 'territory_id' not in exported_call_log
+        # Verify user_id is present in exported entities
+        exported_pod = next(p for p in export_data['pods'] if p['name'] == 'Roundtrip Test POD')
+        assert 'user_id' in exported_pod
+        assert exported_pod['user_id'] == user.id
         
         # Clean up test data
         db.session.delete(call_log)
@@ -300,6 +291,208 @@ def test_export_import_roundtrip_preserves_data(app, client):
         db.session.delete(seller)
         db.session.delete(territory)
         db.session.delete(pod)
+        db.session.commit()
+        
+        # Now test import
+        json_file = BytesIO(json.dumps(export_data).encode('utf-8'))
+        
+        response = client.post('/api/data-management/import/json',
+                              data={'file': (json_file, 'test_import.json')},
+                              content_type='multipart/form-data')
+        
+        assert response.status_code == 200
+        result = json.loads(response.data)
+        assert result['success'] == True
+        assert 'Successfully imported' in result['message']
+        assert '0 users' in result['message']  # User already exists, should match not create
+        assert '1 PODs' in result['message']
+        assert '1 territories' in result['message']
+        assert '1 sellers' in result['message']
+        assert '1 customers' in result['message']
+        assert '1 topics' in result['message']
+        assert '1 call logs' in result['message']
+        
+        # Verify imported entities exist
+        imported_pod = POD.query.filter_by(name='Roundtrip Test POD').first()
+        assert imported_pod is not None
+        assert imported_pod.user_id == user.id
+        
+        imported_territory = Territory.query.filter_by(name='Roundtrip Test Territory').first()
+        assert imported_territory is not None
+        assert imported_territory.user_id == user.id
+        
+        imported_seller = Seller.query.filter_by(name='Roundtrip Test Seller').first()
+        assert imported_seller is not None
+        assert imported_seller.user_id == user.id
+        
+        imported_customer = Customer.query.filter_by(name='Roundtrip Test Customer').first()
+        assert imported_customer is not None
+        assert imported_customer.user_id == user.id
+        
+        imported_topic = Topic.query.filter_by(name='Roundtrip Test Topic').first()
+        assert imported_topic is not None
+        assert imported_topic.user_id == user.id
+        
+        imported_call_log = CallLog.query.filter_by(content='Roundtrip test call log content').first()
+        assert imported_call_log is not None
+        assert imported_call_log.user_id == user.id
+        assert imported_call_log.customer_id == imported_customer.id
+        
+        # Verify relationships preserved
+        assert imported_territory.pod_id == imported_pod.id
+        assert imported_customer.seller_id == imported_seller.id
+        assert imported_customer.territory_id == imported_territory.id
+        assert imported_call_log in imported_topic.call_logs
+        
+        # Clean up imported data
+        db.session.delete(imported_call_log)
+        db.session.delete(imported_customer)
+        db.session.delete(imported_topic)
+        Vertical.query.filter_by(name='Roundtrip Test Vertical').delete()
+        db.session.delete(imported_seller)
+        db.session.delete(imported_territory)
+        db.session.delete(imported_pod)
+        db.session.commit()
+
+
+def test_import_json_preserves_users_by_azure_id(app, client):
+    """Test that import matches users by Azure Object IDs and preserves ownership."""
+    from app.models import db, User, POD
+    
+    with app.app_context():
+        # Create a user with Azure IDs
+        test_user = User(
+            name='Azure Test User',
+            email='azuretest@example.com',
+            microsoft_azure_id='test-microsoft-oid-123',
+            external_azure_id='test-external-oid-456',
+            is_admin=False
+        )
+        db.session.add(test_user)
+        db.session.commit()
+        
+        # Create export data with this user
+        export_data = {
+            'version': '2.0',
+            'export_date': datetime.now(timezone.utc).isoformat(),
+            'users': [{
+                'id': test_user.id,
+                'microsoft_azure_id': 'test-microsoft-oid-123',
+                'external_azure_id': 'test-external-oid-456',
+                'email': 'azuretest@example.com',
+                'microsoft_email': None,
+                'external_email': None,
+                'name': 'Azure Test User',
+                'is_admin': False
+            }],
+            'pods': [{
+                'id': 999,
+                'name': 'Azure User Test POD',
+                'user_id': test_user.id
+            }],
+            'territories': [],
+            'sellers': [],
+            'solution_engineers': [],
+            'verticals': [],
+            'customers': [],
+            'topics': [],
+            'call_logs': []
+        }
+        
+        # Delete the POD if it exists from previous test
+        POD.query.filter_by(name='Azure User Test POD').delete()
+        db.session.commit()
+        
+        # Import the data
+        json_file = BytesIO(json.dumps(export_data).encode('utf-8'))
+        response = client.post('/api/data-management/import/json',
+                              data={'file': (json_file, 'azure_test.json')},
+                              content_type='multipart/form-data')
+        
+        assert response.status_code == 200
+        result = json.loads(response.data)
+        assert result['success'] == True
+        assert '0 users' in result['message']  # Should match existing user, not create new
+        assert '1 PODs' in result['message']
+        
+        # Verify POD was created with correct user_id
+        imported_pod = POD.query.filter_by(name='Azure User Test POD').first()
+        assert imported_pod is not None
+        assert imported_pod.user_id == test_user.id
+        
+        # Clean up
+        db.session.delete(imported_pod)
+        db.session.delete(test_user)
+        db.session.commit()
+
+
+def test_import_json_creates_stub_users_when_missing(app, client):
+    """Test that import creates stub users for users not yet logged in."""
+    from app.models import db, User, POD
+    
+    with app.app_context():
+        # Create export data with a user that doesn't exist
+        export_data = {
+            'version': '2.0',
+            'export_date': datetime.now(timezone.utc).isoformat(),
+            'users': [{
+                'id': 88888,
+                'microsoft_azure_id': 'stub-test-microsoft-oid',
+                'external_azure_id': 'stub-test-external-oid',
+                'email': 'stubtest@example.com',
+                'microsoft_email': 'stubtest@microsoft.com',
+                'external_email': 'stubtest@external.com',
+                'name': 'Stub Test User',
+                'is_admin': False
+            }],
+            'pods': [{
+                'id': 777,
+                'name': 'Stub User Test POD',
+                'user_id': 88888
+            }],
+            'territories': [],
+            'sellers': [],
+            'solution_engineers': [],
+            'verticals': [],
+            'customers': [],
+            'topics': [],
+            'call_logs': []
+        }
+        
+        # Ensure stub user doesn't exist
+        User.query.filter_by(microsoft_azure_id='stub-test-microsoft-oid').delete()
+        POD.query.filter_by(name='Stub User Test POD').delete()
+        db.session.commit()
+        
+        # Import the data
+        json_file = BytesIO(json.dumps(export_data).encode('utf-8'))
+        response = client.post('/api/data-management/import/json',
+                              data={'file': (json_file, 'stub_test.json')},
+                              content_type='multipart/form-data')
+        
+        assert response.status_code == 200
+        result = json.loads(response.data)
+        assert result['success'] == True
+        assert '1 users' in result['message']  # Should create stub user
+        assert '1 PODs' in result['message']
+        
+        # Verify stub user was created
+        stub_user = User.query.filter_by(microsoft_azure_id='stub-test-microsoft-oid').first()
+        assert stub_user is not None
+        assert stub_user.name == 'Stub Test User'
+        assert stub_user.email == 'stubtest@example.com'
+        assert stub_user.microsoft_email == 'stubtest@microsoft.com'
+        assert stub_user.external_email == 'stubtest@external.com'
+        assert stub_user.is_stub == True
+        
+        # Verify POD was created with stub user's ID
+        imported_pod = POD.query.filter_by(name='Stub User Test POD').first()
+        assert imported_pod is not None
+        assert imported_pod.user_id == stub_user.id
+        
+        # Clean up
+        db.session.delete(imported_pod)
+        db.session.delete(stub_user)
         db.session.commit()
 
 

@@ -65,7 +65,11 @@ class TestAIConfig:
     
     def test_non_admin_cannot_update_config(self, app, client):
         """Test that non-admin users cannot update AI config."""
-        # Test user is not admin by default
+        # Make test user non-admin temporarily
+        with app.app_context():
+            test_user = User.query.first()
+            test_user.is_admin = False
+            db.session.commit()
         
         response = client.post('/api/admin/ai-config', json={
             'enabled': True,
@@ -74,6 +78,12 @@ class TestAIConfig:
         
         # Should redirect or return 403
         assert response.status_code in [302, 403]
+        
+        # Restore admin status for other tests
+        with app.app_context():
+            test_user = User.query.first()
+            test_user.is_admin = True
+            db.session.commit()
 
 
 class TestAIConnection:
@@ -143,7 +153,11 @@ class TestAIConnection:
     
     def test_connection_test_requires_admin(self, app, client):
         """Test that only admins can test connections."""
-        # Test user is not admin by default
+        # Make test user non-admin temporarily
+        with app.app_context():
+            test_user = User.query.first()
+            test_user.is_admin = False
+            db.session.commit()
         
         response = client.post('/api/admin/ai-config/test', json={
             'endpoint_url': 'https://test.endpoint.com',
@@ -153,6 +167,12 @@ class TestAIConnection:
         })
         
         assert response.status_code in [302, 403]
+        
+        # Restore admin status for other tests
+        with app.app_context():
+            test_user = User.query.first()
+            test_user.is_admin = True
+            db.session.commit()
 
 
 class TestAISuggestions:

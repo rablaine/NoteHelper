@@ -37,11 +37,12 @@ def app():
     with flask_app.app_context():
         db.create_all()
         
-        # Create test user with Microsoft account
+        # Create test user with Microsoft account and admin privileges
         test_user = User(
             microsoft_azure_id='test-user-12345',
             email='test@microsoft.com',
-            name='Test User'
+            name='Test User',
+            is_admin=True
         )
         db.session.add(test_user)
         db.session.flush()
@@ -207,12 +208,13 @@ def reset_db(app):
         db.drop_all()
         db.create_all()
         
-        # Recreate test user and preferences
+        # Recreate test user with admin privileges and preferences
         from app.models import User
         test_user = User(
             microsoft_azure_id='test-user-12345',
             email='test@microsoft.com',
-            name='Test User'
+            name='Test User',
+            is_admin=True
         )
         db.session.add(test_user)
         db.session.flush()

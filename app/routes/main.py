@@ -623,22 +623,26 @@ def export_full_json():
     """Export complete database as JSON for disaster recovery."""
     data = {
         'export_date': datetime.now(timezone.utc).isoformat(),
-        'version': '1.0',
-        'pods': [{'id': p.id, 'name': p.name} for p in POD.query.all()],
-        'territories': [{'id': t.id, 'name': t.name, 'pod_id': t.pod_id} for t in Territory.query.all()],
+        'version': '2.0',  # Bumped version to include users and user_ids
+        'users': [{'id': u.id, 'microsoft_azure_id': u.microsoft_azure_id, 
+                   'external_azure_id': u.external_azure_id, 'email': u.email,
+                   'microsoft_email': u.microsoft_email, 'external_email': u.external_email,
+                   'name': u.name, 'is_admin': u.is_admin} for u in User.query.all()],
+        'pods': [{'id': p.id, 'name': p.name, 'user_id': p.user_id} for p in POD.query.all()],
+        'territories': [{'id': t.id, 'name': t.name, 'pod_id': t.pod_id, 'user_id': t.user_id} for t in Territory.query.all()],
         'sellers': [{'id': s.id, 'name': s.name, 'alias': s.alias, 'seller_type': s.seller_type, 
-                     'territory_ids': [t.id for t in s.territories]} for s in Seller.query.all()],
+                     'user_id': s.user_id, 'territory_ids': [t.id for t in s.territories]} for s in Seller.query.all()],
         'solution_engineers': [{'id': se.id, 'name': se.name, 'alias': se.alias, 'specialty': se.specialty,
-                               'pod_ids': [p.id for p in se.pods]} for se in SolutionEngineer.query.all()],
-        'verticals': [{'id': v.id, 'name': v.name} for v in Vertical.query.all()],
+                               'user_id': se.user_id, 'pod_ids': [p.id for p in se.pods]} for se in SolutionEngineer.query.all()],
+        'verticals': [{'id': v.id, 'name': v.name, 'user_id': v.user_id} for v in Vertical.query.all()],
         'customers': [{'id': c.id, 'name': c.name, 'nickname': c.nickname, 'tpid': c.tpid, 
                        'tpid_url': c.tpid_url, 'territory_id': c.territory_id, 'seller_id': c.seller_id,
-                       'vertical_ids': [v.id for v in c.verticals]} for c in Customer.query.all()],
-        'topics': [{'id': t.id, 'name': t.name, 'description': t.description} for t in Topic.query.all()],
+                       'user_id': c.user_id, 'vertical_ids': [v.id for v in c.verticals]} for c in Customer.query.all()],
+        'topics': [{'id': t.id, 'name': t.name, 'description': t.description, 'user_id': t.user_id} for t in Topic.query.all()],
         'call_logs': [{'id': cl.id, 'customer_id': cl.customer_id,
                        'call_date': cl.call_date.isoformat(),
                        'content': cl.content, 'topic_ids': [t.id for t in cl.topics],
-                       'created_at': cl.created_at.isoformat()} for cl in CallLog.query.all()]
+                       'user_id': cl.user_id, 'created_at': cl.created_at.isoformat()} for cl in CallLog.query.all()]
     }
     
     response = current_app.response_class(
@@ -648,6 +652,214 @@ def export_full_json():
     )
     response.headers['Content-Disposition'] = f'attachment; filename=notehelper_backup_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.json'
     return response
+
+
+@main_bp.route('/api/data-management/import/json', methods=['POST'])
+@login_required
+def import_full_json():
+    """Import complete database from JSON backup file.
+    
+    Matches users by Azure Object IDs to preserve ownership.
+    Creates new users if they don't exist.
+    """
+    if not current_user.is_admin:
+        return {'error': 'Admin privileges required'}, 403
+    
+    if 'file' not in request.files:
+        return {'error': 'No file uploaded'}, 400
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return {'error': 'No file selected'}, 400
+    
+    if not file.filename.endswith('.json'):
+        return {'error': 'File must be JSON'}, 400
+    
+    try:
+        data = json.load(file)
+    except json.JSONDecodeError:
+        return {'error': 'Invalid JSON file'}, 400
+    
+    # Validate required keys
+    required_keys = ['version', 'users', 'pods', 'territories', 'sellers', 
+                     'solution_engineers', 'verticals', 'customers', 'topics', 'call_logs']
+    missing_keys = [k for k in required_keys if k not in data]
+    if missing_keys:
+        return {'error': f'Missing required keys: {", ".join(missing_keys)}'}, 400
+    
+    try:
+        # Track ID mappings (old_id -> new_object)
+        user_map = {}
+        pod_map = {}
+        territory_map = {}
+        seller_map = {}
+        se_map = {}
+        vertical_map = {}
+        customer_map = {}
+        topic_map = {}
+        
+        # Track created vs matched users
+        created_users = 0
+        
+        # Import users first - match by Azure Object IDs
+        for user_data in data['users']:
+            # Try to find existing user by Azure IDs
+            existing_user = None
+            if user_data.get('microsoft_azure_id'):
+                existing_user = User.query.filter_by(microsoft_azure_id=user_data['microsoft_azure_id']).first()
+            if not existing_user and user_data.get('external_azure_id'):
+                existing_user = User.query.filter_by(external_azure_id=user_data['external_azure_id']).first()
+            
+            if existing_user:
+                # User already exists - update email fields if needed
+                if user_data.get('microsoft_email'):
+                    existing_user.microsoft_email = user_data['microsoft_email']
+                if user_data.get('external_email'):
+                    existing_user.external_email = user_data['external_email']
+                user_map[user_data['id']] = existing_user
+            else:
+                # Create new user (stub account that will be linked on first login)
+                new_user = User(
+                    microsoft_azure_id=user_data.get('microsoft_azure_id'),
+                    external_azure_id=user_data.get('external_azure_id'),
+                    email=user_data['email'],
+                    microsoft_email=user_data.get('microsoft_email'),
+                    external_email=user_data.get('external_email'),
+                    name=user_data['name'],
+                    is_admin=user_data.get('is_admin', False),
+                    is_stub=True  # Mark as stub until they log in
+                )
+                db.session.add(new_user)
+                db.session.flush()
+                user_map[user_data['id']] = new_user
+                created_users += 1
+        
+        # Import PODs
+        for pod_data in data['pods']:
+            new_user_id = user_map[pod_data['user_id']].id
+            pod = POD(name=pod_data['name'], user_id=new_user_id)
+            db.session.add(pod)
+            db.session.flush()
+            pod_map[pod_data['id']] = pod
+        
+        # Import Territories
+        for territory_data in data['territories']:
+            new_user_id = user_map[territory_data['user_id']].id
+            pod_id = pod_map[territory_data['pod_id']].id if territory_data.get('pod_id') else None
+            territory = Territory(name=territory_data['name'], pod_id=pod_id, user_id=new_user_id)
+            db.session.add(territory)
+            db.session.flush()
+            territory_map[territory_data['id']] = territory
+        
+        # Import Sellers
+        for seller_data in data['sellers']:
+            new_user_id = user_map[seller_data['user_id']].id
+            seller = Seller(
+                name=seller_data['name'],
+                alias=seller_data.get('alias'),
+                seller_type=seller_data['seller_type'],
+                user_id=new_user_id
+            )
+            # Add territory associations
+            for territory_id in seller_data.get('territory_ids', []):
+                if territory_id in territory_map:
+                    seller.territories.append(territory_map[territory_id])
+            db.session.add(seller)
+            db.session.flush()
+            seller_map[seller_data['id']] = seller
+        
+        # Import Solution Engineers
+        for se_data in data['solution_engineers']:
+            new_user_id = user_map[se_data['user_id']].id
+            se = SolutionEngineer(
+                name=se_data['name'],
+                alias=se_data.get('alias'),
+                specialty=se_data.get('specialty'),
+                user_id=new_user_id
+            )
+            # Add POD associations
+            for pod_id in se_data.get('pod_ids', []):
+                if pod_id in pod_map:
+                    se.pods.append(pod_map[pod_id])
+            db.session.add(se)
+            db.session.flush()
+            se_map[se_data['id']] = se
+        
+        # Import Verticals
+        for vertical_data in data['verticals']:
+            new_user_id = user_map[vertical_data['user_id']].id
+            vertical = Vertical(name=vertical_data['name'], user_id=new_user_id)
+            db.session.add(vertical)
+            db.session.flush()
+            vertical_map[vertical_data['id']] = vertical
+        
+        # Import Customers
+        for customer_data in data['customers']:
+            new_user_id = user_map[customer_data['user_id']].id
+            territory_id = territory_map[customer_data['territory_id']].id if customer_data.get('territory_id') else None
+            seller_id = seller_map[customer_data['seller_id']].id if customer_data.get('seller_id') else None
+            
+            customer = Customer(
+                name=customer_data['name'],
+                nickname=customer_data.get('nickname'),
+                tpid=customer_data['tpid'],
+                tpid_url=customer_data.get('tpid_url'),
+                territory_id=territory_id,
+                seller_id=seller_id,
+                user_id=new_user_id
+            )
+            # Add vertical associations
+            for vertical_id in customer_data.get('vertical_ids', []):
+                if vertical_id in vertical_map:
+                    customer.verticals.append(vertical_map[vertical_id])
+            db.session.add(customer)
+            db.session.flush()
+            customer_map[customer_data['id']] = customer
+        
+        # Import Topics
+        for topic_data in data['topics']:
+            new_user_id = user_map[topic_data['user_id']].id
+            topic = Topic(
+                name=topic_data['name'],
+                description=topic_data.get('description'),
+                user_id=new_user_id
+            )
+            db.session.add(topic)
+            db.session.flush()
+            topic_map[topic_data['id']] = topic
+        
+        # Import Call Logs
+        for cl_data in data['call_logs']:
+            new_user_id = user_map[cl_data['user_id']].id
+            customer_id = customer_map[cl_data['customer_id']].id
+            
+            call_log = CallLog(
+                customer_id=customer_id,
+                call_date=datetime.fromisoformat(cl_data['call_date']).date(),
+                content=cl_data['content'],
+                user_id=new_user_id,
+                created_at=datetime.fromisoformat(cl_data['created_at'])
+            )
+            # Add topic associations
+            for topic_id in cl_data.get('topic_ids', []):
+                if topic_id in topic_map:
+                    call_log.topics.append(topic_map[topic_id])
+            db.session.add(call_log)
+        
+        db.session.commit()
+        
+        return {
+            'success': True,
+            'message': f'Successfully imported {created_users} users, {len(pod_map)} PODs, '
+                      f'{len(territory_map)} territories, {len(seller_map)} sellers, '
+                      f'{len(customer_map)} customers, {len(topic_map)} topics, '
+                      f'{len(data["call_logs"])} call logs'
+        }, 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return {'error': f'Import failed: {str(e)}'}, 500
 
 
 @main_bp.route('/api/data-management/export/csv', methods=['GET'])
