@@ -187,7 +187,7 @@ def test_export_preserves_relationships(client, sample_data):
 
 def test_export_enriched_derives_from_customer(client, sample_data):
     """Test that enriched export correctly derives seller/territory from customer."""
-    from app import CallLog, Customer
+    from app.models import CallLog, Customer
     
     # Get a call log from the database
     call_log = CallLog.query.first()
@@ -213,7 +213,7 @@ def test_export_enriched_derives_from_customer(client, sample_data):
 
 def test_export_import_roundtrip_preserves_data(app, client):
     """Test that exporting and re-importing data preserves all information."""
-    from app import db, POD, Territory, Seller, Customer, Topic, CallLog, Vertical, User
+    from app.models import db, POD, Territory, Seller, Customer, Topic, CallLog, Vertical, User
     
     with app.app_context():
         # Get test user (created by conftest.py)
@@ -331,7 +331,7 @@ def test_enriched_export_has_complete_relationship_data(client, sample_data):
 
 def test_import_csv_creates_entities(app, client):
     """Test that importing CSV creates all expected entities."""
-    from app import db, Territory, Seller, Customer, POD
+    from app.models import db, Territory, Seller, Customer, POD
     from io import BytesIO
     
     with app.app_context():
@@ -392,7 +392,7 @@ West Region,Test Seller,Test Seller,,Test Customer,12345,https://example.com/123
 
 def test_import_csv_handles_growth_and_acquisition(app, client):
     """Test that import correctly identifies Growth vs Acquisition sellers."""
-    from app import db, Seller, Customer, Territory, POD
+    from app.models import db, Seller, Customer, Territory, POD
     from io import BytesIO
     
     with app.app_context():
@@ -433,7 +433,7 @@ East Region,Acq Seller,,Acq Seller,Customer B,22222,https://example.com/22222,PO
 
 def test_import_csv_avoids_duplicates(app, client):
     """Test that importing the same CSV twice doesn't create duplicates."""
-    from app import db, Territory, Seller, Customer, POD
+    from app.models import db, Territory, Seller, Customer, POD
     from io import BytesIO
     
     with app.app_context():

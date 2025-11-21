@@ -9,7 +9,7 @@ from datetime import datetime
 @pytest.fixture
 def whitelisted_domain(app):
     """Create a whitelisted domain for testing."""
-    from app import db, WhitelistedDomain
+    from app.models import db, WhitelistedDomain
     with app.app_context():
         domain = WhitelistedDomain(domain='partnertenant.onmicrosoft.com', added_by_user_id=1)
         db.session.add(domain)
@@ -19,7 +19,7 @@ def whitelisted_domain(app):
 
 def test_domain_whitelist_allows_microsoft(app):
     """Test that @microsoft.com domains are always allowed."""
-    from app import WhitelistedDomain
+    from app.models import WhitelistedDomain
     with app.app_context():
         assert WhitelistedDomain.is_domain_allowed('alex@microsoft.com') is True
         assert WhitelistedDomain.is_domain_allowed('ALEX@MICROSOFT.COM') is True
@@ -27,7 +27,7 @@ def test_domain_whitelist_allows_microsoft(app):
 
 def test_domain_whitelist_blocks_non_whitelisted(app):
     """Test that non-whitelisted domains are blocked."""
-    from app import WhitelistedDomain
+    from app.models import WhitelistedDomain
     with app.app_context():
         assert WhitelistedDomain.is_domain_allowed('alex@example.com') is False
         assert WhitelistedDomain.is_domain_allowed('alex@gmail.com') is False
@@ -35,7 +35,7 @@ def test_domain_whitelist_blocks_non_whitelisted(app):
 
 def test_domain_whitelist_allows_whitelisted(app, whitelisted_domain):
     """Test that whitelisted domains are allowed."""
-    from app import WhitelistedDomain
+    from app.models import WhitelistedDomain
     with app.app_context():
         email = f'alex@{whitelisted_domain}'
         assert WhitelistedDomain.is_domain_allowed(email) is True
@@ -43,7 +43,7 @@ def test_domain_whitelist_allows_whitelisted(app, whitelisted_domain):
 
 def test_user_account_type_property(app):
     """Test the account_type property returns correct values."""
-    from app import User
+    from app.models import User
     with app.app_context():
         # Dual account
         user_dual = User(
@@ -80,7 +80,7 @@ def test_user_account_type_property(app):
 
 def test_user_get_pending_link_requests(app):
     """Test getting pending link requests for a user."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     with app.app_context():
         # Create target user
         target = User(
@@ -127,7 +127,7 @@ def test_domain_not_allowed_page(client):
 
 def test_admin_domains_page_requires_admin(client, app):
     """Test that admin domains page requires admin privileges."""
-    from app import db, User
+    from app.models import db, User
     # Mock a non-admin user
     with app.app_context():
         user = User.query.first()
@@ -141,7 +141,7 @@ def test_admin_domains_page_requires_admin(client, app):
 
 def test_admin_can_add_domain(client, app):
     """Test that admin can add a domain to whitelist."""
-    from app import db, User, WhitelistedDomain
+    from app.models import db, User, WhitelistedDomain
     with app.app_context():
         # Ensure user is admin
         user = User.query.first()
@@ -163,7 +163,7 @@ def test_admin_can_add_domain(client, app):
 
 def test_admin_cannot_add_invalid_domain(client, app):
     """Test that invalid domains are rejected."""
-    from app import db, User
+    from app.models import db, User
     with app.app_context():
         user = User.query.first()
         user.is_admin = True
@@ -184,7 +184,7 @@ def test_admin_cannot_add_invalid_domain(client, app):
 
 def test_admin_cannot_add_duplicate_domain(client, app, whitelisted_domain):
     """Test that duplicate domains are rejected."""
-    from app import db, User
+    from app.models import db, User
     with app.app_context():
         user = User.query.first()
         user.is_admin = True
@@ -200,7 +200,7 @@ def test_admin_cannot_add_duplicate_domain(client, app, whitelisted_domain):
 
 def test_admin_can_remove_domain(client, app, whitelisted_domain):
     """Test that admin can remove a domain from whitelist."""
-    from app import db, User, WhitelistedDomain
+    from app.models import db, User, WhitelistedDomain
     with app.app_context():
         user = User.query.first()
         user.is_admin = True
@@ -221,7 +221,7 @@ def test_admin_can_remove_domain(client, app, whitelisted_domain):
 
 def test_stub_user_restricted_access(client, app):
     """Test that stub users cannot access regular app routes."""
-    from app import db, User
+    from app.models import db, User
     with app.app_context():
         # Create stub user
         stub = User(
@@ -245,7 +245,7 @@ def test_stub_user_restricted_access(client, app):
 
 def test_account_link_status_page(client, app):
     """Test account link status page shows pending requests."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     with app.app_context():
         # Create stub user with pending request
         stub = User(
@@ -277,7 +277,7 @@ def test_account_link_status_page(client, app):
 
 def test_user_profile_shows_pending_requests(client, app):
     """Test that user profile shows pending link requests."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     with app.app_context():
         # Create full user
         user = User.query.first()
@@ -307,7 +307,7 @@ def test_user_profile_shows_pending_requests(client, app):
 
 def test_approve_link_request_merges_accounts(client, app):
     """Test that approving a link request merges the accounts."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     with app.app_context():
         # Create target user (Microsoft only)
         target = User(
@@ -368,7 +368,7 @@ def test_approve_link_request_merges_accounts(client, app):
 
 def test_deny_link_request(client, app):
     """Test that denying a link request marks it as denied."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     with app.app_context():
         # Create target user
         target = User(
@@ -423,7 +423,7 @@ def test_deny_link_request(client, app):
 
 def test_cannot_link_already_linked_account_type(client, app):
     """Test that you cannot link an account type that's already linked."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     with app.app_context():
         # Create target user with both accounts already linked
         target = User(
@@ -474,7 +474,7 @@ def test_cannot_link_already_linked_account_type(client, app):
 
 def test_duplicate_link_request_cancels_oldest(app):
     """Test that creating a duplicate request cancels the oldest one."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     # This would be integration tested via the full auth flow
     # For now, test the database constraint behavior
     with app.app_context():
@@ -528,7 +528,7 @@ def test_duplicate_link_request_cancels_oldest(app):
 
 def test_gravestone_kept_after_stub_deletion(client, app):
     """Test that AccountLinkingRequest record is kept after stub deletion."""
-    from app import db, User, AccountLinkingRequest
+    from app.models import db, User, AccountLinkingRequest
     with app.app_context():
         # Create target user
         target = User(

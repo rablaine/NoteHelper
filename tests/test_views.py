@@ -80,7 +80,7 @@ def test_territory_view_loads(client, sample_data):
 
 def test_territory_view_accounts(client, sample_data, app):
     """Test territory page loads with accounts view grouped by seller type."""
-    from app import db, UserPreference
+    from app.models import db, UserPreference
     
     with app.app_context():
         # Set preference to show accounts view

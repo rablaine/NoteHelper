@@ -25,7 +25,7 @@ def test_tpid_workflow_shows_customers_without_urls(client, sample_data):
 def test_tpid_workflow_update_single_url(client, sample_data, app):
     """Test updating a single TPID URL via workflow."""
     with app.app_context():
-        from app import Customer
+        from app.models import Customer
         
         # Find a customer without TPID URL
         customer = Customer.query.filter(
@@ -54,7 +54,7 @@ def test_tpid_workflow_update_single_url(client, sample_data, app):
 def test_tpid_workflow_update_multiple_urls(client, sample_data, app):
     """Test updating multiple TPID URLs at once."""
     with app.app_context():
-        from app import Customer, db
+        from app.models import Customer, db
         
         # Find customers without TPID URLs
         customers = Customer.query.filter(
@@ -87,7 +87,7 @@ def test_tpid_workflow_update_multiple_urls(client, sample_data, app):
 def test_tpid_workflow_ignores_empty_fields(client, sample_data, app):
     """Test that empty URL fields are ignored during update."""
     with app.app_context():
-        from app import Customer
+        from app.models import Customer
         
         # Find customers without TPID URLs
         customers = Customer.query.filter(
@@ -120,7 +120,7 @@ def test_tpid_workflow_ignores_empty_fields(client, sample_data, app):
 def test_tpid_workflow_empty_when_all_filled(client, sample_data, app):
     """Test workflow page shows completion message when all URLs are filled."""
     with app.app_context():
-        from app import Customer, db
+        from app.models import Customer, db
         
         # Fill all TPID URLs
         customers = Customer.query.all()

@@ -10,7 +10,7 @@
                 <h1 class="mb-2">Welcome to NoteHelper</h1>
                 <p class="lead mb-0">Track and manage your customer call notes efficiently.</p>
             </div>
-            <a href="{{ url_for('customers_list') }}" class="btn btn-primary btn-lg home-cta-button">
+            <a href="{{ url_for('customers.customers_list') }}" class="btn btn-primary btn-lg home-cta-button">
                 <i class="bi bi-plus-circle"></i> New Call Log
             </a>
         </div>
@@ -38,7 +38,7 @@
 
 <div class="row mt-4">
     <div class="col-md-3">
-        <a href="{{ url_for('call_logs_list') }}" class="text-decoration-none">
+        <a href="{{ url_for('call_logs.call_logs_list') }}" class="text-decoration-none">
             <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
                 <div class="card-body">
                     <i class="bi bi-telephone-fill text-primary" style="font-size: 3rem;"></i>
@@ -49,7 +49,7 @@
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('customers_list') }}" class="text-decoration-none">
+        <a href="{{ url_for('customers.customers_list') }}" class="text-decoration-none">
             <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
                 <div class="card-body">
                     <i class="bi bi-building text-success" style="font-size: 3rem;"></i>
@@ -60,7 +60,7 @@
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('sellers_list') }}" class="text-decoration-none">
+        <a href="{{ url_for('sellers.sellers_list') }}" class="text-decoration-none">
             <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
                 <div class="card-body">
                     <i class="bi bi-people text-info" style="font-size: 3rem;"></i>
@@ -71,7 +71,7 @@
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('topics_list') }}" class="text-decoration-none">
+        <a href="{{ url_for('topics.topics_list') }}" class="text-decoration-none">
             <div class="card text-center h-100" style="cursor: pointer; transition: transform 0.2s;">
                 <div class="card-body">
                     <i class="bi bi-tags text-warning" style="font-size: 3rem;"></i>
@@ -99,10 +99,10 @@
         {% if recent_calls %}
             <div class="list-group">
                 {% for call in recent_calls %}
-                    <div class="list-group-item list-group-item-action" style="cursor: pointer;" onclick="window.location.href='{{ url_for('call_log_view', id=call.id) }}';">
+                    <div class="list-group-item list-group-item-action" style="cursor: pointer;" onclick="window.location.href='{{ url_for('call_logs.call_log_view', id=call.id) }}';">
                         <div class="d-flex w-100 justify-content-between">
                             <h5 class="mb-1">
-                                <a href="{{ url_for('customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">
+                                <a href="{{ url_for('customers.customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">
                                     {{ call.customer.name }}
                                 </a>
                             </h5>
@@ -110,13 +110,13 @@
                         </div>
                         <div class="mb-2">
                             {% if call.seller %}
-                                <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
+                                <a href="{{ url_for('sellers.seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                             {% endif %}
                             {% if call.territory %}
-                                <a href="{{ url_for('territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
+                                <a href="{{ url_for('territories.territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
                             {% endif %}
                             {% for topic in call.topics %}
-                                <a href="{{ url_for('topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
+                                <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
                             {% endfor %}
                         </div>
                         <div class="text-muted">{{ call.content|striptags|truncate(200) }}</div>
@@ -125,9 +125,19 @@
             </div>
         {% else %}
             <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> No call logs yet. <a href="{{ url_for('call_log_create') }}">Create your first call log</a>!
+                <i class="bi bi-info-circle"></i> No call logs yet. <a href="{{ url_for('call_logs.call_log_create') }}">Create your first call log</a>!
             </div>
         {% endif %}
     </div>
 </div>
 {% endblock %}
+
+
+
+
+
+
+
+
+
+

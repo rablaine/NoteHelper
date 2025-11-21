@@ -7,7 +7,7 @@
     <div class="col-md-10 mx-auto">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1><i class="bi bi-database"></i> Data Management</h1>
-            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> Back to Home
             </a>
         </div>
@@ -56,7 +56,7 @@
                     <div class="alert alert-info">
                         <h6 class="alert-heading"><i class="bi bi-arrow-right-circle"></i> Next Step: Add MSX Account URLs</h6>
                         <p class="mb-2">Your alignment data has been imported successfully. Now you can add Microsoft Sales Experience (MSX) account URLs for your customers.</p>
-                        <a href="{{ url_for('tpid_workflow') }}" class="btn btn-primary btn-sm">
+                        <a href="{{ url_for('customers.tpid_workflow') }}" class="btn btn-primary btn-sm">
                             <i class="bi bi-link-45deg"></i> Go to MSX Account URL Workflow
                         </a>
                     </div>
@@ -293,3 +293,13 @@
 </script>
 
 {% endblock %}
+
+
+
+
+
+
+
+
+
+

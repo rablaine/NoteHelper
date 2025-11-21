@@ -4,7 +4,10 @@ Imports organizational structure and customer data from alignment CSV.
 """
 import csv
 import sys
-from app import app, db, POD, SolutionEngineer, Vertical, Territory, Seller, Customer
+from app import create_app
+from app.models import db, POD, SolutionEngineer, Vertical, Territory, Seller, Customer
+
+app = create_app()
 
 
 def import_alignment_sheet(csv_path: str):

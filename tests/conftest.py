@@ -22,7 +22,10 @@ def app():
     os.environ['TESTING'] = 'true'
     
     # NOW import app - it will use the test database URI
-    from app import app as flask_app, db, UserPreference, User, login_manager
+    from app import create_app
+    from app.models import db, UserPreference, User
+    
+    flask_app = create_app()
     
     # Configure additional test settings
     flask_app.config['TESTING'] = True
@@ -82,7 +85,8 @@ def client(app):
     
     # Log in the test user for all tests
     with app.app_context():
-        from app import User, login_user
+        from app.models import User
+        from flask_login import login_user
         test_user = User.query.first()
         
         with client.session_transaction() as sess:
@@ -103,7 +107,7 @@ def runner(app):
 def sample_data(app):
     """Create sample data for tests."""
     with app.app_context():
-        from app import db, Territory, Seller, Customer, Topic, CallLog, User
+        from app.models import db, Territory, Seller, Customer, Topic, CallLog, User
         
         # Get the test user
         test_user = User.query.first()
@@ -189,7 +193,7 @@ def sample_data(app):
 def reset_db(app):
     """Reset database between tests."""
     with app.app_context():
-        from app import db, UserPreference
+        from app.models import db, UserPreference
         
         # SAFETY CHECK: Ensure we're using SQLite for tests
         db_uri = str(db.engine.url)
@@ -204,7 +208,7 @@ def reset_db(app):
         db.create_all()
         
         # Recreate test user and preferences
-        from app import User
+        from app.models import User
         test_user = User(
             microsoft_azure_id='test-user-12345',
             email='test@microsoft.com',

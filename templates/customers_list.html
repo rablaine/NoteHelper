@@ -24,7 +24,7 @@
                 <i class="bi bi-telephone"></i> By Calls
             </button>
         </div>
-        <a href="{{ url_for('customer_create') }}" class="btn btn-primary">
+        <a href="{{ url_for('customers.customer_create') }}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> New Customer
         </a>
     </div>
@@ -36,7 +36,7 @@
         {% for group in grouped_customers %}
             <div class="mb-4">
                 <h4 class="mb-3">
-                    <i class="bi bi-person"></i> <a href="{{ url_for('seller_view', id=group.seller.id) }}" class="text-decoration-none">{{ group.seller.name }}</a>
+                    <i class="bi bi-person"></i> <a href="{{ url_for('sellers.seller_view', id=group.seller.id) }}" class="text-decoration-none">{{ group.seller.name }}</a>
                     {% if group.seller.seller_type %}
                         <span class="badge {% if group.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %} ms-2">{{ group.seller.seller_type }}</span>
                     {% endif %}
@@ -49,7 +49,7 @@
                 </h4>
                 <div class="list-group">
                     {% for customer in group.customers %}
-                        <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customer_view', id=customer.id) }}'">
+                        <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
                             <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                                 <h5 class="mb-0">
                                     <span>{{ customer.name }}</span>
@@ -61,7 +61,7 @@
                                 </h5>
                                 <div class="d-flex align-items-center gap-2">
                                     <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
-                                    <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
+                                    <a href="{{ url_for('call_logs.call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
                                         <i class="bi bi-plus-circle"></i> New Call Log
                                     </a>
                                 </div>
@@ -87,7 +87,7 @@
                 </h4>
                 <div class="list-group">
                     {% for customer in customers_without_seller %}
-                        <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customer_view', id=customer.id) }}'">
+                        <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
                             <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                                 <h5 class="mb-0">
                                     <span>{{ customer.name }}</span>
@@ -99,7 +99,7 @@
                                 </h5>
                                 <div class="d-flex align-items-center gap-2">
                                     <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
-                                    <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
+                                    <a href="{{ url_for('call_logs.call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
                                         <i class="bi bi-plus-circle"></i> New Call Log
                                     </a>
                                 </div>
@@ -116,7 +116,7 @@
         {% endif %}
     {% else %}
         <div class="alert alert-info">
-            <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!
+            <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customers.customer_create') }}">Create your first customer</a>!
         </div>
     {% endif %}
 {% else %}
@@ -124,7 +124,7 @@
     {% if customers %}
         <div class="list-group">
             {% for customer in customers %}
-                <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customer_view', id=customer.id) }}'">
+                <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
                     <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                         <h5 class="mb-0">
                             <span>{{ customer.name }}</span>
@@ -136,14 +136,14 @@
                         </h5>
                         <div class="d-flex align-items-center gap-2">
                             <small class="text-muted text-nowrap">{{ customer.call_logs|length }} calls</small>
-                            <a href="{{ url_for('call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
+                            <a href="{{ url_for('call_logs.call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
                                 <i class="bi bi-plus-circle"></i> New Call Log
                             </a>
                         </div>
                     </div>
                     <div>
                         {% if customer.seller %}
-                            <a href="{{ url_for('seller_view', id=customer.seller.id) }}" class="badge {{ get_seller_color(customer.seller.id) }} text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
+                            <a href="{{ url_for('sellers.seller_view', id=customer.seller.id) }}" class="badge {{ get_seller_color(customer.seller.id) }} text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
                             {% if customer.seller.seller_type %}
                                 <span class="badge {% if customer.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ customer.seller.seller_type }}</span>
                             {% endif %}
@@ -157,7 +157,7 @@
         </div>
     {% else %}
         <div class="alert alert-info">
-            <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customer_create') }}">Create your first customer</a>!
+            <i class="bi bi-info-circle"></i> No customers yet. <a href="{{ url_for('customers.customer_create') }}">Create your first customer</a>!
         </div>
     {% endif %}
 {% endif %}
@@ -195,3 +195,12 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
+
+
+
+
+
+
+
+

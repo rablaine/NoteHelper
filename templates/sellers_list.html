@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-people"></i> Sellers</h1>
-    <a href="{{ url_for('seller_create') }}" class="btn btn-primary">
+    <a href="{{ url_for('sellers.seller_create') }}" class="btn btn-primary">
         <i class="bi bi-plus-circle"></i> New Seller
     </a>
 </div>
@@ -29,7 +29,7 @@
     </style>
     <div class="list-group">
         {% for seller in sellers %}
-            <div class="list-group-item clickable-seller" onclick="window.location.href='{{ url_for('seller_view', id=seller.id) }}';">
+            <div class="list-group-item clickable-seller" onclick="window.location.href='{{ url_for('sellers.seller_view', id=seller.id) }}';">
                 <div class="d-flex w-100 justify-content-between align-items-start">
                     <div class="flex-grow-1">
                         <h5 class="mb-1">{{ seller.name }}</h5>
@@ -43,12 +43,12 @@
                             {% set pods = seller.territories|map(attribute='pod')|select|unique|list %}
                             {% if pods %}
                                 {% for pod in pods|sort(attribute='name') %}
-                                    <a href="{{ url_for('pod_view', id=pod.id) }}" class="badge bg-primary text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-diagram-3"></i> {{ pod.name }}</a>
+                                    <a href="{{ url_for('pods.pod_view', id=pod.id) }}" class="badge bg-primary text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-diagram-3"></i> {{ pod.name }}</a>
                                 {% endfor %}
                             {% endif %}
                             {% if seller.territories %}
                                 {% for territory in seller.territories|sort(attribute='name') %}
-                                    <a href="{{ url_for('territory_view', id=territory.id) }}" class="badge bg-secondary text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ territory.name }}</a>
+                                    <a href="{{ url_for('territories.territory_view', id=territory.id) }}" class="badge bg-secondary text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ territory.name }}</a>
                                 {% endfor %}
                             {% else %}
                                 <span class="badge bg-secondary">No territory</span>
@@ -57,7 +57,7 @@
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <small class="text-muted text-nowrap">{{ seller.customers|length }} customers</small>
-                        <a href="{{ url_for('customer_create', seller_id=seller.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
+                        <a href="{{ url_for('customers.customer_create', seller_id=seller.id) }}" class="btn btn-sm btn-success text-white" onclick="event.stopPropagation();">
                             <i class="bi bi-plus-circle"></i> New Customer
                         </a>
                     </div>
@@ -67,7 +67,17 @@
     </div>
 {% else %}
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> No sellers yet. <a href="{{ url_for('seller_create') }}">Create your first seller</a>!
+        <i class="bi bi-info-circle"></i> No sellers yet. <a href="{{ url_for('sellers.seller_create') }}">Create your first seller</a>!
     </div>
 {% endif %}
 {% endblock %}
+
+
+
+
+
+
+
+
+
+

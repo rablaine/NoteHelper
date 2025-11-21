@@ -6,10 +6,10 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-person"></i> {{ seller.name }}</h1>
     <div>
-        <a href="{{ url_for('customer_create', seller_id=seller.id) }}" class="btn btn-success me-2">
+        <a href="{{ url_for('customers.customer_create', seller_id=seller.id) }}" class="btn btn-success me-2">
             <i class="bi bi-plus-circle"></i> New Customer
         </a>
-        <a href="{{ url_for('seller_edit', id=seller.id) }}" class="btn btn-primary">
+        <a href="{{ url_for('sellers.seller_edit', id=seller.id) }}" class="btn btn-primary">
             <i class="bi bi-pencil"></i> Edit Seller
         </a>
     </div>
@@ -40,7 +40,7 @@
                     {% if pods|length > 0 %}
                         <div class="d-flex flex-wrap gap-2 mb-3">
                             {% for pod in pods|sort(attribute='name') %}
-                                <a href="{{ url_for('pod_view', id=pod.id) }}" class="badge bg-info text-dark text-decoration-none">
+                                <a href="{{ url_for('pods.pod_view', id=pod.id) }}" class="badge bg-info text-dark text-decoration-none">
                                     <i class="bi bi-diagram-3"></i> {{ pod.name }}
                                 </a>
                             {% endfor %}
@@ -56,7 +56,7 @@
                 {% if seller.territories|length > 0 %}
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         {% for territory in seller.territories|sort(attribute='name') %}
-                            <a href="{{ url_for('territory_view', id=territory.id) }}" class="badge bg-secondary text-decoration-none">
+                            <a href="{{ url_for('territories.territory_view', id=territory.id) }}" class="badge bg-secondary text-decoration-none">
                                 <i class="bi bi-geo-alt"></i> {{ territory.name }}
                             </a>
                         {% endfor %}
@@ -88,7 +88,7 @@
                                 {% for customer_data in customers %}
                                     <tr>
                                         <td>
-                                            <a href="{{ url_for('customer_view', id=customer_data.customer.id) }}">
+                                            <a href="{{ url_for('customers.customer_view', id=customer_data.customer.id) }}">
                                                 {{ customer_data.customer.name }}
                                             </a>
                                         </td>
@@ -96,14 +96,14 @@
                                             <div class="d-flex justify-content-between align-items-center">
                                                 <div>
                                                     {% if customer_data.last_call %}
-                                                        <a href="{{ url_for('call_log_view', id=customer_data.last_call.id) }}">
+                                                        <a href="{{ url_for('call_logs.call_log_view', id=customer_data.last_call.id) }}">
                                                             {{ customer_data.last_call.call_date.strftime('%b %d, %Y') }}
                                                         </a>
                                                     {% else %}
                                                         <span class="text-muted">No calls yet</span>
                                                     {% endif %}
                                                 </div>
-                                                <a href="{{ url_for('call_log_create', customer_id=customer_data.customer.id) }}" class="btn btn-sm btn-success ms-2">
+                                                <a href="{{ url_for('call_logs.call_log_create', customer_id=customer_data.customer.id) }}" class="btn btn-sm btn-success ms-2">
                                                     <i class="bi bi-plus-circle"></i> New Call Log
                                                 </a>
                                             </div>
@@ -122,8 +122,18 @@
 </div>
 
 <div class="mt-3">
-    <a href="{{ url_for('sellers_list') }}" class="btn btn-secondary">
+    <a href="{{ url_for('sellers.sellers_list') }}" class="btn btn-secondary">
         <i class="bi bi-arrow-left"></i> Back to Sellers
     </a>
 </div>
 {% endblock %}
+
+
+
+
+
+
+
+
+
+
