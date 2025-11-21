@@ -491,6 +491,12 @@ class AIQueryLog(db.Model):
     success = db.Column(db.Boolean, nullable=False)
     error_message = db.Column(db.Text, nullable=True)
     
+    # Token and model tracking
+    model = db.Column(db.String(100), nullable=True)
+    prompt_tokens = db.Column(db.Integer, nullable=True)
+    completion_tokens = db.Column(db.Integer, nullable=True)
+    total_tokens = db.Column(db.Integer, nullable=True)
+    
     # Relationship
     user = db.relationship('User', foreign_keys=[user_id])
     

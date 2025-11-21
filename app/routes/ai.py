@@ -67,12 +67,11 @@ def api_ai_suggest_topics():
         
         payload = {
             "messages": [
-                {"role": "developer", "content": ai_config.system_prompt},
+                {"role": "system", "content": ai_config.system_prompt},
                 {"role": "user", "content": f"Call notes:\n\n{call_notes}"}
             ],
-            "max_completion_tokens": 1000,
-            "model": ai_config.deployment_name,
-            "reasoning_effort": "medium"
+            "max_tokens": 150,
+            "model": ai_config.deployment_name
         }
         
         response = requests.post(full_url, headers=headers, json=payload, timeout=30)
@@ -99,6 +98,13 @@ def api_ai_suggest_topics():
         
         # Keep the raw response for logging
         raw_response_text = response_text
+        
+        # Extract token usage and model info
+        model_used = result_data.get('model', ai_config.deployment_name)
+        usage_data = result_data.get('usage', {})
+        prompt_tokens = usage_data.get('prompt_tokens')
+        completion_tokens = usage_data.get('completion_tokens')
+        total_tokens = usage_data.get('total_tokens')
         
         # Parse JSON response - be flexible with different formats
         suggested_topics = []
@@ -139,7 +145,11 @@ def api_ai_suggest_topics():
                 request_text=call_notes[:1000],
                 response_text=raw_response_text[:1000],  # Use raw response, not cleaned version
                 success=False,
-                error_message=f"Parse error: {str(e)}"
+                error_message=f"Parse error: {str(e)}",
+                model=model_used,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens
             )
             db.session.add(log_entry)
             db.session.commit()
@@ -155,7 +165,11 @@ def api_ai_suggest_topics():
             request_text=call_notes[:1000],
             response_text=raw_response_text[:1000],  # Use raw response before parsing
             success=True,
-            error_message=None
+            error_message=None,
+            model=model_used,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens
         )
         db.session.add(log_entry)
         

@@ -45,6 +45,23 @@
                             <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
                             {% endif %}
                         </div>
+                        {% if log.model %}
+                        <div class="col-auto">
+                            <span class="text-muted">|</span>
+                        </div>
+                        <div class="col-auto">
+                            <small class="text-muted">Model:</small> <strong>{{ log.model }}</strong>
+                        </div>
+                        {% endif %}
+                        {% if log.total_tokens %}
+                        <div class="col-auto">
+                            <span class="text-muted">|</span>
+                        </div>
+                        <div class="col-auto">
+                            <small class="text-muted">Tokens:</small> <strong>{{ log.total_tokens }}</strong>
+                            <small class="text-muted">({{ log.prompt_tokens }}+{{ log.completion_tokens }})</small>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="card-body">
