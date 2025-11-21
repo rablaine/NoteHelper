@@ -430,3 +430,67 @@ class UserPreference(db.Model):
     
     def __repr__(self) -> str:
         return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} customer_sort_by={self.customer_sort_by} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} colored_sellers={self.colored_sellers}>'
+
+
+# =============================================================================
+# AI Features Models
+# =============================================================================
+
+class AIConfig(db.Model):
+    """Site-wide AI configuration for topic suggestion feature."""
+    __tablename__ = 'ai_config'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    enabled = db.Column(db.Boolean, default=False, nullable=False)
+    endpoint_url = db.Column(db.String(500), nullable=True)
+    api_key = db.Column(db.String(500), nullable=True)
+    deployment_name = db.Column(db.String(100), nullable=True)
+    api_version = db.Column(db.String(50), default='2024-08-01-preview', nullable=False)
+    system_prompt = db.Column(db.Text, default=(
+        "You are a helpful assistant that analyzes call notes and suggests relevant topic tags. "
+        "Based on the call notes provided, return a JSON array of 3-7 short topic tags (1-3 words each) "
+        "that best describe the key technologies, products, or themes discussed. "
+        "Return ONLY a JSON array of strings, nothing else. "
+        "Example: [\"Azure OpenAI\", \"Vector Search\", \"RAG Pattern\"]"
+    ), nullable=False)
+    max_daily_calls_per_user = db.Column(db.Integer, default=20, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    
+    def __repr__(self) -> str:
+        return f'<AIConfig enabled={self.enabled} deployment={self.deployment_name}>'
+
+
+class AIUsage(db.Model):
+    """Track daily AI API usage per user for rate limiting."""
+    __tablename__ = 'ai_usage'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False, default=lambda: date.today())
+    call_count = db.Column(db.Integer, default=0, nullable=False)
+    
+    # Create unique constraint on user_id + date
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'date', name='unique_user_date'),
+    )
+    
+    def __repr__(self) -> str:
+        return f'<AIUsage user_id={self.user_id} date={self.date} calls={self.call_count}>'
+
+
+class AIQueryLog(db.Model):
+    """Audit log of all AI API calls for debugging and prompt improvement."""
+    __tablename__ = 'ai_query_log'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=utc_now, nullable=False)
+    request_text = db.Column(db.Text, nullable=False)
+    response_text = db.Column(db.Text, nullable=True)
+    success = db.Column(db.Boolean, nullable=False)
+    error_message = db.Column(db.Text, nullable=True)
+    
+    def __repr__(self) -> str:
+        status = 'success' if self.success else 'failed'
+        return f'<AIQueryLog user_id={self.user_id} {status} at {self.timestamp}>'

@@ -5,7 +5,7 @@ Handles admin panel, user management, and domain whitelisting.
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 
-from app.models import db, User, WhitelistedDomain, POD, Territory, Seller, Customer, Topic, CallLog, utc_now
+from app.models import db, User, WhitelistedDomain, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, utc_now
 
 # Create blueprint
 admin_bp = Blueprint('admin', __name__)
@@ -33,7 +33,14 @@ def admin_panel():
         'total_call_logs': CallLog.query.count()
     }
     
-    return render_template('admin_panel.html', users=users, stats=stats)
+    # Get or create AI config
+    ai_config = AIConfig.query.first()
+    if not ai_config:
+        ai_config = AIConfig()
+        db.session.add(ai_config)
+        db.session.commit()
+    
+    return render_template('admin_panel.html', users=users, stats=stats, ai_config=ai_config)
 
 
 @admin_bp.route('/admin/domains')
@@ -134,4 +141,74 @@ def api_admin_domain_remove(domain_id):
     db.session.commit()
     
     return jsonify({'success': True, 'message': f'Domain {domain_name} removed from whitelist'})
+
+
+# AI Configuration API routes
+@admin_bp.route('/api/admin/ai-config', methods=['POST'])
+@login_required
+def api_admin_ai_config_update():
+    """Update AI configuration."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    data = request.get_json()
+    
+    # Get or create AI config
+    ai_config = AIConfig.query.first()
+    if not ai_config:
+        ai_config = AIConfig()
+        db.session.add(ai_config)
+    
+    # Update fields
+    ai_config.enabled = data.get('enabled', False)
+    ai_config.endpoint_url = data.get('endpoint_url', '').strip() or None
+    ai_config.api_key = data.get('api_key', '').strip() or None
+    ai_config.deployment_name = data.get('deployment_name', '').strip() or None
+    ai_config.api_version = data.get('api_version', '2024-08-01-preview').strip()
+    ai_config.system_prompt = data.get('system_prompt', '').strip() or ai_config.system_prompt
+    ai_config.max_daily_calls_per_user = int(data.get('max_daily_calls_per_user', 20))
+    
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'AI configuration updated successfully'})
+
+
+@admin_bp.route('/api/admin/ai-config/test', methods=['POST'])
+@login_required
+def api_admin_ai_config_test():
+    """Test AI configuration by making a sample API call."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ai_config = AIConfig.query.first()
+    if not ai_config or not ai_config.enabled:
+        return jsonify({'error': 'AI features are not enabled'}), 400
+    
+    if not ai_config.endpoint_url or not ai_config.api_key or not ai_config.deployment_name:
+        return jsonify({'error': 'AI configuration is incomplete'}), 400
+    
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(
+            base_url=ai_config.endpoint_url,
+            api_key=ai_config.api_key
+        )
+        
+        # Make a simple test call
+        response = client.chat.completions.create(
+            model=ai_config.deployment_name,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Say 'Connection successful!' and nothing else."}
+            ],
+            max_tokens=20
+        )
+        
+        result = response.choices[0].message.content.strip()
+        return jsonify({'success': True, 'message': 'Connection successful!', 'response': result})
+    
+    except Exception as e:
+        error_msg = str(e)
+        return jsonify({'success': False, 'error': f'Connection failed: {error_msg}'}), 400
 

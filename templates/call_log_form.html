@@ -67,7 +67,12 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="topic_search" class="form-label">Topics</label>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label for="topic_search" class="form-label mb-0">Topics</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="aiSuggestBtn" style="display: none;">
+                                <i class="bi bi-stars"></i> <span id="aiSuggestBtnText">Auto-tag with AI</span>
+                            </button>
+                        </div>
                         <input type="text" class="form-control" id="topic_search" 
                                placeholder="Search and add topics..." autocomplete="off">
                         <div id="topic_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
@@ -383,6 +388,113 @@ function createNewTopic(topicName) {
         topicSearch.focus();
     });
 }
+
+// AI Topic Suggestion
+let lastAiCallFailed = false;
+let aiButtonDisabledUntil = 0;
+
+// Check if AI is enabled and show button
+fetch('/api/ai/usage')
+    .then(response => response.json())
+    .then(data => {
+        if (data.enabled) {
+            const aiBtn = document.getElementById('aiSuggestBtn');
+            aiBtn.style.display = 'block';
+            updateAiButtonText(data.remaining, data.limit);
+        }
+    })
+    .catch(error => console.error('Error checking AI status:', error));
+
+function updateAiButtonText(remaining, limit) {
+    const btnText = document.getElementById('aiSuggestBtnText');
+    const aiBtn = document.getElementById('aiSuggestBtn');
+    
+    if (remaining === 0) {
+        btnText.textContent = 'Daily quota exceeded';
+        aiBtn.disabled = true;
+    } else {
+        btnText.textContent = 'Auto-tag with AI';
+        aiBtn.disabled = false;
+    }
+}
+
+document.getElementById('aiSuggestBtn').addEventListener('click', function() {
+    const aiBtn = this;
+    const btnText = document.getElementById('aiSuggestBtnText');
+    const originalText = btnText.textContent;
+    
+    // Check if button is in cooldown
+    if (Date.now() < aiButtonDisabledUntil) {
+        return;
+    }
+    
+    // Get call notes from Quill editor
+    const callNotes = quill.getText().trim();
+    
+    if (!callNotes || callNotes.length < 10) {
+        alert('Please enter some call notes first (at least 10 characters).');
+        return;
+    }
+    
+    // Disable button and show loading
+    aiBtn.disabled = true;
+    btnText.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing...';
+    
+    fetch('/api/ai/suggest-topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ call_notes: callNotes })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Add suggested topics that aren't already selected
+            let addedCount = 0;
+            data.topics.forEach(topic => {
+                if (!isTopicSelected(topic.id)) {
+                    addTopic(topic.id, topic.name);
+                    addedCount++;
+                }
+            });
+            
+            if (addedCount > 0) {
+                btnText.textContent = `Added ${addedCount} topic${addedCount > 1 ? 's' : ''}!`;
+                setTimeout(() => updateAiButtonText(data.remaining, data.limit), 2000);
+            } else {
+                btnText.textContent = 'All suggested topics already added';
+                setTimeout(() => updateAiButtonText(data.remaining, data.limit), 2000);
+            }
+            
+            lastAiCallFailed = false;
+            aiBtn.disabled = false;
+        } else {
+            // Handle error
+            if (data.remaining === 0) {
+                updateAiButtonText(0, data.limit);
+            } else {
+                btnText.textContent = 'Error - Try again in 5s';
+                lastAiCallFailed = true;
+                aiButtonDisabledUntil = Date.now() + 5000;
+                setTimeout(() => {
+                    aiBtn.disabled = false;
+                    btnText.textContent = originalText;
+                }, 5000);
+            }
+            alert('AI Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('AI request failed:', error);
+        btnText.textContent = 'Error - Try again in 5s';
+        lastAiCallFailed = true;
+        aiButtonDisabledUntil = Date.now() + 5000;
+        setTimeout(() => {
+            aiBtn.disabled = false;
+            btnText.textContent = originalText;
+        }, 5000);
+        alert('Failed to get AI suggestions. Please try again.');
+    });
+});
 
 // Set current date as default if creating new call log
 {% if not call_log %}

@@ -163,6 +163,35 @@
             </div>
         </div>
 
+        {% if ai_usage_today %}
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title mb-4"><i class="bi bi-stars"></i> AI Features</h5>
+                
+                <div class="row mb-3">
+                    <div class="col-md-3 fw-bold">Daily AI Suggestions:</div>
+                    <div class="col-md-9">
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1 me-3" style="height: 25px;">
+                                {% set percentage = (ai_usage_today.used / ai_usage_today.limit * 100) | round | int %}
+                                <div class="progress-bar {% if percentage >= 90 %}bg-danger{% elif percentage >= 70 %}bg-warning{% else %}bg-success{% endif %}" 
+                                     role="progressbar" 
+                                     style="width: {{ percentage }}%;" 
+                                     aria-valuenow="{{ ai_usage_today.used }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="{{ ai_usage_today.limit }}">
+                                    {{ ai_usage_today.used }} / {{ ai_usage_today.limit }}
+                                </div>
+                            </div>
+                            <span class="badge bg-primary">{{ ai_usage_today.remaining }} remaining</span>
+                        </div>
+                        <small class="text-muted">Resets daily at midnight</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="mb-4">
             <a href="{{ url_for('main.preferences') }}" class="btn btn-primary">
                 <i class="bi bi-sliders"></i> Preferences

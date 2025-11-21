@@ -144,6 +144,88 @@
             </div>
         </div>
 
+        <!-- AI Features Configuration -->
+        <div class="card mb-4">
+            <div class="card-header bg-purple text-white" style="background-color: #6f42c1 !important;">
+                <h5 class="mb-0"><i class="bi bi-stars"></i> AI Features Configuration</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Configure AI-powered topic suggestion for call logs. Requires Azure AI Foundry deployment.</p>
+                
+                <form id="aiConfigForm">
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="aiEnabled" {% if ai_config.enabled %}checked{% endif %}>
+                            <label class="form-check-label fw-bold" for="aiEnabled">
+                                Enable AI Topic Suggestions
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">When enabled, users can auto-tag call logs using AI</small>
+                    </div>
+
+                    <hr>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="aiEndpoint" class="form-label">Azure AI Foundry Endpoint URL</label>
+                            <input type="url" class="form-control" id="aiEndpoint" 
+                                   value="{{ ai_config.endpoint_url or '' }}" 
+                                   placeholder="https://your-project.services.ai.azure.com/api/projects/YourProject">
+                            <small class="form-text text-muted">Your Foundry project endpoint</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="aiApiKey" class="form-label">API Key</label>
+                            <input type="password" class="form-control" id="aiApiKey" 
+                                   value="{{ ai_config.api_key or '' }}" 
+                                   placeholder="Enter your API key">
+                            <small class="form-text text-muted">From Azure AI Foundry portal</small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="aiDeployment" class="form-label">Model Deployment Name</label>
+                            <input type="text" class="form-control" id="aiDeployment" 
+                                   value="{{ ai_config.deployment_name or '' }}" 
+                                   placeholder="gpt-4">
+                            <small class="form-text text-muted">Name of your deployed model</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="aiApiVersion" class="form-label">API Version</label>
+                            <input type="text" class="form-control" id="aiApiVersion" 
+                                   value="{{ ai_config.api_version or '2024-08-01-preview' }}" 
+                                   placeholder="2024-08-01-preview">
+                            <small class="form-text text-muted">OpenAI API version</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="aiMaxCalls" class="form-label">Max Daily Calls per User</label>
+                            <input type="number" class="form-control" id="aiMaxCalls" 
+                                   value="{{ ai_config.max_daily_calls_per_user or 20 }}" 
+                                   min="1" max="1000">
+                            <small class="form-text text-muted">Rate limit per user</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="aiSystemPrompt" class="form-label">System Prompt</label>
+                        <textarea class="form-control" id="aiSystemPrompt" rows="4">{{ ai_config.system_prompt }}</textarea>
+                        <small class="form-text text-muted">Instructions for the AI model on how to generate topic tags</small>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Configuration
+                        </button>
+                        <button type="button" class="btn btn-success" id="testAiBtn">
+                            <i class="bi bi-lightning"></i> Test Connection
+                        </button>
+                    </div>
+                </form>
+
+                <div id="aiConfigMessage" class="mt-3"></div>
+            </div>
+        </div>
+
         <!-- System-Wide Data Management -->
         <div class="card mb-4">
             <div class="card-header bg-danger text-white">
@@ -266,6 +348,64 @@ document.getElementById('clearAllDataBtn').addEventListener('click', function() 
     } else if (confirmation !== null) {
         alert('Confirmation text did not match. Operation cancelled.');
     }
+});
+
+// AI Configuration Form
+document.getElementById('aiConfigForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('aiConfigMessage');
+    messageDiv.innerHTML = '<div class="alert alert-info">Saving configuration...</div>';
+    
+    const data = {
+        enabled: document.getElementById('aiEnabled').checked,
+        endpoint_url: document.getElementById('aiEndpoint').value.trim(),
+        api_key: document.getElementById('aiApiKey').value.trim(),
+        deployment_name: document.getElementById('aiDeployment').value.trim(),
+        api_version: document.getElementById('aiApiVersion').value.trim(),
+        system_prompt: document.getElementById('aiSystemPrompt').value.trim(),
+        max_daily_calls_per_user: parseInt(document.getElementById('aiMaxCalls').value)
+    };
+    
+    fetch('/api/admin/ai-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            messageDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> ' + data.message + '</div>';
+            setTimeout(() => messageDiv.innerHTML = '', 3000);
+        } else {
+            messageDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Error: ' + data.error + '</div>';
+        }
+    })
+    .catch(error => {
+        messageDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Error: ' + error + '</div>';
+    });
+});
+
+// Test AI Connection
+document.getElementById('testAiBtn').addEventListener('click', function() {
+    const messageDiv = document.getElementById('aiConfigMessage');
+    messageDiv.innerHTML = '<div class="alert alert-info"><div class="spinner-border spinner-border-sm me-2"></div>Testing connection...</div>';
+    
+    fetch('/api/admin/ai-config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            messageDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> ' + data.message + '<br><small>Response: ' + data.response + '</small></div>';
+        } else {
+            messageDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ' + data.error + '</div>';
+        }
+    })
+    .catch(error => {
+        messageDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Connection failed: ' + error + '</div>';
+    });
 });
 </script>
 {% endblock %}

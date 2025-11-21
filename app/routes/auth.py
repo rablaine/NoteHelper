@@ -183,12 +183,28 @@ def logout():
 @login_required
 def user_profile():
     """Display current user's profile information and pending link requests."""
+    from datetime import date
+    from app.models import AIConfig, AIUsage
+    
     # Get pending link requests for this user's email
     pending_requests = current_user.get_pending_link_requests() if not current_user.is_stub else []
     
+    # Get AI usage for today
+    ai_config = AIConfig.query.first()
+    ai_usage_today = None
+    if ai_config and ai_config.enabled:
+        today = date.today()
+        usage = AIUsage.query.filter_by(user_id=current_user.id, date=today).first()
+        ai_usage_today = {
+            'used': usage.call_count if usage else 0,
+            'limit': ai_config.max_daily_calls_per_user,
+            'remaining': (ai_config.max_daily_calls_per_user - (usage.call_count if usage else 0))
+        }
+    
     return render_template('user_profile.html', 
                          user=current_user,
-                         pending_requests=pending_requests)
+                         pending_requests=pending_requests,
+                         ai_usage_today=ai_usage_today)
 
 
 @auth_bp.route('/account/first-time')

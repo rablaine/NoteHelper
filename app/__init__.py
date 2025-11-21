@@ -82,6 +82,7 @@ def create_app():
     # Register blueprints
     from app.routes.auth import auth_bp
     from app.routes.admin import admin_bp
+    from app.routes.ai import ai_bp
     from app.routes.territories import territories_bp
     from app.routes.pods import pods_bp
     from app.routes.solution_engineers import solution_engineers_bp
@@ -93,6 +94,7 @@ def create_app():
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(ai_bp)
     app.register_blueprint(territories_bp)
     app.register_blueprint(pods_bp)
     app.register_blueprint(solution_engineers_bp)
