@@ -34,6 +34,14 @@ def create_app():
         'pool_recycle': 300,
     }
     
+    # Entra ID (Azure AD) OAuth configuration
+    app.config['AZURE_CLIENT_ID'] = os.environ.get('AZURE_CLIENT_ID')
+    app.config['AZURE_CLIENT_SECRET'] = os.environ.get('AZURE_CLIENT_SECRET')
+    app.config['AZURE_TENANT_ID'] = os.environ.get('AZURE_TENANT_ID')
+    app.config['AZURE_REDIRECT_URI'] = os.environ.get('AZURE_REDIRECT_URI', 'http://localhost:5000/auth/callback')
+    app.config['AZURE_AUTHORITY'] = f"https://login.microsoftonline.com/{os.environ.get('AZURE_TENANT_ID', 'common')}"
+    app.config['AZURE_SCOPE'] = ['User.Read']
+    
     # Safety check: Prevent running without configuration
     if not app.config['SECRET_KEY']:
         raise ValueError("SECRET_KEY environment variable is not set")
