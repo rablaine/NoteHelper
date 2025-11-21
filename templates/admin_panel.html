@@ -165,13 +165,24 @@
 
                     <hr>
 
+                    <div class="mb-3">
+                        <label for="aiFullUrl" class="form-label">Quick Setup: Paste Full Endpoint URL</label>
+                        <input type="text" class="form-control" id="aiFullUrl" 
+                               placeholder="Paste from Azure AI Foundry: https://webapps.cognitiveservices.azure.com/openai/deployments/o3-mini/chat/completions?api-version=2025-01-01-preview">
+                        <small class="form-text text-muted">
+                            <i class="bi bi-magic"></i> Paste the full URL from Azure AI Foundry (with the copy button) and it will auto-fill the fields below
+                        </small>
+                    </div>
+
+                    <hr>
+
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="aiEndpoint" class="form-label">Azure AI Foundry Endpoint URL</label>
+                            <label for="aiEndpoint" class="form-label">Endpoint URL</label>
                             <input type="url" class="form-control" id="aiEndpoint" 
                                    value="{{ ai_config.endpoint_url or '' }}" 
-                                   placeholder="https://your-project.services.ai.azure.com/api/projects/YourProject">
-                            <small class="form-text text-muted">Your Foundry project endpoint</small>
+                                   placeholder="https://webapps.cognitiveservices.azure.com/openai/deployments/your-model">
+                            <small class="form-text text-muted">Base deployment endpoint (auto-filled from above)</small>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="aiApiKey" class="form-label">API Key</label>
@@ -187,15 +198,15 @@
                             <label for="aiDeployment" class="form-label">Model Deployment Name</label>
                             <input type="text" class="form-control" id="aiDeployment" 
                                    value="{{ ai_config.deployment_name or '' }}" 
-                                   placeholder="gpt-4">
-                            <small class="form-text text-muted">Name of your deployed model</small>
+                                   placeholder="o3-mini">
+                            <small class="form-text text-muted">Auto-filled from URL</small>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="aiApiVersion" class="form-label">API Version</label>
                             <input type="text" class="form-control" id="aiApiVersion" 
                                    value="{{ ai_config.api_version or '2024-08-01-preview' }}" 
                                    placeholder="2024-08-01-preview">
-                            <small class="form-text text-muted">OpenAI API version</small>
+                            <small class="form-text text-muted">Auto-filled from URL</small>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label for="aiMaxCalls" class="form-label">Max Daily Calls per User</label>
@@ -350,6 +361,44 @@ document.getElementById('clearAllDataBtn').addEventListener('click', function() 
     }
 });
 
+// Parse full AI Foundry URL and auto-fill fields
+document.getElementById('aiFullUrl').addEventListener('input', function() {
+    const fullUrl = this.value.trim();
+    if (!fullUrl) return;
+    
+    try {
+        const url = new URL(fullUrl);
+        
+        // Extract deployment name from path
+        // Pattern: /openai/deployments/{deployment_name}/chat/completions
+        const pathMatch = url.pathname.match(/\/deployments\/([^\/]+)/);
+        if (pathMatch) {
+            const deploymentName = pathMatch[1];
+            document.getElementById('aiDeployment').value = deploymentName;
+            
+            // Build base endpoint URL (without /chat/completions and query params)
+            const baseUrl = `${url.origin}${url.pathname.replace(/\/chat\/completions$/, '')}`;
+            document.getElementById('aiEndpoint').value = baseUrl;
+        }
+        
+        // Extract api-version from query params
+        const apiVersion = url.searchParams.get('api-version');
+        if (apiVersion) {
+            document.getElementById('aiApiVersion').value = apiVersion;
+        }
+        
+        // Show success feedback
+        this.classList.add('is-valid');
+        setTimeout(() => this.classList.remove('is-valid'), 2000);
+    } catch (e) {
+        // Invalid URL, show error feedback
+        if (fullUrl.length > 10) {
+            this.classList.add('is-invalid');
+            setTimeout(() => this.classList.remove('is-invalid'), 2000);
+        }
+    }
+});
+
 // AI Configuration Form
 document.getElementById('aiConfigForm').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -391,9 +440,18 @@ document.getElementById('testAiBtn').addEventListener('click', function() {
     const messageDiv = document.getElementById('aiConfigMessage');
     messageDiv.innerHTML = '<div class="alert alert-info"><div class="spinner-border spinner-border-sm me-2"></div>Testing connection...</div>';
     
+    // Get current form values to test
+    const testData = {
+        endpoint_url: document.getElementById('aiEndpoint').value.trim(),
+        api_key: document.getElementById('aiApiKey').value.trim(),
+        deployment_name: document.getElementById('aiDeployment').value.trim(),
+        api_version: document.getElementById('aiApiVersion').value.trim()
+    };
+    
     fetch('/api/admin/ai-config/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testData)
     })
     .then(response => response.json())
     .then(data => {

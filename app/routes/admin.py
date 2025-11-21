@@ -180,34 +180,62 @@ def api_admin_ai_config_test():
     if not current_user.is_admin:
         return jsonify({'error': 'Unauthorized'}), 403
     
-    ai_config = AIConfig.query.first()
-    if not ai_config or not ai_config.enabled:
-        return jsonify({'error': 'AI features are not enabled'}), 400
+    # Get current form values from request instead of database
+    data = request.get_json() or {}
+    endpoint_url = data.get('endpoint_url', '').strip()
+    api_key = data.get('api_key', '').strip()
+    deployment_name = data.get('deployment_name', '').strip()
     
-    if not ai_config.endpoint_url or not ai_config.api_key or not ai_config.deployment_name:
-        return jsonify({'error': 'AI configuration is incomplete'}), 400
+    # Validate required fields
+    if not endpoint_url or not api_key or not deployment_name:
+        return jsonify({'error': 'Please fill in endpoint URL, API key, and deployment name before testing'}), 400
     
     try:
-        from openai import OpenAI
+        import requests
         
-        client = OpenAI(
-            base_url=ai_config.endpoint_url,
-            api_key=ai_config.api_key
-        )
+        # Azure AI Foundry Serverless API uses direct HTTP calls with Bearer auth
+        # Construct full URL - if user included /chat/completions, use as-is, otherwise append it
+        full_url = endpoint_url
+        if not full_url.endswith('/chat/completions'):
+            full_url = full_url.rstrip('/') + '/chat/completions'
         
-        # Make a simple test call
-        response = client.chat.completions.create(
-            model=ai_config.deployment_name,
-            messages=[
+        # Add api-version parameter from form (user can specify which version)
+        api_version = data.get('api_version', '2024-08-01-preview').strip()
+        full_url = f"{full_url}?api-version={api_version}"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        
+        payload = {
+            "messages": [
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": "Say 'Connection successful!' and nothing else."}
             ],
-            max_tokens=20
-        )
+            "max_completion_tokens": 20,
+            "model": deployment_name
+        }
+        
+        response = requests.post(full_url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        result_data = response.json()
+        result = result_data['choices'][0]['message']['content'].strip()
+        return jsonify({'success': True, 'message': 'Connection successful!', 'response': result})
         
         result = response.choices[0].message.content.strip()
         return jsonify({'success': True, 'message': 'Connection successful!', 'response': result})
     
+    except requests.exceptions.RequestException as e:
+        error_msg = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_detail = e.response.json()
+                error_msg = f"{e.response.status_code} - {error_detail}"
+            except:
+                error_msg = f"{e.response.status_code} - {e.response.text}"
+        return jsonify({'success': False, 'error': f'Connection failed: {error_msg}'}), 400
     except Exception as e:
         error_msg = str(e)
         return jsonify({'success': False, 'error': f'Connection failed: {error_msg}'}), 400

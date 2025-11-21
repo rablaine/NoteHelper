@@ -50,24 +50,35 @@ def api_ai_suggest_topics():
     
     # Make AI API call
     try:
-        from openai import OpenAI
+        import requests
         
-        client = OpenAI(
-            base_url=ai_config.endpoint_url,
-            api_key=ai_config.api_key
-        )
+        # Azure AI Foundry Serverless API uses direct HTTP calls with Bearer auth
+        full_url = ai_config.endpoint_url
+        if not full_url.endswith('/chat/completions'):
+            full_url = full_url.rstrip('/') + '/chat/completions'
         
-        response = client.chat.completions.create(
-            model=ai_config.deployment_name,
-            messages=[
+        full_url = f"{full_url}?api-version={ai_config.api_version}"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {ai_config.api_key}"
+        }
+        
+        payload = {
+            "messages": [
                 {"role": "system", "content": ai_config.system_prompt},
                 {"role": "user", "content": f"Call notes:\n\n{call_notes}"}
             ],
-            max_tokens=200,
-            temperature=0.7
-        )
+            "max_completion_tokens": 200,
+            "temperature": 0.7,
+            "model": ai_config.deployment_name
+        }
         
-        response_text = response.choices[0].message.content.strip()
+        response = requests.post(full_url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        result_data = response.json()
+        response_text = result_data['choices'][0]['message']['content'].strip()
         
         # Parse JSON response
         try:
@@ -143,6 +154,28 @@ def api_ai_suggest_topics():
             'remaining': remaining_calls,
             'limit': ai_config.max_daily_calls_per_user
         })
+    
+    except requests.exceptions.RequestException as e:
+        error_msg = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_detail = e.response.json()
+                error_msg = f"{e.response.status_code} - {error_detail}"
+            except:
+                error_msg = f"{e.response.status_code} - {e.response.text}"
+        
+        # Log failed query
+        log_entry = AIQueryLog(
+            user_id=current_user.id,
+            request_text=call_notes[:1000],
+            response_text=None,
+            success=False,
+            error_message=error_msg
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        return jsonify({'error': f'AI request failed: {error_msg}'}), 500
     
     except Exception as e:
         # Log failed query
