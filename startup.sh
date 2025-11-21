@@ -8,6 +8,11 @@ echo "=========================================="
 echo "Python version:"
 python --version
 
+# Print current directory and contents
+echo "Current directory: $(pwd)"
+echo "Directory contents:"
+ls -la
+
 # Check if app.py exists
 if [ -f "app.py" ]; then
     echo "Found app.py in root directory"
@@ -18,6 +23,9 @@ fi
 
 # Set FLASK_APP environment variable
 export FLASK_APP=app.py
+
+# Add current directory to Python path to ensure proper imports
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
 # Test database connection
 echo "Testing database connection..."
