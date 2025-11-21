@@ -194,11 +194,33 @@ pytest --cov=app tests/  # with coverage
 - Minimize Bootstrap JavaScript usage (only include what's needed)
 - Use Flask caching for expensive queries if needed
 
+## Environments
+
+**Development Environment:**
+- Local machine running Flask development server
+- Local PostgreSQL database
+- Environment: `FLASK_ENV=development`, `FLASK_DEBUG=True`
+- Used for developing and testing new features
+- Safe to experiment and break things
+
+**Production Environment:**
+- Azure App Service: `notehelper.azurewebsites.net`
+- Azure PostgreSQL Flexible Server (database: "NoteHelper")
+- Deployed via GitHub Actions on push to `main` branch
+- Real user data - handle with care
+
 ## Git & Version Control
 
-**Branching Strategy:** Simple feature branches (main is stable)
-- Create feature branches from main
-- Merge back to main when complete
+**Branching Strategy:** Feature branches (main deploys to production)
+- **ALWAYS create feature branches for new work** - Never commit directly to `main`
+- `main` branch auto-deploys to production via GitHub Actions
+- Create feature branches from `main` for all changes
+- Merge back to `main` only when feature is complete and tested
+
+**Branch Naming:** When attempting to commit to `main`, stop and prompt user for feature branch name
+- Ask: "What should we call this feature branch?"
+- Suggested format: `feature/short-description` or `fix/bug-description`
+- Examples: `feature/export-import`, `fix/admin-permissions`, `feature/email-fields`
 
 **Commit Message Format:** Conventional Commits
 - `feat:` - New feature
@@ -207,16 +229,19 @@ pytest --cov=app tests/  # with coverage
 - `refactor:` - Code refactoring
 - `test:` - Test additions or changes
 
-**Commit Workflow:**
-1. Write code and corresponding tests together
-2. Run `pytest tests/` to verify all tests pass
-3. **Prompt user to manually test new features or bug fixes** - Before committing, always ask the user to test the changes in the running app to verify everything works as expected
-4. Stage changes with `git add`
-5. Commit with descriptive message
-6. Push to remote when ready
+**Development Workflow:**
+1. Create feature branch: `git checkout -b feature/your-feature-name`
+2. Write code and corresponding tests together
+3. Run `pytest tests/` to verify all tests pass
+4. **Prompt user to manually test new features or bug fixes** - Before committing, always ask the user to test the changes in the running app to verify everything works as expected
+5. Commit to feature branch with descriptive message
+6. **Wait for user confirmation** before merging to `main`
+7. When user says ready: merge to `main` and push (triggers production deployment)
 
-**Pull Request Requirements:**
-- All tests must pass (`pytest tests/`)
+**Merge to Production Checklist:**
+- All tests passing (`pytest tests/`)
+- User has manually tested the feature
+- User explicitly confirms "ready to deploy" or "merge to main"
 - Code follows PEP 8 standards
 - No secrets or .env file committed
 - Tests included for new features or bug fixes
@@ -267,4 +292,4 @@ pytest --cov=app tests/  # with coverage
 
 ---
 
-**Last Updated:** November 19, 2025
+**Last Updated:** November 21, 2025
