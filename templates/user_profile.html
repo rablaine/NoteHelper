@@ -4,12 +4,20 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-md-8 offset-md-2">
+    <div class="col-md-10 offset-md-1">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1><i class="bi bi-person-circle"></i> User Profile</h1>
         </div>
 
-        <div class="card">
+        {% if pending_requests %}
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            <i class="bi bi-bell-fill"></i>
+            <strong>Action Required:</strong> You have {{ pending_requests|length }} pending account linking request(s) below.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+
+        <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title mb-4">Account Information</h5>
                 
@@ -23,44 +31,122 @@
                     <div class="col-md-9">{{ user.email }}</div>
                 </div>
 
-                <hr>
-
-                <h6 class="text-muted mb-3">Linked Accounts</h6>
-
-                {% if user.microsoft_azure_id %}
                 <div class="row mb-3">
-                    <div class="col-md-3 fw-bold">Microsoft Account:</div>
+                    <div class="col-md-3 fw-bold">Account Type:</div>
                     <div class="col-md-9">
-                        <i class="bi bi-check-circle-fill text-success"></i> Linked
-                        <br>
-                        <small class="text-muted">Object ID: <code>{{ user.microsoft_azure_id }}</code></small>
+                        {% if user.account_type == 'dual' %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Dual Account</span>
+                        {% elif user.account_type == 'microsoft' %}
+                            <span class="badge bg-primary"><i class="bi bi-microsoft"></i> Microsoft Only</span>
+                        {% elif user.account_type == 'external' %}
+                            <span class="badge bg-info"><i class="bi bi-globe"></i> External Only</span>
+                        {% endif %}
                     </div>
                 </div>
-                {% else %}
+
+                {% if user.is_admin %}
                 <div class="row mb-3">
-                    <div class="col-md-3 fw-bold">Microsoft Account:</div>
+                    <div class="col-md-3 fw-bold">Admin Status:</div>
                     <div class="col-md-9">
-                        <i class="bi bi-x-circle text-muted"></i> Not linked
+                        <span class="badge bg-danger"><i class="bi bi-shield-fill-check"></i> Administrator</span>
                     </div>
                 </div>
                 {% endif %}
 
-                {% if user.external_azure_id %}
-                <div class="row mb-3">
-                    <div class="col-md-3 fw-bold">External Account:</div>
-                    <div class="col-md-9">
-                        <i class="bi bi-check-circle-fill text-success"></i> Linked
-                        <br>
-                        <small class="text-muted">Object ID: <code>{{ user.external_azure_id }}</code></small>
+                <hr>
+
+                <h6 class="text-muted mb-3">Linked Accounts</h6>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="border rounded p-3 h-100">
+                            <h6><i class="bi bi-microsoft text-primary"></i> Microsoft Account</h6>
+                            {% if user.microsoft_azure_id %}
+                                <p class="text-success mb-1">
+                                    <i class="bi bi-check-circle-fill"></i> Linked
+                                </p>
+                                <small class="text-muted">Object ID: {{ user.microsoft_azure_id[:8] }}...</small>
+                            {% else %}
+                                <p class="text-muted mb-1">
+                                    <i class="bi bi-x-circle"></i> Not linked
+                                </p>
+
+                                {% if pending_requests %}
+                                    {% set microsoft_requests = pending_requests | selectattr('requesting_user.microsoft_azure_id') | list %}
+                                    {% if microsoft_requests %}
+                                        <div class="alert alert-warning mt-2 mb-0">
+                                            <strong>Pending Account Linking Request:</strong>
+                                            {% for req in microsoft_requests %}
+                                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                                <small>From: {{ req.requesting_user.email }}</small>
+                                                <div>
+                                                    <form method="POST" action="{{ url_for('account_link_approve', request_id=req.id) }}" style="display: inline;">
+                                                        <button type="submit" class="btn btn-sm btn-success">
+                                                            <i class="bi bi-check"></i> Approve
+                                                        </button>
+                                                    </form>
+                                                    <form method="POST" action="{{ url_for('account_link_deny', request_id=req.id) }}" style="display: inline;">
+                                                        <button type="submit" class="btn btn-sm btn-danger">
+                                                            <i class="bi bi-x"></i> Deny
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <div class="border rounded p-3 h-100">
+                            <h6><i class="bi bi-globe text-info"></i> External Account</h6>
+                            {% if user.external_azure_id %}
+                                <p class="text-success mb-1">
+                                    <i class="bi bi-check-circle-fill"></i> Linked
+                                </p>
+                                <small class="text-muted">Object ID: {{ user.external_azure_id[:8] }}...</small>
+                            {% else %}
+                                <p class="text-muted mb-1">
+                                    <i class="bi bi-x-circle"></i> Not linked
+                                </p>
+
+                                {% if pending_requests %}
+                                    {% set external_requests = pending_requests | selectattr('requesting_user.external_azure_id') | list %}
+                                    {% if external_requests %}
+                                        <div class="alert alert-warning mt-2 mb-0">
+                                            <strong>Pending Account Linking Request:</strong>
+                                            {% for req in external_requests %}
+                                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                                <small>From: {{ req.requesting_user.email }}</small>
+                                                <div>
+                                                    <form method="POST" action="{{ url_for('account_link_approve', request_id=req.id) }}" style="display: inline;">
+                                                        <button type="submit" class="btn btn-sm btn-success">
+                                                            <i class="bi bi-check"></i> Approve
+                                                        </button>
+                                                    </form>
+                                                    <form method="POST" action="{{ url_for('account_link_deny', request_id=req.id) }}" style="display: inline;">
+                                                        <button type="submit" class="btn btn-sm btn-danger">
+                                                            <i class="bi bi-x"></i> Deny
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                {% endif %}
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
-                {% else %}
-                <div class="row mb-3">
-                    <div class="col-md-3 fw-bold">External Account:</div>
-                    <div class="col-md-9">
-                        <i class="bi bi-x-circle text-muted"></i> Not linked
+
+                {% if user.linked_at %}
+                    <div class="alert alert-success mt-2">
+                        <i class="bi bi-check-circle"></i> Accounts successfully linked on {{ user.linked_at.strftime('%B %d, %Y') }}
                     </div>
-                </div>
                 {% endif %}
 
                 <hr>
@@ -77,7 +163,10 @@
             </div>
         </div>
 
-        <div class="mt-4">
+        <div class="mb-4">
+            <a href="{{ url_for('preferences') }}" class="btn btn-primary">
+                <i class="bi bi-sliders"></i> Preferences
+            </a>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">
                 <i class="bi bi-arrow-left"></i> Back to Home
             </a>

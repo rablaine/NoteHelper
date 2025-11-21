@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domain Not Allowed - NoteHelper</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+</head>
+<body class="bg-light">
+    <div class="container">
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-6">
+                <div class="card shadow">
+                    <div class="card-body text-center p-5">
+                        <i class="bi bi-shield-exclamation text-danger" style="font-size: 4rem;"></i>
+                        <h2 class="mt-4">Domain Not Allowed</h2>
+                        <p class="text-muted mt-3">
+                            Your email address <strong>{{ email }}</strong> is not currently whitelisted for access to this system.
+                        </p>
+                        <p class="text-muted">
+                            If you believe this is an error, please contact <strong>Alex</strong> to whitelist your domain.
+                        </p>
+                        <a href="{{ url_for('login') }}" class="btn btn-primary mt-3">
+                            <i class="bi bi-arrow-left"></i> Back to Login
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Whitelisted Domains - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 offset-md-1">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="bi bi-shield-check"></i> Manage Whitelisted Domains</h1>
+            <a href="{{ url_for('admin_panel') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Admin
+            </a>
+        </div>
+
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            <strong>Note:</strong> All @microsoft.com accounts are automatically allowed. Use this whitelist to add other domains (like external partner tenants).
+        </div>
+
+        <!-- Add Domain Form -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="bi bi-plus-circle"></i> Add Domain to Whitelist</h5>
+            </div>
+            <div class="card-body">
+                <form id="addDomainForm">
+                    <div class="input-group">
+                        <span class="input-group-text">@</span>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="domainInput" 
+                            name="domain" 
+                            placeholder="partner.onmicrosoft.com" 
+                            required
+                        >
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-plus"></i> Add Domain
+                        </button>
+                    </div>
+                    <small class="form-text text-muted">
+                        Enter just the domain (e.g., "partner.onmicrosoft.com" not "@partner.onmicrosoft.com")
+                    </small>
+                </form>
+            </div>
+        </div>
+
+        <!-- Whitelisted Domains List -->
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-list-ul"></i> Whitelisted Domains ({{ domains|length }})</h5>
+            </div>
+            <div class="card-body">
+                {% if domains %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Added</th>
+                                <th style="width: 100px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="domainsTableBody">
+                            {% for domain in domains %}
+                            <tr id="domain-row-{{ domain.id }}">
+                                <td>
+                                    <i class="bi bi-globe text-info"></i>
+                                    <strong>{{ domain.domain }}</strong>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ domain.created_at.strftime('%b %d, %Y') }}</small>
+                                </td>
+                                <td>
+                                    <button 
+                                        class="btn btn-sm btn-danger remove-domain-btn" 
+                                        data-domain-id="{{ domain.id }}"
+                                        data-domain-name="{{ domain.domain }}"
+                                    >
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No custom domains whitelisted. All non-@microsoft.com accounts will be blocked.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Add domain
+document.getElementById('addDomainForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const domainInput = document.getElementById('domainInput');
+    const domain = domainInput.value.trim();
+    
+    if (!domain) {
+        alert('Please enter a domain');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/admin/domain/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ domain: domain })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            // Add to table
+            const tbody = document.getElementById('domainsTableBody');
+            const newRow = document.createElement('tr');
+            newRow.id = `domain-row-${data.domain.id}`;
+            newRow.innerHTML = `
+                <td>
+                    <i class="bi bi-globe text-info"></i>
+                    <strong>${data.domain.domain}</strong>
+                </td>
+                <td>
+                    <small class="text-muted">Just now</small>
+                </td>
+                <td>
+                    <button 
+                        class="btn btn-sm btn-danger remove-domain-btn" 
+                        data-domain-id="${data.domain.id}"
+                        data-domain-name="${data.domain.domain}"
+                    >
+                        <i class="bi bi-trash"></i> Remove
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(newRow);
+            
+            // Clear input
+            domainInput.value = '';
+            
+            // Show success message
+            alert(data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to add domain');
+    }
+});
+
+// Remove domain
+document.addEventListener('click', async function(e) {
+    if (e.target.closest('.remove-domain-btn')) {
+        const btn = e.target.closest('.remove-domain-btn');
+        const domainId = btn.getAttribute('data-domain-id');
+        const domainName = btn.getAttribute('data-domain-name');
+        
+        if (!confirm(`Are you sure you want to remove ${domainName} from the whitelist?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/admin/domain/remove/${domainId}`, {
+                method: 'POST'
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                // Remove row from table
+                const row = document.getElementById(`domain-row-${domainId}`);
+                if (row) {
+                    row.remove();
+                }
+                
+                alert(data.message);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to remove domain');
+        }
+    }
+});
+</script>
+{% endblock %}

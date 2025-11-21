@@ -131,6 +131,19 @@
             </div>
         </div>
 
+        <!-- Domain Whitelist Management -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-shield-check"></i> Domain Whitelist</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Manage which email domains are allowed to access the system (non-@microsoft.com accounts).</p>
+                <a href="{{ url_for('admin_domains') }}" class="btn btn-info">
+                    <i class="bi bi-gear"></i> Manage Whitelisted Domains
+                </a>
+            </div>
+        </div>
+
         <!-- System-Wide Data Management -->
         <div class="card mb-4">
             <div class="card-header bg-danger text-white">

@@ -113,6 +113,7 @@ class User(db.Model):
     - external_azure_id: External tenant account (e.g., partner tenant)
     
     Users can log in with either account and will be associated with the same User record.
+    Stub accounts are created when a new user attempts to link to an existing account.
     """
     __tablename__ = 'users'
     
@@ -122,6 +123,8 @@ class User(db.Model):
     email = db.Column(db.String(255), nullable=False)  # Primary email (not necessarily unique if using both account types)
     name = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)  # Admin flag for privileged users
+    is_stub = db.Column(db.Boolean, default=False, nullable=False)  # True if this is a stub account awaiting linking
+    linked_at = db.Column(db.DateTime, nullable=True)  # When the account linking was completed
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     last_login = db.Column(db.DateTime, default=utc_now, nullable=False)
     
@@ -141,8 +144,78 @@ class User(db.Model):
     def get_id(self):
         return str(self.id)
     
+    @property
+    def account_type(self) -> str:
+        """Return account type: 'microsoft', 'external', or 'dual'."""
+        has_microsoft = self.microsoft_azure_id is not None
+        has_external = self.external_azure_id is not None
+        
+        if has_microsoft and has_external:
+            return 'dual'
+        elif has_microsoft:
+            return 'microsoft'
+        elif has_external:
+            return 'external'
+        return 'unknown'
+    
+    def get_pending_link_requests(self):
+        """Get all pending linking requests targeting this user's email."""
+        return AccountLinkingRequest.query.filter_by(
+            target_email=self.email,
+            status='pending'
+        ).order_by(AccountLinkingRequest.created_at.desc()).all()
+    
     def __repr__(self) -> str:
         return f'<User {self.email}>'
+
+
+class WhitelistedDomain(db.Model):
+    """Domains allowed to access the system for non-@microsoft.com accounts."""
+    __tablename__ = 'whitelisted_domains'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    domain = db.Column(db.String(255), unique=True, nullable=False)  # e.g., 'partner.onmicrosoft.com'
+    added_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    @staticmethod
+    def is_domain_allowed(email: str) -> bool:
+        """Check if the email's domain is allowed."""
+        if not email or '@' not in email:
+            return False
+        
+        # @microsoft.com is always allowed
+        if email.lower().endswith('@microsoft.com'):
+            return True
+        
+        # Extract domain
+        domain = email.split('@')[1].lower()
+        
+        # Check whitelist
+        return WhitelistedDomain.query.filter_by(domain=domain).first() is not None
+    
+    def __repr__(self) -> str:
+        return f'<WhitelistedDomain {self.domain}>'
+
+
+class AccountLinkingRequest(db.Model):
+    """Requests to link a stub account to an existing user account."""
+    __tablename__ = 'account_linking_requests'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    requesting_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # The stub account
+    target_email = db.Column(db.String(255), nullable=False)  # Email of the account to link to
+    status = db.Column(db.String(20), default='pending', nullable=False)  # 'pending', 'approved', 'denied'
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    
+    # Relationships
+    requesting_user = db.relationship('User', foreign_keys=[requesting_user_id], backref='linking_requests_sent')
+    resolved_by_user = db.relationship('User', foreign_keys=[resolved_by_user_id])
+    
+    def __repr__(self) -> str:
+        return f'<AccountLinkingRequest from={self.requesting_user_id} to={self.target_email} status={self.status}>'
 
 
 class POD(db.Model):
@@ -413,12 +486,21 @@ def load_user(user_id):
 @app.before_request
 def require_login():
     """Require login for all routes except auth routes and static files."""
+    # If user is logged in but is a stub account, restrict access to only account linking routes
+    # This check happens BEFORE LOGIN_DISABLED check so tests can verify stub restrictions
+    if current_user.is_authenticated and current_user.is_stub:
+        stub_allowed_routes = ['account_link_status', 'first_time_flow', 'first_time_new_user', 
+                              'first_time_link_request', 'user_profile', 'logout', 'static']
+        if request.endpoint not in stub_allowed_routes:
+            return redirect(url_for('account_link_status'))
+    
     # Skip auth check if LOGIN_DISABLED is set (for testing)
     if app.config.get('LOGIN_DISABLED'):
         return None
     
-    # Allow access to auth routes and static files
-    allowed_routes = ['login', 'auth_callback', 'static']
+    # Allow access to auth routes, first-time flow, domain not allowed page, and static files
+    allowed_routes = ['login', 'auth_callback', 'first_time_flow', 'first_time_new_user', 
+                     'first_time_link_request', 'domain_not_allowed', 'static']
     
     if request.endpoint not in allowed_routes and not current_user.is_authenticated:
         return redirect(url_for('login'))
@@ -457,9 +539,16 @@ def login():
     return redirect(auth_url)
 
 
+@app.route('/domain-not-allowed')
+def domain_not_allowed():
+    """Show error page for non-whitelisted domains."""
+    email = request.args.get('email', 'your email')
+    return render_template('domain_not_allowed.html', email=email)
+
+
 @app.route('/auth/callback')
 def auth_callback():
-    """Handle Entra ID OAuth callback."""
+    """Handle Entra ID OAuth callback with domain whitelist and account linking support."""
     # Get authorization code from query params
     code = request.args.get('code')
     if not code:
@@ -500,43 +589,78 @@ def auth_callback():
     email = user_info.get('mail') or user_info.get('userPrincipalName')
     name = user_info.get('displayName', email)
     
+    # Check if domain is whitelisted (for non-@microsoft.com accounts)
+    if not WhitelistedDomain.is_domain_allowed(email):
+        # Domain not allowed - redirect to error page
+        return redirect(url_for('domain_not_allowed', email=email))
+    
     # Determine account type based on email domain
     is_microsoft_account = email.lower().endswith('@microsoft.com')
     
-    # Find existing user by the appropriate azure_id field
+    # Try to find existing user by either azure_id (handles dual accounts)
     if is_microsoft_account:
         user = User.query.filter_by(microsoft_azure_id=azure_id).first()
     else:
         user = User.query.filter_by(external_azure_id=azure_id).first()
     
     if not user:
-        # Create new user with appropriate account type
-        if is_microsoft_account:
-            user = User(
-                microsoft_azure_id=azure_id,
-                email=email,
-                name=name
-            )
-        else:
-            user = User(
-                external_azure_id=azure_id,
-                email=email,
-                name=name
-            )
-        db.session.add(user)
-        flash(f'Welcome, {name}! Your account has been created.', 'success')
-    else:
-        # Update last login
-        user.last_login = utc_now()
-        user.name = name  # Update name in case it changed
-        user.email = email  # Update primary email
-        flash(f'Welcome back, {user.name}!', 'success')
+        # New Azure ID - check if there's an existing full account with this email
+        # that might be waiting to link with this account type
+        existing_full_account = User.query.filter_by(email=email, is_stub=False).first()
+        
+        if existing_full_account:
+            # There's a full account with this email - check if they have the other account type
+            if is_microsoft_account and not existing_full_account.microsoft_azure_id:
+                # This is a Microsoft account trying to link to an external-only account
+                # Redirect to first-time flow to ask if they want to link
+                session['pending_auth'] = {
+                    'azure_id': azure_id,
+                    'email': email,
+                    'name': name,
+                    'is_microsoft': is_microsoft_account
+                }
+                return redirect(url_for('first_time_flow'))
+            elif not is_microsoft_account and not existing_full_account.external_azure_id:
+                # This is an external account trying to link to a Microsoft-only account
+                session['pending_auth'] = {
+                    'azure_id': azure_id,
+                    'email': email,
+                    'name': name,
+                    'is_microsoft': is_microsoft_account
+                }
+                return redirect(url_for('first_time_flow'))
+        
+        # No existing account or incompatible account - show first-time flow
+        session['pending_auth'] = {
+            'azure_id': azure_id,
+            'email': email,
+            'name': name,
+            'is_microsoft': is_microsoft_account
+        }
+        return redirect(url_for('first_time_flow'))
+    
+    # User exists - update last login
+    user.last_login = utc_now()
+    user.name = name  # Update name in case it changed
+    
+    # If this is a stub account, remind them they need to complete linking
+    if user.is_stub:
+        db.session.commit()
+        login_user(user)
+        flash('You are logged into a temporary account. Please complete the account linking process.', 'warning')
+        return redirect(url_for('account_link_status'))
     
     db.session.commit()
     
     # Log user in
     login_user(user)
     
+    # Check if there are pending link requests for this user
+    pending_requests = user.get_pending_link_requests()
+    if pending_requests:
+        flash(f'You have {len(pending_requests)} pending account linking request(s). Please review them in your profile.', 'info')
+    
+    flash(f'Welcome back, {user.name}!', 'success')
     return redirect(url_for('index'))
 
 
@@ -555,8 +679,13 @@ def logout():
 @app.route('/profile')
 @login_required
 def user_profile():
-    """Display current user's profile information."""
-    return render_template('user_profile.html', user=current_user)
+    """Display current user's profile information and pending link requests."""
+    # Get pending link requests for this user's email
+    pending_requests = current_user.get_pending_link_requests() if not current_user.is_stub else []
+    
+    return render_template('user_profile.html', 
+                         user=current_user,
+                         pending_requests=pending_requests)
 
 
 # =============================================================================
@@ -618,6 +747,308 @@ def api_revoke_admin(user_id):
     db.session.commit()
     
     return jsonify({'success': True, 'message': f'{user.name} is no longer an admin'})
+
+
+@app.route('/admin/domains')
+@login_required
+def admin_domains():
+    """Manage whitelisted domains."""
+    if not current_user.is_admin:
+        flash('You do not have permission to access domain management.', 'danger')
+        return redirect(url_for('index'))
+    
+    domains = WhitelistedDomain.query.order_by(WhitelistedDomain.domain).all()
+    return render_template('admin_domains.html', domains=domains)
+
+
+@app.route('/api/admin/domain/add', methods=['POST'])
+@login_required
+def api_admin_domain_add():
+    """Add a domain to the whitelist."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    data = request.get_json()
+    domain = data.get('domain', '').strip().lower()
+    
+    if not domain:
+        return jsonify({'error': 'Domain is required'}), 400
+    
+    # Basic validation
+    if '@' in domain or not '.' in domain:
+        return jsonify({'error': 'Invalid domain format. Enter just the domain (e.g., partner.onmicrosoft.com)'}), 400
+    
+    # Check if already exists
+    existing = WhitelistedDomain.query.filter_by(domain=domain).first()
+    if existing:
+        return jsonify({'error': f'Domain {domain} is already whitelisted'}), 400
+    
+    # Add domain
+    new_domain = WhitelistedDomain(domain=domain, added_by_user_id=current_user.id)
+    db.session.add(new_domain)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Domain {domain} added to whitelist',
+        'domain': {'id': new_domain.id, 'domain': new_domain.domain, 'created_at': new_domain.created_at.isoformat()}
+    }), 201
+
+
+@app.route('/api/admin/domain/remove/<int:domain_id>', methods=['POST'])
+@login_required
+def api_admin_domain_remove(domain_id):
+    """Remove a domain from the whitelist."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    domain = WhitelistedDomain.query.get_or_404(domain_id)
+    domain_name = domain.domain
+    
+    db.session.delete(domain)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': f'Domain {domain_name} removed from whitelist'})
+
+
+# =============================================================================
+# Account Linking Routes
+# =============================================================================
+
+@app.route('/account/first-time')
+def first_time_flow():
+    """First-time login flow to determine if user wants to create new account or link to existing."""
+    # Check if there's pending auth data in session
+    pending_auth = session.get('pending_auth')
+    if not pending_auth:
+        flash('No pending authentication. Please log in again.', 'warning')
+        return redirect(url_for('login'))
+    
+    return render_template('first_time_flow.html',
+                         email=pending_auth['email'],
+                         name=pending_auth['name'],
+                         is_microsoft=pending_auth['is_microsoft'])
+
+
+@app.route('/account/first-time/new', methods=['POST'])
+def first_time_new_user():
+    """Create a new user account (first-time user with no existing data)."""
+    pending_auth = session.get('pending_auth')
+    if not pending_auth:
+        flash('No pending authentication. Please log in again.', 'warning')
+        return redirect(url_for('login'))
+    
+    # Create new user account
+    if pending_auth['is_microsoft']:
+        user = User(
+            microsoft_azure_id=pending_auth['azure_id'],
+            email=pending_auth['email'],
+            name=pending_auth['name']
+        )
+    else:
+        user = User(
+            external_azure_id=pending_auth['azure_id'],
+            email=pending_auth['email'],
+            name=pending_auth['name']
+        )
+    
+    db.session.add(user)
+    db.session.commit()
+    
+    # Create default user preferences
+    pref = UserPreference(user_id=user.id)
+    db.session.add(pref)
+    db.session.commit()
+    
+    # Clear pending auth
+    session.pop('pending_auth', None)
+    
+    # Log user in
+    login_user(user)
+    flash(f'Welcome, {user.name}! Your account has been created.', 'success')
+    
+    return redirect(url_for('index'))
+
+
+@app.route('/account/first-time/link', methods=['POST'])
+def first_time_link_request():
+    """Create a linking request to an existing account."""
+    pending_auth = session.get('pending_auth')
+    if not pending_auth:
+        flash('No pending authentication. Please log in again.', 'warning')
+        return redirect(url_for('login'))
+    
+    target_email = request.form.get('target_email', '').strip()
+    
+    if not target_email or '@' not in target_email:
+        flash('Please enter a valid email address.', 'danger')
+        return redirect(url_for('first_time_flow'))
+    
+    # Check if target email exists
+    target_user = User.query.filter_by(email=target_email, is_stub=False).first()
+    if not target_user:
+        flash(f'No account found with email {target_email}. Double-check the spelling, or create a new account if this is your first time using the app.', 'warning')
+        return redirect(url_for('first_time_flow'))
+    
+    # Check if target user already has this account type linked
+    is_microsoft = pending_auth['is_microsoft']
+    if is_microsoft and target_user.microsoft_azure_id:
+        flash(f'The account {target_email} already has a Microsoft account linked. Cannot link another Microsoft account.', 'danger')
+        return redirect(url_for('first_time_flow'))
+    if not is_microsoft and target_user.external_azure_id:
+        flash(f'The account {target_email} already has an external account linked. Cannot link another external account.', 'danger')
+        return redirect(url_for('first_time_flow'))
+    
+    # Create stub user
+    if is_microsoft:
+        stub_user = User(
+            microsoft_azure_id=pending_auth['azure_id'],
+            email=pending_auth['email'],
+            name=pending_auth['name'],
+            is_stub=True
+        )
+    else:
+        stub_user = User(
+            external_azure_id=pending_auth['azure_id'],
+            email=pending_auth['email'],
+            name=pending_auth['name'],
+            is_stub=True
+        )
+    
+    db.session.add(stub_user)
+    db.session.flush()
+    
+    # Cancel any existing pending requests from this stub to the same target
+    AccountLinkingRequest.query.filter_by(
+        requesting_user_id=stub_user.id,
+        target_email=target_email,
+        status='pending'
+    ).update({'status': 'cancelled', 'resolved_at': utc_now()})
+    
+    # Create linking request
+    link_request = AccountLinkingRequest(
+        requesting_user_id=stub_user.id,
+        target_email=target_email
+    )
+    db.session.add(link_request)
+    db.session.commit()
+    
+    # Clear pending auth
+    session.pop('pending_auth', None)
+    
+    # Log stub user in
+    login_user(stub_user)
+    
+    flash(f'Linking request sent to {target_email}. Please log in with that account to approve the request.', 'success')
+    return redirect(url_for('account_link_status'))
+
+
+@app.route('/account/link-status')
+@login_required
+def account_link_status():
+    """Show status of account linking for stub users."""
+    if not current_user.is_stub:
+        return redirect(url_for('user_profile'))
+    
+    # Get pending requests
+    requests = AccountLinkingRequest.query.filter_by(
+        requesting_user_id=current_user.id,
+        status='pending'
+    ).all()
+    
+    return render_template('account_link_status.html', requests=requests)
+
+
+@app.route('/account/link/approve/<int:request_id>', methods=['POST'])
+@login_required
+def account_link_approve(request_id):
+    """Approve a linking request and merge the stub account."""
+    link_request = AccountLinkingRequest.query.get_or_404(request_id)
+    
+    # Verify this request is for the current user
+    if link_request.target_email != current_user.email:
+        flash('You cannot approve a linking request not intended for you.', 'danger')
+        return redirect(url_for('user_profile'))
+    
+    # Verify request is still pending
+    if link_request.status != 'pending':
+        flash('This linking request has already been processed.', 'info')
+        return redirect(url_for('user_profile'))
+    
+    # Get the stub user
+    stub_user = User.query.get(link_request.requesting_user_id)
+    if not stub_user or not stub_user.is_stub:
+        flash('Invalid linking request.', 'danger')
+        return redirect(url_for('user_profile'))
+    
+    # Check if current user already has this account type
+    if stub_user.microsoft_azure_id and current_user.microsoft_azure_id:
+        flash('You already have a Microsoft account linked.', 'danger')
+        return redirect(url_for('user_profile'))
+    if stub_user.external_azure_id and current_user.external_azure_id:
+        flash('You already have an external account linked.', 'danger')
+        return redirect(url_for('user_profile'))
+    
+    # Clear stub's azure_ids before merging to avoid UNIQUE constraint violation
+    stub_microsoft_id = stub_user.microsoft_azure_id
+    stub_external_id = stub_user.external_azure_id
+    stub_user.microsoft_azure_id = None
+    stub_user.external_azure_id = None
+    db.session.flush()  # Flush to release the UNIQUE constraint
+    
+    # Merge the accounts
+    if stub_microsoft_id:
+        current_user.microsoft_azure_id = stub_microsoft_id
+    if stub_external_id:
+        current_user.external_azure_id = stub_external_id
+    
+    current_user.linked_at = utc_now()
+    
+    # Save stub_id for deletion
+    stub_user_id = stub_user.id
+    
+    # Mark request as approved
+    link_request.status = 'approved'
+    link_request.resolved_at = utc_now()
+    link_request.resolved_by_user_id = current_user.id
+    
+    # Commit the merge and approval
+    db.session.commit()
+    
+    # Delete stub user using raw SQL to preserve the foreign key in account_linking_requests
+    # (Using ORM delete would NULL the FK)
+    db.session.execute(db.text('DELETE FROM users WHERE id = :id'), {'id': stub_user_id})
+    db.session.commit()
+    
+    flash('Account linked successfully! You can now log in with either account.', 'success')
+    return redirect(url_for('user_profile'))
+
+
+@app.route('/account/link/deny/<int:request_id>', methods=['POST'])
+@login_required
+def account_link_deny(request_id):
+    """Deny a linking request."""
+    link_request = AccountLinkingRequest.query.get_or_404(request_id)
+    
+    # Verify this request is for the current user
+    if link_request.target_email != current_user.email:
+        flash('You cannot deny a linking request not intended for you.', 'danger')
+        return redirect(url_for('user_profile'))
+    
+    # Verify request is still pending
+    if link_request.status != 'pending':
+        flash('This linking request has already been processed.', 'info')
+        return redirect(url_for('user_profile'))
+    
+    # Mark request as denied
+    link_request.status = 'denied'
+    link_request.resolved_at = utc_now()
+    link_request.resolved_by_user_id = current_user.id
+    
+    db.session.commit()
+    
+    flash('Linking request denied.', 'info')
+    return redirect(url_for('user_profile'))
 
 
 # =============================================================================

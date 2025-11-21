@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <h2 class="text-center mb-4">Welcome to NoteHelper!</h2>
+                    <p class="text-center text-muted mb-4">
+                        We don't recognize your account: <strong>{{ email }}</strong>
+                    </p>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Is this your first time logging into this app?</strong>
+                    </div>
+
+                    <div class="row g-3 mt-4">
+                        <!-- New User Option -->
+                        <div class="col-md-6">
+                            <div class="card h-100 border-primary">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-person-plus-fill text-primary"></i> Yes, First Time
+                                    </h5>
+                                    <p class="card-text flex-grow-1">
+                                        Create a new account and start fresh. You'll begin with no existing data.
+                                    </p>
+                                    <form method="POST" action="{{ url_for('first_time_new_user') }}">
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="bi bi-plus-circle"></i> Create New Account
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Existing User Option -->
+                        <div class="col-md-6">
+                            <div class="card h-100 border-success">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-link-45deg text-success"></i> No, I Have Data
+                                    </h5>
+                                    <p class="card-text flex-grow-1">
+                                        Link to an existing account. You'll need the email of your primary account.
+                                    </p>
+                                    <button type="button" class="btn btn-success w-100" data-bs-toggle="collapse" data-bs-target="#linkForm">
+                                        <i class="bi bi-arrow-down-circle"></i> Link to Existing Account
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Link Form (Collapsed) -->
+                    <div class="collapse mt-4" id="linkForm">
+                        <div class="card border-success">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="bi bi-envelope"></i> Enter Your Primary Account Email
+                                </h5>
+                                <p class="text-muted small">
+                                    This should be the email address you see in your user profile in the app.
+                                </p>
+                                <form method="POST" action="{{ url_for('first_time_link_request') }}">
+                                    <div class="mb-3">
+                                        <label for="target_email" class="form-label">Primary Account Email</label>
+                                        <input 
+                                            type="email" 
+                                            class="form-control" 
+                                            id="target_email" 
+                                            name="target_email" 
+                                            required
+                                            placeholder="{% if is_microsoft %}admin@externaltenant.onmicrosoft.com{% else %}alias@microsoft.com{% endif %}"
+                                        >
+                                        <div class="form-text">
+                                            {% if is_microsoft %}
+                                                Since you're logged in with a Microsoft account, enter your external tenant email if you have one.
+                                            {% else %}
+                                                Since you're logged in with an external account, enter your Microsoft email if you have one.
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100">
+                                        <i class="bi bi-send"></i> Submit Linking Request
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('logout') }}" class="text-muted">
+                            <i class="bi bi-box-arrow-left"></i> Cancel and Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
