@@ -21,6 +21,35 @@ main_bp = Blueprint('main', __name__)
 
 
 # =============================================================================
+# Health Check Endpoint
+# =============================================================================
+
+@main_bp.route('/health', methods=['GET'])
+def health_check():
+    """
+    Health check endpoint for Azure App Service monitoring.
+    Returns 200 OK if app is healthy and can connect to database.
+    """
+    try:
+        # Test database connectivity with a simple query
+        db.session.execute(db.text('SELECT 1'))
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }), 200
+    except Exception as e:
+        # Return 503 Service Unavailable if database is down
+        return jsonify({
+            'status': 'unhealthy',
+            'database': 'disconnected',
+            'error': str(e),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }), 503
+
+
+# =============================================================================
 # Helper Functions
 # =============================================================================
 
