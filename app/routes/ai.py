@@ -70,7 +70,6 @@ def api_ai_suggest_topics():
                 {"role": "user", "content": f"Call notes:\n\n{call_notes}"}
             ],
             "max_completion_tokens": 200,
-            "temperature": 0.7,
             "model": ai_config.deployment_name
         }
         
