@@ -247,6 +247,15 @@
         </div>
     </nav>
 
+    <!-- Pending Link Requests Notification -->
+    {% if pending_link_requests_count > 0 %}
+    <div class="alert alert-warning mb-0 text-center" role="alert">
+        <i class="bi bi-link-45deg"></i>
+        <strong>Account Linking:</strong> You have {{ pending_link_requests_count }} pending account linking request{{ 's' if pending_link_requests_count != 1 else '' }}.
+        <a href="{{ url_for('user_profile') }}" class="alert-link">Review now</a>
+    </div>
+    {% endif %}
+
     <!-- Flash Messages -->
     <div class="container mt-3">
         {% with messages = get_flashed_messages(with_categories=true) %}

@@ -48,10 +48,9 @@
         <!-- Whitelisted Domains List -->
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-list-ul"></i> Whitelisted Domains ({{ domains|length }})</h5>
+                <h5><i class="bi bi-list-ul"></i> Whitelisted Domains (<span id="domainCount">{{ domains|length }}</span>)</h5>
             </div>
             <div class="card-body">
-                {% if domains %}
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead>
@@ -62,6 +61,7 @@
                             </tr>
                         </thead>
                         <tbody id="domainsTableBody">
+                            {% if domains %}
                             {% for domain in domains %}
                             <tr id="domain-row-{{ domain.id }}">
                                 <td>
@@ -82,12 +82,16 @@
                                 </td>
                             </tr>
                             {% endfor %}
+                            {% else %}
+                            <tr id="emptyState">
+                                <td colspan="3" class="text-center text-muted">
+                                    No custom domains whitelisted. All non-@microsoft.com accounts will be blocked.
+                                </td>
+                            </tr>
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>
-                {% else %}
-                <p class="text-muted">No custom domains whitelisted. All non-@microsoft.com accounts will be blocked.</p>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -118,6 +122,12 @@ document.getElementById('addDomainForm').addEventListener('submit', async functi
         const data = await response.json();
         
         if (response.ok) {
+            // Remove empty state if present
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
             // Add to table
             const tbody = document.getElementById('domainsTableBody');
             const newRow = document.createElement('tr');
@@ -141,6 +151,12 @@ document.getElementById('addDomainForm').addEventListener('submit', async functi
                 </td>
             `;
             tbody.appendChild(newRow);
+            
+            // Update count
+            const countSpan = document.getElementById('domainCount');
+            if (countSpan) {
+                countSpan.textContent = parseInt(countSpan.textContent) + 1;
+            }
             
             // Clear input
             domainInput.value = '';
@@ -179,6 +195,25 @@ document.addEventListener('click', async function(e) {
                 const row = document.getElementById(`domain-row-${domainId}`);
                 if (row) {
                     row.remove();
+                }
+                
+                // Update count
+                const countSpan = document.getElementById('domainCount');
+                if (countSpan) {
+                    countSpan.textContent = parseInt(countSpan.textContent) - 1;
+                }
+                
+                // Check if table is now empty and add empty state
+                const tbody = document.getElementById('domainsTableBody');
+                if (tbody && tbody.children.length === 0) {
+                    const emptyRow = document.createElement('tr');
+                    emptyRow.id = 'emptyState';
+                    emptyRow.innerHTML = `
+                        <td colspan="3" class="text-center text-muted">
+                            No custom domains whitelisted. All non-@microsoft.com accounts will be blocked.
+                        </td>
+                    `;
+                    tbody.appendChild(emptyRow);
                 }
                 
                 alert(data.message);

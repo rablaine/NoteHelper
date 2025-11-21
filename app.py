@@ -203,7 +203,7 @@ class AccountLinkingRequest(db.Model):
     __tablename__ = 'account_linking_requests'
     
     id = db.Column(db.Integer, primary_key=True)
-    requesting_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # The stub account
+    requesting_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)  # The stub account (NULL after merge)
     target_email = db.Column(db.String(255), nullable=False)  # Email of the account to link to
     status = db.Column(db.String(20), default='pending', nullable=False)  # 'pending', 'approved', 'denied'
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
@@ -784,15 +784,20 @@ def api_admin_domain_add():
         return jsonify({'error': f'Domain {domain} is already whitelisted'}), 400
     
     # Add domain
-    new_domain = WhitelistedDomain(domain=domain, added_by_user_id=current_user.id)
-    db.session.add(new_domain)
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'message': f'Domain {domain} added to whitelist',
-        'domain': {'id': new_domain.id, 'domain': new_domain.domain, 'created_at': new_domain.created_at.isoformat()}
-    }), 201
+    try:
+        new_domain = WhitelistedDomain(domain=domain, added_by_user_id=current_user.id)
+        db.session.add(new_domain)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Domain {domain} added to whitelist',
+            'domain': {'id': new_domain.id, 'domain': new_domain.domain, 'created_at': new_domain.created_at.isoformat()}
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error adding domain: {str(e)}")
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
 
 
 @app.route('/api/admin/domain/remove/<int:domain_id>', methods=['POST'])
@@ -976,7 +981,7 @@ def account_link_approve(request_id):
         return redirect(url_for('user_profile'))
     
     # Get the stub user
-    stub_user = User.query.get(link_request.requesting_user_id)
+    stub_user = db.session.get(User, link_request.requesting_user_id)
     if not stub_user or not stub_user.is_stub:
         flash('Invalid linking request.', 'danger')
         return redirect(url_for('user_profile'))
@@ -2773,12 +2778,17 @@ def get_seller_color(seller_id: int, use_colors: bool = True) -> str:
 
 @app.context_processor
 def inject_preferences():
-    """Inject user preferences into all templates."""
+    """Inject user preferences and pending link requests into all templates."""
     pref = UserPreference.query.filter_by(user_id=current_user.id).first() if current_user.is_authenticated else None
     dark_mode = pref.dark_mode if pref else False
     customer_view_grouped = pref.customer_view_grouped if pref else False
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
     colored_sellers = pref.colored_sellers if pref else True
+    
+    # Get pending link requests count
+    pending_link_requests_count = 0
+    if current_user.is_authenticated and not current_user.is_stub:
+        pending_link_requests_count = len(current_user.get_pending_link_requests())
     
     # Create a wrapper function that includes the colored_sellers preference
     def get_seller_color_with_pref(seller_id: int) -> str:
@@ -2789,7 +2799,8 @@ def inject_preferences():
         customer_view_grouped=customer_view_grouped, 
         topic_sort_by_calls=topic_sort_by_calls,
         colored_sellers=colored_sellers,
-        get_seller_color=get_seller_color_with_pref
+        get_seller_color=get_seller_color_with_pref,
+        pending_link_requests_count=pending_link_requests_count
     )
 
 
