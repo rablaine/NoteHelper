@@ -10,8 +10,11 @@
         <!-- System Statistics -->
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> System Statistics</h5>
+                <button class="btn btn-link text-decoration-none p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#statsCollapse">
+                    <h5 class="mb-0"><i class="bi bi-bar-chart"></i> System Statistics <i class="bi bi-chevron-down float-end"></i></h5>
+                </button>
             </div>
+            <div id="statsCollapse" class="collapse show">
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3 mb-3">
@@ -74,13 +77,17 @@
                     </div>
                 </div>
             </div>
+            </div>
         </div>
 
         <!-- User Management -->
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-people"></i> User Management</h5>
+                <button class="btn btn-link text-decoration-none p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#usersCollapse">
+                    <h5 class="mb-0"><i class="bi bi-people"></i> User Management <i class="bi bi-chevron-down float-end"></i></h5>
+                </button>
             </div>
+            <div id="usersCollapse" class="collapse show">
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-hover">
@@ -129,26 +136,104 @@
                     </table>
                 </div>
             </div>
+            </div>
         </div>
 
         <!-- Domain Whitelist Management -->
         <div class="card mb-4">
             <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="bi bi-shield-check"></i> Domain Whitelist</h5>
+                <button class="btn btn-link text-decoration-none text-white p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#domainsCollapse">
+                    <h5 class="mb-0"><i class="bi bi-shield-check"></i> Domain Whitelist <i class="bi bi-chevron-down float-end"></i></h5>
+                </button>
             </div>
+            <div id="domainsCollapse" class="collapse show">
             <div class="card-body">
-                <p class="text-muted">Manage which email domains are allowed to access the system (non-@microsoft.com accounts).</p>
-                <a href="{{ url_for('admin.admin_domains') }}" class="btn btn-info">
-                    <i class="bi bi-gear"></i> Manage Whitelisted Domains
-                </a>
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Note:</strong> All @microsoft.com accounts are automatically allowed. Use this whitelist to add other domains (like external partner tenants).
+                </div>
+
+                <!-- Add Domain Form -->
+                <div class="mb-4">
+                    <h6><i class="bi bi-plus-circle"></i> Add Domain to Whitelist</h6>
+                    <form id="addDomainForm" class="mt-2">
+                        <div class="input-group">
+                            <span class="input-group-text">@</span>
+                            <input 
+                                type="text" 
+                                class="form-control" 
+                                id="domainInput" 
+                                name="domain" 
+                                placeholder="partner.onmicrosoft.com" 
+                                required
+                            >
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus"></i> Add Domain
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">
+                            Enter just the domain (e.g., "partner.onmicrosoft.com" not "@partner.onmicrosoft.com")
+                        </small>
+                    </form>
+                </div>
+
+                <!-- Whitelisted Domains List -->
+                <div>
+                    <h6><i class="bi bi-list-ul"></i> Whitelisted Domains (<span id="domainCount">{{ domains|length }}</span>)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Domain</th>
+                                    <th>Added</th>
+                                    <th style="width: 120px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="domainsTableBody">
+                                {% if domains %}
+                                {% for domain in domains %}
+                                <tr id="domain-row-{{ domain.id }}">
+                                    <td>
+                                        <i class="bi bi-globe text-info"></i>
+                                        <strong>{{ domain.domain }}</strong>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ domain.created_at.strftime('%b %d, %Y') }}</small>
+                                    </td>
+                                    <td>
+                                        <button 
+                                            class="btn btn-sm btn-danger remove-domain-btn" 
+                                            data-domain-id="{{ domain.id }}"
+                                            data-domain-name="{{ domain.domain }}"
+                                        >
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% else %}
+                                <tr id="emptyState">
+                                    <td colspan="3" class="text-center text-muted">
+                                        No custom domains whitelisted. All non-@microsoft.com accounts will be blocked.
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
             </div>
         </div>
 
         <!-- AI Features Configuration -->
         <div class="card mb-4">
             <div class="card-header bg-purple text-white" style="background-color: #6f42c1 !important;">
-                <h5 class="mb-0"><i class="bi bi-stars"></i> AI Features Configuration</h5>
+                <button class="btn btn-link text-decoration-none text-white p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#aiCollapse">
+                    <h5 class="mb-0"><i class="bi bi-stars"></i> AI Features Configuration <i class="bi bi-chevron-down float-end"></i></h5>
+                </button>
             </div>
+            <div id="aiCollapse" class="collapse show">
             <div class="card-body">
                 <p class="text-muted">Configure AI-powered topic suggestion for call logs. Requires Azure AI Foundry deployment.</p>
                 
@@ -168,7 +253,7 @@
                     <div class="mb-3">
                         <label for="aiFullUrl" class="form-label">Quick Setup: Paste Full Endpoint URL</label>
                         <input type="text" class="form-control" id="aiFullUrl" 
-                               placeholder="Paste from Azure AI Foundry: https://webapps.cognitiveservices.azure.com/openai/deployments/o3-mini/chat/completions?api-version=2025-01-01-preview">
+                               placeholder="Paste from Azure AI Foundry: https://webapps.cognitiveservices.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview">
                         <small class="form-text text-muted">
                             <i class="bi bi-magic"></i> Paste the full URL from Azure AI Foundry (with the copy button) and it will auto-fill the fields below
                         </small>
@@ -198,7 +283,7 @@
                             <label for="aiDeployment" class="form-label">Model Deployment Name</label>
                             <input type="text" class="form-control" id="aiDeployment" 
                                    value="{{ ai_config.deployment_name or '' }}" 
-                                   placeholder="o3-mini">
+                                   placeholder="gpt-4o-mini">
                             <small class="form-text text-muted">Auto-filled from URL</small>
                         </div>
                         <div class="col-md-4 mb-3">
@@ -242,13 +327,17 @@
                     <small class="text-muted ms-2">Debug AI responses and parsing issues</small>
                 </div>
             </div>
+            </div>
         </div>
 
         <!-- System-Wide Data Management -->
         <div class="card mb-4">
             <div class="card-header bg-danger text-white">
-                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> System-Wide Data Management</h5>
+                <button class="btn btn-link text-decoration-none text-white p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#dataCollapse">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> System-Wide Data Management <i class="bi bi-chevron-down float-end"></i></h5>
+                </button>
             </div>
+            <div id="dataCollapse" class="collapse show">
             <div class="card-body">
                 <p class="text-muted">These operations affect all users in the system. Use with caution.</p>
                 
@@ -279,6 +368,7 @@
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     </div>
@@ -471,6 +561,135 @@ document.getElementById('testAiBtn').addEventListener('click', function() {
     .catch(error => {
         messageDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Connection failed: ' + error + '</div>';
     });
+});
+
+// Domain Management - Add domain
+document.getElementById('addDomainForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const domainInput = document.getElementById('domainInput');
+    const domain = domainInput.value.trim();
+    
+    if (!domain) {
+        alert('Please enter a domain');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/admin/domain/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ domain: domain })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            // Remove empty state if present
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            // Add to table
+            const tbody = document.getElementById('domainsTableBody');
+            const newRow = document.createElement('tr');
+            newRow.id = `domain-row-${data.domain.id}`;
+            newRow.innerHTML = `
+                <td>
+                    <i class="bi bi-globe text-info"></i>
+                    <strong>${data.domain.domain}</strong>
+                </td>
+                <td>
+                    <small class="text-muted">Just now</small>
+                </td>
+                <td>
+                    <button 
+                        class="btn btn-sm btn-danger remove-domain-btn" 
+                        data-domain-id="${data.domain.id}"
+                        data-domain-name="${data.domain.domain}"
+                    >
+                        <i class="bi bi-trash"></i> Remove
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(newRow);
+            
+            // Update count
+            const countSpan = document.getElementById('domainCount');
+            if (countSpan) {
+                countSpan.textContent = parseInt(countSpan.textContent) + 1;
+            }
+            
+            // Clear input
+            domainInput.value = '';
+            
+            // Show success message
+            alert(data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to add domain');
+    }
+});
+
+// Domain Management - Remove domain
+document.addEventListener('click', async function(e) {
+    if (e.target.closest('.remove-domain-btn')) {
+        const btn = e.target.closest('.remove-domain-btn');
+        const domainId = btn.getAttribute('data-domain-id');
+        const domainName = btn.getAttribute('data-domain-name');
+        
+        if (!confirm(`Are you sure you want to remove ${domainName} from the whitelist?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/admin/domain/remove/${domainId}`, {
+                method: 'POST'
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                // Remove row from table
+                const row = document.getElementById(`domain-row-${domainId}`);
+                if (row) {
+                    row.remove();
+                }
+                
+                // Update count
+                const countSpan = document.getElementById('domainCount');
+                if (countSpan) {
+                    countSpan.textContent = parseInt(countSpan.textContent) - 1;
+                }
+                
+                // Check if table is now empty and add empty state
+                const tbody = document.getElementById('domainsTableBody');
+                if (tbody && tbody.children.length === 0) {
+                    const emptyRow = document.createElement('tr');
+                    emptyRow.id = 'emptyState';
+                    emptyRow.innerHTML = `
+                        <td colspan="3" class="text-center text-muted">
+                            No custom domains whitelisted. All non-@microsoft.com accounts will be blocked.
+                        </td>
+                    `;
+                    tbody.appendChild(emptyRow);
+                }
+                
+                alert(data.message);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to remove domain');
+        }
+    }
 });
 </script>
 {% endblock %}

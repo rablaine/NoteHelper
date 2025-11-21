@@ -40,7 +40,10 @@ def admin_panel():
         db.session.add(ai_config)
         db.session.commit()
     
-    return render_template('admin_panel.html', users=users, stats=stats, ai_config=ai_config)
+    # Get whitelisted domains
+    domains = WhitelistedDomain.query.order_by(WhitelistedDomain.domain).all()
+    
+    return render_template('admin_panel.html', users=users, stats=stats, ai_config=ai_config, domains=domains)
 
 
 @admin_bp.route('/admin/domains')
