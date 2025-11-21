@@ -75,3 +75,21 @@ def solution_engineer_edit(id):
     all_pods = POD.query.filter_by(user_id=current_user.id).order_by(POD.name).all()
     return render_template('solution_engineer_form.html', solution_engineer=se, all_pods=all_pods)
 
+
+@solution_engineers_bp.route('/solution-engineer/<int:id>/delete', methods=['POST'])
+@login_required
+def solution_engineer_delete(id):
+    """Delete solution engineer."""
+    se = SolutionEngineer.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    
+    se_name = se.name
+    
+    # Clear POD associations
+    se.pods.clear()
+    
+    db.session.delete(se)
+    db.session.commit()
+    
+    flash(f'Solution Engineer "{se_name}" deleted successfully.', 'success')
+    return redirect(url_for('solution_engineers.solution_engineers_list'))
+
