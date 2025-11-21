@@ -210,9 +210,10 @@ pytest --cov=app tests/  # with coverage
 **Commit Workflow:**
 1. Write code and corresponding tests together
 2. Run `pytest tests/` to verify all tests pass
-3. Stage changes with `git add`
-4. Commit with descriptive message
-5. Push to remote when ready
+3. **Prompt user to manually test new features or bug fixes** - Before committing, always ask the user to test the changes in the running app to verify everything works as expected
+4. Stage changes with `git add`
+5. Commit with descriptive message
+6. Push to remote when ready
 
 **Pull Request Requirements:**
 - All tests must pass (`pytest tests/`)
