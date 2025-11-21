@@ -27,7 +27,7 @@
                                     <p class="card-text flex-grow-1">
                                         Create a new account and start fresh. You'll begin with no existing data.
                                     </p>
-                                    <form method="POST" action="{{ url_for('first_time_new_user') }}">
+                                    <form method="POST" action="{{ url_for('auth.first_time_new_user') }}">
                                         <button type="submit" class="btn btn-primary w-100">
                                             <i class="bi bi-plus-circle"></i> Create New Account
                                         </button>
@@ -64,7 +64,7 @@
                                 <p class="text-muted small">
                                     This should be the email address you see in your user profile in the app.
                                 </p>
-                                <form method="POST" action="{{ url_for('first_time_link_request') }}">
+                                <form method="POST" action="{{ url_for('auth.first_time_link_request') }}">
                                     <div class="mb-3">
                                         <label for="target_email" class="form-label">Primary Account Email</label>
                                         <input 
@@ -92,7 +92,7 @@
                     </div>
 
                     <div class="text-center mt-4">
-                        <a href="{{ url_for('logout') }}" class="text-muted">
+                        <a href="{{ url_for('auth.logout') }}" class="text-muted">
                             <i class="bi bi-box-arrow-left"></i> Cancel and Logout
                         </a>
                     </div>
@@ -102,7 +102,6 @@
     </div>
 </div>
 {% endblock %}
-
 
 
 

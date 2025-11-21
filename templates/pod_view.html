@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-diagram-3"></i> {{ pod.name }}</h1>
-    <a href="{{ url_for('pod_edit', id=pod.id) }}" class="btn btn-primary">
+    <a href="{{ url_for('pods.pod_edit', id=pod.id) }}" class="btn btn-primary">
         <i class="bi bi-pencil"></i> Edit POD
     </a>
 </div>
@@ -20,7 +20,7 @@
                 {% if territories %}
                     <ul class="list-group list-group-flush">
                         {% for territory in territories %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="window.location='{{ url_for('territory_view', id=territory.id) }}'">
+                            <li class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="window.location='{{ url_for('territories.territory_view', id=territory.id) }}'">
                                 <span>{{ territory.name }}</span>
                                 <span class="badge bg-primary rounded-pill">{{ territory.customers|length }} customers</span>
                             </li>
@@ -40,7 +40,7 @@
                 {% if sellers %}
                     <ul class="list-group list-group-flush">
                         {% for seller in sellers %}
-                            <li class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('seller_view', id=seller.id) }}'">
+                            <li class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('sellers.seller_view', id=seller.id) }}'">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
                                         <span>{{ seller.name }}</span>
@@ -98,12 +98,11 @@
 </div>
 
 <div class="mt-3">
-    <a href="{{ url_for('pods_list') }}" class="btn btn-secondary">
+    <a href="{{ url_for('pods.pods_list') }}" class="btn btn-secondary">
         <i class="bi bi-arrow-left"></i> Back to PODs
     </a>
 </div>
 {% endblock %}
-
 
 
 
