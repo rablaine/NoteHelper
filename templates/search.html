@@ -8,7 +8,7 @@
 <!-- Search and Filter Form -->
 <div class="card mb-4">
     <div class="card-body">
-        <form method="GET" action="{{ url_for('main.search') }}">
+        <form method="GET" action="{{ url_for('search') }}">
             <div class="row g-3">
                 <div class="col-md-12">
                     <label for="q" class="form-label">Search Text</label>
@@ -73,7 +73,7 @@
                 <button type="submit" class="btn btn-primary">
                     <i class="bi bi-search"></i> Search
                 </button>
-                <a href="{{ url_for('main.search') }}" class="btn btn-secondary">
+                <a href="{{ url_for('search') }}" class="btn btn-secondary">
                     <i class="bi bi-x-circle"></i> Clear Filters
                 </a>
             </div>

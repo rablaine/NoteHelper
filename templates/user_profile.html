@@ -80,12 +80,12 @@
                                             <div class="d-flex justify-content-between align-items-center mt-2">
                                                 <small>From: {{ req.requesting_user.email }}</small>
                                                 <div>
-                                                    <form method="POST" action="{{ url_for('auth.account_link_approve', request_id=req.id) }}" style="display: inline;">
+                                                    <form method="POST" action="{{ url_for('account_link_approve', request_id=req.id) }}" style="display: inline;">
                                                         <button type="submit" class="btn btn-sm btn-success">
                                                             <i class="bi bi-check"></i> Approve
                                                         </button>
                                                     </form>
-                                                    <form method="POST" action="{{ url_for('auth.account_link_deny', request_id=req.id) }}" style="display: inline;">
+                                                    <form method="POST" action="{{ url_for('account_link_deny', request_id=req.id) }}" style="display: inline;">
                                                         <button type="submit" class="btn btn-sm btn-danger">
                                                             <i class="bi bi-x"></i> Deny
                                                         </button>
@@ -122,12 +122,12 @@
                                             <div class="d-flex justify-content-between align-items-center mt-2">
                                                 <small>From: {{ req.requesting_user.email }}</small>
                                                 <div>
-                                                    <form method="POST" action="{{ url_for('auth.account_link_approve', request_id=req.id) }}" style="display: inline;">
+                                                    <form method="POST" action="{{ url_for('account_link_approve', request_id=req.id) }}" style="display: inline;">
                                                         <button type="submit" class="btn btn-sm btn-success">
                                                             <i class="bi bi-check"></i> Approve
                                                         </button>
                                                     </form>
-                                                    <form method="POST" action="{{ url_for('auth.account_link_deny', request_id=req.id) }}" style="display: inline;">
+                                                    <form method="POST" action="{{ url_for('account_link_deny', request_id=req.id) }}" style="display: inline;">
                                                         <button type="submit" class="btn btn-sm btn-danger">
                                                             <i class="bi bi-x"></i> Deny
                                                         </button>
@@ -193,16 +193,18 @@
         {% endif %}
 
         <div class="mb-4">
-            <a href="{{ url_for('main.preferences') }}" class="btn btn-primary">
+            <a href="{{ url_for('preferences') }}" class="btn btn-primary">
                 <i class="bi bi-sliders"></i> Preferences
             </a>
-            <a href="{{ url_for('main.index') }}" class="btn btn-secondary">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
                 <i class="bi bi-arrow-left"></i> Back to Home
             </a>
         </div>
     </div>
 </div>
 {% endblock %}
+
+
 
 
 
