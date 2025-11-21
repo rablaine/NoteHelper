@@ -85,7 +85,7 @@
                             <span class="text-info"><i class="bi bi-info-circle"></i> Territory auto-selected based on seller</span>
                         </div>
                         <div class="form-text">
-                            Or <a href="{{ url_for('territories.territory_create') }}" target="_blank">create a new territory</a>
+                            Or <a href="{{ url_for('territory_create') }}" target="_blank">create a new territory</a>
                         </div>
                     </div>
                     
@@ -93,7 +93,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-circle"></i> Save Customer
                         </button>
-                        <a href="{{ url_for('customers.customers_list') }}" class="btn btn-secondary">
+                        <a href="{{ url_for('customers_list') }}" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Cancel
                         </a>
                     </div>
@@ -111,7 +111,7 @@
                 <h5 class="modal-title">Create New Seller</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ url_for('sellers.seller_create_inline') }}">
+            <form method="POST" action="{{ url_for('seller_create_inline') }}">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="new_seller_name" class="form-label">Seller Name</label>
@@ -289,6 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
 
 
 

@@ -161,7 +161,7 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid px-4">
-            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="bi bi-journal-text"></i> NoteHelper
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -175,17 +175,17 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('pods.pods_list') }}">
+                        <a class="nav-link" href="{{ url_for('pods_list') }}">
                             <i class="bi bi-diagram-3"></i> PODs
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('territories.territories_list') }}">
+                        <a class="nav-link" href="{{ url_for('territories_list') }}">
                             <i class="bi bi-geo-alt"></i> Territories
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('sellers.sellers_list') }}">
+                        <a class="nav-link" href="{{ url_for('sellers_list') }}">
                             <i class="bi bi-people"></i> Sellers
                         </a>
                     </li>
@@ -195,17 +195,17 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('customers.customers_list') }}">
+                        <a class="nav-link" href="{{ url_for('customers_list') }}">
                             <i class="bi bi-building"></i> Customers
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('topics.topics_list') }}">
+                        <a class="nav-link" href="{{ url_for('topics_list') }}">
                             <i class="bi bi-tags"></i> Topics
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('call_logs.call_logs_list') }}">
+                        <a class="nav-link" href="{{ url_for('call_logs_list') }}">
                             <i class="bi bi-telephone"></i> Call Logs
                         </a>
                     </li>
@@ -236,7 +236,7 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('preferences') }}"><i class="bi bi-gear"></i> Preferences</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('data_management') }}"><i class="bi bi-database"></i> Data Management</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('customers.tpid_workflow') }}"><i class="bi bi-link-45deg"></i> MSX Account URLs</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('tpid_workflow') }}"><i class="bi bi-link-45deg"></i> MSX Account URLs</a></li>
                             {% if current_user.is_authenticated and current_user.is_admin %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('admin.admin_panel') }}"><i class="bi bi-shield-lock"></i> Admin Panel</a></li>
@@ -357,6 +357,8 @@
     {% block extra_js %}{% endblock %}
 </body>
 </html>
+
+
 
 
 

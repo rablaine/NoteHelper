@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-journal-text"></i> Call Logs</h1>
-    <a href="{{ url_for('call_logs.call_log_create') }}" class="btn btn-success">
+    <a href="{{ url_for('call_log_create') }}" class="btn btn-success">
         <i class="bi bi-plus-circle"></i> New Call Log
     </a>
 </div>
@@ -33,11 +33,11 @@
     </style>
     <div class="list-group">
         {% for call in call_logs %}
-            <div class="list-group-item clickable-call-log" onclick="window.location.href='{{ url_for('call_logs.call_log_view', id=call.id) }}';">
+            <div class="list-group-item clickable-call-log" onclick="window.location.href='{{ url_for('call_log_view', id=call.id) }}';">
                 <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                     <h5 class="mb-0">
                         {% if call.customer %}
-                            <a href="{{ url_for('customers.customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">{{ call.customer.name }}</a>
+                            <a href="{{ url_for('customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">{{ call.customer.name }}</a>
                             {% if call.customer.tpid_url %}
                                 (<a href="{{ call.customer.tpid_url }}" target="_blank" onclick="event.stopPropagation();">{{ call.customer.tpid }}</a>)
                             {% else %}
@@ -54,13 +54,13 @@
                 </p>
                 <div>
                     {% if call.seller %}
-                        <a href="{{ url_for('sellers.seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
+                        <a href="{{ url_for('seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                     {% endif %}
                     {% if call.territory %}
-                        <a href="{{ url_for('territories.territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
+                        <a href="{{ url_for('territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
                     {% endif %}
                     {% for topic in call.topics %}
-                        <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
+                        <a href="{{ url_for('topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
                     {% endfor %}
                 </div>
             </div>
@@ -68,10 +68,11 @@
     </div>
 {% else %}
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> No call logs yet. <a href="{{ url_for('call_logs.call_log_create') }}">Create your first call log</a>!
+        <i class="bi bi-info-circle"></i> No call logs yet. <a href="{{ url_for('call_log_create') }}">Create your first call log</a>!
     </div>
 {% endif %}
 {% endblock %}
+
 
 
 

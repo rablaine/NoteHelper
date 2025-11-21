@@ -112,7 +112,7 @@
                         <button type="submit" class="btn btn-success">
                             <i class="bi bi-check-circle"></i> Save Call Log
                         </button>
-                        <a href="{{ url_for('call_logs.call_logs_list') }}" class="btn btn-secondary">
+                        <a href="{{ url_for('call_logs_list') }}" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Cancel
                         </a>
                     </div>
@@ -132,7 +132,7 @@
                     <div class="mb-4 pb-3 {% if not loop.last %}border-bottom{% endif %}">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <h6 class="mb-0">{{ call.call_date.strftime('%b %d, %Y') }}</h6>
-                            <a href="{{ url_for('call_logs.call_log_view', id=call.id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                            <a href="{{ url_for('call_log_view', id=call.id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
                                 <i class="bi bi-box-arrow-up-right"></i> View
                             </a>
                         </div>
@@ -533,6 +533,7 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endif %}
 </script>
 {% endblock %}
+
 
 
 

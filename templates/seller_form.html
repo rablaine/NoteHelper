@@ -42,7 +42,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-circle"></i> Save Seller
                         </button>
-                        <a href="{{ url_for('sellers.sellers_list') }}" class="btn btn-secondary">
+                        <a href="{{ url_for('sellers_list') }}" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Cancel
                         </a>
                     </div>
@@ -75,7 +75,7 @@
                 <h5 class="modal-title">Create New Territory</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ url_for('territories.territory_create_inline') }}">
+            <form method="POST" action="{{ url_for('territory_create_inline') }}">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="new_territory_name" class="form-label">Territory Name</label>
@@ -214,6 +214,7 @@ function removeTerritory(territoryId) {
 }
 </script>
 {% endblock %}
+
 
 
 

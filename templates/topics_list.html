@@ -9,7 +9,7 @@
         <button id="sortToggle" class="btn btn-outline-secondary btn-sm" title="Toggle sort order">
             <i class="bi bi-sort-alpha-down"></i> <span id="sortLabel">By Calls</span>
         </button>
-        <a href="{{ url_for('topics.topic_create') }}" class="btn btn-primary">
+        <a href="{{ url_for('topic_create') }}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> New Topic
         </a>
     </div>
@@ -18,7 +18,7 @@
 {% if topics %}
     <div class="list-group">
         {% for topic in topics %}
-            <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="list-group-item list-group-item-action">
+            <a href="{{ url_for('topic_view', id=topic.id) }}" class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
                     <h5 class="mb-1">{{ topic.name }}</h5>
                     <small class="text-muted">{{ topic.call_logs|length }} calls</small>
@@ -31,7 +31,7 @@
     </div>
 {% else %}
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> No topics yet. <a href="{{ url_for('topics.topic_create') }}">Create your first topic</a>!
+        <i class="bi bi-info-circle"></i> No topics yet. <a href="{{ url_for('topic_create') }}">Create your first topic</a>!
     </div>
 {% endif %}
 {% endblock %}
@@ -89,6 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
 
 
 
