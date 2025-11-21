@@ -491,6 +491,9 @@ class AIQueryLog(db.Model):
     success = db.Column(db.Boolean, nullable=False)
     error_message = db.Column(db.Text, nullable=True)
     
+    # Relationship
+    user = db.relationship('User', foreign_keys=[user_id])
+    
     def __repr__(self) -> str:
         status = 'success' if self.success else 'failed'
         return f'<AIQueryLog user_id={self.user_id} {status} at {self.timestamp}>'

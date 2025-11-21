@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}AI Query Logs - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-card-list"></i> AI Query Logs</h1>
+        <a href="{{ url_for('admin.admin_panel') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Admin
+        </a>
+    </div>
+
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Showing the last 50 AI queries. Click on any entry to expand and view full details.
+    </div>
+
+    {% if not logs %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> No AI queries logged yet.
+    </div>
+    {% else %}
+    <div class="row g-3">
+        {% for log in logs %}
+        <div class="col-12">
+            <div class="card {% if log.success %}border-success{% else %}border-danger{% endif %}">
+                <div class="card-header {% if log.success %}bg-success bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %}">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <strong>{{ log.timestamp.strftime('%m/%d %H:%M:%S') }}</strong>
+                        </div>
+                        <div class="col-auto">
+                            <span class="text-muted">|</span>
+                        </div>
+                        <div class="col-auto">
+                            <strong>{{ log.user.name if log.user else 'Unknown' }}</strong>
+                        </div>
+                        <div class="col-auto">
+                            <span class="text-muted">|</span>
+                        </div>
+                        <div class="col-auto">
+                            {% if log.success %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Success</span>
+                            {% else %}
+                            <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted"><i class="bi bi-chat-left-text"></i> Full Request</h6>
+                            <pre class="p-3 bg-light border rounded" style="max-height: 300px; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word;">{{ log.request_text }}</pre>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted"><i class="bi bi-chat-right-text"></i> Raw AI Response</h6>
+                            {% if log.response_text %}
+                            <pre class="p-3 bg-light border rounded" style="max-height: 300px; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word;">{{ log.response_text }}</pre>
+                            {% else %}
+                            <div class="alert alert-secondary">No response captured</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if log.error_message %}
+                    <div class="mt-3">
+                        <h6 class="text-danger"><i class="bi bi-exclamation-triangle"></i> Error Details</h6>
+                        <div class="alert alert-danger mb-0">
+                            <pre class="mb-0" style="font-size: 0.85rem; white-space: pre-wrap;">{{ log.error_message }}</pre>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

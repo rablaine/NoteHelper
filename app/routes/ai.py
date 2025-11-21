@@ -21,17 +21,17 @@ def api_ai_suggest_topics():
     # Check if AI features are enabled
     ai_config = AIConfig.query.first()
     if not ai_config or not ai_config.enabled:
-        return jsonify({'error': 'AI features are not enabled'}), 400
+        return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
     
     if not ai_config.endpoint_url or not ai_config.api_key or not ai_config.deployment_name:
-        return jsonify({'error': 'AI configuration is incomplete'}), 400
+        return jsonify({'success': False, 'error': 'AI configuration is incomplete'}), 400
     
     # Get call notes from request
     data = request.get_json()
     call_notes = data.get('call_notes', '').strip()
     
     if not call_notes or len(call_notes) < 10:
-        return jsonify({'error': 'Call notes are too short to analyze'}), 400
+        return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
     
     # Check rate limit
     today = date.today()
@@ -43,6 +43,7 @@ def api_ai_suggest_topics():
     
     if usage.call_count >= ai_config.max_daily_calls_per_user:
         return jsonify({
+            'success': False,
             'error': 'Daily AI quota exceeded',
             'remaining': 0,
             'limit': ai_config.max_daily_calls_per_user
@@ -61,61 +62,98 @@ def api_ai_suggest_topics():
         
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {ai_config.api_key}"
+            "api-key": ai_config.api_key
         }
         
         payload = {
             "messages": [
-                {"role": "system", "content": ai_config.system_prompt},
+                {"role": "developer", "content": ai_config.system_prompt},
                 {"role": "user", "content": f"Call notes:\n\n{call_notes}"}
             ],
-            "max_completion_tokens": 200,
-            "model": ai_config.deployment_name
+            "max_completion_tokens": 1000,
+            "model": ai_config.deployment_name,
+            "reasoning_effort": "medium"
         }
         
         response = requests.post(full_url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         
         result_data = response.json()
-        response_text = result_data['choices'][0]['message']['content'].strip()
         
-        # Parse JSON response
+        # Log the full response structure for debugging
+        full_response_debug = json.dumps(result_data, indent=2)[:2000]
+        
+        # Check if response has expected structure
+        if 'choices' not in result_data or not result_data['choices']:
+            raise ValueError(f"API response missing 'choices'. Full response:\n{full_response_debug}")
+        
+        if 'message' not in result_data['choices'][0] or 'content' not in result_data['choices'][0]['message']:
+            raise ValueError(f"API response missing 'message.content'. Full response:\n{full_response_debug}")
+        
+        response_text = result_data['choices'][0]['message']['content']
+        
+        if not response_text or not response_text.strip():
+            raise ValueError(f"API returned empty content. Full response:\n{full_response_debug}")
+        
+        response_text = response_text.strip()
+        
+        # Keep the raw response for logging
+        raw_response_text = response_text
+        
+        # Parse JSON response - be flexible with different formats
+        suggested_topics = []
         try:
             # Remove markdown code blocks if present
-            if response_text.startswith('```'):
-                lines = response_text.split('\n')
-                response_text = '\n'.join(lines[1:-1]) if len(lines) > 2 else response_text
+            clean_text = response_text
+            if '```' in clean_text:
+                # Extract content between code blocks
+                import re
+                match = re.search(r'```(?:json)?\s*(.*?)\s*```', clean_text, re.DOTALL)
+                if match:
+                    clean_text = match.group(1).strip()
+                else:
+                    # Try to find just the JSON array
+                    clean_text = clean_text.replace('```json', '').replace('```', '').strip()
             
-            suggested_topics = json.loads(response_text)
+            # Try to find a JSON array in the text
+            import re
+            array_match = re.search(r'\[.*\]', clean_text, re.DOTALL)
+            if array_match:
+                clean_text = array_match.group(0)
+            
+            suggested_topics = json.loads(clean_text)
             
             if not isinstance(suggested_topics, list):
                 raise ValueError("Response is not a list")
             
-            # Filter to strings only
-            suggested_topics = [str(t).strip() for t in suggested_topics if t]
+            # Filter to strings only and clean up
+            suggested_topics = [str(t).strip() for t in suggested_topics if t and str(t).strip()]
             
             if not suggested_topics:
                 raise ValueError("No topics returned")
             
         except (json.JSONDecodeError, ValueError) as e:
-            # Log malformed response
+            # Log malformed response with full details for debugging
             log_entry = AIQueryLog(
                 user_id=current_user.id,
-                request_text=call_notes[:1000],  # Limit stored text
-                response_text=response_text[:1000],
+                request_text=call_notes[:1000],
+                response_text=raw_response_text[:1000],  # Use raw response, not cleaned version
                 success=False,
-                error_message=f"Malformed response: {str(e)}"
+                error_message=f"Parse error: {str(e)}"
             )
             db.session.add(log_entry)
             db.session.commit()
             
-            return jsonify({'error': 'AI returned invalid response format'}), 500
+            return jsonify({
+                'success': False,
+                'error': f'AI returned invalid response format. Check audit log for raw response.'
+            }), 500
         
         # Log successful query
         log_entry = AIQueryLog(
             user_id=current_user.id,
             request_text=call_notes[:1000],
-            response_text=response_text[:1000],
+            response_text=raw_response_text[:1000],  # Use raw response before parsing
             success=True,
             error_message=None
         )
@@ -163,7 +201,7 @@ def api_ai_suggest_topics():
             except:
                 error_msg = f"{e.response.status_code} - {e.response.text}"
         
-        # Log failed query
+        # Log the error
         log_entry = AIQueryLog(
             user_id=current_user.id,
             request_text=call_notes[:1000],
@@ -174,7 +212,7 @@ def api_ai_suggest_topics():
         db.session.add(log_entry)
         db.session.commit()
         
-        return jsonify({'error': f'AI request failed: {error_msg}'}), 500
+        return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
     
     except Exception as e:
         # Log failed query
@@ -189,7 +227,7 @@ def api_ai_suggest_topics():
         db.session.commit()
         
         error_msg = str(e)
-        return jsonify({'error': f'AI request failed: {error_msg}'}), 500
+        return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
 
 
 @ai_bp.route('/api/ai/usage', methods=['GET'])

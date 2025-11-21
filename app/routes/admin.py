@@ -5,7 +5,7 @@ Handles admin panel, user management, and domain whitelisting.
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 
-from app.models import db, User, WhitelistedDomain, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, utc_now
+from app.models import db, User, WhitelistedDomain, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog, utc_now
 
 # Create blueprint
 admin_bp = Blueprint('admin', __name__)
@@ -53,6 +53,28 @@ def admin_domains():
     
     domains = WhitelistedDomain.query.order_by(WhitelistedDomain.domain).all()
     return render_template('admin_domains.html', domains=domains)
+
+
+@admin_bp.route('/admin/ai-logs')
+@login_required
+def admin_ai_logs():
+    """View AI query logs for debugging."""
+    if not current_user.is_admin:
+        flash('You do not have permission to access AI logs.', 'danger')
+        return redirect(url_for('main.index'))
+    
+    # Get recent logs (last 50) with users loaded separately
+    logs = AIQueryLog.query.order_by(AIQueryLog.timestamp.desc()).limit(50).all()
+    
+    # Load users for all logs
+    user_ids = {log.user_id for log in logs}
+    users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()}
+    
+    # Attach users to logs
+    for log in logs:
+        log.user = users.get(log.user_id)
+    
+    return render_template('admin_ai_logs.html', logs=logs)
 
 
 # API routes
