@@ -2,7 +2,7 @@
 Customer routes for NoteHelper.
 Handles customer listing, creation, viewing, editing, and TPID workflow.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_
 
@@ -266,4 +266,29 @@ def tpid_workflow_update():
         flash(f'Error updating MSX Account URLs: {str(e)}', 'danger')
     
     return redirect(url_for('customers.tpid_workflow'))
+
+
+# API route
+@customers_bp.route('/api/customers/autocomplete', methods=['GET'])
+@login_required
+def api_customers_autocomplete():
+    """API endpoint for customer name autocomplete."""
+    query = request.args.get('q', '').strip()
+    
+    if not query or len(query) < 2:
+        return jsonify([]), 200
+    
+    # Search customers by name (case-insensitive, contains)
+    customers = Customer.query.filter_by(user_id=current_user.id).filter(
+        Customer.name.ilike(f'%{query}%')
+    ).order_by(Customer.name).limit(10).all()
+    
+    results = [{
+        'id': c.id,
+        'name': c.name,
+        'nickname': c.nickname,
+        'tpid': c.tpid
+    } for c in customers]
+    
+    return jsonify(results), 200
 
