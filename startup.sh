@@ -13,23 +13,23 @@ echo "Current directory: $(pwd)"
 echo "Directory contents:"
 ls -la
 
-# Check if app.py exists
-if [ -f "app.py" ]; then
-    echo "Found app.py in root directory"
+# Check if application.py exists
+if [ -f "application.py" ]; then
+    echo "Found application.py in root directory"
 else
-    echo "ERROR: app.py not found!"
+    echo "ERROR: application.py not found!"
     exit 1
 fi
 
 # Set FLASK_APP environment variable
-export FLASK_APP=app.py
+export FLASK_APP=application.py
 
 # Add current directory to Python path to ensure proper imports
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
 # Test database connection
 echo "Testing database connection..."
-python -c "from app import app, db; app.app_context().push(); print('Database connection successful!')" || {
+python -c "from application import app, db; app.app_context().push(); print('Database connection successful!')" || {
     echo "ERROR: Database connection failed!"
     echo "Check DATABASE_URL environment variable"
     exit 1
@@ -54,4 +54,4 @@ gunicorn --bind=0.0.0.0:8000 \
          --error-logfile=- \
          --log-level=info \
          --preload \
-         app:app
+         application:app

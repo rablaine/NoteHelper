@@ -77,7 +77,7 @@ flask db upgrade
 ### 7. Run the Application
 
 ```powershell
-python app.py
+python application.py
 ```
 
 Visit `http://localhost:5000` in your browser.
