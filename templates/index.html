@@ -93,6 +93,21 @@
     }
 </style>
 
+<div class="row mt-4" id="draftsSection" style="display: none;">
+    <div class="col-md-12">
+        <div class="alert alert-warning d-flex justify-content-between align-items-center">
+            <div>
+                <i class="bi bi-pencil-square"></i> <strong>Unsaved Drafts</strong>
+                <span id="draftCount" class="badge bg-warning text-dark ms-2">0</span>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-warning" onclick="clearAllDrafts()">
+                <i class="bi bi-trash"></i> Clear All Drafts
+            </button>
+        </div>
+        <div id="draftsList" class="list-group mb-3"></div>
+    </div>
+</div>
+
 <div class="row mt-5">
     <div class="col-md-12">
         <h3 class="mb-3">Recent Call Logs</h3>
@@ -152,6 +167,123 @@
 </div>
 
 <script>
+    // ===== DRAFT MANAGEMENT =====
+    const DRAFT_KEY_PREFIX = 'notehelper_draft_';
+    
+    // Load drafts on page load
+    function loadDrafts() {
+        const drafts = [];
+        
+        // Find all drafts in localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(DRAFT_KEY_PREFIX)) {
+                try {
+                    const draftData = JSON.parse(localStorage.getItem(key));
+                    const customerId = key.replace(DRAFT_KEY_PREFIX, '');
+                    
+                    drafts.push({
+                        key,
+                        customerId,
+                        customerName: draftData.customer_name || 'Unknown Customer',
+                        data: draftData,
+                        timestamp: draftData.timestamp || 0
+                    });
+                } catch (e) {
+                    console.error('Error loading draft:', e);
+                    // Invalid draft, remove it
+                    localStorage.removeItem(key);
+                }
+            }
+        }
+        
+        // Sort by timestamp (newest first)
+        drafts.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Show/hide drafts section
+        if (drafts.length > 0) {
+            document.getElementById('draftsSection').style.display = 'block';
+            document.getElementById('draftCount').textContent = drafts.length;
+            
+            // Render draft list
+            const draftsList = document.getElementById('draftsList');
+            draftsList.innerHTML = drafts.map(draft => {
+                const date = new Date(draft.timestamp);
+                const timeAgo = formatTimeAgo(date);
+                const topicCount = draft.data.topics ? draft.data.topics.length : 0;
+                
+                return `
+                    <a href="{{ url_for('call_logs.call_log_create') }}?customer_id=${draft.customerId}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">
+                                    <i class="bi bi-building"></i> ${draft.customerName}
+                                    <span class="badge bg-warning text-dark ms-2"><i class="bi bi-pencil"></i> Draft</span>
+                                </h6>
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i> ${timeAgo}
+                                    ${topicCount > 0 ? `<span class="ms-2"><i class="bi bi-tag"></i> ${topicCount} topic${topicCount > 1 ? 's' : ''}</span>` : ''}
+                                </small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteDraft(event, '${draft.key}', ${draft.customerId})" title="Delete draft">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </a>
+                `;
+            }).join('');
+        } else {
+            document.getElementById('draftsSection').style.display = 'none';
+        }
+    }
+    
+    function formatTimeAgo(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        
+        if (seconds < 60) return 'Just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+        if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+        
+        return date.toLocaleDateString();
+    }
+    
+    function deleteDraft(event, draftKey, customerId) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        if (confirm('Delete this draft? This cannot be undone.')) {
+            localStorage.removeItem(draftKey);
+            loadDrafts();
+        }
+    }
+    
+    function clearAllDrafts() {
+        if (confirm('Delete all drafts? This cannot be undone.')) {
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(DRAFT_KEY_PREFIX)) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            loadDrafts();
+        }
+    }
+    
+    // Load drafts when page loads
+    document.addEventListener('DOMContentLoaded', loadDrafts);
+    
+    // Reload drafts when storage changes (multi-tab support)
+    window.addEventListener('storage', function(e) {
+        if (e.key && e.key.startsWith(DRAFT_KEY_PREFIX)) {
+            loadDrafts();
+        }
+    });
+    
+    // ===== CUSTOMER AUTOCOMPLETE =====
     // Customer autocomplete for quick call log creation
     let debounceTimer;
     const customerSearch = document.getElementById('customerSearch');
