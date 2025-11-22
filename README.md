@@ -1,15 +1,39 @@
 # NoteHelper
 
-A note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
+**Version 1.0** - A note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
+
+> 📖 **[Read the Development Story](DEVELOPMENT_STORY.md)** - Learn how this 13,000+ line application was built in 40 hours using AI-assisted "vibe coding" with GitHub Copilot.
 
 ## Features
 
-- Create, edit, and delete notes from customer calls
-- Tag notes with technologies, customers, and sellers
-- Search and filter notes by multiple criteria
-- Associate notes with customer accounts
-- Track note authors and timestamps
-- User authentication and session management
+### Core Functionality
+- Create, edit, and delete call logs with rich text content
+- Tag notes with topics (technologies), customers, sellers, and territories
+- Search and filter call logs by multiple criteria
+- Associate call logs with customer accounts and track relationships
+- Track note authors and timestamps with timezone support
+
+### Organizational Structure
+- Multi-level organizational hierarchy: PODs → Territories → Sellers → Customers
+- Solution Engineers with specialties (Data, Core/Infra, Apps/AI)
+- Customer verticals and categories for industry classification
+- Seller types (Acquisition vs Growth) with automatic customer type assignment
+
+### User Experience
+- Multi-user support with Azure AD authentication and isolated workspaces
+- Account linking for Microsoft and external email addresses
+- Dark mode with user preferences
+- Quick call log creation with customer autocomplete
+- Flexible customer list views (alphabetical, grouped by seller, sorted by call count)
+- Filter customers by call log activity
+- AI-powered topic suggestion using Azure OpenAI
+- Data import/export (JSON and CSV) for backup and migration
+
+### Admin Features
+- Domain whitelisting for external accounts
+- User management and admin role assignment
+- AI configuration and usage monitoring
+- Audit logs for AI queries
 
 ## Technology Stack
 
@@ -18,7 +42,8 @@ A note-taking application for Azure technical sellers to capture and retrieve cu
 - **Database:** PostgreSQL
 - **UI:** Bootstrap 5
 - **ORM:** SQLAlchemy
-- **Authentication:** Flask-Login
+- **Authentication:** Microsoft Entra ID (Azure AD) OAuth 2.0
+- **AI Integration:** Azure OpenAI Service / Azure AI Foundry
 
 ## Prerequisites
 
@@ -95,11 +120,9 @@ pytest --cov=app tests/  # with coverage
 
 This project follows PEP 8 guidelines and uses type hints. See `.github/copilot-instructions.md` for full coding standards.
 
-## Project Phases
+## Version History
 
-- **Phase 1 (Current):** Single-file Flask app with Flask-Login authentication
-- **Phase 2 (Future):** Refactor to blueprints for better organization
-- **Phase 3 (Optional):** Add Azure AD OAuth authentication
+- **v1.0 (November 2025):** Production release with multi-user support, Azure AD authentication, AI-powered topic suggestions, organizational hierarchy (PODs/SEs), and comprehensive import/export capabilities
 
 ## Contributing
 

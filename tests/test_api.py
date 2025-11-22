@@ -62,6 +62,30 @@ def test_topic_sort_preference_post(client):
     assert data['topic_sort_by_calls'] is True
 
 
+def test_show_customers_without_calls_preference_get(client):
+    """Test getting show customers without calls preference."""
+    response = client.get('/api/preferences/show-customers-without-calls')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'show_customers_without_calls' in data
+    assert isinstance(data['show_customers_without_calls'], bool)
+    assert data['show_customers_without_calls'] is False  # Default should be False
+
+
+def test_show_customers_without_calls_preference_post(client):
+    """Test setting show customers without calls preference."""
+    response = client.post('/api/preferences/show-customers-without-calls',
+                          json={'show_customers_without_calls': True})
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['show_customers_without_calls'] is True
+    
+    # Verify it persists
+    response = client.get('/api/preferences/show-customers-without-calls')
+    data = json.loads(response.data)
+    assert data['show_customers_without_calls'] is True
+
+
 def test_topic_autocomplete(client, sample_data):
     """Test topic autocomplete endpoint."""
     # Skip test - autocomplete endpoint not yet implemented

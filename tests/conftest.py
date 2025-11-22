@@ -144,8 +144,17 @@ def sample_data(app):
             seller_id=seller2.id,
             territory_id=territory2.id,
             user_id=test_user.id
+            # No tpid_url - for testing TPID workflow
         )
-        db.session.add_all([customer1, customer2])
+        customer3 = Customer(
+            name='Initech LLC',
+            tpid=1003,  # Numeric TPID
+            seller_id=seller1.id,
+            territory_id=territory1.id,
+            user_id=test_user.id
+            # No tpid_url - for testing TPID workflow batch updates
+        )
+        db.session.add_all([customer1, customer2, customer3])
         db.session.flush()
         
         # Create topics
@@ -183,6 +192,7 @@ def sample_data(app):
             'seller2_id': seller2.id,
             'customer1_id': customer1.id,
             'customer2_id': customer2.id,
+            'customer3_id': customer3.id,
             'topic1_id': topic1.id,
             'topic2_id': topic2.id,
             'call1_id': call1.id,
