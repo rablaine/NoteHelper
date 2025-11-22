@@ -19,6 +19,9 @@ def customers_list():
     user_id = current_user.id if current_user.is_authenticated else 1
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     
+    # Check preference for showing customers without calls (default: False = hide them)
+    show_customers_without_calls = pref.show_customers_without_calls if pref else False
+    
     # Determine sort method - check new field first, fall back to old grouped field for backwards compatibility
     sort_by = pref.customer_sort_by if pref else 'alphabetical'
     if sort_by == 'grouped' or (pref and pref.customer_view_grouped and sort_by == 'alphabetical'):
@@ -36,6 +39,11 @@ def customers_list():
         grouped_customers = []
         for seller in sellers:
             customers = sorted(seller.customers, key=lambda c: c.name)
+            
+            # Filter out customers without calls if preference is False
+            if not show_customers_without_calls:
+                customers = [c for c in customers if len(c.call_logs) > 0]
+            
             if customers:
                 grouped_customers.append({
                     'seller': seller,
@@ -43,36 +51,57 @@ def customers_list():
                 })
         
         # Get customers without a seller
-        customers_without_seller = Customer.query.filter_by(user_id=current_user.id).options(
+        customers_without_seller_query = Customer.query.filter_by(user_id=current_user.id).options(
             db.joinedload(Customer.call_logs),
             db.joinedload(Customer.territory)
-        ).filter_by(seller_id=None).order_by(Customer.name).all()
+        ).filter_by(seller_id=None).order_by(Customer.name)
+        
+        # Filter out customers without calls if preference is False
+        if not show_customers_without_calls:
+            customers_without_seller = [c for c in customers_without_seller_query.all() if len(c.call_logs) > 0]
+        else:
+            customers_without_seller = customers_without_seller_query.all()
         
         return render_template('customers_list.html', 
                              grouped_customers=grouped_customers,
                              customers_without_seller=customers_without_seller,
-                             sort_by='grouped')
+                             sort_by='grouped',
+                             show_customers_without_calls=show_customers_without_calls)
     
     elif sort_by == 'by_calls':
         # Sort by number of calls (descending)
-        customers = Customer.query.filter_by(user_id=current_user.id).options(
+        customers_query = Customer.query.filter_by(user_id=current_user.id).options(
             db.joinedload(Customer.seller),
             db.joinedload(Customer.territory),
             db.joinedload(Customer.call_logs)
         ).outerjoin(CallLog).group_by(Customer.id).order_by(
             func.count(CallLog.id).desc(),
             Customer.name
-        ).all()
-        return render_template('customers_list.html', customers=customers, sort_by='by_calls')
+        )
+        
+        # Filter out customers without calls if preference is False
+        if not show_customers_without_calls:
+            customers = [c for c in customers_query.all() if len(c.call_logs) > 0]
+        else:
+            customers = customers_query.all()
+        
+        return render_template('customers_list.html', customers=customers, sort_by='by_calls', show_customers_without_calls=show_customers_without_calls)
     
     else:
         # Alphabetical view (default)
-        customers = Customer.query.filter_by(user_id=current_user.id).options(
+        customers_query = Customer.query.filter_by(user_id=current_user.id).options(
             db.joinedload(Customer.seller),
             db.joinedload(Customer.territory),
             db.joinedload(Customer.call_logs)
-        ).order_by(Customer.name).all()
-        return render_template('customers_list.html', customers=customers, sort_by='alphabetical')
+        ).order_by(Customer.name)
+        
+        # Filter out customers without calls if preference is False
+        if not show_customers_without_calls:
+            customers = [c for c in customers_query.all() if len(c.call_logs) > 0]
+        else:
+            customers = customers_query.all()
+        
+        return render_template('customers_list.html', customers=customers, sort_by='alphabetical', show_customers_without_calls=show_customers_without_calls)
 
 
 @customers_bp.route('/customer/new', methods=['GET', 'POST'])

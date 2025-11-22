@@ -1380,6 +1380,37 @@ def customer_sort_by_preference():
     return jsonify({'customer_sort_by': pref.customer_sort_by}), 200
 
 
+@main_bp.route('/api/preferences/show-customers-without-calls', methods=['GET', 'POST'])
+@login_required
+def show_customers_without_calls_preference():
+    """Get or set preference for showing customers without call logs."""
+    user_id = current_user.id if current_user.is_authenticated else 1
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        show_customers_without_calls = data.get('show_customers_without_calls', False)
+        
+        # Get or create user preference
+        pref = UserPreference.query.filter_by(user_id=user_id).first()
+        if not pref:
+            pref = UserPreference(user_id=user_id, show_customers_without_calls=show_customers_without_calls)
+            db.session.add(pref)
+        else:
+            pref.show_customers_without_calls = show_customers_without_calls
+        
+        db.session.commit()
+        return jsonify({'show_customers_without_calls': pref.show_customers_without_calls}), 200
+    
+    # GET request
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, show_customers_without_calls=False)
+        db.session.add(pref)
+        db.session.commit()
+    
+    return jsonify({'show_customers_without_calls': pref.show_customers_without_calls}), 200
+
+
 # =============================================================================
 # Context Processor
 # =============================================================================

@@ -5,9 +5,9 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><i class="bi bi-journal-text"></i> Call Logs</h1>
-    <a href="{{ url_for('call_logs.call_log_create') }}" class="btn btn-success">
+    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#quickCallLogModal">
         <i class="bi bi-plus-circle"></i> New Call Log
-    </a>
+    </button>
 </div>
 
 {% if call_logs %}
@@ -68,9 +68,84 @@
     </div>
 {% else %}
     <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> No call logs yet. <a href="{{ url_for('call_logs.call_log_create') }}">Create your first call log</a>!
+        <i class="bi bi-info-circle"></i> No call logs yet. <button type="button" class="btn btn-link p-0" data-bs-toggle="modal" data-bs-target="#quickCallLogModal">Create your first call log</button>!
     </div>
 {% endif %}
+
+<!-- Quick Call Log Modal -->
+<div class="modal fade" id="quickCallLogModal" tabindex="-1" aria-labelledby="quickCallLogModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quickCallLogModalLabel">Create Call Log</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="customerSearch" class="form-label">Search for Customer</label>
+                    <input type="text" class="form-control" id="customerSearch" placeholder="Start typing customer name..." autocomplete="off">
+                    <small class="form-text text-muted">Type at least 2 characters to search</small>
+                </div>
+                <div id="customerResults" class="list-group"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Customer autocomplete for quick call log creation
+    let debounceTimer;
+    const customerSearch = document.getElementById('customerSearch');
+    const customerResults = document.getElementById('customerResults');
+    const modal = document.getElementById('quickCallLogModal');
+
+    // Focus input when modal opens
+    modal.addEventListener('shown.bs.modal', function () {
+        customerSearch.focus();
+    });
+
+    // Clear search when modal closes
+    modal.addEventListener('hidden.bs.modal', function () {
+        customerSearch.value = '';
+        customerResults.innerHTML = '';
+    });
+
+    customerSearch.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const query = this.value.trim();
+
+        if (query.length < 2) {
+            customerResults.innerHTML = '';
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            try {
+                const response = await fetch(`{{ url_for('customers.api_customers_autocomplete') }}?q=${encodeURIComponent(query)}`);
+                const customers = await response.json();
+
+                if (customers.length === 0) {
+                    customerResults.innerHTML = '<div class="list-group-item text-muted">No customers found</div>';
+                    return;
+                }
+
+                customerResults.innerHTML = customers.map(customer => {
+                    const displayName = customer.nickname ? `${customer.name} (${customer.nickname})` : customer.name;
+                    const tpidBadge = customer.tpid ? `<span class="badge bg-secondary ms-2">TPID: ${customer.tpid}</span>` : '';
+                    return `
+                        <a href="{{ url_for('call_logs.call_log_create') }}?customer_id=${customer.id}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-building"></i> ${displayName}${tpidBadge}
+                        </a>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error fetching customers:', error);
+                customerResults.innerHTML = '<div class="list-group-item text-danger">Error loading results</div>';
+            }
+        }, 300);
+    });
+</script>
+
 {% endblock %}
 
 

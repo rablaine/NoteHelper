@@ -427,11 +427,12 @@ class UserPreference(db.Model):
     topic_sort_by_calls = db.Column(db.Boolean, default=False, nullable=False)
     territory_view_accounts = db.Column(db.Boolean, default=False, nullable=False)  # False = recent calls, True = accounts
     colored_sellers = db.Column(db.Boolean, default=True, nullable=False)  # False = grey sellers, True = colored sellers
+    show_customers_without_calls = db.Column(db.Boolean, default=False, nullable=False)  # False = hide customers with no calls, True = show all customers
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     def __repr__(self) -> str:
-        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} customer_sort_by={self.customer_sort_by} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} colored_sellers={self.colored_sellers}>'
+        return f'<UserPreference user_id={self.user_id} dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} customer_sort_by={self.customer_sort_by} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} colored_sellers={self.colored_sellers} show_customers_without_calls={self.show_customers_without_calls}>'
 
 
 # =============================================================================

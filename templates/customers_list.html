@@ -2,17 +2,39 @@
 
 {% block title %}Customers - NoteHelper{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Subtle contrast improvement for unchecked switch */
+    #showCustomersWithoutCalls {
+        opacity: 1 !important;
+    }
+    
+    #showCustomersWithoutCalls:not(:checked) {
+        border-width: 1.5px !important;
+        border-color: rgba(var(--bs-body-color-rgb), 0.5) !important;
+        opacity: 1 !important;
+    }
+    
+    #showCustomersWithoutCalls:not(:checked):hover {
+        border-color: var(--bs-primary) !important;
+        opacity: 1 !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>
         <i class="bi bi-building"></i> Customers
-        {% if sort_by == 'grouped' %}
-            <small class="text-muted">(Grouped by Seller)</small>
-        {% elif sort_by == 'by_calls' %}
-            <small class="text-muted">(Sorted by Calls)</small>
-        {% endif %}
     </h1>
     <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-switch me-2">
+            <input class="form-check-input" type="checkbox" role="switch" id="showCustomersWithoutCalls" 
+                   {{ 'checked' if show_customers_without_calls else '' }} style="cursor: pointer;">
+            <label class="form-check-label" for="showCustomersWithoutCalls" style="cursor: pointer;">
+                Show customers with no calls
+            </label>
+        </div>
         <div class="btn-group" role="group" aria-label="Sort customers">
             <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'alphabetical' else 'btn-outline-secondary' }}" data-sort="alphabetical" title="Sort alphabetically">
                 <i class="bi bi-sort-alpha-down"></i> A-Z
@@ -192,6 +214,32 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+    
+    // Handle "Show customers with no calls" checkbox
+    const showCustomersCheckbox = document.getElementById('showCustomersWithoutCalls');
+    if (showCustomersCheckbox) {
+        showCustomersCheckbox.addEventListener('change', function() {
+            const showCustomersWithoutCalls = this.checked;
+            
+            // Save preference
+            fetch('/api/preferences/show-customers-without-calls', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ show_customers_without_calls: showCustomersWithoutCalls })
+            })
+            .then(response => response.json())
+            .then(() => {
+                // Reload page to apply filter
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error saving preference:', error);
+                window.location.reload();
+            });
+        });
+    }
 });
 </script>
 {% endblock %}

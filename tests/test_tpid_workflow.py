@@ -56,21 +56,15 @@ def test_tpid_workflow_update_multiple_urls(client, sample_data, app):
     with app.app_context():
         from app.models import Customer, db
         
-        # Find customers without TPID URLs
-        customers = Customer.query.filter(
-            (Customer.tpid_url == None) | (Customer.tpid_url == '')
-        ).limit(2).all()
-        
-        if len(customers) < 2:
-            pytest.skip("Need at least 2 customers without TPID URLs")
+        # Use customer2 and customer3 from fixtures (both have no TPID URLs)
+        customer2_id = sample_data['customer2_id']
+        customer3_id = sample_data['customer3_id']
         
         # Prepare update data
-        update_data = {}
-        expected_urls = {}
-        for i, customer in enumerate(customers):
-            url = f'https://example.com/crm/customer-{i+1}'
-            update_data[f'tpid_url_{customer.id}'] = url
-            expected_urls[customer.id] = url
+        update_data = {
+            f'tpid_url_{customer2_id}': 'https://example.com/crm/customer-1',
+            f'tpid_url_{customer3_id}': 'https://example.com/crm/customer-2'
+        }
         
         # Submit update
         response = client.post('/tpid-workflow/update', data=update_data, follow_redirects=True)
@@ -79,9 +73,10 @@ def test_tpid_workflow_update_multiple_urls(client, sample_data, app):
         assert b'Successfully updated 2' in response.data
         
         # Verify all URLs were saved
-        for customer_id, expected_url in expected_urls.items():
-            customer = Customer.query.get(customer_id)
-            assert customer.tpid_url == expected_url
+        customer2 = Customer.query.get(customer2_id)
+        customer3 = Customer.query.get(customer3_id)
+        assert customer2.tpid_url == 'https://example.com/crm/customer-1'
+        assert customer3.tpid_url == 'https://example.com/crm/customer-2'
 
 
 def test_tpid_workflow_ignores_empty_fields(client, sample_data, app):
@@ -89,32 +84,25 @@ def test_tpid_workflow_ignores_empty_fields(client, sample_data, app):
     with app.app_context():
         from app.models import Customer
         
-        # Find customers without TPID URLs
-        customers = Customer.query.filter(
-            (Customer.tpid_url == None) | (Customer.tpid_url == '')
-        ).limit(2).all()
-        
-        if len(customers) < 2:
-            pytest.skip("Need at least 2 customers without TPID URLs")
-        
-        # Submit with one filled and one empty
-        customer1_id = customers[0].id
-        customer2_id = customers[1].id
+        # Use customer2 and customer3 from fixtures (both have no TPID URLs)
+        customer2_id = sample_data['customer2_id']
+        customer3_id = sample_data['customer3_id']
         test_url = 'https://example.com/crm/only-this-one'
         
+        # Submit with one filled and one empty
         response = client.post('/tpid-workflow/update', data={
-            f'tpid_url_{customer1_id}': test_url,
-            f'tpid_url_{customer2_id}': ''  # Empty - should be ignored
+            f'tpid_url_{customer2_id}': test_url,
+            f'tpid_url_{customer3_id}': ''  # Empty - should be ignored
         }, follow_redirects=True)
         
         assert response.status_code == 200
         assert b'Successfully updated 1' in response.data
         
         # Verify only the filled one was saved
-        customer1 = Customer.query.get(customer1_id)
         customer2 = Customer.query.get(customer2_id)
-        assert customer1.tpid_url == test_url
-        assert not customer2.tpid_url  # Should still be empty
+        customer3 = Customer.query.get(customer3_id)
+        assert customer2.tpid_url == test_url
+        assert not customer3.tpid_url  # Should still be empty
 
 
 def test_tpid_workflow_empty_when_all_filled(client, sample_data, app):

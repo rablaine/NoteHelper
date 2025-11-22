@@ -279,12 +279,6 @@ class TestAISuggestions:
             # Total topics in DB should be 2 (not 3)
             assert Topic.query.count() == 2
     
-    def test_suggest_topics_requires_login(self, app, client):
-        """Test that topic suggestion requires authentication."""
-        # With LOGIN_DISABLED=True in tests, this always allows access
-        # Skip this test as authentication is disabled for test simplicity
-        pytest.skip('Authentication disabled in test config')
-    
     def test_suggest_topics_when_disabled(self, app, client):
         """Test that suggestions fail when AI is disabled."""
         with app.app_context():
