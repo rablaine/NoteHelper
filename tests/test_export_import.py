@@ -574,6 +574,35 @@ def test_import_json_includes_user_preferences(app, client):
         assert pref.topic_sort_by_calls == True
 
 
+def test_export_can_exclude_ai_config(app, client):
+    """Test that AI config can be excluded from export."""
+    from app.models import db, AIConfig
+    
+    with app.app_context():
+        # Create AI config if it doesn't exist
+        ai_config = AIConfig.query.first()
+        if not ai_config:
+            ai_config = AIConfig(
+                enabled=True,
+                endpoint_url='https://test.openai.azure.com',
+                api_key='test-key-123',
+                deployment_name='gpt-4'
+            )
+            db.session.add(ai_config)
+            db.session.commit()
+        
+        # Export with AI config (default)
+        response = client.get('/api/data-management/export/json')
+        export_data = json.loads(response.data)
+        assert export_data['ai_config'] is not None
+        assert export_data['ai_config']['deployment_name'] == 'gpt-4'
+        
+        # Export without AI config
+        response = client.get('/api/data-management/export/json?exclude_ai_config=true')
+        export_data = json.loads(response.data)
+        assert export_data['ai_config'] is None
+
+
 def test_import_csv_creates_entities(app, client):
     """Test that importing CSV creates all expected entities."""
     from app.models import db, Territory, Seller, Customer, POD

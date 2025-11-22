@@ -347,9 +347,17 @@
                             <div class="card-body">
                                 <h5><i class="bi bi-download"></i> Export All Data</h5>
                                 <p class="text-muted">Backup complete database (all users, includes ownership)</p>
-                                <a href="{{ url_for('main.export_full_json') }}" class="btn btn-primary me-2 mb-2">
+                                <div class="mb-2">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" id="includeAiConfig" checked>
+                                        <label class="form-check-label" for="includeAiConfig">
+                                            Include AI Config
+                                        </label>
+                                    </div>
+                                </div>
+                                <button id="exportJsonBtn" class="btn btn-primary me-2 mb-2">
                                     <i class="bi bi-filetype-json"></i> Export JSON
-                                </a>
+                                </button>
                                 <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-info">
                                     <i class="bi bi-filetype-csv"></i> Export CSV
                                 </a>
@@ -710,6 +718,15 @@ document.addEventListener('click', async function(e) {
             alert('Failed to remove domain');
         }
     }
+});
+
+// JSON Export with optional AI config
+document.getElementById('exportJsonBtn').addEventListener('click', function() {
+    const includeAiConfig = document.getElementById('includeAiConfig').checked;
+    const url = includeAiConfig 
+        ? '{{ url_for("main.export_full_json") }}'
+        : '{{ url_for("main.export_full_json") }}?exclude_ai_config=true';
+    window.location.href = url;
 });
 
 // JSON Import

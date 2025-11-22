@@ -652,19 +652,23 @@ def export_full_json():
     """Export complete database as JSON for disaster recovery."""
     from app.models import UserPreference, AIConfig
     
-    # Export AI config if it exists
-    ai_config = AIConfig.query.first()
+    # Check if AI config should be excluded
+    exclude_ai_config = request.args.get('exclude_ai_config', 'false').lower() == 'true'
+    
+    # Export AI config if it exists and not excluded
     ai_config_data = None
-    if ai_config:
-        ai_config_data = {
-            'enabled': ai_config.enabled,
-            'endpoint_url': ai_config.endpoint_url,
-            'api_key': ai_config.api_key,
-            'deployment_name': ai_config.deployment_name,
-            'api_version': ai_config.api_version,
-            'system_prompt': ai_config.system_prompt,
-            'max_daily_calls_per_user': ai_config.max_daily_calls_per_user
-        }
+    if not exclude_ai_config:
+        ai_config = AIConfig.query.first()
+        if ai_config:
+            ai_config_data = {
+                'enabled': ai_config.enabled,
+                'endpoint_url': ai_config.endpoint_url,
+                'api_key': ai_config.api_key,
+                'deployment_name': ai_config.deployment_name,
+                'api_version': ai_config.api_version,
+                'system_prompt': ai_config.system_prompt,
+                'max_daily_calls_per_user': ai_config.max_daily_calls_per_user
+            }
     
     data = {
         'export_date': datetime.now(timezone.utc).isoformat(),
