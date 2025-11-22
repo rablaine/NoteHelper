@@ -240,6 +240,58 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+    
+    // Show draft indicators for customers with unsaved drafts
+    function showDraftIndicators() {
+        const DRAFT_KEY_PREFIX = 'notehelper_draft_';
+        
+        // Find all drafts in localStorage
+        const customerDrafts = new Set();
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(DRAFT_KEY_PREFIX)) {
+                // Extract customer ID from key (e.g., "notehelper_draft_123" -> "123")
+                const customerId = key.replace(DRAFT_KEY_PREFIX, '');
+                if (customerId) {
+                    customerDrafts.add(customerId);
+                }
+            }
+        }
+        
+        // Add draft indicators to matching customer rows
+        customerDrafts.forEach(customerId => {
+            // Find all list items and check if they link to this customer
+            document.querySelectorAll('.list-group-item').forEach(item => {
+                const onclick = item.getAttribute('onclick');
+                if (onclick && onclick.includes(`/customer/${customerId}`)) {
+                    // Check if indicator already exists
+                    if (!item.querySelector('.draft-indicator')) {
+                        // Add draft badge next to customer name
+                        const heading = item.querySelector('h5');
+                        if (heading) {
+                            const draftBadge = document.createElement('span');
+                            draftBadge.className = 'badge bg-warning text-dark ms-2 draft-indicator';
+                            draftBadge.innerHTML = '<i class="bi bi-pencil"></i> Draft';
+                            draftBadge.title = 'This customer has an unsaved draft call log';
+                            heading.appendChild(draftBadge);
+                        }
+                    }
+                }
+            });
+        });
+    }
+    
+    // Show indicators on page load
+    showDraftIndicators();
+    
+    // Listen for storage changes from other tabs
+    window.addEventListener('storage', function(e) {
+        if (e.key && e.key.startsWith('notehelper_draft_')) {
+            // A draft was added or removed in another tab - update indicators
+            document.querySelectorAll('.draft-indicator').forEach(el => el.remove());
+            showDraftIndicators();
+        }
+    });
 });
 </script>
 {% endblock %}

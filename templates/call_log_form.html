@@ -109,9 +109,16 @@
                     </div>
                     
                     <div class="d-flex justify-content-between">
-                        <button type="submit" class="btn btn-success">
-                            <i class="bi bi-check-circle"></i> Save Call Log
-                        </button>
+                        <div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle"></i> Save Call Log
+                            </button>
+                            {% if not call_log %}
+                            <button type="button" class="btn btn-outline-danger ms-2" onclick="discardDraft()">
+                                <i class="bi bi-trash"></i> Discard Draft
+                            </button>
+                            {% endif %}
+                        </div>
                         <a href="{{ url_for('call_logs.call_logs_list') }}" class="btn btn-secondary">
                             <i class="bi bi-x-circle"></i> Cancel
                         </a>
@@ -496,6 +503,247 @@ document.getElementById('aiSuggestBtn').addEventListener('click', function() {
     });
 });
 
+// ===== AUTO-SAVE FUNCTIONALITY =====
+const DRAFT_KEY_PREFIX = 'notehelper_draft_';
+const MAX_DRAFTS = 5;
+let autoSaveInterval = null;
+let draftRestored = false;
+
+// Get customer-specific draft key
+function getDraftKey() {
+    const customerId = document.getElementById('customer_id').value;
+    return customerId ? `${DRAFT_KEY_PREFIX}${customerId}` : null;
+}
+
+// Get customer name from select dropdown
+function getCustomerName() {
+    const customerSelect = document.getElementById('customer_id');
+    const selectedOption = customerSelect.options[customerSelect.selectedIndex];
+    return selectedOption ? selectedOption.textContent.trim() : '';
+}
+
+// Save draft to localStorage
+function saveDraft() {
+    const draftKey = getDraftKey();
+    if (!draftKey) return; // Can't save without customer selected
+    
+    const draftData = {
+        customer_id: document.getElementById('customer_id').value,
+        customer_name: getCustomerName(),
+        call_date: document.getElementById('call_date').value,
+        content: quill.root.innerHTML,
+        topics: Array.from(selectedTopicsContainer.querySelectorAll('input[name="topic_ids"]')).map(input => ({
+            id: parseInt(input.value),
+            name: input.closest('.badge').textContent.trim().replace('×', '').trim()
+        })),
+        timestamp: Date.now()
+    };
+    
+    // Only save if there's actual content
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = draftData.content;
+    const textContent = (tempDiv.textContent || tempDiv.innerText || '').trim();
+    
+    if (textContent.length > 0 || draftData.topics.length > 0) {
+        try {
+            localStorage.setItem(draftKey, JSON.stringify(draftData));
+            console.log('Draft auto-saved');
+        } catch (e) {
+            console.error('Failed to save draft:', e);
+            // Storage quota exceeded - prune old drafts
+            pruneOldDrafts();
+        }
+    }
+}
+
+// Restore draft from localStorage
+function restoreDraft() {
+    const draftKey = getDraftKey();
+    if (!draftKey) return false;
+    
+    try {
+        const draftJson = localStorage.getItem(draftKey);
+        if (!draftJson) return false;
+        
+        const draft = JSON.parse(draftJson);
+        
+        // Check if draft has any content
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = draft.content || '';
+        const textContent = (tempDiv.textContent || tempDiv.innerText || '').trim();
+        
+        if (textContent.length === 0 && (!draft.topics || draft.topics.length === 0)) {
+            return false; // No content to restore
+        }
+        
+        // Restore form data
+        if (draft.call_date) {
+            document.getElementById('call_date').value = draft.call_date;
+        }
+        
+        if (draft.content) {
+            quill.root.innerHTML = draft.content;
+        }
+        
+        if (draft.topics && draft.topics.length > 0) {
+            draft.topics.forEach(topic => {
+                if (!isTopicSelected(topic.id)) {
+                    addTopic(topic.id, topic.name);
+                }
+            });
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('Failed to restore draft:', e);
+        return false;
+    }
+}
+
+// Clear draft from localStorage
+function clearDraft() {
+    const draftKey = getDraftKey();
+    if (!draftKey) return;
+    
+    try {
+        localStorage.removeItem(draftKey);
+        console.log('Draft cleared');
+    } catch (e) {
+        console.error('Failed to clear draft:', e);
+    }
+}
+
+// Prune old drafts (keep only MAX_DRAFTS most recent)
+function pruneOldDrafts() {
+    try {
+        const drafts = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(DRAFT_KEY_PREFIX)) {
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    drafts.push({ key, timestamp: data.timestamp || 0 });
+                } catch (e) {
+                    // Invalid draft, remove it
+                    localStorage.removeItem(key);
+                }
+            }
+        }
+        
+        // Sort by timestamp descending
+        drafts.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Remove drafts beyond MAX_DRAFTS
+        if (drafts.length > MAX_DRAFTS) {
+            drafts.slice(MAX_DRAFTS).forEach(draft => {
+                localStorage.removeItem(draft.key);
+                console.log('Pruned old draft:', draft.key);
+            });
+        }
+    } catch (e) {
+        console.error('Failed to prune drafts:', e);
+    }
+}
+
+// Listen for storage changes (multi-tab coordination)
+window.addEventListener('storage', function(e) {
+    if (e.key && e.key.startsWith(DRAFT_KEY_PREFIX)) {
+        const draftKey = getDraftKey();
+        if (e.key === draftKey && !draftRestored) {
+            // Another tab modified our draft - reload if we haven't restored yet
+            if (e.newValue) {
+                console.log('Draft updated from another tab');
+                const shouldRestore = confirm('A draft was updated in another tab. Reload it?');
+                if (shouldRestore) {
+                    restoreDraft();
+                    draftRestored = true;
+                }
+            }
+        }
+    }
+});
+
+// Function to start auto-save for selected customer
+function startAutoSave() {
+    const customerSelect = document.getElementById('customer_id');
+    const customerId = customerSelect.value || customerSelect.querySelector('option[selected]')?.value;
+    
+    // Stop any existing auto-save
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        autoSaveInterval = null;
+    }
+    
+    // Check for existing draft when customer changes
+    if (customerId && !draftRestored) {
+        const hasDraft = restoreDraft();
+        if (hasDraft) {
+            draftRestored = true;
+            
+            // Show dismissible alert
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-info alert-dismissible fade show mt-3';
+            alertDiv.innerHTML = `
+                <i class="bi bi-info-circle"></i> <strong>Draft restored!</strong> Your unsaved changes have been recovered.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('form').insertBefore(alertDiv, document.querySelector('form').firstChild);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.remove(), 150);
+            }, 5000);
+        }
+    }
+    
+    // Start auto-save if customer selected
+    if (customerId) {
+        autoSaveInterval = setInterval(saveDraft, 10000); // Every 10 seconds
+        console.log('Auto-save started for customer', customerId);
+    }
+}
+
+// Start auto-save when customer is selected
+document.getElementById('customer_id').addEventListener('change', startAutoSave);
+
+// Save draft before page unload
+window.addEventListener('beforeunload', function(e) {
+    const customerId = document.getElementById('customer_id').value;
+    if (customerId) {
+        saveDraft();
+    }
+});
+
+// Clear draft on successful form submission
+document.getElementById('callLogForm').addEventListener('submit', function(e) {
+    // The form will proceed with submission, just clear the draft
+    setTimeout(() => {
+        clearDraft();
+        if (autoSaveInterval) {
+            clearInterval(autoSaveInterval);
+        }
+    }, 100);
+});
+
+// Discard draft function
+function discardDraft() {
+    if (confirm('Discard this draft? This will clear all unsaved changes and cannot be undone.')) {
+        clearDraft();
+        if (autoSaveInterval) {
+            clearInterval(autoSaveInterval);
+        }
+        
+        // Clear the form
+        quill.setContents([]);
+        document.getElementById('call_date').value = '';
+        document.querySelectorAll('.badge[data-topic-id]').forEach(badge => badge.remove());
+        
+        // Redirect back to call logs list
+        window.location.href = '{{ url_for("call_logs.call_logs_list") }}';
+    }
+}
+
 // Set current date as default if creating new call log
 {% if not call_log %}
 document.addEventListener('DOMContentLoaded', function() {
@@ -504,6 +752,9 @@ document.addEventListener('DOMContentLoaded', function() {
     var month = String(now.getMonth() + 1).padStart(2, '0');
     var day = String(now.getDate()).padStart(2, '0');
     document.getElementById('call_date').value = year + '-' + month + '-' + day;
+    
+    // Initialize auto-save if customer is preselected
+    startAutoSave();
     
     {% if previous_calls %}
     // Match previous calls card height to new call log card height

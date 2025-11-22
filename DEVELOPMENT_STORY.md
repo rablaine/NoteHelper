@@ -6,16 +6,17 @@ NoteHelper is a comprehensive note-taking application built for Azure technical 
 
 ## Development Stats
 
-- **Total Development Time:** ~40 hours over 5 days (November 17-21, 2025)
-- **Lines of Code:** 13,355+ lines (Python, HTML, JavaScript, CSS)
+- **Version:** 1.1 (with auto-save feature)
+- **Total Development Time:** ~41.5 hours over 5 days (November 17-21, 2025)
+- **Lines of Code:** 13,800+ lines (6,641 Python, 6,184 HTML, 1,059 migrations)
 - **Files Created:** 
-  - 34 Python files
+  - 24 Python files (app + tests)
   - 35 HTML templates
-  - 24 database migration files
+  - 27 database migration files
 - **Database Models:** 15 models with complex relationships
 - **API Endpoints:** 76 routes across multiple blueprints
 - **Test Coverage:** 119 unit tests with 100% pass rate (0 failures, 0 skips)
-- **Git Commits:** 150+ commits with conventional commit messages
+- **Git Commits:** 155+ commits with conventional commit messages
 
 ## What Is "Vibe Coding"?
 
@@ -76,6 +77,18 @@ This conversational approach allowed me to focus on product vision and user expe
 - Usage tracking with progress bars
 - Complete audit logging (requests, responses, tokens, errors)
 - Admin configuration panel with connection testing
+
+### Auto-Save & Draft Management (v1.1)
+- **Client-Side Auto-Save:** Drafts saved to localStorage every 10 seconds while typing
+- **Per-Customer Drafts:** Multiple simultaneous drafts supported (keyed by customer ID)
+- **Draft Restoration:** Automatic recovery with dismissible alert when reopening forms
+- **Visual Indicators:** Orange "Draft" badges on customer list and home page draft section
+- **Draft Management UI:** Home page section showing all drafts with timestamps and topic counts
+- **Multi-Tab Coordination:** Storage event listeners sync draft changes across browser tabs
+- **Draft Pruning:** Automatic cleanup keeping only 5 most recent drafts
+- **Discard Draft Button:** Manual draft clearing with confirmation
+- **beforeunload Protection:** Final save before closing tab to capture last changes
+- **Zero Server Overhead:** Entirely client-side using browser localStorage
 
 ### Quick Actions & UX Flows
 - **Homepage Quick Call Log:** Modal with customer autocomplete (debounced, 300ms)
@@ -313,11 +326,11 @@ This application demonstrates competency in:
 
 ## Takeaway for Your Team
 
-This project proves that **vibe coding with GitHub Copilot is a legitimate development methodology**. In 40 hours, a single developer built a production-ready application with:
-- 13,000+ lines of code
+This project proves that **vibe coding with GitHub Copilot is a legitimate development methodology**. In 41.5 hours, a single developer built a production-ready application with:
+- 13,800+ lines of code (6,641 Python, 6,184 HTML, 1,059 migrations)
 - 76 API endpoints
 - 35 templates
-- 101 tests
+- 119 tests (100% pass rate)
 - Complete documentation
 
 The key is **treating Copilot like a senior engineer**: give it clear requirements, review its work, and iterate conversationally. You're not "just prompting" - you're **pair programming with AI**.

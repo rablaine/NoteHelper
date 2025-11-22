@@ -1,6 +1,6 @@
 # NoteHelper
 
-**Version 1.0** - A note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
+**Version 1.1** - A note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
 
 > 📖 **[Read the Development Story](DEVELOPMENT_STORY.md)** - Learn how this 13,000+ line application was built in 40 hours using AI-assisted "vibe coding" with GitHub Copilot.
 
@@ -24,6 +24,9 @@
 - Account linking for Microsoft and external email addresses
 - Dark mode with user preferences
 - Quick call log creation with customer autocomplete
+- **Auto-save drafts** - Call logs automatically save every 10 seconds to prevent data loss
+- **Draft management** - View unsaved drafts on home page, restore on return, discard when done
+- **Multi-tab coordination** - Draft changes sync across browser tabs in real-time
 - Flexible customer list views (alphabetical, grouped by seller, sorted by call count)
 - Filter customers by call log activity
 - AI-powered topic suggestion using Azure OpenAI
