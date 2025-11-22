@@ -13,6 +13,13 @@
         {% endif %}
     </h1>
     <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-switch me-2">
+            <input class="form-check-input" type="checkbox" id="showCustomersWithoutCalls" 
+                   {{ 'checked' if show_customers_without_calls else '' }}>
+            <label class="form-check-label" for="showCustomersWithoutCalls">
+                Show customers with no calls
+            </label>
+        </div>
         <div class="btn-group" role="group" aria-label="Sort customers">
             <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'alphabetical' else 'btn-outline-secondary' }}" data-sort="alphabetical" title="Sort alphabetically">
                 <i class="bi bi-sort-alpha-down"></i> A-Z
@@ -192,6 +199,32 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+    
+    // Handle "Show customers with no calls" checkbox
+    const showCustomersCheckbox = document.getElementById('showCustomersWithoutCalls');
+    if (showCustomersCheckbox) {
+        showCustomersCheckbox.addEventListener('change', function() {
+            const showCustomersWithoutCalls = this.checked;
+            
+            // Save preference
+            fetch('/api/preferences/show-customers-without-calls', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ show_customers_without_calls: showCustomersWithoutCalls })
+            })
+            .then(response => response.json())
+            .then(() => {
+                // Reload page to apply filter
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error saving preference:', error);
+                window.location.reload();
+            });
+        });
+    }
 });
 </script>
 {% endblock %}
