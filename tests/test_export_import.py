@@ -16,10 +16,12 @@ def test_export_full_json_structure(client, sample_data):
     # Check top-level structure
     assert 'export_date' in data
     assert 'version' in data
-    assert data['version'] == '2.0'
+    assert data['version'] == '2.1'
     
     # Check all entity types are present including users
     assert 'users' in data
+    assert 'user_preferences' in data
+    assert 'ai_config' in data  # Can be None if not configured
     assert 'pods' in data
     assert 'territories' in data
     assert 'sellers' in data
@@ -520,6 +522,85 @@ def test_enriched_export_has_complete_relationship_data(client, sample_data):
     # Verify territory data includes POD
     assert call_log['territory']['name']
     assert 'pod' in call_log['territory']
+
+
+def test_import_json_includes_user_preferences(app, client):
+    """Test that importing JSON includes user preferences."""
+    from app.models import db, User, UserPreference
+    
+    with app.app_context():
+        # Get test user
+        test_user = User.query.first()
+        
+        # Update their preferences
+        pref = UserPreference.query.filter_by(user_id=test_user.id).first()
+        pref.dark_mode = True
+        pref.customer_view_grouped = True
+        pref.topic_sort_by_calls = True
+        db.session.commit()
+        
+        # Export data
+        response = client.get('/api/data-management/export/json')
+        export_data = json.loads(response.data)
+        
+        # Verify preferences are in export
+        assert 'user_preferences' in export_data
+        assert len(export_data['user_preferences']) > 0
+        user_pref = next(p for p in export_data['user_preferences'] if p['user_id'] == test_user.id)
+        assert user_pref['dark_mode'] == True
+        assert user_pref['customer_view_grouped'] == True
+        assert user_pref['topic_sort_by_calls'] == True
+        
+        # Reset preferences
+        pref.dark_mode = False
+        pref.customer_view_grouped = False
+        pref.topic_sort_by_calls = False
+        db.session.commit()
+        
+        # Import back
+        json_file = BytesIO(json.dumps(export_data).encode('utf-8'))
+        response = client.post('/api/data-management/import/json',
+                              data={'file': (json_file, 'test_prefs.json')},
+                              content_type='multipart/form-data')
+        
+        assert response.status_code == 200
+        result = json.loads(response.data)
+        assert 'user preferences' in result['message']
+        
+        # Verify preferences were restored
+        db.session.refresh(pref)
+        assert pref.dark_mode == True
+        assert pref.customer_view_grouped == True
+        assert pref.topic_sort_by_calls == True
+
+
+def test_export_can_exclude_ai_config(app, client):
+    """Test that AI config can be excluded from export."""
+    from app.models import db, AIConfig
+    
+    with app.app_context():
+        # Create AI config if it doesn't exist
+        ai_config = AIConfig.query.first()
+        if not ai_config:
+            ai_config = AIConfig(
+                enabled=True,
+                endpoint_url='https://test.openai.azure.com',
+                api_key='test-key-123',
+                deployment_name='gpt-4'
+            )
+            db.session.add(ai_config)
+            db.session.commit()
+        
+        # Export with AI config (default)
+        response = client.get('/api/data-management/export/json')
+        export_data = json.loads(response.data)
+        assert export_data['ai_config'] is not None
+        assert export_data['ai_config']['deployment_name'] == 'gpt-4'
+        
+        # Export without AI config
+        response = client.get('/api/data-management/export/json?exclude_ai_config=true')
+        export_data = json.loads(response.data)
+        assert export_data['ai_config'] is None
 
 
 def test_import_csv_creates_entities(app, client):
