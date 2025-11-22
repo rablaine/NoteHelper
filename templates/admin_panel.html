@@ -761,8 +761,6 @@ document.getElementById('importJsonForm').addEventListener('submit', async funct
         if (response.ok) {
             resultDiv.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle"></i> ${data.message}</div>`;
             fileInput.value = '';
-            // Reload page after 2 seconds to show updated stats
-            setTimeout(() => location.reload(), 2000);
         } else {
             resultDiv.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ${data.error}</div>`;
         }
