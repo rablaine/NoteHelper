@@ -2,7 +2,7 @@
 
 **Version 1.1** - A note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
 
-> 📖 **[Read the Development Story](DEVELOPMENT_STORY.md)** - Learn how this 13,000+ line application was built in 40 hours using AI-assisted "vibe coding" with GitHub Copilot.
+> 📖 **[Read the Development Story](DEVELOPMENT_STORY.md)** - Learn how this 14,000+ line application was built in 42+ hours using AI-assisted "vibe coding" with GitHub Copilot.
 
 ## Features
 
@@ -125,6 +125,8 @@ This project follows PEP 8 guidelines and uses type hints. See `.github/copilot-
 
 ## Version History
 
+- **v1.2 (November 2025):** Analytics dashboard with insights and trends, comprehensive UI/UX improvements (word-boundary truncation, clickable admin stats, draft save indicators, standardized button sizes, improved search hierarchy)
+- **v1.1 (November 2025):** Auto-save draft feature with localStorage, multi-tab coordination, and draft management
 - **v1.0 (November 2025):** Production release with multi-user support, Azure AD authentication, AI-powered topic suggestions, organizational hierarchy (PODs/SEs), and comprehensive import/export capabilities
 
 ## Contributing

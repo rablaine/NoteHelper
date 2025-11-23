@@ -6,17 +6,17 @@ NoteHelper is a comprehensive note-taking application built for Azure technical 
 
 ## Development Stats
 
-- **Version:** 1.1 (with auto-save feature)
-- **Total Development Time:** ~41.5 hours over 5 days (November 17-21, 2025)
-- **Lines of Code:** 13,800+ lines (6,641 Python, 6,184 HTML, 1,059 migrations)
+- **Version:** 1.2 (with analytics dashboard and comprehensive UX improvements)
+- **Total Development Time:** ~42+ hours over 5 days (November 17-23, 2025)
+- **Lines of Code:** 14,940 lines (7,331 Python - 4,353 app + 2,978 tests, 6,549 HTML, 1,059 migrations)
 - **Files Created:** 
-  - 24 Python files (app + tests)
-  - 35 HTML templates
+  - 26 Python files (app + tests)
+  - 36 HTML templates
   - 27 database migration files
 - **Database Models:** 15 models with complex relationships
-- **API Endpoints:** 76 routes across multiple blueprints
-- **Test Coverage:** 119 unit tests with 100% pass rate (0 failures, 0 skips)
-- **Git Commits:** 155+ commits with conventional commit messages
+- **API Endpoints:** 79 routes across multiple blueprints
+- **Test Coverage:** 135 unit tests with 100% pass rate (117 main + 10 analytics + 7 UX + 1 config)
+- **Git Commits:** 146 commits with conventional commit messages
 
 ## What Is "Vibe Coding"?
 
@@ -77,6 +77,24 @@ This conversational approach allowed me to focus on product vision and user expe
 - Usage tracking with progress bars
 - Complete audit logging (requests, responses, tokens, errors)
 - Admin configuration panel with connection testing
+
+### Analytics Dashboard (v1.2)
+- **Comprehensive Metrics:** Calls this week/month, customers engaged, total customers/calls
+- **Call Frequency Trends:** Visual bar chart showing weekly call volume (4-week history)
+- **Most Discussed Topics:** Top 10 topics from last 90 days with call counts
+- **Customers Needing Attention:** Automatic identification of accounts with 90+ days without contact
+- **Seller Activity:** Monthly call counts per seller with visual indicators
+- **Quick Actions:** One-click call logging with modal form and customer autocomplete
+- **Real-Time Data:** All metrics calculated on page load for accuracy
+
+### UI/UX Improvements (v1.2)
+- **Word-Boundary Truncation:** Call content truncated at natural word breaks (not mid-word)
+- **Clickable Admin Stats:** Dashboard metrics link directly to relevant pages
+- **Topics Toggle Fix:** Sort button now shows current state instead of action
+- **Simplified Search Hierarchy:** Lighter visual design for easier scanning
+- **Prominent Customers Filter:** Button-style toggle with eye icons for better discoverability
+- **Draft Save Indicator:** Visual feedback when drafts auto-save (fade-in/fade-out animation)
+- **Standardized Button Sizes:** Consistent btn-sm styling across all list pages
 
 ### Auto-Save & Draft Management (v1.1)
 - **Client-Side Auto-Save:** Drafts saved to localStorage every 10 seconds while typing
@@ -188,6 +206,9 @@ This conversational approach allowed me to focus on product vision and user expe
 5. **Export/Import Tests (18 tests):** JSON/CSV roundtrips, data integrity
 6. **AI Tests (18 tests):** OpenAI integration, rate limiting, audit logging
 7. **Account Linking Tests (19 tests):** OAuth flows, user merging, security
+8. **Analytics Tests (10 tests):** Dashboard metrics, trends, insights, calculations
+9. **UX Improvement Tests (7 tests):** Toggle states, truncation, clickable elements, visual hierarchy
+10. **Config Tests (1 test):** Environment variable validation
 
 #### Test Patterns
 - **Arrange-Act-Assert:** Clear test structure
@@ -326,11 +347,11 @@ This application demonstrates competency in:
 
 ## Takeaway for Your Team
 
-This project proves that **vibe coding with GitHub Copilot is a legitimate development methodology**. In 41.5 hours, a single developer built a production-ready application with:
-- 13,800+ lines of code (6,641 Python, 6,184 HTML, 1,059 migrations)
-- 76 API endpoints
-- 35 templates
-- 119 tests (100% pass rate)
+This project proves that **vibe coding with GitHub Copilot is a legitimate development methodology**. In 42+ hours, a single developer built a production-ready application with:
+- 14,940 lines of code (7,331 Python - 4,353 app + 2,978 tests, 6,549 HTML, 1,059 migrations)
+- 79 API endpoints
+- 36 templates
+- 135 tests (100% pass rate)
 - Complete documentation
 
 The key is **treating Copilot like a senior engineer**: give it clear requirements, review its work, and iterate conversationally. You're not "just prompting" - you're **pair programming with AI**.
@@ -347,4 +368,4 @@ When you build alongside me live, you'll see:
 ---
 
 *Built with GitHub Copilot, Flask, PostgreSQL, and a conversational approach to software development.*
-*November 17-21, 2025*
+*November 17-23, 2025*
