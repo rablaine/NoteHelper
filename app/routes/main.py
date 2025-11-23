@@ -253,6 +253,114 @@ def data_management():
     return render_template('data_management.html', has_data=has_data)
 
 
+@main_bp.route('/analytics')
+@login_required
+def analytics():
+    """Analytics and insights dashboard."""
+    from datetime import date, timedelta
+    from sqlalchemy import func, distinct
+    
+    # Date ranges
+    today = date.today()
+    week_ago = today - timedelta(days=7)
+    month_ago = today - timedelta(days=30)
+    three_months_ago = today - timedelta(days=90)
+    
+    # Call volume metrics
+    total_calls = CallLog.query.filter_by(user_id=current_user.id).count()
+    calls_this_week = CallLog.query.filter_by(user_id=current_user.id).filter(
+        CallLog.call_date >= week_ago
+    ).count()
+    calls_this_month = CallLog.query.filter_by(user_id=current_user.id).filter(
+        CallLog.call_date >= month_ago
+    ).count()
+    
+    # Customer engagement
+    total_customers = Customer.query.filter_by(user_id=current_user.id).count()
+    customers_called_this_week = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= week_ago
+    ).scalar()
+    customers_called_this_month = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= month_ago
+    ).scalar()
+    
+    # Topic insights - most discussed topics
+    top_topics = db.session.query(
+        Topic.id,
+        Topic.name,
+        func.count(CallLog.id).label('call_count')
+    ).join(
+        CallLog.topics
+    ).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= three_months_ago
+    ).group_by(
+        Topic.id,
+        Topic.name
+    ).order_by(
+        func.count(CallLog.id).desc()
+    ).limit(10).all()
+    
+    # Customers not called recently (90+ days or never)
+    customers_with_recent_calls = db.session.query(CallLog.customer_id).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= three_months_ago
+    ).distinct().subquery()
+    
+    customers_needing_attention = Customer.query.filter(
+        Customer.user_id == current_user.id,
+        ~Customer.id.in_(customers_with_recent_calls)
+    ).order_by(Customer.name).limit(10).all()
+    
+    # Seller activity (calls per seller this month)
+    seller_activity = db.session.query(
+        Seller.id,
+        Seller.name,
+        func.count(CallLog.id).label('call_count')
+    ).join(
+        Customer, Customer.seller_id == Seller.id
+    ).join(
+        CallLog, CallLog.customer_id == Customer.id
+    ).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= month_ago
+    ).group_by(
+        Seller.id,
+        Seller.name
+    ).order_by(
+        func.count(CallLog.id).desc()
+    ).limit(10).all()
+    
+    # Call frequency trend (last 30 days, grouped by week)
+    weekly_calls = []
+    for i in range(4):
+        week_start = today - timedelta(days=7*(i+1))
+        week_end = today - timedelta(days=7*i)
+        count = CallLog.query.filter_by(user_id=current_user.id).filter(
+            CallLog.call_date >= week_start,
+            CallLog.call_date < week_end
+        ).count()
+        weekly_calls.append({
+            'week_label': f"{week_start.strftime('%b %d')} - {week_end.strftime('%b %d')}",
+            'count': count
+        })
+    weekly_calls.reverse()  # Show oldest to newest
+    
+    return render_template('analytics.html',
+                         total_calls=total_calls,
+                         calls_this_week=calls_this_week,
+                         calls_this_month=calls_this_month,
+                         total_customers=total_customers,
+                         customers_called_this_week=customers_called_this_week,
+                         customers_called_this_month=customers_called_this_month,
+                         top_topics=top_topics,
+                         customers_needing_attention=customers_needing_attention,
+                         seller_activity=seller_activity,
+                         weekly_calls=weekly_calls)
+
+
 # =============================================================================
 # My Data API Routes (User-specific exports/imports)
 # =============================================================================

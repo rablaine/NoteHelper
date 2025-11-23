@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - NoteHelper{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="bi bi-graph-up"></i> Analytics & Insights</h1>
+
+<!-- Key Metrics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-primary mb-0">{{ calls_this_week }}</h3>
+                <p class="text-muted mb-0">Calls This Week</p>
+                <small class="text-muted">{{ calls_this_month }} this month</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-success mb-0">{{ customers_called_this_week }}</h3>
+                <p class="text-muted mb-0">Customers Engaged</p>
+                <small class="text-muted">{{ customers_called_this_month }} this month</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-info mb-0">{{ total_calls }}</h3>
+                <p class="text-muted mb-0">Total Calls</p>
+                <small class="text-muted">All time</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3 class="text-warning mb-0">{{ total_customers }}</h3>
+                <p class="text-muted mb-0">Total Customers</p>
+                <small class="text-muted">In your portfolio</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Call Frequency Trend -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Call Frequency Trend</h5>
+            </div>
+            <div class="card-body">
+                {% if weekly_calls %}
+                    <div class="mb-3">
+                        {% for week in weekly_calls %}
+                            <div class="d-flex align-items-center mb-2">
+                                <div style="width: 120px;" class="text-muted small">{{ week.week_label }}</div>
+                                <div class="progress flex-grow-1 mx-2" style="height: 25px;">
+                                    {% set max_count = weekly_calls|map(attribute='count')|max %}
+                                    {% set width = (week.count / max_count * 100) if max_count > 0 else 0 %}
+                                    <div class="progress-bar bg-primary" style="width: {{ width }}%;">
+                                        {{ week.count }}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">No call data yet. Start logging calls to see trends!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Most Discussed Topics -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-tags"></i> Most Discussed Topics</h5>
+            </div>
+            <div class="card-body">
+                {% if top_topics %}
+                    <div class="list-group list-group-flush">
+                        {% for topic in top_topics %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="text-decoration-none">
+                                    <i class="bi bi-tag"></i> {{ topic.name }}
+                                </a>
+                                <span class="badge bg-warning text-dark">{{ topic.call_count }} calls</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <small class="text-muted">Last 90 days</small>
+                {% else %}
+                    <p class="text-muted">No topics tracked yet. Add topics to call logs to see insights!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Customers Needing Attention -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i> Customers Needing Attention</h5>
+            </div>
+            <div class="card-body">
+                {% if customers_needing_attention %}
+                    <p class="text-muted small mb-3">No calls in 90+ days or never called</p>
+                    <div class="list-group list-group-flush">
+                        {% for customer in customers_needing_attention %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <div>
+                                    <a href="{{ url_for('customers.customer_view', id=customer.id) }}" class="text-decoration-none">
+                                        <i class="bi bi-building"></i> {{ customer.name }}
+                                    </a>
+                                    {% if customer.seller %}
+                                        <br>
+                                        <small class="text-muted">
+                                            <i class="bi bi-person"></i> {{ customer.seller.name }}
+                                        </small>
+                                    {% endif %}
+                                </div>
+                                <a href="{{ url_for('call_logs.call_log_create', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-plus"></i> Log Call
+                                </a>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if total_customers > 10 %}
+                        <small class="text-muted d-block mt-2">Showing top 10 of {{ total_customers }} customers</small>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle"></i> Great job! You've engaged with all your customers recently.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Seller Activity -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-people"></i> Seller Activity</h5>
+            </div>
+            <div class="card-body">
+                {% if seller_activity %}
+                    <p class="text-muted small mb-3">Calls per seller this month</p>
+                    <div class="list-group list-group-flush">
+                        {% for seller in seller_activity %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <a href="{{ url_for('sellers.seller_view', id=seller.id) }}" class="text-decoration-none">
+                                    <i class="bi bi-person"></i> {{ seller.name }}
+                                </a>
+                                <span class="badge bg-primary">{{ seller.call_count }} calls</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">No seller data yet. Assign sellers to customers to track activity!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-lightning"></i> Quick Actions</h5>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#quickCallLogModal">
+                        <i class="bi bi-plus-circle"></i> New Call Log
+                    </button>
+                    <a href="{{ url_for('customers.customers_list') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-building"></i> View All Customers
+                    </a>
+                    <a href="{{ url_for('topics.topics_list') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-tags"></i> Manage Topics
+                    </a>
+                    <a href="{{ url_for('main.search') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-search"></i> Advanced Search
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Call Log Modal (reused from homepage) -->
+<div class="modal fade" id="quickCallLogModal" tabindex="-1" aria-labelledby="quickCallLogModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quickCallLogModalLabel">Create Call Log</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="customerSearch" class="form-label">Search for Customer</label>
+                    <input type="text" class="form-control" id="customerSearch" placeholder="Start typing customer name..." autocomplete="off">
+                    <small class="form-text text-muted">Type at least 2 characters to search</small>
+                </div>
+                <div id="customerResults" class="list-group"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Customer autocomplete for quick call log creation
+    let debounceTimer;
+    const customerSearch = document.getElementById('customerSearch');
+    const customerResults = document.getElementById('customerResults');
+    const modal = document.getElementById('quickCallLogModal');
+
+    // Focus input when modal opens
+    modal.addEventListener('shown.bs.modal', function () {
+        customerSearch.focus();
+    });
+
+    // Clear search when modal closes
+    modal.addEventListener('hidden.bs.modal', function () {
+        customerSearch.value = '';
+        customerResults.innerHTML = '';
+    });
+
+    customerSearch.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const query = this.value.trim();
+
+        if (query.length < 2) {
+            customerResults.innerHTML = '';
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            try {
+                const response = await fetch(`{{ url_for('customers.api_customers_autocomplete') }}?q=${encodeURIComponent(query)}`);
+                const customers = await response.json();
+
+                if (customers.length === 0) {
+                    customerResults.innerHTML = '<div class="list-group-item text-muted">No customers found</div>';
+                    return;
+                }
+
+                customerResults.innerHTML = customers.map(customer => {
+                    const displayName = customer.nickname ? `${customer.name} (${customer.nickname})` : customer.name;
+                    const tpidBadge = customer.tpid ? `<span class="badge bg-secondary ms-2">TPID: ${customer.tpid}</span>` : '';
+                    return `
+                        <a href="{{ url_for('call_logs.call_log_create') }}?customer_id=${customer.id}" class="list-group-item list-group-item-action">
+                            <i class="bi bi-building"></i> ${displayName}${tpidBadge}
+                        </a>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error fetching customers:', error);
+                customerResults.innerHTML = '<div class="list-group-item text-danger">Error loading results</div>';
+            }
+        }, 300);
+    });
+</script>
+
+{% endblock %}
