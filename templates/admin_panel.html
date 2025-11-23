@@ -15,39 +15,53 @@
             <div class="card-body">
                 <div class="row text-center">
                     <div class="col-6 col-md-3 col-lg mb-3">
-                        <h3 class="text-primary">{{ stats.total_users }}</h3>
-                        <small class="text-muted">Users</small>
+                        <a href="#usersSection" class="text-decoration-none" style="cursor: pointer;" onclick="document.getElementById('usersSection').scrollIntoView({behavior: 'smooth'});">
+                            <h3 class="text-primary">{{ stats.total_users }}</h3>
+                            <small class="text-muted">Users</small>
+                        </a>
                     </div>
                     <div class="col-6 col-md-3 col-lg mb-3">
-                        <h3 class="text-success">{{ stats.total_call_logs }}</h3>
-                        <small class="text-muted">Call Logs</small>
+                        <a href="{{ url_for('call_logs.call_logs_list') }}" class="text-decoration-none">
+                            <h3 class="text-success">{{ stats.total_call_logs }}</h3>
+                            <small class="text-muted">Call Logs</small>
+                        </a>
                     </div>
                     <div class="col-6 col-md-3 col-lg mb-3">
-                        <h3 class="text-info">{{ stats.total_customers }}</h3>
-                        <small class="text-muted">Customers</small>
+                        <a href="{{ url_for('customers.customers_list') }}" class="text-decoration-none">
+                            <h3 class="text-info">{{ stats.total_customers }}</h3>
+                            <small class="text-muted">Customers</small>
+                        </a>
                     </div>
                     <div class="col-6 col-md-3 col-lg mb-3">
-                        <h3>{{ stats.total_sellers }}</h3>
-                        <small class="text-muted">Sellers</small>
+                        <a href="{{ url_for('sellers.sellers_list') }}" class="text-decoration-none">
+                            <h3>{{ stats.total_sellers }}</h3>
+                            <small class="text-muted">Sellers</small>
+                        </a>
                     </div>
                     <div class="col-6 col-md-3 col-lg mb-3">
-                        <h3>{{ stats.total_territories }}</h3>
-                        <small class="text-muted">Territories</small>
+                        <a href="{{ url_for('territories.territories_list') }}" class="text-decoration-none">
+                            <h3>{{ stats.total_territories }}</h3>
+                            <small class="text-muted">Territories</small>
+                        </a>
                     </div>
                     <div class="col-6 col-md-3 col-lg mb-3">
-                        <h3>{{ stats.total_topics }}</h3>
-                        <small class="text-muted">Topics</small>
+                        <a href="{{ url_for('topics.topics_list') }}" class="text-decoration-none">
+                            <h3>{{ stats.total_topics }}</h3>
+                            <small class="text-muted">Topics</small>
+                        </a>
                     </div>
                     <div class="col-6 col-md-3 col-lg mb-3">
-                        <h3>{{ stats.total_pods }}</h3>
-                        <small class="text-muted">PODs</small>
+                        <a href="{{ url_for('pods.pods_list') }}" class="text-decoration-none">
+                            <h3>{{ stats.total_pods }}</h3>
+                            <small class="text-muted">PODs</small>
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- User Management -->
-        <div class="card mb-4">
+        <div class="card mb-4" id="usersSection">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-people"></i> User Management</h5>
             </div>

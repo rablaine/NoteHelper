@@ -9,7 +9,7 @@
         <button id="sortToggle" class="btn btn-outline-secondary btn-sm" title="Toggle sort order">
             <i class="bi bi-sort-alpha-down"></i> <span id="sortLabel">By Calls</span>
         </button>
-        <a href="{{ url_for('topics.topic_create') }}" class="btn btn-primary">
+        <a href="{{ url_for('topics.topic_create') }}" class="btn btn-sm btn-primary">
             <i class="bi bi-plus-circle"></i> New Topic
         </a>
     </div>
@@ -24,7 +24,7 @@
                     <small class="text-muted">{{ topic.call_logs|length }} calls</small>
                 </div>
                 {% if topic.description %}
-                    <p class="mb-1 text-muted">{{ topic.description|truncate(150) }}</p>
+                    <p class="mb-1 text-muted">{{ topic.description|truncate(150, true) }}</p>
                 {% endif %}
             </a>
         {% endfor %}
@@ -79,10 +79,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function updateButtonLabel(sortByCalls) {
         if (sortByCalls) {
-            sortLabel.textContent = 'Alphabetical';
+            sortLabel.textContent = 'By Calls';
             sortToggle.querySelector('i').className = 'bi bi-sort-numeric-down';
         } else {
-            sortLabel.textContent = 'By Calls';
+            sortLabel.textContent = 'Alphabetical';
             sortToggle.querySelector('i').className = 'bi bi-sort-alpha-down';
         }
     }

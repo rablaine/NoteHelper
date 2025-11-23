@@ -134,7 +134,7 @@
                                 <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
                             {% endfor %}
                         </div>
-                        <div class="text-muted">{{ call.content|striptags|truncate(200) }}</div>
+                        <div class="text-muted">{{ call.content|striptags|truncate(200, true) }}</div>
                     </div>
                 {% endfor %}
             </div>
