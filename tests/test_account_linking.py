@@ -125,20 +125,6 @@ def test_domain_not_allowed_page(client):
     assert b'not currently whitelisted' in response.data
 
 
-def test_admin_domains_page_requires_admin(client, app):
-    """Test that admin domains page requires admin privileges."""
-    from app.models import db, User
-    # Mock a non-admin user
-    with app.app_context():
-        user = User.query.first()
-        user.is_admin = False
-        db.session.commit()
-    
-    response = client.get('/admin/domains')
-    # Should redirect or show unauthorized
-    assert response.status_code in [302, 403]
-
-
 def test_admin_can_add_domain(client, app):
     """Test that admin can add a domain to whitelist."""
     from app.models import db, User, WhitelistedDomain

@@ -2,7 +2,7 @@
 Main routes for NoteHelper.
 Handles index, search, preferences, data management, and API endpoints.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context, make_response, session
 from flask_login import login_required, current_user
 from datetime import datetime, timezone
 from sqlalchemy import func
@@ -12,6 +12,7 @@ import io
 import zipfile
 import tempfile
 import os
+import re
 
 from app.models import (db, CallLog, Customer, Seller, Territory, Topic, POD, SolutionEngineer, 
                         Vertical, UserPreference, User)
@@ -88,6 +89,9 @@ def get_seller_color(seller_id: int, use_colors: bool = True) -> str:
 @login_required
 def index():
     """Home page showing recent activity and stats."""
+    # Check if this is a first-time user
+    show_first_time_modal = session.pop('show_first_time_modal', False)
+    
     # Eager load relationships for recent calls to avoid N+1 queries
     recent_calls = CallLog.query.filter_by(user_id=current_user.id).options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
@@ -102,7 +106,7 @@ def index():
         'sellers': Seller.query.filter_by(user_id=current_user.id).count(),
         'topics': Topic.query.filter_by(user_id=current_user.id).count()
     }
-    return render_template('index.html', recent_calls=recent_calls, stats=stats)
+    return render_template('index.html', recent_calls=recent_calls, stats=stats, show_first_time_modal=show_first_time_modal)
 
 
 @main_bp.route('/search')
@@ -214,19 +218,32 @@ def preferences():
         db.session.add(pref)
         db.session.commit()
     
+    # Get user statistics
+    stats = {
+        'call_logs': CallLog.query.filter_by(user_id=current_user.id).count(),
+        'customers': Customer.query.filter_by(user_id=current_user.id).count(),
+        'topics': Topic.query.filter_by(user_id=current_user.id).count()
+    }
+    
     return render_template('preferences.html', 
                          dark_mode=pref.dark_mode,
                          customer_view_grouped=pref.customer_view_grouped,
                          customer_sort_by=pref.customer_sort_by,
                          topic_sort_by_calls=pref.topic_sort_by_calls,
                          territory_view_accounts=pref.territory_view_accounts,
-                         colored_sellers=pref.colored_sellers)
+                         colored_sellers=pref.colored_sellers,
+                         show_customers_without_calls=pref.show_customers_without_calls,
+                         stats=stats)
 
 
 @main_bp.route('/data-management')
 @login_required
 def data_management():
-    """Data import/export management page."""
+    """Data import/export management page (admin only)."""
+    if not current_user.is_admin:
+        flash('You do not have permission to access data management.', 'danger')
+        return redirect(url_for('main.index'))
+    
     # Check if database has any data
     has_data = (Customer.query.count() > 0 or 
                 CallLog.query.count() > 0 or 
@@ -236,8 +253,334 @@ def data_management():
     return render_template('data_management.html', has_data=has_data)
 
 
+@main_bp.route('/analytics')
+@login_required
+def analytics():
+    """Analytics and insights dashboard."""
+    from datetime import date, timedelta
+    from sqlalchemy import func, distinct
+    
+    # Date ranges
+    today = date.today()
+    week_ago = today - timedelta(days=7)
+    month_ago = today - timedelta(days=30)
+    three_months_ago = today - timedelta(days=90)
+    
+    # Call volume metrics
+    total_calls = CallLog.query.filter_by(user_id=current_user.id).count()
+    calls_this_week = CallLog.query.filter_by(user_id=current_user.id).filter(
+        CallLog.call_date >= week_ago
+    ).count()
+    calls_this_month = CallLog.query.filter_by(user_id=current_user.id).filter(
+        CallLog.call_date >= month_ago
+    ).count()
+    
+    # Customer engagement
+    total_customers = Customer.query.filter_by(user_id=current_user.id).count()
+    customers_called_this_week = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= week_ago
+    ).scalar()
+    customers_called_this_month = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= month_ago
+    ).scalar()
+    
+    # Topic insights - most discussed topics
+    top_topics = db.session.query(
+        Topic.id,
+        Topic.name,
+        func.count(CallLog.id).label('call_count')
+    ).join(
+        CallLog.topics
+    ).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= three_months_ago
+    ).group_by(
+        Topic.id,
+        Topic.name
+    ).order_by(
+        func.count(CallLog.id).desc()
+    ).limit(10).all()
+    
+    # Customers not called recently (90+ days or never)
+    customers_with_recent_calls = db.session.query(CallLog.customer_id).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= three_months_ago
+    ).distinct().subquery()
+    
+    customers_needing_attention = Customer.query.filter(
+        Customer.user_id == current_user.id,
+        ~Customer.id.in_(customers_with_recent_calls)
+    ).order_by(Customer.name).limit(10).all()
+    
+    # Seller activity (calls per seller this month)
+    seller_activity = db.session.query(
+        Seller.id,
+        Seller.name,
+        func.count(CallLog.id).label('call_count')
+    ).join(
+        Customer, Customer.seller_id == Seller.id
+    ).join(
+        CallLog, CallLog.customer_id == Customer.id
+    ).filter(
+        CallLog.user_id == current_user.id,
+        CallLog.call_date >= month_ago
+    ).group_by(
+        Seller.id,
+        Seller.name
+    ).order_by(
+        func.count(CallLog.id).desc()
+    ).limit(10).all()
+    
+    # Call frequency trend (last 30 days, grouped by week)
+    weekly_calls = []
+    for i in range(4):
+        week_start = today - timedelta(days=7*(i+1))
+        week_end = today - timedelta(days=7*i)
+        count = CallLog.query.filter_by(user_id=current_user.id).filter(
+            CallLog.call_date >= week_start,
+            CallLog.call_date < week_end
+        ).count()
+        weekly_calls.append({
+            'week_label': f"{week_start.strftime('%b %d')} - {week_end.strftime('%b %d')}",
+            'count': count
+        })
+    weekly_calls.reverse()  # Show oldest to newest
+    
+    return render_template('analytics.html',
+                         total_calls=total_calls,
+                         calls_this_week=calls_this_week,
+                         calls_this_month=calls_this_month,
+                         total_customers=total_customers,
+                         customers_called_this_week=customers_called_this_week,
+                         customers_called_this_month=customers_called_this_month,
+                         top_topics=top_topics,
+                         customers_needing_attention=customers_needing_attention,
+                         seller_activity=seller_activity,
+                         weekly_calls=weekly_calls)
+
+
 # =============================================================================
-# Data Management API Routes
+# My Data API Routes (User-specific exports/imports)
+# =============================================================================
+
+@main_bp.route('/api/my-data/export/call-logs-json', methods=['GET'])
+@login_required
+def my_data_export_call_logs_json():
+    """Export user's call logs to JSON (personal export)."""
+    # Reuse existing call logs export but filter by current user
+    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
+        db.joinedload(CallLog.customer),
+        db.joinedload(CallLog.topics)
+    ).order_by(CallLog.call_date.desc()).all()
+    
+    # Build enriched export
+    export_data = []
+    for call in call_logs:
+        call_data = {
+            'call_date': call.call_date.isoformat() if call.call_date else None,
+            'customer_name': call.customer.name if call.customer else None,
+            'customer_tpid': call.customer.tpid if call.customer else None,
+            'seller_name': call.customer.seller.name if call.customer and call.customer.seller else None,
+            'territory_name': call.customer.territory.name if call.customer and call.customer.territory else None,
+            'topics': [topic.name for topic in call.topics],
+            'content': call.content,
+            'created_at': call.created_at.isoformat() if call.created_at else None,
+            'updated_at': call.updated_at.isoformat() if call.updated_at else None
+        }
+        export_data.append(call_data)
+    
+    # Create response
+    response_data = {
+        'export_date': datetime.utcnow().isoformat(),
+        'user_email': current_user.email,
+        'call_logs_count': len(export_data),
+        'call_logs': export_data
+    }
+    
+    response = make_response(json.dumps(response_data, indent=2))
+    response.headers['Content-Type'] = 'application/json'
+    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_call_logs_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.json'
+    return response
+
+
+@main_bp.route('/api/my-data/export/call-logs-csv', methods=['GET'])
+@login_required
+def my_data_export_call_logs_csv():
+    """Export user's call logs to CSV (personal export)."""
+    # Get user's call logs
+    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
+        db.joinedload(CallLog.customer),
+        db.joinedload(CallLog.topics)
+    ).order_by(CallLog.call_date.desc()).all()
+    
+    # Create CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow([
+        'Call Date', 'Customer Name', 'Customer TPID', 'Seller Name', 
+        'Territory Name', 'Topics', 'Content (Plain Text)', 
+        'Created At', 'Updated At'
+    ])
+    
+    # Data rows
+    for call in call_logs:
+        # Strip HTML from content
+        content_plain = re.sub('<[^<]+?>', '', call.content) if call.content else ''
+        content_plain = content_plain.replace('\n', ' ').replace('\r', ' ')
+        
+        writer.writerow([
+            call.call_date.strftime('%Y-%m-%d') if call.call_date else '',
+            call.customer.name if call.customer else '',
+            call.customer.tpid if call.customer else '',
+            call.customer.seller.name if call.customer and call.customer.seller else '',
+            call.customer.territory.name if call.customer and call.customer.territory else '',
+            ', '.join([topic.name for topic in call.topics]),
+            content_plain,
+            call.created_at.isoformat() if call.created_at else '',
+            call.updated_at.isoformat() if call.updated_at else ''
+        ])
+    
+    # Create response
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_call_logs_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
+    return response
+
+
+@main_bp.route('/api/my-data/import/json', methods=['POST'])
+@login_required
+def my_data_import_json():
+    """Import call logs from JSON (personal import)."""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+    
+    skip_duplicates = request.form.get('skip_duplicates', 'true').lower() == 'true'
+    
+    try:
+        # Read and parse JSON
+        data = json.load(file)
+        call_logs_data = data.get('call_logs', [])
+        
+        imported = {'call_logs': 0, 'customers': 0, 'topics': 0}
+        skipped = {'call_logs': 0, 'customers': 0, 'topics': 0}
+        
+        # Track created entities
+        customer_map = {}  # name+tpid -> Customer object
+        topic_map = {}  # name -> Topic object
+        
+        for call_data in call_logs_data:
+            # Check for duplicate by date and customer
+            customer_name = call_data.get('customer_name')
+            call_date_str = call_data.get('call_date')
+            
+            if not customer_name or not call_date_str:
+                skipped['call_logs'] += 1
+                continue
+            
+            call_date = datetime.fromisoformat(call_date_str).date() if call_date_str else None
+            
+            # Get or create customer
+            customer_key = f"{customer_name}_{call_data.get('customer_tpid', '')}"
+            if customer_key not in customer_map:
+                # Check if customer exists
+                existing_customer = Customer.query.filter_by(
+                    user_id=current_user.id,
+                    name=customer_name,
+                    tpid=call_data.get('customer_tpid')
+                ).first()
+                
+                if existing_customer:
+                    customer_map[customer_key] = existing_customer
+                else:
+                    # Create new customer
+                    new_customer = Customer(
+                        user_id=current_user.id,
+                        name=customer_name,
+                        tpid=call_data.get('customer_tpid', '')
+                    )
+                    db.session.add(new_customer)
+                    db.session.flush()  # Get ID without committing
+                    customer_map[customer_key] = new_customer
+                    imported['customers'] += 1
+            
+            customer = customer_map[customer_key]
+            
+            # Check for duplicate call log
+            if skip_duplicates:
+                existing_call = CallLog.query.filter_by(
+                    user_id=current_user.id,
+                    customer_id=customer.id,
+                    call_date=call_date
+                ).first()
+                
+                if existing_call:
+                    skipped['call_logs'] += 1
+                    continue
+            
+            # Create call log
+            new_call = CallLog(
+                user_id=current_user.id,
+                customer_id=customer.id,
+                call_date=call_date,
+                content=call_data.get('content', ''),
+                created_at=datetime.fromisoformat(call_data['created_at']) if call_data.get('created_at') else datetime.utcnow(),
+                updated_at=datetime.fromisoformat(call_data['updated_at']) if call_data.get('updated_at') else datetime.utcnow()
+            )
+            
+            # Add topics
+            for topic_name in call_data.get('topics', []):
+                if topic_name not in topic_map:
+                    # Check if topic exists
+                    existing_topic = Topic.query.filter_by(
+                        user_id=current_user.id,
+                        name=topic_name
+                    ).first()
+                    
+                    if existing_topic:
+                        topic_map[topic_name] = existing_topic
+                    else:
+                        # Create new topic
+                        new_topic = Topic(
+                            user_id=current_user.id,
+                            name=topic_name
+                        )
+                        db.session.add(new_topic)
+                        db.session.flush()
+                        topic_map[topic_name] = new_topic
+                        imported['topics'] += 1
+                
+                new_call.topics.append(topic_map[topic_name])
+            
+            db.session.add(new_call)
+            imported['call_logs'] += 1
+        
+        # Commit all changes
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'imported': imported,
+            'skipped': skipped
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# =============================================================================
+# Data Management API Routes (Admin only)
 # =============================================================================
 
 @main_bp.route('/api/data-management/stats', methods=['GET'])
@@ -1429,9 +1772,9 @@ def inject_preferences():
     if current_user.is_authenticated and not current_user.is_stub:
         pending_link_requests_count = len(current_user.get_pending_link_requests())
     
-    # Create a wrapper function that includes the colored_sellers preference
+    # Create a wrapper function that always returns color classes (CSS will handle grey state)
     def get_seller_color_with_pref(seller_id: int) -> str:
-        return get_seller_color(seller_id, colored_sellers)
+        return get_seller_color(seller_id, use_colors=True)
     
     return dict(
         dark_mode=dark_mode, 

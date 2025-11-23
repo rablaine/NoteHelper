@@ -30,7 +30,12 @@
 
 {% block content %}
 
-<h1 class="mb-4">{{ 'Edit' if call_log else 'New' }} Call Log{% if not call_log and preselect_customer %} - {{ preselect_customer.name }}{% endif %}</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">{{ 'Edit' if call_log else 'New' }} Call Log{% if not call_log and preselect_customer %} - {{ preselect_customer.name }}{% endif %}</h1>
+    <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
+        <i class="bi bi-check-circle text-success"></i> Draft saved
+    </div>
+</div>
 
 <div class="row">
     <div class="col-md-{% if not call_log and previous_calls %}6{% else %}10{% endif %}">
@@ -548,12 +553,24 @@ function saveDraft() {
         try {
             localStorage.setItem(draftKey, JSON.stringify(draftData));
             console.log('Draft auto-saved');
+            showDraftSavedIndicator();
         } catch (e) {
             console.error('Failed to save draft:', e);
             // Storage quota exceeded - prune old drafts
             pruneOldDrafts();
         }
     }
+}
+
+// Show draft saved indicator with fade animation
+function showDraftSavedIndicator() {
+    const indicator = document.getElementById('draftSaveIndicator');
+    if (!indicator) return;
+    
+    indicator.style.opacity = '1';
+    setTimeout(() => {
+        indicator.style.opacity = '0';
+    }, 2000);
 }
 
 // Restore draft from localStorage

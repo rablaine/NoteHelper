@@ -28,13 +28,9 @@
         <i class="bi bi-building"></i> Customers
     </h1>
     <div class="d-flex align-items-center gap-2">
-        <div class="form-check form-switch me-2">
-            <input class="form-check-input" type="checkbox" role="switch" id="showCustomersWithoutCalls" 
-                   {{ 'checked' if show_customers_without_calls else '' }} style="cursor: pointer;">
-            <label class="form-check-label" for="showCustomersWithoutCalls" style="cursor: pointer;">
-                Show customers with no calls
-            </label>
-        </div>
+        <button type="button" class="btn btn-sm {{ 'btn-primary' if show_customers_without_calls else 'btn-outline-secondary' }}" id="toggleShowWithoutCalls" title="Toggle showing customers with no calls">
+            <i class="bi bi-{{ 'eye-slash' if show_customers_without_calls else 'eye' }}"></i> {{ 'Hide' if show_customers_without_calls else 'Show' }} No Calls
+        </button>
         <div class="btn-group" role="group" aria-label="Sort customers">
             <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'alphabetical' else 'btn-outline-secondary' }}" data-sort="alphabetical" title="Sort alphabetically">
                 <i class="bi bi-sort-alpha-down"></i> A-Z
@@ -46,7 +42,7 @@
                 <i class="bi bi-telephone"></i> By Calls
             </button>
         </div>
-        <a href="{{ url_for('customers.customer_create') }}" class="btn btn-primary">
+        <a href="{{ url_for('customers.customer_create') }}" class="btn btn-sm btn-primary">
             <i class="bi bi-plus-circle"></i> New Customer
         </a>
     </div>
@@ -215,11 +211,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Handle "Show customers with no calls" checkbox
-    const showCustomersCheckbox = document.getElementById('showCustomersWithoutCalls');
-    if (showCustomersCheckbox) {
-        showCustomersCheckbox.addEventListener('change', function() {
-            const showCustomersWithoutCalls = this.checked;
+    // Handle "Show customers with no calls" toggle button
+    const toggleShowWithoutCalls = document.getElementById('toggleShowWithoutCalls');
+    if (toggleShowWithoutCalls) {
+        toggleShowWithoutCalls.addEventListener('click', function() {
+            const currentState = {{ 'true' if show_customers_without_calls else 'false' }};
+            const newState = !currentState;
             
             // Save preference
             fetch('/api/preferences/show-customers-without-calls', {
@@ -227,7 +224,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ show_customers_without_calls: showCustomersWithoutCalls })
+                body: JSON.stringify({ show_customers_without_calls: newState })
             })
             .then(response => response.json())
             .then(() => {

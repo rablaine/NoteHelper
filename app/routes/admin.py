@@ -46,18 +46,6 @@ def admin_panel():
     return render_template('admin_panel.html', users=users, stats=stats, ai_config=ai_config, domains=domains)
 
 
-@admin_bp.route('/admin/domains')
-@login_required
-def admin_domains():
-    """Manage whitelisted domains."""
-    if not current_user.is_admin:
-        flash('You do not have permission to access domain management.', 'danger')
-        return redirect(url_for('main.index'))
-    
-    domains = WhitelistedDomain.query.order_by(WhitelistedDomain.domain).all()
-    return render_template('admin_domains.html', domains=domains)
-
-
 @admin_bp.route('/admin/ai-logs')
 @login_required
 def admin_ai_logs():
