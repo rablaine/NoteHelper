@@ -177,7 +177,7 @@ def test_preferences_page_loads(client):
     """Test preferences page loads."""
     response = client.get('/preferences')
     assert response.status_code == 200
-    assert b'User Preferences' in response.data
+    assert b'Settings' in response.data
 
 
 def test_customers_list_filters_without_calls(client, sample_data):

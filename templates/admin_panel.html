@@ -10,84 +10,47 @@
         <!-- System Statistics -->
         <div class="card mb-4">
             <div class="card-header">
-                <button class="btn btn-link text-decoration-none p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#statsCollapse">
-                    <h5 class="mb-0"><i class="bi bi-bar-chart"></i> System Statistics <i class="bi bi-chevron-down float-end"></i></h5>
-                </button>
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> System Statistics</h5>
             </div>
-            <div id="statsCollapse" class="collapse show">
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3 mb-3">
-                        <div class="card bg-primary text-white">
-                            <div class="card-body text-center">
-                                <h2>{{ stats.total_users }}</h2>
-                                <p class="mb-0">Users</p>
-                            </div>
-                        </div>
+                <div class="row text-center">
+                    <div class="col-6 col-md-3 col-lg mb-3">
+                        <h3 class="text-primary">{{ stats.total_users }}</h3>
+                        <small class="text-muted">Users</small>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <div class="card bg-success text-white">
-                            <div class="card-body text-center">
-                                <h2>{{ stats.total_call_logs }}</h2>
-                                <p class="mb-0">Call Logs</p>
-                            </div>
-                        </div>
+                    <div class="col-6 col-md-3 col-lg mb-3">
+                        <h3 class="text-success">{{ stats.total_call_logs }}</h3>
+                        <small class="text-muted">Call Logs</small>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <div class="card bg-info text-white">
-                            <div class="card-body text-center">
-                                <h2>{{ stats.total_customers }}</h2>
-                                <p class="mb-0">Customers</p>
-                            </div>
-                        </div>
+                    <div class="col-6 col-md-3 col-lg mb-3">
+                        <h3 class="text-info">{{ stats.total_customers }}</h3>
+                        <small class="text-muted">Customers</small>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <div class="card bg-warning text-dark">
-                            <div class="card-body text-center">
-                                <h2>{{ stats.total_sellers }}</h2>
-                                <p class="mb-0">Sellers</p>
-                            </div>
-                        </div>
+                    <div class="col-6 col-md-3 col-lg mb-3">
+                        <h3>{{ stats.total_sellers }}</h3>
+                        <small class="text-muted">Sellers</small>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg mb-3">
+                        <h3>{{ stats.total_territories }}</h3>
+                        <small class="text-muted">Territories</small>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg mb-3">
+                        <h3>{{ stats.total_topics }}</h3>
+                        <small class="text-muted">Topics</small>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg mb-3">
+                        <h3>{{ stats.total_pods }}</h3>
+                        <small class="text-muted">PODs</small>
                     </div>
                 </div>
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <div class="card">
-                            <div class="card-body text-center">
-                                <h3>{{ stats.total_territories }}</h3>
-                                <p class="mb-0">Territories</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <div class="card">
-                            <div class="card-body text-center">
-                                <h3>{{ stats.total_topics }}</h3>
-                                <p class="mb-0">Topics</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <div class="card">
-                            <div class="card-body text-center">
-                                <h3>{{ stats.total_pods }}</h3>
-                                <p class="mb-0">PODs</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
             </div>
         </div>
 
         <!-- User Management -->
         <div class="card mb-4">
             <div class="card-header">
-                <button class="btn btn-link text-decoration-none p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#usersCollapse">
-                    <h5 class="mb-0"><i class="bi bi-people"></i> User Management <i class="bi bi-chevron-down float-end"></i></h5>
-                </button>
+                <h5 class="mb-0"><i class="bi bi-people"></i> User Management</h5>
             </div>
-            <div id="usersCollapse" class="collapse show">
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-hover">
@@ -136,50 +99,34 @@
                     </table>
                 </div>
             </div>
-            </div>
         </div>
 
         <!-- Domain Whitelist Management -->
         <div class="card mb-4">
-            <div class="card-header bg-info text-white">
-                <button class="btn btn-link text-decoration-none text-white p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#domainsCollapse">
-                    <h5 class="mb-0"><i class="bi bi-shield-check"></i> Domain Whitelist <i class="bi bi-chevron-down float-end"></i></h5>
-                </button>
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-check"></i> Domain Whitelist</h5>
             </div>
-            <div id="domainsCollapse" class="collapse show">
             <div class="card-body">
-                <div class="alert alert-info mb-3">
-                    <i class="bi bi-info-circle"></i>
-                    <strong>Note:</strong> All @microsoft.com accounts are automatically allowed. Use this whitelist to add other domains (like external partner tenants).
-                </div>
+                <p class="text-muted">@microsoft.com is always allowed. Add other domains for external partners.</p>
 
-                <!-- Add Domain Form -->
-                <div class="mb-4">
-                    <h6><i class="bi bi-plus-circle"></i> Add Domain to Whitelist</h6>
-                    <form id="addDomainForm" class="mt-2">
-                        <div class="input-group">
-                            <span class="input-group-text">@</span>
-                            <input 
-                                type="text" 
-                                class="form-control" 
-                                id="domainInput" 
-                                name="domain" 
-                                placeholder="partner.onmicrosoft.com" 
-                                required
-                            >
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-plus"></i> Add Domain
-                            </button>
-                        </div>
-                        <small class="form-text text-muted">
-                            Enter just the domain (e.g., "partner.onmicrosoft.com" not "@partner.onmicrosoft.com")
-                        </small>
-                    </form>
-                </div>
+                <form id="addDomainForm" class="mb-4">
+                    <div class="input-group">
+                        <span class="input-group-text">@</span>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="domainInput" 
+                            name="domain" 
+                            placeholder="partner.onmicrosoft.com" 
+                            required
+                        >
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-plus"></i> Add
+                        </button>
+                    </div>
+                </form>
 
-                <!-- Whitelisted Domains List -->
                 <div>
-                    <h6><i class="bi bi-list-ul"></i> Whitelisted Domains (<span id="domainCount">{{ domains|length }}</span>)</h6>
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
@@ -223,180 +170,129 @@
                     </div>
                 </div>
             </div>
-            </div>
         </div>
 
         <!-- AI Features Configuration -->
         <div class="card mb-4">
-            <div class="card-header bg-purple text-white" style="background-color: #6f42c1 !important;">
-                <button class="btn btn-link text-decoration-none text-white p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#aiCollapse">
-                    <h5 class="mb-0"><i class="bi bi-stars"></i> AI Features Configuration <i class="bi bi-chevron-down float-end"></i></h5>
-                </button>
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-stars"></i> AI Topic Suggestions</h5>
             </div>
-            <div id="aiCollapse" class="collapse show">
             <div class="card-body">
-                <p class="text-muted">Configure AI-powered topic suggestion for call logs. Requires Azure AI Foundry deployment.</p>
-                
                 <form id="aiConfigForm">
                     <div class="mb-3">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="aiEnabled" {% if ai_config.enabled %}checked{% endif %}>
-                            <label class="form-check-label fw-bold" for="aiEnabled">
-                                Enable AI Topic Suggestions
-                            </label>
-                        </div>
-                        <small class="form-text text-muted">When enabled, users can auto-tag call logs using AI</small>
+                        <label for="aiFullUrl" class="form-label">Azure AI Foundry Endpoint URL</label>
+                        <input type="text" class="form-control form-control-sm" id="aiFullUrl" 
+                               placeholder="Paste full URL to auto-fill fields below">
                     </div>
 
-                    <hr>
-
-                    <div class="mb-3">
-                        <label for="aiFullUrl" class="form-label">Quick Setup: Paste Full Endpoint URL</label>
-                        <input type="text" class="form-control" id="aiFullUrl" 
-                               placeholder="Paste from Azure AI Foundry: https://webapps.cognitiveservices.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview">
-                        <small class="form-text text-muted">
-                            <i class="bi bi-magic"></i> Paste the full URL from Azure AI Foundry (with the copy button) and it will auto-fill the fields below
-                        </small>
-                    </div>
-
-                    <hr>
-
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="aiEndpoint" class="form-label">Endpoint URL</label>
-                            <input type="url" class="form-control" id="aiEndpoint" 
-                                   value="{{ ai_config.endpoint_url or '' }}" 
-                                   placeholder="https://webapps.cognitiveservices.azure.com/openai/deployments/your-model">
-                            <small class="form-text text-muted">Base deployment endpoint (auto-filled from above)</small>
-                        </div>
-                        <div class="col-md-6 mb-3">
+                    <div class="row mb-3">
+                        <div class="col-md-8">
                             <label for="aiApiKey" class="form-label">API Key</label>
-                            <input type="password" class="form-control" id="aiApiKey" 
+                            <input type="password" class="form-control form-control-sm" id="aiApiKey" 
                                    value="{{ ai_config.api_key or '' }}" 
-                                   placeholder="Enter your API key">
-                            <small class="form-text text-muted">From Azure AI Foundry portal</small>
+                                   placeholder="From Azure portal">
                         </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="aiDeployment" class="form-label">Model Deployment Name</label>
-                            <input type="text" class="form-control" id="aiDeployment" 
-                                   value="{{ ai_config.deployment_name or '' }}" 
-                                   placeholder="gpt-4o-mini">
-                            <small class="form-text text-muted">Auto-filled from URL</small>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="aiApiVersion" class="form-label">API Version</label>
-                            <input type="text" class="form-control" id="aiApiVersion" 
-                                   value="{{ ai_config.api_version or '2024-08-01-preview' }}" 
-                                   placeholder="2024-08-01-preview">
-                            <small class="form-text text-muted">Auto-filled from URL</small>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="aiMaxCalls" class="form-label">Max Daily Calls per User</label>
-                            <input type="number" class="form-control" id="aiMaxCalls" 
+                        <div class="col-md-2">
+                            <label for="aiMaxCalls" class="form-label">Daily Limit</label>
+                            <input type="number" class="form-control form-control-sm" id="aiMaxCalls" 
                                    value="{{ ai_config.max_daily_calls_per_user or 20 }}" 
                                    min="1" max="1000">
-                            <small class="form-text text-muted">Rate limit per user</small>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Enabled</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="aiEnabled" {% if ai_config.enabled %}checked{% endif %}>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="aiSystemPrompt" class="form-label">System Prompt</label>
-                        <textarea class="form-control" id="aiSystemPrompt" rows="4">{{ ai_config.system_prompt }}</textarea>
-                        <small class="form-text text-muted">Instructions for the AI model on how to generate topic tags</small>
-                    </div>
+                    <details class="mb-3">
+                        <summary style="cursor: pointer;" class="text-muted small">Advanced Configuration</summary>
+                        <div class="row mt-2">
+                            <div class="col-md-12 mb-2">
+                                <label for="aiEndpoint" class="form-label small">Endpoint URL</label>
+                                <input type="url" class="form-control form-control-sm" id="aiEndpoint" 
+                                       value="{{ ai_config.endpoint_url or '' }}" 
+                                       placeholder="Auto-filled">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label for="aiDeployment" class="form-label small">Deployment Name</label>
+                                <input type="text" class="form-control form-control-sm" id="aiDeployment" 
+                                       value="{{ ai_config.deployment_name or '' }}" 
+                                       placeholder="Auto-filled">
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label for="aiApiVersion" class="form-label small">API Version</label>
+                                <input type="text" class="form-control form-control-sm" id="aiApiVersion" 
+                                       value="{{ ai_config.api_version or '2024-08-01-preview' }}" 
+                                       placeholder="Auto-filled">
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label for="aiSystemPrompt" class="form-label small">System Prompt</label>
+                            <textarea class="form-control form-control-sm" id="aiSystemPrompt" rows="3">{{ ai_config.system_prompt }}</textarea>
+                        </div>
+                    </details>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-save"></i> Save Configuration
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="bi bi-save"></i> Save
                         </button>
-                        <button type="button" class="btn btn-success" id="testAiBtn">
-                            <i class="bi bi-lightning"></i> Test Connection
+                        <button type="button" class="btn btn-sm btn-outline-success" id="testAiBtn">
+                            <i class="bi bi-lightning"></i> Test
                         </button>
+                        <a href="{{ url_for('admin.admin_ai_logs') }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-card-list"></i> Logs
+                        </a>
                     </div>
                 </form>
 
                 <div id="aiConfigMessage" class="mt-3"></div>
-                
-                <div class="mt-3">
-                    <a href="{{ url_for('admin.admin_ai_logs') }}" class="btn btn-outline-primary">
-                        <i class="bi bi-card-list"></i> View AI Query Logs
-                    </a>
-                    <small class="text-muted ms-2">Debug AI responses and parsing issues</small>
-                </div>
-            </div>
             </div>
         </div>
 
         <!-- System-Wide Data Management -->
-        <div class="card mb-4">
+        <div class="card mb-4 border-danger">
             <div class="card-header bg-danger text-white">
-                <button class="btn btn-link text-decoration-none text-white p-0 w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#dataCollapse">
-                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> System-Wide Data Management <i class="bi bi-chevron-down float-end"></i></h5>
-                </button>
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> System-Wide Data</h5>
             </div>
-            <div id="dataCollapse" class="collapse show">
             <div class="card-body">
-                <p class="text-muted">These operations affect all users in the system. Use with caution.</p>
-                
                 <div class="row">
                     <div class="col-md-4 mb-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5><i class="bi bi-download"></i> Export All Data</h5>
-                                <p class="text-muted">Backup complete database (all users, includes ownership)</p>
-                                <div class="mb-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="includeAiConfig" checked>
-                                        <label class="form-check-label" for="includeAiConfig">
-                                            Include AI Config
-                                        </label>
-                                    </div>
-                                </div>
-                                <button id="exportJsonBtn" class="btn btn-primary me-2">
-                                    <i class="bi bi-filetype-json"></i> Export JSON
-                                </button>
-                                <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-info">
-                                    <i class="bi bi-filetype-csv"></i> Export CSV
-                                </a>
-                                <div class="mt-2">
-                                    <small class="text-muted">JSON format includes user data for proper restore</small>
-                                </div>
-                            </div>
+                        <h6><i class="bi bi-download"></i> Export</h6>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="includeAiConfig" checked>
+                            <label class="form-check-label" for="includeAiConfig">Include AI Config</label>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button id="exportJsonBtn" class="btn btn-sm btn-primary">
+                                <i class="bi bi-filetype-json"></i> JSON
+                            </button>
+                            <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-sm btn-info">
+                                <i class="bi bi-filetype-csv"></i> CSV
+                            </a>
                         </div>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <div class="card border-warning">
-                            <div class="card-body">
-                                <h5 class="text-warning"><i class="bi bi-upload"></i> Import/Restore Data</h5>
-                                <p class="text-muted">Restore from JSON backup (preserves user ownership)</p>
-                                <form id="importJsonForm" enctype="multipart/form-data">
-                                    <div class="mb-2">
-                                        <input type="file" class="form-control form-control-sm" id="importJsonFile" accept=".json" required>
-                                    </div>
-                                    <button type="submit" class="btn btn-warning">
-                                        <i class="bi bi-upload"></i> Import JSON Backup
-                                    </button>
-                                </form>
-                                <div id="importJsonResult" class="mt-2"></div>
-                            </div>
-                        </div>
+                        <h6><i class="bi bi-upload"></i> Import</h6>
+                        <form id="importJsonForm" enctype="multipart/form-data">
+                            <input type="file" class="form-control form-control-sm mb-2" id="importJsonFile" accept=".json" required>
+                            <button type="submit" class="btn btn-sm btn-warning">
+                                <i class="bi bi-upload"></i> Restore Backup
+                            </button>
+                        </form>
+                        <div id="importJsonResult" class="mt-2"></div>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <div class="card border-danger">
-                            <div class="card-body">
-                                <h5 class="text-danger"><i class="bi bi-trash"></i> Clear All Data</h5>
-                                <p class="text-muted">⚠️ This will delete ALL data from ALL users!</p>
-                                <button class="btn btn-danger" id="clearAllDataBtn">
-                                    <i class="bi bi-trash"></i> Clear All Data
-                                </button>
-                            </div>
-                        </div>
+                        <h6><i class="bi bi-trash"></i> Clear All</h6>
+                        <p class="small text-danger mb-2">Deletes ALL data from ALL users</p>
+                        <button class="btn btn-sm btn-danger" id="clearAllDataBtn">
+                            <i class="bi bi-trash"></i> Clear Everything
+                        </button>
                     </div>
                 </div>
-            </div>
             </div>
         </div>
     </div>

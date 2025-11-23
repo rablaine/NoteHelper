@@ -146,6 +146,65 @@
     </div>
 </div>
 
+<!-- First-Time User Welcome Modal -->
+{% if show_first_time_modal %}
+<div class="modal fade" id="firstTimeModal" tabindex="-1" aria-labelledby="firstTimeModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="firstTimeModalLabel">
+                    <i class="bi bi-rocket"></i> Welcome to NoteHelper!
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="lead">Thanks for signing up! Let's get you started.</p>
+                
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-moon-stars text-primary"></i> Personalize Your Experience</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <strong>Dark Mode</strong>
+                                <p class="text-muted mb-0 small">Easy on the eyes for extended use</p>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="firstTimeDarkModeSwitch" style="width: 3em; height: 1.5em;">
+                            </div>
+                        </div>
+                        <small class="text-muted">You can change this anytime in Settings.</small>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-info-circle text-primary"></i> Quick Start Tip</h6>
+                        <p class="card-text mb-0">
+                            If you have an existing customer alignment spreadsheet, you can upload it to quickly import your customers, territories, and sellers.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <strong><i class="bi bi-file-earmark-spreadsheet"></i> Supported Format:</strong>
+                    CSV file with columns: Customer Name, Territory, Seller Name (and optionally TPID, POD, Vertical)
+                </div>
+                
+                <p>Would you like to import your customer alignment now?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Skip for Now
+                </button>
+                <a href="{{ url_for('main.preferences') }}#import-section" class="btn btn-primary" data-bs-dismiss="modal">
+                    <i class="bi bi-upload"></i> Import Customer Alignment
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Quick Call Log Modal -->
 <div class="modal fade" id="quickCallLogModal" tabindex="-1" aria-labelledby="quickCallLogModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -274,7 +333,37 @@
     }
     
     // Load drafts when page loads
-    document.addEventListener('DOMContentLoaded', loadDrafts);
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDrafts();
+        
+        // Show first-time user modal if flag is set
+        {% if show_first_time_modal %}
+        const firstTimeModal = new bootstrap.Modal(document.getElementById('firstTimeModal'));
+        firstTimeModal.show();
+        
+        // Dark mode toggle in first-time modal
+        const firstTimeDarkModeSwitch = document.getElementById('firstTimeDarkModeSwitch');
+        firstTimeDarkModeSwitch.addEventListener('change', function() {
+            const darkMode = this.checked;
+            
+            fetch('/api/preferences/dark-mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ dark_mode: darkMode })
+            })
+            .then(response => response.json())
+            .then(() => {
+                // Update UI immediately
+                document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
+            })
+            .catch(error => {
+                console.error('Error saving dark mode preference:', error);
+            });
+        });
+        {% endif %}
+    });
     
     // Reload drafts when storage changes (multi-tab support)
     window.addEventListener('storage', function(e) {
