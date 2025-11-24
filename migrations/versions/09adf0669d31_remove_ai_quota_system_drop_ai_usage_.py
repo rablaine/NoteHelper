@@ -17,12 +17,18 @@ depends_on = None
 
 
 def upgrade():
-    # Drop ai_usage table
-    op.drop_table('ai_usage')
+    # Drop ai_usage table (if it exists)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if 'ai_usage' in inspector.get_table_names():
+        op.drop_table('ai_usage')
     
-    # Remove max_daily_calls_per_user column from ai_config
-    with op.batch_alter_table('ai_config', schema=None) as batch_op:
-        batch_op.drop_column('max_daily_calls_per_user')
+    # Remove max_daily_calls_per_user column from ai_config (if it exists)
+    if 'ai_config' in inspector.get_table_names():
+        columns = [c['name'] for c in inspector.get_columns('ai_config')]
+        if 'max_daily_calls_per_user' in columns:
+            with op.batch_alter_table('ai_config', schema=None) as batch_op:
+                batch_op.drop_column('max_daily_calls_per_user')
 
 
 def downgrade():
