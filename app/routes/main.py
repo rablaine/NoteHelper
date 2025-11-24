@@ -738,7 +738,7 @@ def data_management_import():
                 if existing:
                     pods_map[pod_name] = existing
                 else:
-                    pod = POD(name=pod_name)
+                    pod = POD(name=pod_name, user_id=g.user.id)
                     db.session.add(pod)
                     pods_map[pod_name] = pod
             
@@ -783,7 +783,7 @@ def data_management_import():
                         if pod and pod not in existing.pods:
                             existing.pods.append(pod)
                 else:
-                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Data')
+                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Data', user_id=g.user.id)
                     for pod_name in info['pods']:
                         se.pods.append(pods_map[pod_name])
                     db.session.add(se)
@@ -813,7 +813,7 @@ def data_management_import():
                         if pod and pod not in existing.pods:
                             existing.pods.append(pod)
                 else:
-                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Core and Infra')
+                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Core and Infra', user_id=g.user.id)
                     for pod_name in info['pods']:
                         se.pods.append(pods_map[pod_name])
                     db.session.add(se)
@@ -843,7 +843,7 @@ def data_management_import():
                         if pod and pod not in existing.pods:
                             existing.pods.append(pod)
                 else:
-                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Apps and AI')
+                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Apps and AI', user_id=g.user.id)
                     for pod_name in info['pods']:
                         se.pods.append(pods_map[pod_name])
                     db.session.add(se)
@@ -872,7 +872,7 @@ def data_management_import():
                 if existing:
                     verticals_map[vertical_name] = existing
                 else:
-                    vertical = Vertical(name=vertical_name)
+                    vertical = Vertical(name=vertical_name, user_id=g.user.id)
                     db.session.add(vertical)
                     verticals_map[vertical_name] = vertical
             

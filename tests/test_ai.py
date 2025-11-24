@@ -352,44 +352,4 @@ class TestAuditLogging:
             assert len(log.response_text) <= 1000
 
 
-class TestUserProfileAIDisplay:
-    """Test AI usage display on user profile."""
-    
-    @pytest.mark.skip(reason="Profile route removed in single-user mode")
-    def test_profile_shows_ai_usage_when_enabled(self, app, client):
-        """Test that profile shows AI usage card when enabled."""
-        with app.app_context():
-            test_user = User.query.first()
-            
-            # Set up enabled AI config
-            config = AIConfig.query.first()
-            if not config:
-                config = AIConfig()
-                db.session.add(config)
-            config.enabled = True
-            db.session.commit()
-            
-            response = client.get('/profile')
-            assert response.status_code == 200
-            html = response.data.decode()
-            
-            # Check for AI usage display
-            assert 'AI Features' in html or 'AI Usage' in html
-            assert '5' in html  # used count
-            assert '15' in html  # remaining (20 - 5)
-            assert '20' in html  # limit
-    
-    @pytest.mark.skip(reason="Profile route removed in single-user mode")
-    def test_profile_hides_ai_when_disabled(self, app, client):
-        """Test that profile doesn't show AI card when disabled."""
-        with app.app_context():
-            # Ensure AI is disabled
-            config = AIConfig.query.first()
-            if config:
-                config.enabled = False
-                db.session.commit()
-            
-            response = client.get('/profile')
-            assert response.status_code == 200
-            # Profile should still load, just without AI section
-            # (Can't easily test absence without more specific HTML structure)
+
