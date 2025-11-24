@@ -29,4 +29,4 @@ ENV FLASK_APP=run.py
 ENV PYTHONUNBUFFERED=1
 
 # Run database migrations and start the application with production WSGI server
-CMD flask db upgrade && gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 app:app
+CMD flask db upgrade && gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 run:app
