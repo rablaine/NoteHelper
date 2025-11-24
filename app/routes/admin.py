@@ -148,7 +148,6 @@ def api_admin_ai_config_update():
     ai_config.deployment_name = data.get('deployment_name', '').strip() or None
     ai_config.api_version = data.get('api_version', '2024-08-01-preview').strip()
     ai_config.system_prompt = data.get('system_prompt', '').strip() or ai_config.system_prompt
-    ai_config.max_daily_calls_per_user = int(data.get('max_daily_calls_per_user', 20))
     
     db.session.commit()
     

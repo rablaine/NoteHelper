@@ -406,29 +406,19 @@ let lastAiCallFailed = false;
 let aiButtonDisabledUntil = 0;
 
 // Check if AI is enabled and show button
-fetch('/api/ai/usage')
+fetch('/api/admin/ai-config')
     .then(response => response.json())
     .then(data => {
-        if (data.enabled) {
+        // If AI config exists and is enabled, show the button
+        if (data && data.enabled) {
             const aiBtn = document.getElementById('aiSuggestBtn');
             aiBtn.style.display = 'block';
-            updateAiButtonText(data.remaining, data.limit);
         }
     })
-    .catch(error => console.error('Error checking AI status:', error));
-
-function updateAiButtonText(remaining, limit) {
-    const btnText = document.getElementById('aiSuggestBtnText');
-    const aiBtn = document.getElementById('aiSuggestBtn');
-    
-    if (remaining === 0) {
-        btnText.textContent = 'Daily quota exceeded';
-        aiBtn.disabled = true;
-    } else {
-        btnText.textContent = 'Auto-tag with AI';
-        aiBtn.disabled = false;
-    }
-}
+    .catch(error => {
+        // Silently fail - button stays hidden if AI not configured
+        console.log('AI not configured or error checking status');
+    });
 
 document.getElementById('aiSuggestBtn').addEventListener('click', function() {
     const aiBtn = this;
@@ -471,27 +461,23 @@ document.getElementById('aiSuggestBtn').addEventListener('click', function() {
             
             if (addedCount > 0) {
                 btnText.textContent = `Added ${addedCount} topic${addedCount > 1 ? 's' : ''}!`;
-                setTimeout(() => updateAiButtonText(data.remaining, data.limit), 2000);
+                setTimeout(() => btnText.textContent = 'Auto-tag with AI', 2000);
             } else {
                 btnText.textContent = 'All suggested topics already added';
-                setTimeout(() => updateAiButtonText(data.remaining, data.limit), 2000);
+                setTimeout(() => btnText.textContent = 'Auto-tag with AI', 2000);
             }
             
             lastAiCallFailed = false;
             aiBtn.disabled = false;
         } else {
             // Handle error
-            if (data.remaining === 0) {
-                updateAiButtonText(0, data.limit);
-            } else {
-                btnText.textContent = 'Error - Try again in 5s';
-                lastAiCallFailed = true;
-                aiButtonDisabledUntil = Date.now() + 5000;
-                setTimeout(() => {
-                    aiBtn.disabled = false;
-                    btnText.textContent = originalText;
-                }, 5000);
-            }
+            btnText.textContent = 'Error - Try again in 5s';
+            lastAiCallFailed = true;
+            aiButtonDisabledUntil = Date.now() + 5000;
+            setTimeout(() => {
+                aiBtn.disabled = false;
+                btnText.textContent = originalText;
+            }, 5000);
             alert('AI Error: ' + data.error);
         }
     })

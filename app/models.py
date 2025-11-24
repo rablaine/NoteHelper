@@ -469,24 +469,6 @@ class AIConfig(db.Model):
         return f'<AIConfig enabled={self.enabled} deployment={self.deployment_name}>'
 
 
-class AIUsage(db.Model):
-    """Track daily AI API usage per user for rate limiting."""
-    __tablename__ = 'ai_usage'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False, default=lambda: date.today())
-    call_count = db.Column(db.Integer, default=0, nullable=False)
-    
-    # Create unique constraint on user_id + date
-    __table_args__ = (
-        db.UniqueConstraint('user_id', 'date', name='unique_user_date'),
-    )
-    
-    def __repr__(self) -> str:
-        return f'<AIUsage user_id={self.user_id} date={self.date} calls={self.call_count}>'
-
-
 class AIQueryLog(db.Model):
     """Audit log of all AI API calls for debugging and prompt improvement."""
     __tablename__ = 'ai_query_log'

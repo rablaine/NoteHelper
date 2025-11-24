@@ -93,7 +93,6 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if user.id != current_user.id %}
                                         {% if user.is_admin %}
                                             <button class="btn btn-sm btn-warning revoke-admin-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.name }}">
                                                 <i class="bi bi-shield-x"></i> Revoke Admin
@@ -103,9 +102,6 @@
                                                 <i class="bi bi-shield-plus"></i> Grant Admin
                                             </button>
                                         {% endif %}
-                                    {% else %}
-                                        <span class="badge bg-primary">You</span>
-                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -205,12 +201,6 @@
                             <input type="password" class="form-control form-control-sm" id="aiApiKey" 
                                    value="{{ ai_config.api_key or '' }}" 
                                    placeholder="From Azure portal">
-                        </div>
-                        <div class="col-md-2">
-                            <label for="aiMaxCalls" class="form-label">Daily Limit</label>
-                            <input type="number" class="form-control form-control-sm" id="aiMaxCalls" 
-                                   value="{{ ai_config.max_daily_calls_per_user or 20 }}" 
-                                   min="1" max="1000">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Enabled</label>
@@ -447,8 +437,7 @@ document.getElementById('aiConfigForm').addEventListener('submit', function(e) {
         api_key: document.getElementById('aiApiKey').value.trim(),
         deployment_name: document.getElementById('aiDeployment').value.trim(),
         api_version: document.getElementById('aiApiVersion').value.trim(),
-        system_prompt: document.getElementById('aiSystemPrompt').value.trim(),
-        max_daily_calls_per_user: parseInt(document.getElementById('aiMaxCalls').value)
+        system_prompt: document.getElementById('aiSystemPrompt').value.trim()
     };
     
     fetch('/api/admin/ai-config', {

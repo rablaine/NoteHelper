@@ -674,7 +674,7 @@ def data_management_import():
                 if existing:
                     territories_map[territory_name] = existing
                 else:
-                    territory = Territory(name=territory_name)
+                    territory = Territory(name=territory_name, user_id=g.user.id)
                     db.session.add(territory)
                     territories_map[territory_name] = territory
             
@@ -706,7 +706,7 @@ def data_management_import():
                             seller_type = 'Growth'
                             alias = None
                         
-                        seller = Seller(name=seller_name, seller_type=seller_type, alias=alias)
+                        seller = Seller(name=seller_name, seller_type=seller_type, alias=alias, user_id=g.user.id)
                         db.session.add(seller)
                         sellers_map[seller_name] = seller
             
@@ -915,7 +915,8 @@ def data_management_import():
                     name=customer_name,
                     tpid=tpid,
                     territory=territories_map.get(territory_name),
-                    seller=sellers_map.get(seller_name))
+                    seller=sellers_map.get(seller_name),
+                    user_id=g.user.id)
                 
                 # Associate both verticals if they exist and aren't N/A
                 if vertical_name and vertical_name.upper() != 'N/A':
