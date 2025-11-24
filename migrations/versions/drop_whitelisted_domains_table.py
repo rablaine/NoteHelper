@@ -18,7 +18,11 @@ depends_on = None
 
 def upgrade():
     # Drop whitelisted_domains table (not needed in single-user mode)
-    op.drop_table('whitelisted_domains')
+    # Check if table exists first (for fresh SQLite databases)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if 'whitelisted_domains' in inspector.get_table_names():
+        op.drop_table('whitelisted_domains')
 
 
 def downgrade():
