@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.pytest_cache/
+
+# Data
+data/
+instance/
+
+# Git
+.git/
+.github/
+.gitignore
+
+# Development
+.vscode/
+.env
+*.log
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+tests/
+run_tests.ps1
+
+# Misc
+.deployment
+runtime.txt
+startup.sh

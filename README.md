@@ -32,10 +32,10 @@
 - Data import/export (JSON and CSV) for backup and migration
 
 ### Admin Features
-- Domain whitelisting for external accounts
-- User management and admin role assignment
-- AI configuration and usage monitoring
+- AI configuration and usage monitoring (optional Azure OpenAI integration)
 - Audit logs for AI queries
+- Data import/export with CSV and JSON formats
+- Analytics dashboard with call trends and insights
 
 ## Technology Stack
 
@@ -46,54 +46,124 @@
 - **ORM:** SQLAlchemy
 - **AI Integration:** Azure OpenAI Service / Azure AI Foundry
 
-## Prerequisites
+## Deployment Options
 
-- Python 3.13 or higher
-- pip and venv
+Choose your preferred deployment method:
 
-## Setup Instructions
+### Option 1: Docker (Recommended for Production)
 
-### 1. Clone the Repository
+**Prerequisites:**
+- Docker and Docker Compose installed
 
+**Quick Start:**
+
+1. Clone the repository:
 ```bash
 git clone https://github.com/rablaine/NoteHelper.git
 cd NoteHelper
 ```
 
-### 2. Create Virtual Environment
-
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+2. Create `.env` file with your secret key:
+```bash
+cp .env.example .env
+# Edit .env and set SECRET_KEY (generate with: python -c "import secrets; print(secrets.token_hex(32))")
 ```
 
-### 3. Install Dependencies
+3. Build and run with Docker Compose:
+```bash
+docker-compose up -d
+```
 
+4. Visit `http://localhost:5000` in your browser
+
+**Using Pre-Built Image from GitHub Container Registry:**
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/rablaine/notehelper:latest
+
+# Run with docker-compose (recommended - includes volume for data persistence)
+docker-compose up -d
+
+# Or run directly (manual volume mounting)
+docker run -d \
+  -p 5000:5000 \
+  -v $(pwd)/data:/app/data \
+  -e SECRET_KEY=your-secret-key-here \
+  --name notehelper \
+  ghcr.io/rablaine/notehelper:latest
+```
+
+**Docker Deployment Features:**
+- ✅ **Persistent Data:** SQLite database stored in `./data` volume survives container updates
+- ✅ **Automatic Migrations:** Database migrations run automatically on container startup
+- ✅ **Easy Updates:** Pull latest image and restart: `docker-compose pull && docker-compose up -d`
+- ✅ **Clean Environment:** No Python/pip installation needed on host
+- ✅ **Automated Builds:** New images built automatically on every push to `main` branch
+
+**Managing Your Docker Deployment:**
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Stop the application
+docker-compose down
+
+# Update to latest version
+docker-compose pull
+docker-compose up -d
+
+# Backup your data
+tar -czf notehelper-backup-$(date +%Y%m%d).tar.gz data/
+
+# Restore from backup
+tar -xzf notehelper-backup-20241124.tar.gz
+```
+
+### Option 2: Local Development (Python)
+
+**Prerequisites:**
+- Python 3.13 or higher
+- pip and venv
+
+**Setup:**
+
+1. Clone the repository:
+```bash
+git clone https://github.com/rablaine/NoteHelper.git
+cd NoteHelper
+```
+
+2. Create virtual environment:
 ```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1  # Windows
+# or
+source venv/bin/activate      # Linux/Mac
+```
+
+3. Install dependencies:
+```bash
 pip install -r requirements.txt
 ```
 
-### 4. Set Up Environment Variables
-
-```powershell
+4. Set up environment variables:
+```bash
 cp .env.example .env
-```
-
-Generate a secret key:
-
-```powershell
+# Generate secret key:
 python -c "import secrets; print(secrets.token_hex(32))"
+# Add the generated key to .env as SECRET_KEY
 ```
 
-Update `SECRET_KEY` in `.env` with the generated value. The database will be created automatically in `data/notehelper.db` when you first run the application.
-
-### 5. Run the Application
-
-```powershell
+5. Run the application:
+```bash
 python run.py
 ```
 
-Visit `http://localhost:5000` in your browser.
+6. Visit `http://localhost:5000` in your browser
+
+**Note:** The database will be created automatically in `data/notehelper.db` on first run.
 
 ## Development
 

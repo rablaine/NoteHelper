@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  notehelper:
+    build: .
+    container_name: notehelper
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persist SQLite database across container updates
+      - ./data:/app/data
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=sqlite:////app/data/notehelper.db
+    restart: unless-stopped
