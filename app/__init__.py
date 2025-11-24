@@ -1,11 +1,10 @@
 """
 Flask application factory for NoteHelper.
-Initializes the app, extensions, and blueprints.
+Single-user local deployment mode.
 """
 import os
-from flask import Flask
+from flask import Flask, g
 from flask_migrate import Migrate
-from flask_login import LoginManager, current_user
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -16,7 +15,6 @@ from app.models import db
 
 # Initialize extensions
 migrate = Migrate()
-login_manager = LoginManager()
 
 
 def create_app():
@@ -26,69 +24,70 @@ def create_app():
                 static_folder='../static')
     
     # Configuration
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+    
+    # SQLite database path - use absolute path
+    db_url = os.environ.get('DATABASE_URL', 'sqlite:///data/notehelper.db')
+    if db_url.startswith('sqlite:///') and not db_url.startswith('sqlite:////'):
+        # Convert relative path to absolute path
+        db_path = db_url.replace('sqlite:///', '')
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), db_path)
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            db_url = 'sqlite:///' + db_path
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_pre_ping': True,
-        'pool_recycle': 300,
-    }
-    
-    # Entra ID (Azure AD) OAuth configuration
-    app.config['AZURE_CLIENT_ID'] = os.environ.get('AZURE_CLIENT_ID')
-    app.config['AZURE_CLIENT_SECRET'] = os.environ.get('AZURE_CLIENT_SECRET')
-    app.config['AZURE_TENANT_ID'] = os.environ.get('AZURE_TENANT_ID')
-    app.config['AZURE_REDIRECT_URI'] = os.environ.get('AZURE_REDIRECT_URI', 'http://localhost:5000/auth/callback')
-    app.config['AZURE_AUTHORITY'] = f"https://login.microsoftonline.com/{os.environ.get('AZURE_TENANT_ID', 'common')}"
-    app.config['AZURE_SCOPE'] = ['User.Read']
-    
-    # Safety check: Prevent running without configuration
-    if not app.config['SECRET_KEY']:
-        raise ValueError("SECRET_KEY environment variable is not set")
-    if not app.config['SQLALCHEMY_DATABASE_URI']:
-        raise ValueError("DATABASE_URL environment variable is not set")
     
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
-    login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'
-    
-    # Configure Flask-Login
-    from app.models import User
-    
-    @login_manager.user_loader
-    def load_user(user_id):
-        return User.query.get(int(user_id))
     
     # Import models to register them with SQLAlchemy
     from app import models
     
-    # Before request handler for user data isolation and stub user restriction
+    # Create default user and preferences on app startup
+    with app.app_context():
+        from app.models import User, UserPreference
+        
+        # Ensure database tables exist
+        db.create_all()
+        
+        # Create default user if none exists
+        user = User.query.first()
+        if not user:
+            user = User(
+                email='user@localhost',
+                name='Local User',
+                is_admin=True  # Single user has all permissions
+            )
+            db.session.add(user)
+            db.session.commit()
+            
+            # Create default preferences
+            pref = UserPreference(user_id=user.id)
+            db.session.add(pref)
+            db.session.commit()
+    
+    # Load app-wide preferences into g
     @app.before_request
-    def before_request():
-        """Handle stub user restrictions and load user preferences before each request."""
-        from flask import g, request, redirect, url_for
+    def load_preferences():
+        """Load single user and preferences into request context."""
+        from app.models import User, UserPreference
         
-        # If user is logged in but is a stub account, restrict access to only account linking routes
-        # This check happens BEFORE LOGIN_DISABLED check so tests can verify stub restrictions
-        if current_user.is_authenticated and current_user.is_stub:
-            stub_allowed_routes = ['auth.account_link_status', 'auth.first_time_flow', 'auth.first_time_new_user', 
-                                  'auth.first_time_link_request', 'auth.user_profile', 'auth.logout', 'static']
-            if request.endpoint not in stub_allowed_routes:
-                return redirect(url_for('auth.account_link_status'))
+        # Get the single user
+        g.user = User.query.first()
         
-        # Load user preferences
-        if current_user.is_authenticated:
-            g.user_prefs = models.UserPreference.query.filter_by(user_id=current_user.id).first()
+        # Load preferences
+        if g.user:
+            g.user_prefs = UserPreference.query.filter_by(user_id=g.user.id).first()
             if not g.user_prefs:
-                # Create default preferences if they don't exist
-                g.user_prefs = models.UserPreference(user_id=current_user.id)
+                g.user_prefs = UserPreference(user_id=g.user.id)
                 db.session.add(g.user_prefs)
                 db.session.commit()
     
-    # Register blueprints
-    from app.routes.auth import auth_bp
+    # Register blueprints (skip auth blueprint - not needed in single-user mode)
     from app.routes.admin import admin_bp
     from app.routes.ai import ai_bp
     from app.routes.territories import territories_bp
@@ -100,7 +99,6 @@ def create_app():
     from app.routes.call_logs import call_logs_bp
     from app.routes.main import main_bp
     
-    app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(territories_bp)

@@ -2,8 +2,7 @@
 Customer routes for NoteHelper.
 Handles customer listing, creation, viewing, editing, and TPID workflow.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from flask_login import login_required, current_user
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 from sqlalchemy import func, or_
 
 from app.models import db, Customer, Seller, Territory, CallLog, UserPreference
@@ -13,10 +12,9 @@ customers_bp = Blueprint('customers', __name__)
 
 
 @customers_bp.route('/customers')
-@login_required
 def customers_list():
     """List all customers - alphabetical, grouped by seller, or sorted by call count based on preference."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     
     # Check preference for showing customers without calls (default: False = hide them)
@@ -29,7 +27,7 @@ def customers_list():
     
     if sort_by == 'grouped':
         # Grouped view - get all sellers with their customers
-        sellers = Seller.query.filter_by(user_id=current_user.id).options(
+        sellers = Seller.query.options(
             db.joinedload(Seller.customers).joinedload(Customer.call_logs),
             db.joinedload(Seller.customers).joinedload(Customer.territory),
             db.joinedload(Seller.territories)
@@ -51,7 +49,7 @@ def customers_list():
                 })
         
         # Get customers without a seller
-        customers_without_seller_query = Customer.query.filter_by(user_id=current_user.id).options(
+        customers_without_seller_query = Customer.query.options(
             db.joinedload(Customer.call_logs),
             db.joinedload(Customer.territory)
         ).filter_by(seller_id=None).order_by(Customer.name)
@@ -70,7 +68,7 @@ def customers_list():
     
     elif sort_by == 'by_calls':
         # Sort by number of calls (descending)
-        customers_query = Customer.query.filter_by(user_id=current_user.id).options(
+        customers_query = Customer.query.options(
             db.joinedload(Customer.seller),
             db.joinedload(Customer.territory),
             db.joinedload(Customer.call_logs)
@@ -89,7 +87,7 @@ def customers_list():
     
     else:
         # Alphabetical view (default)
-        customers_query = Customer.query.filter_by(user_id=current_user.id).options(
+        customers_query = Customer.query.options(
             db.joinedload(Customer.seller),
             db.joinedload(Customer.territory),
             db.joinedload(Customer.call_logs)
@@ -105,7 +103,6 @@ def customers_list():
 
 
 @customers_bp.route('/customer/new', methods=['GET', 'POST'])
-@login_required
 def customer_create():
     """Create a new customer (FR003, FR031)."""
     if request.method == 'POST':
@@ -137,9 +134,7 @@ def customer_create():
             tpid=tpid_value,
             tpid_url=tpid_url if tpid_url else None,
             seller_id=int(seller_id) if seller_id else None,
-            territory_id=int(territory_id) if territory_id else None,
-            user_id=current_user.id
-        )
+            territory_id=int(territory_id) if territory_id else None)
         db.session.add(customer)
         db.session.commit()
         
@@ -151,8 +146,8 @@ def customer_create():
         
         return redirect(url_for('customers.customer_view', id=customer.id))
     
-    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
-    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
+    sellers = Seller.query.order_by(Seller.name).all()
+    territories = Territory.query.order_by(Territory.name).all()
     
     # Pre-select seller and territory from query params (FR032)
     preselect_seller_id = request.args.get('seller_id', type=int)
@@ -160,13 +155,13 @@ def customer_create():
     
     # If seller is pre-selected and has exactly one territory, auto-select it
     if preselect_seller_id:
-        seller = Seller.query.filter_by(user_id=current_user.id).filter_by(id=preselect_seller_id).first()
+        seller = Seller.query.filter_by(id=preselect_seller_id).first()
         if seller and len(seller.territories) == 1:
             preselect_territory_id = seller.territories[0].id
     
     # If territory is pre-selected and has only one seller, auto-select it (FR032)
     if preselect_territory_id and not preselect_seller_id:
-        territory = Territory.query.filter_by(user_id=current_user.id).filter_by(id=preselect_territory_id).first()
+        territory = Territory.query.filter_by(id=preselect_territory_id).first()
         if territory:
             # territory.sellers is already a list from eager loading
             territory_sellers = territory.sellers
@@ -186,20 +181,18 @@ def customer_create():
 
 
 @customers_bp.route('/customer/<int:id>')
-@login_required
 def customer_view(id):
     """View customer details (FR008)."""
-    customer = Customer.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    customer = Customer.query.filter_by(id=id).first_or_404()
     # Sort call logs by date (descending) - customer.call_logs is already loaded as a list
     call_logs = sorted(customer.call_logs, key=lambda c: c.call_date, reverse=True)
     return render_template('customer_view.html', customer=customer, call_logs=call_logs)
 
 
 @customers_bp.route('/customer/<int:id>/edit', methods=['GET', 'POST'])
-@login_required
 def customer_edit(id):
     """Edit customer (FR008)."""
-    customer = Customer.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    customer = Customer.query.filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -234,8 +227,8 @@ def customer_edit(id):
         flash(f'Customer "{name}" updated successfully!', 'success')
         return redirect(url_for('customers.customer_view', id=customer.id))
     
-    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
-    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
+    sellers = Seller.query.order_by(Seller.name).all()
+    territories = Territory.query.order_by(Territory.name).all()
     
     return render_template('customer_form.html', 
                          customer=customer, 
@@ -245,7 +238,6 @@ def customer_edit(id):
 
 
 @customers_bp.route('/tpid-workflow')
-@login_required
 def tpid_workflow():
     """MSX Account URL workflow page - helps fill in missing MSX Account URLs efficiently."""
     # Get all customers without MSX Account URLs, ordered by seller/territory for grouping
@@ -264,7 +256,6 @@ def tpid_workflow():
 
 
 @customers_bp.route('/tpid-workflow/update', methods=['POST'])
-@login_required
 def tpid_workflow_update():
     """Update MSX Account URLs from the workflow page."""
     try:
@@ -299,7 +290,6 @@ def tpid_workflow_update():
 
 # API route
 @customers_bp.route('/api/customers/autocomplete', methods=['GET'])
-@login_required
 def api_customers_autocomplete():
     """API endpoint for customer name autocomplete."""
     query = request.args.get('q', '').strip()
@@ -308,7 +298,7 @@ def api_customers_autocomplete():
         return jsonify([]), 200
     
     # Search customers by name (case-insensitive, contains)
-    customers = Customer.query.filter_by(user_id=current_user.id).filter(
+    customers = Customer.query.filter(
         Customer.name.ilike(f'%{query}%')
     ).order_by(Customer.name).limit(10).all()
     

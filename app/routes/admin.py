@@ -2,8 +2,7 @@
 Admin routes for NoteHelper.
 Handles admin panel, user management, and domain whitelisting.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from flask_login import login_required, current_user
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 
 from app.models import db, User, WhitelistedDomain, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog, utc_now
 
@@ -12,13 +11,8 @@ admin_bp = Blueprint('admin', __name__)
 
 
 @admin_bp.route('/admin')
-@login_required
 def admin_panel():
     """Admin control panel for managing users and system-wide operations."""
-    if not current_user.is_admin:
-        flash('You do not have permission to access the admin panel.', 'danger')
-        return redirect(url_for('main.index'))
-    
     # Get all users
     users = User.query.order_by(User.created_at.desc()).all()
     
@@ -47,13 +41,8 @@ def admin_panel():
 
 
 @admin_bp.route('/admin/ai-logs')
-@login_required
 def admin_ai_logs():
     """View AI query logs for debugging."""
-    if not current_user.is_admin:
-        flash('You do not have permission to access AI logs.', 'danger')
-        return redirect(url_for('main.index'))
-    
     # Get recent logs (last 50) with users loaded separately
     logs = AIQueryLog.query.order_by(AIQueryLog.timestamp.desc()).limit(50).all()
     
@@ -70,12 +59,8 @@ def admin_ai_logs():
 
 # API routes
 @admin_bp.route('/api/grant-admin/<int:user_id>', methods=['POST'])
-@login_required
 def api_grant_admin(user_id):
     """Grant admin privileges to a user."""
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     user = User.query.get_or_404(user_id)
     user.is_admin = True
     db.session.commit()
@@ -84,14 +69,10 @@ def api_grant_admin(user_id):
 
 
 @admin_bp.route('/api/revoke-admin/<int:user_id>', methods=['POST'])
-@login_required
 def api_revoke_admin(user_id):
     """Revoke admin privileges from a user."""
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     # Prevent revoking your own admin
-    if user_id == current_user.id:
+    if user_id == g.user.id:
         return jsonify({'error': 'You cannot revoke your own admin privileges'}), 400
     
     user = User.query.get_or_404(user_id)
@@ -102,12 +83,8 @@ def api_revoke_admin(user_id):
 
 
 @admin_bp.route('/api/admin/domain/add', methods=['POST'])
-@login_required
 def api_admin_domain_add():
     """Add a domain to the whitelist."""
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     data = request.get_json()
     domain = data.get('domain', '').strip().lower()
     
@@ -125,7 +102,7 @@ def api_admin_domain_add():
     
     # Add domain
     try:
-        new_domain = WhitelistedDomain(domain=domain, added_by_user_id=current_user.id)
+        new_domain = WhitelistedDomain(domain=domain, added_by_user_id=g.user.id)
         db.session.add(new_domain)
         db.session.commit()
         
@@ -141,12 +118,8 @@ def api_admin_domain_add():
 
 
 @admin_bp.route('/api/admin/domain/remove/<int:domain_id>', methods=['POST'])
-@login_required
 def api_admin_domain_remove(domain_id):
     """Remove a domain from the whitelist."""
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     domain = WhitelistedDomain.query.get_or_404(domain_id)
     domain_name = domain.domain
     
@@ -158,12 +131,8 @@ def api_admin_domain_remove(domain_id):
 
 # AI Configuration API routes
 @admin_bp.route('/api/admin/ai-config', methods=['POST'])
-@login_required
 def api_admin_ai_config_update():
     """Update AI configuration."""
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     data = request.get_json()
     
     # Get or create AI config
@@ -179,7 +148,6 @@ def api_admin_ai_config_update():
     ai_config.deployment_name = data.get('deployment_name', '').strip() or None
     ai_config.api_version = data.get('api_version', '2024-08-01-preview').strip()
     ai_config.system_prompt = data.get('system_prompt', '').strip() or ai_config.system_prompt
-    ai_config.max_daily_calls_per_user = int(data.get('max_daily_calls_per_user', 20))
     
     db.session.commit()
     
@@ -187,12 +155,8 @@ def api_admin_ai_config_update():
 
 
 @admin_bp.route('/api/admin/ai-config/test', methods=['POST'])
-@login_required
 def api_admin_ai_config_test():
     """Test AI configuration by making a sample API call."""
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     # Get current form values from request instead of database
     data = request.get_json() or {}
     endpoint_url = data.get('endpoint_url', '').strip()

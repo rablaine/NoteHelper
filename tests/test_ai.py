@@ -7,7 +7,7 @@ from datetime import date, datetime
 from unittest.mock import patch, MagicMock
 import pytest
 from app import db
-from app.models import AIConfig, AIUsage, AIQueryLog, Topic, User
+from app.models import AIConfig, AIQueryLog, Topic, User
 
 
 class TestAIConfig:
@@ -28,7 +28,6 @@ class TestAIConfig:
         config = AIConfig.query.first()
         assert config is not None
         assert config.enabled is False
-        assert config.max_daily_calls_per_user == 20
         assert config.api_version == '2024-08-01-preview'
         assert 'helpful assistant' in config.system_prompt.lower()
     
@@ -46,8 +45,7 @@ class TestAIConfig:
             'api_key': 'test-key-123',
             'deployment_name': 'gpt-4',
             'api_version': '2024-08-01-preview',
-            'system_prompt': 'Custom prompt',
-            'max_daily_calls_per_user': 50
+            'system_prompt': 'Custom prompt'
         })
         
         assert response.status_code == 200
@@ -60,31 +58,8 @@ class TestAIConfig:
         assert config.endpoint_url == 'https://test.endpoint.com'
         assert config.api_key == 'test-key-123'
         assert config.deployment_name == 'gpt-4'
-        assert config.max_daily_calls_per_user == 50
         assert config.system_prompt == 'Custom prompt'
     
-    def test_non_admin_cannot_update_config(self, app, client):
-        """Test that non-admin users cannot update AI config."""
-        # Make test user non-admin temporarily
-        with app.app_context():
-            test_user = User.query.first()
-            test_user.is_admin = False
-            db.session.commit()
-        
-        response = client.post('/api/admin/ai-config', json={
-            'enabled': True,
-            'endpoint_url': 'https://evil.com'
-        })
-        
-        # Should redirect or return 403
-        assert response.status_code in [302, 403]
-        
-        # Restore admin status for other tests
-        with app.app_context():
-            test_user = User.query.first()
-            test_user.is_admin = True
-            db.session.commit()
-
 
 class TestAIConnection:
     """Test AI connection testing functionality."""
@@ -150,29 +125,6 @@ class TestAIConnection:
         assert data['success'] is False
         error_text = data.get('message', data.get('error', '')).lower()
         assert 'failed' in error_text or 'error' in error_text or '401' in error_text
-    
-    def test_connection_test_requires_admin(self, app, client):
-        """Test that only admins can test connections."""
-        # Make test user non-admin temporarily
-        with app.app_context():
-            test_user = User.query.first()
-            test_user.is_admin = False
-            db.session.commit()
-        
-        response = client.post('/api/admin/ai-config/test', json={
-            'endpoint_url': 'https://test.endpoint.com',
-            'api_key': 'test-key',
-            'deployment_name': 'gpt-4',
-            'api_version': '2024-08-01-preview'
-        })
-        
-        assert response.status_code in [302, 403]
-        
-        # Restore admin status for other tests
-        with app.app_context():
-            test_user = User.query.first()
-            test_user.is_admin = True
-            db.session.commit()
 
 
 class TestAISuggestions:
@@ -190,7 +142,6 @@ class TestAISuggestions:
         config.api_key = 'test-key'
         config.deployment_name = 'o3-mini'
         config.api_version = '2025-01-01-preview'
-        config.max_daily_calls_per_user = 20
         db.session.commit()
         return config
     
@@ -222,16 +173,10 @@ class TestAISuggestions:
             assert data['success'] is True
             assert len(data['topics']) == 3
             assert any('azure functions' in t['name'].lower() for t in data['topics'])
-            assert data['remaining'] == 19  # 20 - 1
             
             # Verify topics were created
             topics = Topic.query.all()
             assert len(topics) == 3
-            
-            # Verify usage was tracked
-            usage = AIUsage.query.filter_by(user_id=test_user.id, date=date.today()).first()
-            assert usage is not None
-            assert usage.call_count == 1
             
             # Verify audit log entry
             log = AIQueryLog.query.first()
@@ -308,106 +253,6 @@ class TestAISuggestions:
         data = response.get_json()
         assert data['success'] is False
         assert 'too short' in data['error'].lower() or 'required' in data['error'].lower() or 'call notes' in data['error'].lower()
-
-
-class TestRateLimiting:
-    """Test AI rate limiting functionality."""
-    
-    def setup_ai_config(self, max_calls=5):
-        """Helper to set up enabled AI config with custom limit."""
-        config = AIConfig.query.first()
-        if not config:
-            config = AIConfig()
-            db.session.add(config)
-        
-        config.enabled = True
-        config.endpoint_url = 'https://test.endpoint.com'
-        config.api_key = 'test-key'
-        config.deployment_name = 'o3-mini'
-        config.max_daily_calls_per_user = max_calls
-        db.session.commit()
-        return config
-    
-    @patch('requests.post')
-    def test_rate_limit_enforcement(self, mock_post, app, client):
-        """Test that rate limiting prevents excessive API calls."""
-        with app.app_context():
-            self.setup_ai_config(max_calls=2)
-            
-            # Mock successful API response
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                'choices': [{'message': {'content': '["Topic1", "Topic2"]'}}]
-            }
-            mock_post.return_value = mock_response
-            
-            # First call should succeed
-            response1 = client.post('/api/ai/suggest-topics', json={
-                'call_notes': 'First call'
-            })
-            assert response1.status_code == 200
-            assert response1.get_json()['remaining'] == 1
-            
-            # Second call should succeed
-            response2 = client.post('/api/ai/suggest-topics', json={
-                'call_notes': 'Second call'
-            })
-            assert response2.status_code == 200
-            assert response2.get_json()['remaining'] == 0
-            
-            # Third call should fail with 429
-            response3 = client.post('/api/ai/suggest-topics', json={
-                'call_notes': 'Third call (should fail)'
-            })
-            assert response3.status_code == 429
-            data = response3.get_json()
-            assert data['success'] is False
-            assert 'quota exceeded' in data['error'].lower()
-    
-    def test_usage_endpoint_shows_remaining(self, app, client):
-        """Test that usage endpoint shows correct remaining calls."""
-        with app.app_context():
-            self.setup_ai_config(max_calls=10)
-            test_user = User.query.first()
-        
-            # No usage yet
-            response = client.get('/api/ai/usage')
-            assert response.status_code == 200
-            data = response.get_json()
-            assert data['enabled'] is True
-            assert data['used'] == 0
-            assert data['remaining'] == 10
-            assert data['limit'] == 10
-            
-            # Create usage entry
-            usage = AIUsage(
-                user_id=test_user.id,
-                date=date.today(),
-                call_count=3
-            )
-            db.session.add(usage)
-            db.session.commit()
-            
-            # Check again
-            response = client.get('/api/ai/usage')
-            data = response.get_json()
-            assert data['used'] == 3
-            assert data['remaining'] == 7
-    
-    def test_usage_endpoint_when_disabled(self, app, client):
-        """Test usage endpoint returns disabled status."""
-        with app.app_context():
-            # Ensure AI is disabled
-            config = AIConfig.query.first()
-            if config:
-                config.enabled = False
-                db.session.commit()
-        
-        response = client.get('/api/ai/usage')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data['enabled'] is False
 
 
 class TestAuditLogging:
@@ -510,6 +355,7 @@ class TestAuditLogging:
 class TestUserProfileAIDisplay:
     """Test AI usage display on user profile."""
     
+    @pytest.mark.skip(reason="Profile route removed in single-user mode")
     def test_profile_shows_ai_usage_when_enabled(self, app, client):
         """Test that profile shows AI usage card when enabled."""
         with app.app_context():
@@ -521,16 +367,6 @@ class TestUserProfileAIDisplay:
                 config = AIConfig()
                 db.session.add(config)
             config.enabled = True
-            config.max_daily_calls_per_user = 20
-            db.session.commit()
-            
-            # Create usage entry
-            usage = AIUsage(
-                user_id=test_user.id,
-                date=date.today(),
-                call_count=5
-            )
-            db.session.add(usage)
             db.session.commit()
             
             response = client.get('/profile')
@@ -543,6 +379,7 @@ class TestUserProfileAIDisplay:
             assert '15' in html  # remaining (20 - 5)
             assert '20' in html  # limit
     
+    @pytest.mark.skip(reason="Profile route removed in single-user mode")
     def test_profile_hides_ai_when_disabled(self, app, client):
         """Test that profile doesn't show AI card when disabled."""
         with app.app_context():

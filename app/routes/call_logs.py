@@ -3,7 +3,6 @@ Call log routes for NoteHelper.
 Handles call log listing, creation, viewing, and editing.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import login_required, current_user
 from datetime import datetime
 
 from app.models import db, CallLog, Customer, Seller, Territory, Topic
@@ -13,10 +12,9 @@ call_logs_bp = Blueprint('call_logs', __name__)
 
 
 @call_logs_bp.route('/call-logs')
-@login_required
 def call_logs_list():
     """List all call logs (FR010)."""
-    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
+    call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory),
         db.joinedload(CallLog.topics)
@@ -25,7 +23,6 @@ def call_logs_list():
 
 
 @call_logs_bp.route('/call-log/new', methods=['GET', 'POST'])
-@login_required
 def call_log_create():
     """Create a new call log (FR005)."""
     if request.method == 'POST':
@@ -57,14 +54,14 @@ def call_log_create():
             return redirect(url_for('call_logs.call_log_create'))
         
         # Get customer and auto-fill territory
-        customer = Customer.query.filter_by(user_id=current_user.id).filter_by(id=int(customer_id)).first()
+        customer = Customer.query.filter_by(id=int(customer_id)).first()
         territory_id = customer.territory_id if customer else None
         
         # If customer doesn't have a seller but one is selected, associate it
         if customer and not customer.seller_id and seller_id:
             customer.seller_id = int(seller_id)
             # Also update customer's territory if seller has one
-            seller = Seller.query.filter_by(user_id=current_user.id).filter_by(id=int(seller_id)).first()
+            seller = Seller.query.filter_by(id=int(seller_id)).first()
             if seller and seller.territory_id:
                 customer.territory_id = seller.territory_id
                 territory_id = seller.territory_id
@@ -73,13 +70,11 @@ def call_log_create():
         call_log = CallLog(
             customer_id=int(customer_id),
             call_date=call_date,
-            content=content,
-            user_id=current_user.id
-        )
+            content=content)
         
         # Add topics
         if topic_ids:
-            topics = Topic.query.filter_by(user_id=current_user.id).filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
+            topics = Topic.query.filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
             call_log.topics.extend(topics)
         
         db.session.add(call_log)
@@ -103,14 +98,14 @@ def call_log_create():
         return redirect(url_for('customers.customers_list'))
     
     # Load customer and their previous call logs
-    preselect_customer = Customer.query.filter_by(user_id=current_user.id).filter_by(id=preselect_customer_id).first_or_404()
-    previous_calls = CallLog.query.filter_by(user_id=current_user.id, customer_id=preselect_customer_id).options(
+    preselect_customer = Customer.query.filter_by(id=preselect_customer_id).first_or_404()
+    previous_calls = CallLog.query.filter_by(customer_id=preselect_customer_id).options(
         db.joinedload(CallLog.topics)
     ).order_by(CallLog.call_date.desc()).all()
     
-    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
-    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
-    topics = Topic.query.filter_by(user_id=current_user.id).order_by(Topic.name).all()
+    customers = Customer.query.order_by(Customer.name).all()
+    sellers = Seller.query.order_by(Seller.name).all()
+    topics = Topic.query.order_by(Topic.name).all()
     
     # Pre-select topic from query params
     preselect_topic_id = request.args.get('topic_id', type=int)
@@ -131,18 +126,16 @@ def call_log_create():
 
 
 @call_logs_bp.route('/call-log/<int:id>')
-@login_required
 def call_log_view(id):
     """View call log details (FR010)."""
-    call_log = CallLog.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    call_log = CallLog.query.filter_by(id=id).first_or_404()
     return render_template('call_log_view.html', call_log=call_log)
 
 
 @call_logs_bp.route('/call-log/<int:id>/edit', methods=['GET', 'POST'])
-@login_required
 def call_log_edit(id):
     """Edit call log (FR010)."""
-    call_log = CallLog.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    call_log = CallLog.query.filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         customer_id = request.form.get('customer_id')
@@ -180,7 +173,7 @@ def call_log_edit(id):
         # Update topics - remove all existing associations first
         call_log.topics = []
         if topic_ids:
-            topics = Topic.query.filter_by(user_id=current_user.id).filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
+            topics = Topic.query.filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
             call_log.topics = topics
         
         db.session.commit()
@@ -189,9 +182,9 @@ def call_log_edit(id):
         return redirect(url_for('call_logs.call_log_view', id=call_log.id))
     
     # GET request - load form
-    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
-    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
-    topics = Topic.query.filter_by(user_id=current_user.id).order_by(Topic.name).all()
+    customers = Customer.query.order_by(Customer.name).all()
+    sellers = Seller.query.order_by(Seller.name).all()
+    topics = Topic.query.order_by(Topic.name).all()
     
     return render_template('call_log_form.html',
                          call_log=call_log,

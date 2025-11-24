@@ -38,6 +38,7 @@ instance/
 *.db
 *.sqlite
 *.sqlite3
+data/
 
 # IDE
 .vscode/
@@ -52,6 +53,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Future planning documents
+FUTURE_*.md
 
 # Testing
 .pytest_cache/

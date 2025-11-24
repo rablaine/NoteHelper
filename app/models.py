@@ -15,6 +15,11 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 
+def get_single_user():
+    """Get the single default user for single-user mode."""
+    return User.query.first()
+
+
 # =============================================================================
 # Association Tables
 # =============================================================================
@@ -456,30 +461,11 @@ class AIConfig(db.Model):
         "Return ONLY a JSON array of strings, nothing else. "
         "Example: [\"Azure OpenAI\", \"Vector Search\", \"RAG Pattern\"]"
     ), nullable=False)
-    max_daily_calls_per_user = db.Column(db.Integer, default=20, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     def __repr__(self) -> str:
         return f'<AIConfig enabled={self.enabled} deployment={self.deployment_name}>'
-
-
-class AIUsage(db.Model):
-    """Track daily AI API usage per user for rate limiting."""
-    __tablename__ = 'ai_usage'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False, default=lambda: date.today())
-    call_count = db.Column(db.Integer, default=0, nullable=False)
-    
-    # Create unique constraint on user_id + date
-    __table_args__ = (
-        db.UniqueConstraint('user_id', 'date', name='unique_user_date'),
-    )
-    
-    def __repr__(self) -> str:
-        return f'<AIUsage user_id={self.user_id} date={self.date} calls={self.call_count}>'
 
 
 class AIQueryLog(db.Model):
