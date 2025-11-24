@@ -2,8 +2,7 @@
 Main routes for NoteHelper.
 Handles index, search, preferences, data management, and API endpoints.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context, make_response, session
-from flask_login import login_required, current_user
+from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context, make_response, session, g
 from datetime import datetime, timezone
 from sqlalchemy import func
 import json
@@ -86,14 +85,13 @@ def get_seller_color(seller_id: int, use_colors: bool = True) -> str:
 # =============================================================================
 
 @main_bp.route('/')
-@login_required
 def index():
     """Home page showing recent activity and stats."""
     # Check if this is a first-time user
     show_first_time_modal = session.pop('show_first_time_modal', False)
     
     # Eager load relationships for recent calls to avoid N+1 queries
-    recent_calls = CallLog.query.filter_by(user_id=current_user.id).options(
+    recent_calls = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory),
         db.joinedload(CallLog.topics)
@@ -101,16 +99,15 @@ def index():
     
     # Count queries are fast on these small tables
     stats = {
-        'call_logs': CallLog.query.filter_by(user_id=current_user.id).count(),
-        'customers': Customer.query.filter_by(user_id=current_user.id).count(),
-        'sellers': Seller.query.filter_by(user_id=current_user.id).count(),
-        'topics': Topic.query.filter_by(user_id=current_user.id).count()
+        'call_logs': CallLog.query.count(),
+        'customers': Customer.query.count(),
+        'sellers': Seller.query.count(),
+        'topics': Topic.query.count()
     }
     return render_template('index.html', recent_calls=recent_calls, stats=stats, show_first_time_modal=show_first_time_modal)
 
 
 @main_bp.route('/search')
-@login_required
 def search():
     """Search and filter call logs (FR011)."""
     # Get filter parameters
@@ -129,7 +126,7 @@ def search():
     # Only perform search if criteria provided
     if has_search:
         # Start with base query filtered by user
-        query = CallLog.query.filter_by(user_id=current_user.id)
+        query = CallLog.query
         
         # Apply filters
         if search_text:
@@ -188,10 +185,10 @@ def search():
             grouped_data[seller_id_key]['customers_sorted'] = customers_list
     
     # Get all filter options for dropdowns
-    customers = Customer.query.filter_by(user_id=current_user.id).order_by(Customer.name).all()
-    sellers = Seller.query.filter_by(user_id=current_user.id).order_by(Seller.name).all()
-    territories = Territory.query.filter_by(user_id=current_user.id).order_by(Territory.name).all()
-    topics = Topic.query.filter_by(user_id=current_user.id).order_by(Topic.name).all()
+    customers = Customer.query.order_by(Customer.name).all()
+    sellers = Seller.query.order_by(Seller.name).all()
+    territories = Territory.query.order_by(Territory.name).all()
+    topics = Topic.query.order_by(Topic.name).all()
     
     return render_template('search.html',
                          grouped_data=grouped_data,
@@ -208,10 +205,9 @@ def search():
 
 
 @main_bp.route('/preferences')
-@login_required
 def preferences():
     """User preferences page."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
         pref = UserPreference(user_id=user_id)
@@ -220,9 +216,9 @@ def preferences():
     
     # Get user statistics
     stats = {
-        'call_logs': CallLog.query.filter_by(user_id=current_user.id).count(),
-        'customers': Customer.query.filter_by(user_id=current_user.id).count(),
-        'topics': Topic.query.filter_by(user_id=current_user.id).count()
+        'call_logs': CallLog.query.count(),
+        'customers': Customer.query.count(),
+        'topics': Topic.query.count()
     }
     
     return render_template('preferences.html', 
@@ -237,13 +233,8 @@ def preferences():
 
 
 @main_bp.route('/data-management')
-@login_required
 def data_management():
     """Data import/export management page (admin only)."""
-    if not current_user.is_admin:
-        flash('You do not have permission to access data management.', 'danger')
-        return redirect(url_for('main.index'))
-    
     # Check if database has any data
     has_data = (Customer.query.count() > 0 or 
                 CallLog.query.count() > 0 or 
@@ -254,7 +245,6 @@ def data_management():
 
 
 @main_bp.route('/analytics')
-@login_required
 def analytics():
     """Analytics and insights dashboard."""
     from datetime import date, timedelta
@@ -267,22 +257,22 @@ def analytics():
     three_months_ago = today - timedelta(days=90)
     
     # Call volume metrics
-    total_calls = CallLog.query.filter_by(user_id=current_user.id).count()
-    calls_this_week = CallLog.query.filter_by(user_id=current_user.id).filter(
+    total_calls = CallLog.query.count()
+    calls_this_week = CallLog.query.filter(
         CallLog.call_date >= week_ago
     ).count()
-    calls_this_month = CallLog.query.filter_by(user_id=current_user.id).filter(
+    calls_this_month = CallLog.query.filter(
         CallLog.call_date >= month_ago
     ).count()
     
     # Customer engagement
-    total_customers = Customer.query.filter_by(user_id=current_user.id).count()
+    total_customers = Customer.query.count()
     customers_called_this_week = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
-        CallLog.user_id == current_user.id,
+        CallLog.user_id == g.user.id,
         CallLog.call_date >= week_ago
     ).scalar()
     customers_called_this_month = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
-        CallLog.user_id == current_user.id,
+        CallLog.user_id == g.user.id,
         CallLog.call_date >= month_ago
     ).scalar()
     
@@ -294,7 +284,7 @@ def analytics():
     ).join(
         CallLog.topics
     ).filter(
-        CallLog.user_id == current_user.id,
+        CallLog.user_id == g.user.id,
         CallLog.call_date >= three_months_ago
     ).group_by(
         Topic.id,
@@ -305,12 +295,12 @@ def analytics():
     
     # Customers not called recently (90+ days or never)
     customers_with_recent_calls = db.session.query(CallLog.customer_id).filter(
-        CallLog.user_id == current_user.id,
+        CallLog.user_id == g.user.id,
         CallLog.call_date >= three_months_ago
     ).distinct().subquery()
     
     customers_needing_attention = Customer.query.filter(
-        Customer.user_id == current_user.id,
+        Customer.user_id == g.user.id,
         ~Customer.id.in_(customers_with_recent_calls)
     ).order_by(Customer.name).limit(10).all()
     
@@ -324,7 +314,7 @@ def analytics():
     ).join(
         CallLog, CallLog.customer_id == Customer.id
     ).filter(
-        CallLog.user_id == current_user.id,
+        CallLog.user_id == g.user.id,
         CallLog.call_date >= month_ago
     ).group_by(
         Seller.id,
@@ -338,7 +328,7 @@ def analytics():
     for i in range(4):
         week_start = today - timedelta(days=7*(i+1))
         week_end = today - timedelta(days=7*i)
-        count = CallLog.query.filter_by(user_id=current_user.id).filter(
+        count = CallLog.query.filter(
             CallLog.call_date >= week_start,
             CallLog.call_date < week_end
         ).count()
@@ -366,11 +356,10 @@ def analytics():
 # =============================================================================
 
 @main_bp.route('/api/my-data/export/call-logs-json', methods=['GET'])
-@login_required
 def my_data_export_call_logs_json():
     """Export user's call logs to JSON (personal export)."""
     # Reuse existing call logs export but filter by current user
-    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
+    call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer),
         db.joinedload(CallLog.topics)
     ).order_by(CallLog.call_date.desc()).all()
@@ -394,7 +383,7 @@ def my_data_export_call_logs_json():
     # Create response
     response_data = {
         'export_date': datetime.utcnow().isoformat(),
-        'user_email': current_user.email,
+        'user_email': g.user.email,
         'call_logs_count': len(export_data),
         'call_logs': export_data
     }
@@ -406,11 +395,10 @@ def my_data_export_call_logs_json():
 
 
 @main_bp.route('/api/my-data/export/call-logs-csv', methods=['GET'])
-@login_required
 def my_data_export_call_logs_csv():
     """Export user's call logs to CSV (personal export)."""
     # Get user's call logs
-    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
+    call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer),
         db.joinedload(CallLog.topics)
     ).order_by(CallLog.call_date.desc()).all()
@@ -452,7 +440,6 @@ def my_data_export_call_logs_csv():
 
 
 @main_bp.route('/api/my-data/import/json', methods=['POST'])
-@login_required
 def my_data_import_json():
     """Import call logs from JSON (personal import)."""
     if 'file' not in request.files:
@@ -492,7 +479,6 @@ def my_data_import_json():
             if customer_key not in customer_map:
                 # Check if customer exists
                 existing_customer = Customer.query.filter_by(
-                    user_id=current_user.id,
                     name=customer_name,
                     tpid=call_data.get('customer_tpid')
                 ).first()
@@ -502,7 +488,6 @@ def my_data_import_json():
                 else:
                     # Create new customer
                     new_customer = Customer(
-                        user_id=current_user.id,
                         name=customer_name,
                         tpid=call_data.get('customer_tpid', '')
                     )
@@ -516,7 +501,6 @@ def my_data_import_json():
             # Check for duplicate call log
             if skip_duplicates:
                 existing_call = CallLog.query.filter_by(
-                    user_id=current_user.id,
                     customer_id=customer.id,
                     call_date=call_date
                 ).first()
@@ -527,7 +511,6 @@ def my_data_import_json():
             
             # Create call log
             new_call = CallLog(
-                user_id=current_user.id,
                 customer_id=customer.id,
                 call_date=call_date,
                 content=call_data.get('content', ''),
@@ -540,7 +523,6 @@ def my_data_import_json():
                 if topic_name not in topic_map:
                     # Check if topic exists
                     existing_topic = Topic.query.filter_by(
-                        user_id=current_user.id,
                         name=topic_name
                     ).first()
                     
@@ -549,7 +531,6 @@ def my_data_import_json():
                     else:
                         # Create new topic
                         new_topic = Topic(
-                            user_id=current_user.id,
                             name=topic_name
                         )
                         db.session.add(new_topic)
@@ -584,7 +565,6 @@ def my_data_import_json():
 # =============================================================================
 
 @main_bp.route('/api/data-management/stats', methods=['GET'])
-@login_required
 def data_management_stats():
     """Get database statistics for data management page."""
     stats = {
@@ -601,7 +581,6 @@ def data_management_stats():
 
 
 @main_bp.route('/api/data-management/clear', methods=['POST'])
-@login_required
 def data_management_clear():
     """Clear all data from the database."""
     try:
@@ -633,7 +612,6 @@ def data_management_clear():
 
 
 @main_bp.route('/api/data-management/import', methods=['POST'])
-@login_required
 def data_management_import():
     """Import alignment sheet CSV with real-time progress feedback."""
     if 'file' not in request.files:
@@ -692,11 +670,11 @@ def data_management_import():
             # Create Territories
             territory_names = set(row.get('Sales Territory', '').strip() for row in rows if row.get('Sales Territory', '').strip())
             for territory_name in territory_names:
-                existing = Territory.query.filter_by(name=territory_name, user_id=current_user.id).first()
+                existing = Territory.query.filter_by(name=territory_name).first()
                 if existing:
                     territories_map[territory_name] = existing
                 else:
-                    territory = Territory(name=territory_name, user_id=current_user.id)
+                    territory = Territory(name=territory_name)
                     db.session.add(territory)
                     territories_map[territory_name] = territory
             
@@ -709,7 +687,7 @@ def data_management_import():
             # Create Sellers
             seller_names = set(row.get('DSS (Growth/Acq)', '').strip() for row in rows if row.get('DSS (Growth/Acq)', '').strip())
             for seller_name in seller_names:
-                existing = Seller.query.filter_by(name=seller_name, user_id=current_user.id).first()
+                existing = Seller.query.filter_by(name=seller_name).first()
                 if existing:
                     sellers_map[seller_name] = existing
                 else:
@@ -728,7 +706,7 @@ def data_management_import():
                             seller_type = 'Growth'
                             alias = None
                         
-                        seller = Seller(name=seller_name, seller_type=seller_type, alias=alias, user_id=current_user.id)
+                        seller = Seller(name=seller_name, seller_type=seller_type, alias=alias)
                         db.session.add(seller)
                         sellers_map[seller_name] = seller
             
@@ -756,11 +734,11 @@ def data_management_import():
             # Create PODs
             pod_names = set(row.get('SME&C POD', '').strip() for row in rows if row.get('SME&C POD', '').strip())
             for pod_name in pod_names:
-                existing = POD.query.filter_by(name=pod_name, user_id=current_user.id).first()
+                existing = POD.query.filter_by(name=pod_name).first()
                 if existing:
                     pods_map[pod_name] = existing
                 else:
-                    pod = POD(name=pod_name, user_id=current_user.id)
+                    pod = POD(name=pod_name)
                     db.session.add(pod)
                     pods_map[pod_name] = pod
             
@@ -796,7 +774,7 @@ def data_management_import():
                         data_se_info[se_name]['pods'].add(pod_name)
             
             for se_name, info in data_se_info.items():
-                existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Data', user_id=current_user.id).first()
+                existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Data').first()
                 if existing:
                     solution_engineers_map[se_name] = existing
                     # Update POD associations for existing SE
@@ -805,7 +783,7 @@ def data_management_import():
                         if pod and pod not in existing.pods:
                             existing.pods.append(pod)
                 else:
-                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Data', user_id=current_user.id)
+                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Data')
                     for pod_name in info['pods']:
                         se.pods.append(pods_map[pod_name])
                     db.session.add(se)
@@ -826,7 +804,7 @@ def data_management_import():
                         infra_se_info[se_name]['pods'].add(pod_name)
             
             for se_name, info in infra_se_info.items():
-                existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Core and Infra', user_id=current_user.id).first()
+                existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Core and Infra').first()
                 if existing:
                     solution_engineers_map[se_name] = existing
                     # Update POD associations for existing SE
@@ -835,7 +813,7 @@ def data_management_import():
                         if pod and pod not in existing.pods:
                             existing.pods.append(pod)
                 else:
-                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Core and Infra', user_id=current_user.id)
+                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Core and Infra')
                     for pod_name in info['pods']:
                         se.pods.append(pods_map[pod_name])
                     db.session.add(se)
@@ -856,7 +834,7 @@ def data_management_import():
                         apps_se_info[se_name]['pods'].add(pod_name)
             
             for se_name, info in apps_se_info.items():
-                existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Apps and AI', user_id=current_user.id).first()
+                existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Apps and AI').first()
                 if existing:
                     solution_engineers_map[se_name] = existing
                     # Update POD associations for existing SE
@@ -865,7 +843,7 @@ def data_management_import():
                         if pod and pod not in existing.pods:
                             existing.pods.append(pod)
                 else:
-                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Apps and AI', user_id=current_user.id)
+                    se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Apps and AI')
                     for pod_name in info['pods']:
                         se.pods.append(pods_map[pod_name])
                     db.session.add(se)
@@ -890,11 +868,11 @@ def data_management_import():
                     vertical_names.add(category)
             
             for vertical_name in vertical_names:
-                existing = Vertical.query.filter_by(name=vertical_name, user_id=current_user.id).first()
+                existing = Vertical.query.filter_by(name=vertical_name).first()
                 if existing:
                     verticals_map[vertical_name] = existing
                 else:
-                    vertical = Vertical(name=vertical_name, user_id=current_user.id)
+                    vertical = Vertical(name=vertical_name)
                     db.session.add(vertical)
                     verticals_map[vertical_name] = vertical
             
@@ -923,7 +901,7 @@ def data_management_import():
                     customers_skipped += 1
                     continue
                 
-                existing = Customer.query.filter_by(tpid=tpid, user_id=current_user.id).first()
+                existing = Customer.query.filter_by(tpid=tpid).first()
                 if existing:
                     customers_skipped += 1
                     continue
@@ -937,9 +915,7 @@ def data_management_import():
                     name=customer_name,
                     tpid=tpid,
                     territory=territories_map.get(territory_name),
-                    seller=sellers_map.get(seller_name),
-                    user_id=current_user.id
-                )
+                    seller=sellers_map.get(seller_name))
                 
                 # Associate both verticals if they exist and aren't N/A
                 if vertical_name and vertical_name.upper() != 'N/A':
@@ -990,7 +966,6 @@ def data_management_import():
 
 
 @main_bp.route('/api/data-management/export/json', methods=['GET'])
-@login_required
 def export_full_json():
     """Export complete database as JSON for disaster recovery."""
     from app.models import UserPreference, AIConfig
@@ -1053,16 +1028,12 @@ def export_full_json():
 
 
 @main_bp.route('/api/data-management/import/json', methods=['POST'])
-@login_required
 def import_full_json():
     """Import complete database from JSON backup file.
     
     Matches users by Azure Object IDs to preserve ownership.
     Creates new users if they don't exist.
     """
-    if not current_user.is_admin:
-        return {'error': 'Admin privileges required'}, 403
-    
     if 'file' not in request.files:
         return {'error': 'No file uploaded'}, 400
     
@@ -1329,7 +1300,6 @@ def import_full_json():
 
 
 @main_bp.route('/api/data-management/export/csv', methods=['GET'])
-@login_required
 def export_full_csv():
     """Export complete database as CSV files in ZIP for spreadsheet analysis."""
     # Create in-memory ZIP file
@@ -1428,10 +1398,9 @@ def export_full_csv():
 
 
 @main_bp.route('/api/data-management/export/call-logs-json', methods=['GET'])
-@login_required
 def export_call_logs_json():
     """Export call logs with enriched data as JSON for external analysis/LLM processing."""
-    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
+    call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.verticals),
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory).joinedload(Territory.pod)
@@ -1480,10 +1449,9 @@ def export_call_logs_json():
 
 
 @main_bp.route('/api/data-management/export/call-logs-csv', methods=['GET'])
-@login_required
 def export_call_logs_csv():
     """Export call logs with enriched data as CSV for spreadsheet analysis."""
-    call_logs = CallLog.query.filter_by(user_id=current_user.id).options(
+    call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.verticals),
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory).joinedload(Territory.pod)
@@ -1532,11 +1500,10 @@ def export_call_logs_csv():
 # =============================================================================
 
 @main_bp.route('/api/preferences/dark-mode', methods=['GET', 'POST'])
-@login_required
 def dark_mode_preference():
     """Get or set dark mode preference."""
     # Get user ID (handle testing mode where login is disabled)
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     
     if request.method == 'POST':
         data = request.get_json()
@@ -1564,10 +1531,9 @@ def dark_mode_preference():
 
 
 @main_bp.route('/api/preferences/customer-view', methods=['GET', 'POST'])
-@login_required
 def customer_view_preference():
     """Get or set customer view preference (alphabetical vs grouped)."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     
     if request.method == 'POST':
         data = request.get_json()
@@ -1595,10 +1561,9 @@ def customer_view_preference():
 
 
 @main_bp.route('/api/preferences/topic-sort', methods=['GET', 'POST'])
-@login_required
 def topic_sort_preference():
     """Get or set topic sort preference (alphabetical vs by calls)."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     
     if request.method == 'POST':
         data = request.get_json()
@@ -1626,10 +1591,9 @@ def topic_sort_preference():
 
 
 @main_bp.route('/api/preferences/territory-view', methods=['GET', 'POST'])
-@login_required
 def territory_view_preference():
     """Get or set territory view preference (recent calls vs accounts)."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     
     if request.method == 'POST':
         data = request.get_json()
@@ -1657,10 +1621,9 @@ def territory_view_preference():
 
 
 @main_bp.route('/api/preferences/colored-sellers', methods=['GET', 'POST'])
-@login_required
 def colored_sellers_preference():
     """Get or set colored sellers preference (grey vs colored badges)."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     
     if request.method == 'POST':
         data = request.get_json()
@@ -1688,10 +1651,9 @@ def colored_sellers_preference():
 
 
 @main_bp.route('/api/preferences/customer-sort-by', methods=['GET', 'POST'])
-@login_required
 def customer_sort_by_preference():
     """Get or set customer sorting preference (alphabetical, grouped, or by_calls)."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     
     if request.method == 'POST':
         data = request.get_json()
@@ -1724,10 +1686,9 @@ def customer_sort_by_preference():
 
 
 @main_bp.route('/api/preferences/show-customers-without-calls', methods=['GET', 'POST'])
-@login_required
 def show_customers_without_calls_preference():
     """Get or set preference for showing customers without call logs."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     
     if request.method == 'POST':
         data = request.get_json()
@@ -1761,7 +1722,7 @@ def show_customers_without_calls_preference():
 @main_bp.app_context_processor
 def inject_preferences():
     """Inject user preferences and pending link requests into all templates."""
-    pref = UserPreference.query.filter_by(user_id=current_user.id).first() if current_user.is_authenticated else None
+    pref = UserPreference.query.first() if g.user.is_authenticated else None
     dark_mode = pref.dark_mode if pref else False
     customer_view_grouped = pref.customer_view_grouped if pref else False
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
@@ -1769,8 +1730,8 @@ def inject_preferences():
     
     # Get pending link requests count
     pending_link_requests_count = 0
-    if current_user.is_authenticated and not current_user.is_stub:
-        pending_link_requests_count = len(current_user.get_pending_link_requests())
+    if g.user.is_authenticated and not g.user.is_stub:
+        pending_link_requests_count = len(g.user.get_pending_link_requests())
     
     # Create a wrapper function that always returns color classes (CSS will handle grey state)
     def get_seller_color_with_pref(seller_id: int) -> str:

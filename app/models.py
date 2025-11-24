@@ -15,6 +15,11 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 
+def get_single_user():
+    """Get the single default user for single-user mode."""
+    return User.query.first()
+
+
 # =============================================================================
 # Association Tables
 # =============================================================================

@@ -2,8 +2,7 @@
 AI routes for NoteHelper.
 Handles AI-powered topic suggestion and related features.
 """
-from flask import Blueprint, request, jsonify
-from flask_login import login_required, current_user
+from flask import Bluepri, gnt, request, jsonify, g
 from datetime import date
 import json
 
@@ -14,7 +13,6 @@ ai_bp = Blueprint('ai', __name__)
 
 
 @ai_bp.route('/api/ai/suggest-topics', methods=['POST'])
-@login_required
 def api_ai_suggest_topics():
     """Generate topic suggestions from call notes using AI."""
     
@@ -35,10 +33,10 @@ def api_ai_suggest_topics():
     
     # Check rate limit
     today = date.today()
-    usage = AIUsage.query.filter_by(user_id=current_user.id, date=today).first()
+    usage = AIUsage.query.filter_by(date=today).first()
     
     if not usage:
-        usage = AIUsage(user_id=current_user.id, date=today, call_count=0)
+        usage = AIUsage( date=today, call_count=0)
         db.session.add(usage)
     
     if usage.call_count >= ai_config.max_daily_calls_per_user:
@@ -141,7 +139,6 @@ def api_ai_suggest_topics():
         except (json.JSONDecodeError, ValueError) as e:
             # Log malformed response with full details for debugging
             log_entry = AIQueryLog(
-                user_id=current_user.id,
                 request_text=call_notes[:1000],
                 response_text=raw_response_text[:1000],  # Use raw response, not cleaned version
                 success=False,
@@ -161,7 +158,6 @@ def api_ai_suggest_topics():
         
         # Log successful query
         log_entry = AIQueryLog(
-            user_id=current_user.id,
             request_text=call_notes[:1000],
             response_text=raw_response_text[:1000],  # Use raw response before parsing
             success=True,
@@ -182,7 +178,7 @@ def api_ai_suggest_topics():
         for topic_name in suggested_topics:
             # Check if topic exists (case-insensitive)
             existing_topic = Topic.query.filter(
-                Topic.user_id == current_user.id,
+                Topic.user_id == g.user.id,
                 db.func.lower(Topic.name) == topic_name.lower()
             ).first()
             
@@ -190,7 +186,7 @@ def api_ai_suggest_topics():
                 topic_ids.append({'id': existing_topic.id, 'name': existing_topic.name})
             else:
                 # Create new topic
-                new_topic = Topic(name=topic_name, user_id=current_user.id)
+                new_topic = Topic(name=topic_name)
                 db.session.add(new_topic)
                 db.session.flush()  # Get the ID
                 topic_ids.append({'id': new_topic.id, 'name': new_topic.name})
@@ -217,7 +213,6 @@ def api_ai_suggest_topics():
         
         # Log the error
         log_entry = AIQueryLog(
-            user_id=current_user.id,
             request_text=call_notes[:1000],
             response_text=None,
             success=False,
@@ -231,7 +226,6 @@ def api_ai_suggest_topics():
     except Exception as e:
         # Log failed query
         log_entry = AIQueryLog(
-            user_id=current_user.id,
             request_text=call_notes[:1000],
             response_text=None,
             success=False,
@@ -245,7 +239,6 @@ def api_ai_suggest_topics():
 
 
 @ai_bp.route('/api/ai/usage', methods=['GET'])
-@login_required
 def api_ai_usage():
     """Get current user's AI usage for today."""
     ai_config = AIConfig.query.first()
@@ -253,7 +246,7 @@ def api_ai_usage():
         return jsonify({'enabled': False})
     
     today = date.today()
-    usage = AIUsage.query.filter_by(user_id=current_user.id, date=today).first()
+    usage = AIUsage.query.filter_by(date=today).first()
     
     used = usage.call_count if usage else 0
     remaining = max(0, ai_config.max_daily_calls_per_user - used)

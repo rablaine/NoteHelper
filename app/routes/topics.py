@@ -2,8 +2,7 @@
 Topic routes for NoteHelper.
 Handles topic listing, creation, viewing, editing, and deletion.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from flask_login import login_required, current_user
+from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, jsonify, g
 from sqlalchemy import func
 
 from app.models import db, Topic, UserPreference
@@ -13,14 +12,13 @@ topics_bp = Blueprint('topics', __name__)
 
 
 @topics_bp.route('/topics')
-@login_required
 def topics_list():
     """List all topics (FR009)."""
-    user_id = current_user.id if current_user.is_authenticated else 1
+    user_id = g.user.id if g.user.is_authenticated else 1
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     
     # Load topics with eager loading
-    topics = Topic.query.filter_by(user_id=current_user.id).options(db.joinedload(Topic.call_logs)).all()
+    topics = Topic.query.options(db.joinedload(Topic.call_logs)).all()
     
     # Sort based on preference
     if pref and pref.topic_sort_by_calls:
@@ -34,7 +32,6 @@ def topics_list():
 
 
 @topics_bp.route('/topic/new', methods=['GET', 'POST'])
-@login_required
 def topic_create():
     """Create a new topic (FR004)."""
     if request.method == 'POST':
@@ -46,16 +43,14 @@ def topic_create():
             return redirect(url_for('topics.topic_create'))
         
         # Check for duplicate topic names
-        existing = Topic.query.filter_by(name=name, user_id=current_user.id).first()
+        existing = Topic.query.filter_by(name=name).first()
         if existing:
             flash(f'Topic "{name}" already exists.', 'warning')
             return redirect(url_for('topics.topic_view', id=existing.id))
         
         topic = Topic(
             name=name,
-            description=description if description else None,
-            user_id=current_user.id
-        )
+            description=description if description else None)
         db.session.add(topic)
         db.session.commit()
         
@@ -66,20 +61,18 @@ def topic_create():
 
 
 @topics_bp.route('/topic/<int:id>')
-@login_required
 def topic_view(id):
     """View topic details (FR009)."""
-    topic = Topic.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    topic = Topic.query.filter_by(id=id).first_or_404()
     # Sort call logs in-memory since they're eager-loaded
     call_logs = sorted(topic.call_logs, key=lambda c: c.call_date, reverse=True)
     return render_template('topic_view.html', topic=topic, call_logs=call_logs)
 
 
 @topics_bp.route('/topic/<int:id>/edit', methods=['GET', 'POST'])
-@login_required
 def topic_edit(id):
     """Edit topic (FR009)."""
-    topic = Topic.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    topic = Topic.query.filter_by(id=id).first_or_404()
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -90,7 +83,7 @@ def topic_edit(id):
             return redirect(url_for('topics.topic_edit', id=id))
         
         # Check for duplicate topic names (excluding current topic)
-        existing = Topic.query.filter_by(user_id=current_user.id).filter(Topic.name == name, Topic.id != id).first()
+        existing = Topic.query.filter(Topic.name == name, Topic.id != id).first()
         if existing:
             flash(f'Topic "{name}" already exists.', 'warning')
             return redirect(url_for('topics.topic_edit', id=id))
@@ -106,10 +99,9 @@ def topic_edit(id):
 
 
 @topics_bp.route('/topic/<int:id>/delete', methods=['POST'])
-@login_required
 def topic_delete(id):
     """Delete topic and remove from all associated call logs."""
-    topic = Topic.query.filter_by(user_id=current_user.id).filter_by(id=id).first_or_404()
+    topic = Topic.query.filter_by(id=id).first_or_404()
     topic_name = topic.name
     
     # Get all call logs associated with this topic
@@ -129,7 +121,6 @@ def topic_delete(id):
 
 # API route
 @topics_bp.route('/api/topic/create', methods=['POST'])
-@login_required
 def api_topic_create():
     """API endpoint to create a new topic via AJAX (FR027)."""
     data = request.get_json()
@@ -139,7 +130,7 @@ def api_topic_create():
         return jsonify({'error': 'Topic name is required'}), 400
     
     # Check for duplicate topic names (case-insensitive)
-    existing = Topic.query.filter_by(user_id=current_user.id).filter(func.lower(Topic.name) == func.lower(name)).first()
+    existing = Topic.query.filter(func.lower(Topic.name) == func.lower(name)).first()
     if existing:
         return jsonify({
             'id': existing.id,
@@ -149,7 +140,7 @@ def api_topic_create():
         }), 200
     
     # Create new topic
-    topic = Topic(name=name, description=None, user_id=current_user.id)
+    topic = Topic(name=name, description=None)
     db.session.add(topic)
     db.session.commit()
     

@@ -6,11 +6,8 @@ Werkzeug==3.0.1
 SQLAlchemy==2.0.35
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.0.5
-psycopg2-binary==2.9.11
 
-# Authentication
-Flask-Login==0.6.3
-msal==1.31.1
+# HTTP requests (for AI features)
 requests==2.32.3
 
 # Environment & Configuration

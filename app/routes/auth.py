@@ -2,8 +2,7 @@
 Authentication routes for NoteHelper.
 Handles login, logout, Azure AD OAuth, and account linking.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
-from flask_login import login_user, logout_user, login_required, current_user
+from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, session, current_app, g
 import msal
 import requests
 
@@ -17,7 +16,7 @@ auth_bp = Blueprint('auth', __name__)
 def login():
     """Show login page or redirect to Entra ID login."""
     # If already authenticated, redirect to home
-    if current_user.is_authenticated:
+    if g.user.is_authenticated:
         return redirect(url_for('main.index'))
     
     # Check if Entra ID is configured
@@ -172,7 +171,6 @@ def auth_callback():
 
 
 @auth_bp.route('/logout')
-@login_required
 def logout():
     """Log out the current user."""
     logout_user()
@@ -184,21 +182,20 @@ def logout():
 
 
 @auth_bp.route('/profile')
-@login_required
 def user_profile():
     """Display current user's profile information and pending link requests."""
     from datetime import date
     from app.models import AIConfig, AIUsage
     
     # Get pending link requests for this user's email
-    pending_requests = current_user.get_pending_link_requests() if not current_user.is_stub else []
+    pending_requests = g.user.get_pending_link_requests() if not g.user.is_stub else []
     
     # Get AI usage for today
     ai_config = AIConfig.query.first()
     ai_usage_today = None
     if ai_config and ai_config.enabled:
         today = date.today()
-        usage = AIUsage.query.filter_by(user_id=current_user.id, date=today).first()
+        usage = AIUsage.query.filter_by(date=today).first()
         ai_usage_today = {
             'used': usage.call_count if usage else 0,
             'limit': ai_config.max_daily_calls_per_user,
@@ -206,7 +203,7 @@ def user_profile():
         }
     
     return render_template('user_profile.html', 
-                         user=current_user,
+                         user=g.user,
                          pending_requests=pending_requests,
                          ai_usage_today=ai_usage_today)
 
@@ -348,15 +345,14 @@ def first_time_link_request():
 
 
 @auth_bp.route('/account/link-status')
-@login_required
 def account_link_status():
     """Show status of account linking for stub users."""
-    if not current_user.is_stub:
+    if not g.user.is_stub:
         return redirect(url_for('auth.user_profile'))
     
     # Get pending requests
     requests = AccountLinkingRequest.query.filter_by(
-        requesting_user_id=current_user.id,
+        requesting_
         status='pending'
     ).all()
     
@@ -364,13 +360,12 @@ def account_link_status():
 
 
 @auth_bp.route('/account/link/approve/<int:request_id>', methods=['POST'])
-@login_required
 def account_link_approve(request_id):
     """Approve a linking request and merge the stub account."""
     link_request = AccountLinkingRequest.query.get_or_404(request_id)
     
     # Verify this request is for the current user
-    if link_request.target_email != current_user.email:
+    if link_request.target_email != g.user.email:
         flash('You cannot approve a linking request not intended for you.', 'danger')
         return redirect(url_for('auth.user_profile'))
     
@@ -386,10 +381,10 @@ def account_link_approve(request_id):
         return redirect(url_for('auth.user_profile'))
     
     # Check if current user already has this account type
-    if stub_user.microsoft_azure_id and current_user.microsoft_azure_id:
+    if stub_user.microsoft_azure_id and g.user.microsoft_azure_id:
         flash('You already have a Microsoft account linked.', 'danger')
         return redirect(url_for('auth.user_profile'))
-    if stub_user.external_azure_id and current_user.external_azure_id:
+    if stub_user.external_azure_id and g.user.external_azure_id:
         flash('You already have an external account linked.', 'danger')
         return redirect(url_for('auth.user_profile'))
     
@@ -404,13 +399,13 @@ def account_link_approve(request_id):
     
     # Merge the accounts
     if stub_microsoft_id:
-        current_user.microsoft_azure_id = stub_microsoft_id
-        current_user.microsoft_email = stub_microsoft_email
+        g.user.microsoft_azure_id = stub_microsoft_id
+        g.user.microsoft_email = stub_microsoft_email
     if stub_external_id:
-        current_user.external_azure_id = stub_external_id
-        current_user.external_email = stub_external_email
+        g.user.external_azure_id = stub_external_id
+        g.user.external_email = stub_external_email
     
-    current_user.linked_at = utc_now()
+    g.user.linked_at = utc_now()
     
     # Save stub_id for deletion
     stub_user_id = stub_user.id
@@ -418,7 +413,7 @@ def account_link_approve(request_id):
     # Mark request as approved
     link_request.status = 'approved'
     link_request.resolved_at = utc_now()
-    link_request.resolved_by_user_id = current_user.id
+    link_request.resolved_by_user_id = g.user.id
     
     # Commit the merge and approval
     db.session.commit()
@@ -433,13 +428,12 @@ def account_link_approve(request_id):
 
 
 @auth_bp.route('/account/link/deny/<int:request_id>', methods=['POST'])
-@login_required
 def account_link_deny(request_id):
     """Deny a linking request."""
     link_request = AccountLinkingRequest.query.get_or_404(request_id)
     
     # Verify this request is for the current user
-    if link_request.target_email != current_user.email:
+    if link_request.target_email != g.user.email:
         flash('You cannot deny a linking request not intended for you.', 'danger')
         return redirect(url_for('auth.user_profile'))
     
@@ -451,7 +445,7 @@ def account_link_deny(request_id):
     # Mark request as denied
     link_request.status = 'denied'
     link_request.resolved_at = utc_now()
-    link_request.resolved_by_user_id = current_user.id
+    link_request.resolved_by_user_id = g.user.id
     
     db.session.commit()
     
