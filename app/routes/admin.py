@@ -2,7 +2,7 @@
 Admin routes for NoteHelper.
 Handles admin panel, user management, and domain whitelisting.
 """
-from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, jsonify, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 
 from app.models import db, User, WhitelistedDomain, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog, utc_now
 
@@ -102,7 +102,7 @@ def api_admin_domain_add():
     
     # Add domain
     try:
-        new_domain = WhitelistedDomain(domain=domain, added_by_)
+        new_domain = WhitelistedDomain(domain=domain, added_by_user_id=g.user.id)
         db.session.add(new_domain)
         db.session.commit()
         

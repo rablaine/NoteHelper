@@ -2,7 +2,7 @@
 AI routes for NoteHelper.
 Handles AI-powered topic suggestion and related features.
 """
-from flask import Bluepri, gnt, request, jsonify, g
+from flask import Blueprint, request, jsonify, g
 from datetime import date
 import json
 

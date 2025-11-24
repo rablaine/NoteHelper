@@ -2,7 +2,7 @@
 Main routes for NoteHelper.
 Handles index, search, preferences, data management, and API endpoints.
 """
-from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context, make_response, session, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context, make_response, session, g
 from datetime import datetime, timezone
 from sqlalchemy import func
 import json

@@ -2,7 +2,7 @@
 Topic routes for NoteHelper.
 Handles topic listing, creation, viewing, editing, and deletion.
 """
-from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, jsonify, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 from sqlalchemy import func
 
 from app.models import db, Topic, UserPreference

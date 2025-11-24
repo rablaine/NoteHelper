@@ -2,7 +2,7 @@
 Customer routes for NoteHelper.
 Handles customer listing, creation, viewing, editing, and TPID workflow.
 """
-from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, jsonify, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 from sqlalchemy import func, or_
 
 from app.models import db, Customer, Seller, Territory, CallLog, UserPreference

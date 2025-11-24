@@ -25,7 +25,19 @@ def create_app():
     
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///data/notehelper.db')
+    
+    # SQLite database path - use absolute path
+    db_url = os.environ.get('DATABASE_URL', 'sqlite:///data/notehelper.db')
+    if db_url.startswith('sqlite:///') and not db_url.startswith('sqlite:////'):
+        # Convert relative path to absolute path
+        db_path = db_url.replace('sqlite:///', '')
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), db_path)
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            db_url = 'sqlite:///' + db_path
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Initialize extensions with app
@@ -35,12 +47,14 @@ def create_app():
     # Import models to register them with SQLAlchemy
     from app import models
     
-    # Create default user and preferences on first run
-    @app.before_first_request
-    def create_default_user():
-        """Create single default user if database is empty."""
+    # Create default user and preferences on app startup
+    with app.app_context():
         from app.models import User, UserPreference
         
+        # Ensure database tables exist
+        db.create_all()
+        
+        # Create default user if none exists
         user = User.query.first()
         if not user:
             user = User(

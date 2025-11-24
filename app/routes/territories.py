@@ -2,7 +2,7 @@
 Territory routes for NoteHelper.
 Handles territory listing, creation, viewing, and editing.
 """
-from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from datetime import timedelta
 from sqlalchemy import func
 

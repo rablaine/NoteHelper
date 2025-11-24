@@ -2,7 +2,7 @@
 Authentication routes for NoteHelper.
 Handles login, logout, Azure AD OAuth, and account linking.
 """
-from flask import Bluepri, gnt, render_template, request, redirect, url_for, flash, session, current_app, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, g
 import msal
 import requests
 
