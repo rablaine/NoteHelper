@@ -110,7 +110,7 @@ docker-compose logs -f
 # Stop the application
 docker-compose down
 
-# Update to latest version
+# Update to latest version (manual)
 docker-compose pull
 docker-compose up -d
 
@@ -120,6 +120,24 @@ tar -czf notehelper-backup-$(date +%Y%m%d).tar.gz data/
 # Restore from backup
 tar -xzf notehelper-backup-20241124.tar.gz
 ```
+
+**Automatic Updates with Watchtower (Optional):**
+
+If you're running [Watchtower](https://containrrr.dev/watchtower/), NoteHelper will automatically update when new versions are published to the container registry. Watchtower monitors your containers and pulls new images when available.
+
+To set up Watchtower for all your containers:
+
+```bash
+docker run -d \
+  --name watchtower \
+  --restart unless-stopped \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  containrrr/watchtower \
+  --interval 300 \
+  --cleanup
+```
+
+This checks for updates every 5 minutes (300 seconds) and automatically removes old images after updating. NoteHelper will seamlessly update with zero configuration needed—migrations run automatically on startup.
 
 ### Option 2: Local Development (Python)
 
