@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 import msal
 import requests
 
-from app.models import db, User, WhitelistedDomain, AccountLinkingRequest, UserPreference, utc_now
+from app.models import db, User, AccountLinkingRequest, UserPreference, utc_now
 
 # Create blueprint
 auth_bp = Blueprint('auth', __name__)
@@ -90,11 +90,6 @@ def auth_callback():
     azure_id = user_info['id']
     email = user_info.get('mail') or user_info.get('userPrincipalName')
     name = user_info.get('displayName', email)
-    
-    # Check if domain is whitelisted (for non-@microsoft.com accounts)
-    if not WhitelistedDomain.is_domain_allowed(email):
-        # Domain not allowed - redirect to error page
-        return redirect(url_for('auth.domain_not_allowed', email=email))
     
     # Determine account type based on email domain
     is_microsoft_account = email.lower().endswith('@microsoft.com')

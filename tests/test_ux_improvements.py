@@ -22,8 +22,8 @@ def test_admin_panel_stats_are_clickable(client):
     stats_section = soup.find('div', class_='card-body')
     links = stats_section.find_all('a')
     
-    # Should have links for: Users (anchor), Call Logs, Customers, Sellers, Territories, Topics, PODs
-    assert len(links) >= 7, "Should have at least 7 clickable stats"
+    # Should have links for: Call Logs, Customers, Sellers, Territories, Topics, PODs
+    assert len(links) >= 6, "Should have at least 6 clickable stats"
     
     # Check specific links exist
     call_logs_link = soup.find('a', href='/call-logs')

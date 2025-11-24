@@ -123,35 +123,6 @@ class User(db.Model):
         return f'<User {self.email}>'
 
 
-class WhitelistedDomain(db.Model):
-    """Domains allowed to access the system for non-@microsoft.com accounts."""
-    __tablename__ = 'whitelisted_domains'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    domain = db.Column(db.String(255), unique=True, nullable=False)  # e.g., 'partner.onmicrosoft.com'
-    added_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
-    
-    @staticmethod
-    def is_domain_allowed(email: str) -> bool:
-        """Check if the email's domain is allowed."""
-        if not email or '@' not in email:
-            return False
-        
-        # @microsoft.com is always allowed
-        if email.lower().endswith('@microsoft.com'):
-            return True
-        
-        # Extract domain
-        domain = email.split('@')[1].lower()
-        
-        # Check whitelist
-        return WhitelistedDomain.query.filter_by(domain=domain).first() is not None
-    
-    def __repr__(self) -> str:
-        return f'<WhitelistedDomain {self.domain}>'
-
-
 class AccountLinkingRequest(db.Model):
     """Requests to link a stub account to an existing user account."""
     __tablename__ = 'account_linking_requests'

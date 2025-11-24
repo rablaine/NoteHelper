@@ -1,6 +1,6 @@
 # NoteHelper
 
-**Version 1.1** - A note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
+**Version 1.3** - A single-user note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
 
 > 📖 **[Read the Development Story](DEVELOPMENT_STORY.md)** - Learn how this 14,000+ line application was built in 42+ hours using AI-assisted "vibe coding" with GitHub Copilot.
 
@@ -20,8 +20,7 @@
 - Seller types (Acquisition vs Growth) with automatic customer type assignment
 
 ### User Experience
-- Multi-user support with Azure AD authentication and isolated workspaces
-- Account linking for Microsoft and external email addresses
+- **Single-user local deployment** - No authentication required, each instance for one user
 - Dark mode with user preferences
 - Quick call log creation with customer autocomplete
 - **Auto-save drafts** - Call logs automatically save every 10 seconds to prevent data loss
@@ -42,16 +41,14 @@
 
 - **Language:** Python 3.13
 - **Framework:** Flask
-- **Database:** PostgreSQL
+- **Database:** SQLite (file-based, no server required)
 - **UI:** Bootstrap 5
 - **ORM:** SQLAlchemy
-- **Authentication:** Microsoft Entra ID (Azure AD) OAuth 2.0
 - **AI Integration:** Azure OpenAI Service / Azure AI Foundry
 
 ## Prerequisites
 
 - Python 3.13 or higher
-- PostgreSQL 15 or higher
 - pip and venv
 
 ## Setup Instructions
@@ -82,30 +79,18 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` with your database credentials and generate a secret key:
+Generate a secret key:
 
 ```powershell
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### 5. Create PostgreSQL Database
+Update `SECRET_KEY` in `.env` with the generated value. The database will be created automatically in `data/notehelper.db` when you first run the application.
 
-```sql
-CREATE DATABASE notehelper;
-```
-
-### 6. Initialize Database
+### 5. Run the Application
 
 ```powershell
-flask db init
-flask db migrate -m "Initial migration"
-flask db upgrade
-```
-
-### 7. Run the Application
-
-```powershell
-python application.py
+python run.py
 ```
 
 Visit `http://localhost:5000` in your browser.
@@ -125,7 +110,8 @@ This project follows PEP 8 guidelines and uses type hints. See `.github/copilot-
 
 ## Version History
 
-- **v1.2 (November 2025):** Analytics dashboard with insights and trends, comprehensive UI/UX improvements (word-boundary truncation, clickable admin stats, draft save indicators, standardized button sizes, improved search hierarchy)
+- **v1.3 (November 2025):** Converted to single-user local deployment with SQLite database, removed authentication and multi-user features
+- **v1.2 (November 2025):** Analytics dashboard with insights and trends, comprehensive UI/UX improvements
 - **v1.1 (November 2025):** Auto-save draft feature with localStorage, multi-tab coordination, and draft management
 - **v1.0 (November 2025):** Production release with multi-user support, Azure AD authentication, AI-powered topic suggestions, organizational hierarchy (PODs/SEs), and comprehensive import/export capabilities
 

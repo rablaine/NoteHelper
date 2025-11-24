@@ -4,7 +4,7 @@ Handles admin panel, user management, and domain whitelisting.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 
-from app.models import db, User, WhitelistedDomain, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog, utc_now
+from app.models import db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog, utc_now
 
 # Create blueprint
 admin_bp = Blueprint('admin', __name__)
@@ -12,13 +12,9 @@ admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/admin')
 def admin_panel():
-    """Admin control panel for managing users and system-wide operations."""
-    # Get all users
-    users = User.query.order_by(User.created_at.desc()).all()
-    
+    """Admin control panel for system-wide operations."""
     # Get system-wide statistics
     stats = {
-        'total_users': User.query.count(),
         'total_pods': POD.query.count(),
         'total_territories': Territory.query.count(),
         'total_sellers': Seller.query.count(),
@@ -34,10 +30,7 @@ def admin_panel():
         db.session.add(ai_config)
         db.session.commit()
     
-    # Get whitelisted domains
-    domains = WhitelistedDomain.query.order_by(WhitelistedDomain.domain).all()
-    
-    return render_template('admin_panel.html', users=users, stats=stats, ai_config=ai_config, domains=domains)
+    return render_template('admin_panel.html', stats=stats, ai_config=ai_config)
 
 
 @admin_bp.route('/admin/ai-logs')
@@ -58,78 +51,7 @@ def admin_ai_logs():
 
 
 # API routes
-@admin_bp.route('/api/grant-admin/<int:user_id>', methods=['POST'])
-def api_grant_admin(user_id):
-    """Grant admin privileges to a user."""
-    user = User.query.get_or_404(user_id)
-    user.is_admin = True
-    db.session.commit()
-    
-    return jsonify({'success': True, 'message': f'{user.name} is now an admin'})
-
-
-@admin_bp.route('/api/revoke-admin/<int:user_id>', methods=['POST'])
-def api_revoke_admin(user_id):
-    """Revoke admin privileges from a user."""
-    # Prevent revoking your own admin
-    if user_id == g.user.id:
-        return jsonify({'error': 'You cannot revoke your own admin privileges'}), 400
-    
-    user = User.query.get_or_404(user_id)
-    user.is_admin = False
-    db.session.commit()
-    
-    return jsonify({'success': True, 'message': f'{user.name} is no longer an admin'})
-
-
 @admin_bp.route('/api/admin/domain/add', methods=['POST'])
-def api_admin_domain_add():
-    """Add a domain to the whitelist."""
-    data = request.get_json()
-    domain = data.get('domain', '').strip().lower()
-    
-    if not domain:
-        return jsonify({'error': 'Domain is required'}), 400
-    
-    # Basic validation
-    if '@' in domain or not '.' in domain:
-        return jsonify({'error': 'Invalid domain format. Enter just the domain (e.g., partner.onmicrosoft.com)'}), 400
-    
-    # Check if already exists
-    existing = WhitelistedDomain.query.filter_by(domain=domain).first()
-    if existing:
-        return jsonify({'error': f'Domain {domain} is already whitelisted'}), 400
-    
-    # Add domain
-    try:
-        new_domain = WhitelistedDomain(domain=domain, added_by_user_id=g.user.id)
-        db.session.add(new_domain)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Domain {domain} added to whitelist',
-            'domain': {'id': new_domain.id, 'domain': new_domain.domain, 'created_at': new_domain.created_at.isoformat()}
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error adding domain: {str(e)}")
-        return jsonify({'error': f'Database error: {str(e)}'}), 500
-
-
-@admin_bp.route('/api/admin/domain/remove/<int:domain_id>', methods=['POST'])
-def api_admin_domain_remove(domain_id):
-    """Remove a domain from the whitelist."""
-    domain = WhitelistedDomain.query.get_or_404(domain_id)
-    domain_name = domain.domain
-    
-    db.session.delete(domain)
-    db.session.commit()
-    
-    return jsonify({'success': True, 'message': f'Domain {domain_name} removed from whitelist'})
-
-
-# AI Configuration API routes
 @admin_bp.route('/api/admin/ai-config', methods=['POST'])
 def api_admin_ai_config_update():
     """Update AI configuration."""

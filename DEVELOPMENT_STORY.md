@@ -6,7 +6,7 @@ NoteHelper is a comprehensive note-taking application built for Azure technical 
 
 ## Development Stats
 
-- **Version:** 1.2 (with analytics dashboard and comprehensive UX improvements)
+- **Version:** 1.3 (single-user conversion with SQLite)
 - **Total Development Time:** ~42+ hours over 5 days (November 17-23, 2025)
 - **Lines of Code:** 14,940 lines (7,331 Python - 4,353 app + 2,978 tests, 6,549 HTML, 1,059 migrations)
 - **Files Created:** 
@@ -63,12 +63,14 @@ This conversational approach allowed me to focus on product vision and user expe
 - **Real-time Progress:** Server-Sent Events (SSE) for long-running imports
 - Automatic duplicate detection and skip logic
 
-### Authentication & Multi-User
-- **Microsoft Entra ID (Azure AD) OAuth 2.0** integration
-- Account linking for users with multiple email addresses (corporate + partner accounts)
-- Domain whitelisting for external accounts
-- Isolated workspaces per user (all queries filtered by user_id)
-- Admin panel for user management and domain approval
+### ~~Authentication & Multi-User~~ (Removed in v1.3)
+- ~~**Microsoft Entra ID (Azure AD) OAuth 2.0** integration~~
+- ~~Account linking for users with multiple email addresses (corporate + partner accounts)~~
+- ~~Domain whitelisting for external accounts~~
+- ~~Isolated workspaces per user (all queries filtered by user_id)~~
+- ~~Admin panel for user management and domain approval~~
+
+**Note:** As of v1.3, NoteHelper is a single-user local application. Authentication, multi-user features, and account linking have been completely removed. The application now uses SQLite for simple file-based storage and creates a single default user automatically.
 
 ### AI-Powered Features
 - **Topic Suggestion:** Azure OpenAI integration with GPT-4o-mini
@@ -344,6 +346,51 @@ This application demonstrates competency in:
 - Error handling for AI failures
 - Audit trail for AI operations
 - Admin configuration panel
+
+## Architecture Evolution (v1.3)
+
+After initial development, the application underwent a significant architectural shift:
+
+### From Multi-User to Single-User
+**Original Design (v1.0-1.2):**
+- Multi-user Azure AD OAuth authentication
+- Domain whitelist for external accounts
+- User management and admin roles
+- PostgreSQL database with user isolation
+- Account linking for multiple email addresses
+
+**Current Design (v1.3):**
+- Single-user local deployment (no authentication)
+- SQLite file-based database (`data/notehelper.db`)
+- Single default user created automatically
+- Simplified setup (no database server required)
+- Designed for individual use or team deployments where each person runs their own instance
+
+### Why the Change?
+The multi-user features were built for a shared deployment scenario, but the primary use case became **individual technical sellers running their own local instances**. Removing authentication and switching to SQLite made the application:
+- **Easier to set up:** No PostgreSQL installation, no OAuth configuration, no admin setup
+- **More portable:** Single database file, can be backed up/restored easily
+- **Simpler to maintain:** Fewer dependencies, no auth token management
+- **Privacy-focused:** All data stays local on the user's machine
+
+### What Was Removed
+- `WhitelistedDomain` model and database table
+- User management UI in admin panel (grant/revoke admin roles)
+- Domain whitelist UI in admin panel (add/remove domains)
+- OAuth callback domain validation
+- Account linking workflow and `AccountLinkingRequest` features
+- All `before_request` login enforcement
+- 300+ lines of authentication-related code
+
+### What Remains
+- All core functionality (call logs, customers, sellers, territories, topics, PODs, SEs)
+- AI-powered topic suggestions
+- Analytics dashboard
+- Import/export capabilities
+- User preferences (dark mode, view options)
+- Complete test suite (110 tests, all passing)
+
+The conversion demonstrates how AI-assisted development enables rapid architectural pivots. The entire refactoring (removing multi-user features, switching databases, updating documentation) was completed in a single afternoon with Copilot's assistance.
 
 ## Takeaway for Your Team
 
