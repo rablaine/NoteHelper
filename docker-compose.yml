@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   notehelper:
     image: ghcr.io/rablaine/notehelper:latest
