@@ -461,7 +461,6 @@ class AIConfig(db.Model):
         "Return ONLY a JSON array of strings, nothing else. "
         "Example: [\"Azure OpenAI\", \"Vector Search\", \"RAG Pattern\"]"
     ), nullable=False)
-    max_daily_calls_per_user = db.Column(db.Integer, default=20, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     

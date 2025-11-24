@@ -985,8 +985,7 @@ def export_full_json():
                 'api_key': ai_config.api_key,
                 'deployment_name': ai_config.deployment_name,
                 'api_version': ai_config.api_version,
-                'system_prompt': ai_config.system_prompt,
-                'max_daily_calls_per_user': ai_config.max_daily_calls_per_user
+                'system_prompt': ai_config.system_prompt
             }
     
     data = {
@@ -1263,7 +1262,6 @@ def import_full_json():
                 existing_config.deployment_name = ai_data.get('deployment_name')
                 existing_config.api_version = ai_data.get('api_version', '2024-08-01-preview')
                 existing_config.system_prompt = ai_data.get('system_prompt', existing_config.system_prompt)
-                existing_config.max_daily_calls_per_user = ai_data.get('max_daily_calls_per_user', 20)
             else:
                 # Create new config
                 new_config = AIConfig(
@@ -1272,8 +1270,7 @@ def import_full_json():
                     api_key=ai_data.get('api_key'),
                     deployment_name=ai_data.get('deployment_name'),
                     api_version=ai_data.get('api_version', '2024-08-01-preview'),
-                    system_prompt=ai_data.get('system_prompt'),
-                    max_daily_calls_per_user=ai_data.get('max_daily_calls_per_user', 20)
+                    system_prompt=ai_data.get('system_prompt')
                 )
                 db.session.add(new_config)
             imported_ai_config = True

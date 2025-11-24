@@ -7,7 +7,7 @@ from datetime import date, datetime
 from unittest.mock import patch, MagicMock
 import pytest
 from app import db
-from app.models import AIConfig, AIUsage, AIQueryLog, Topic, User
+from app.models import AIConfig, AIQueryLog, Topic, User
 
 
 class TestAIConfig:
@@ -28,7 +28,6 @@ class TestAIConfig:
         config = AIConfig.query.first()
         assert config is not None
         assert config.enabled is False
-        assert config.max_daily_calls_per_user == 20
         assert config.api_version == '2024-08-01-preview'
         assert 'helpful assistant' in config.system_prompt.lower()
     
@@ -143,7 +142,6 @@ class TestAISuggestions:
         config.api_key = 'test-key'
         config.deployment_name = 'o3-mini'
         config.api_version = '2025-01-01-preview'
-        config.max_daily_calls_per_user = 20
         db.session.commit()
         return config
     
@@ -179,11 +177,6 @@ class TestAISuggestions:
             # Verify topics were created
             topics = Topic.query.all()
             assert len(topics) == 3
-            
-            # Verify usage was tracked
-            usage = AIUsage.query.filter_by(user_id=test_user.id, date=date.today()).first()
-            assert usage is not None
-            assert usage.call_count == 1
             
             # Verify audit log entry
             log = AIQueryLog.query.first()
