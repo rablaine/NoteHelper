@@ -20,7 +20,7 @@ def test_analytics_shows_key_metrics(client, sample_data):
     
     # Should show call counts
     assert b'Calls This Week' in response.data
-    assert b'Customers Engaged' in response.data
+    assert b'Customers This Week' in response.data
     assert b'Total Calls' in response.data
     assert b'Total Customers' in response.data
 
