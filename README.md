@@ -46,6 +46,25 @@
 - **ORM:** SQLAlchemy
 - **AI Integration:** Azure OpenAI Service / Azure AI Foundry
 
+## Security & Compliance
+
+**Data Protection:**
+- ✅ **Encryption at Rest:** SQLite database protected by host disk encryption (BitLocker on Windows, LUKS on Linux)
+- ✅ **Access Control:** Single-user deployment - physical access to server required
+- ✅ **Audit Trail:** All records include timestamps and user tracking
+- ⚠️ **Encryption in Transit:** HTTP only - suitable for trusted internal networks
+
+**For Enhanced Security:**
+- Deploy on BitLocker/LUKS encrypted drives
+- Access via SSH tunnel when connecting over untrusted networks: `ssh -L 5000:localhost:5000 user@server-ip`
+- Use VPN (e.g., Tailscale) for remote access with automatic encryption
+- Implement network-level access controls (firewall rules, VLANs)
+
+**Compliance Notes:**
+- Designed for internal use on trusted networks
+- Regular backups recommended (see Data Management section)
+- SSL/TLS can be added via reverse proxy if required by your security policy
+
 ## Deployment Options
 
 Choose your preferred deployment method:

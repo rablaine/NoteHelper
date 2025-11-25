@@ -14,14 +14,13 @@
 
 **Framework(s):** Flask
 
-**Database:** PostgreSQL
+**Database:** SQLite
 
 **Key Libraries/Packages:**
 - Flask - Web framework
 - Bootstrap 5 - UI components and styling
 - SQLAlchemy - Database ORM
 - Flask-Migrate - Database migrations
-- psycopg2 - PostgreSQL adapter
 - Flask-Login - User session management
 - python-dotenv - Environment variable management
 - pytest - Testing framework
@@ -99,7 +98,7 @@
 - Write unit tests for business logic and database operations
 - Use Flask test client for route testing
 - Tests use isolated SQLite database (configured in `tests/conftest.py`)
-- Never run tests against production PostgreSQL database
+- Never run tests against production database
 - Aim for 70%+ code coverage
 - Test file naming: `test_*.py` or `*_test.py`
 - **Run tests before committing** - Ensure all tests pass with `pytest tests/`
@@ -123,7 +122,7 @@
 
 **Required Environment Variables:**
 ```
-DATABASE_URL=postgresql://username:password@localhost:5432/notehelper
+DATABASE_URL=sqlite:///data/notehelper.db
 SECRET_KEY=your-secret-key-here
 FLASK_ENV=development
 FLASK_DEBUG=True
@@ -131,7 +130,6 @@ FLASK_DEBUG=True
 
 **Prerequisites:**
 - Python 3.13+
-- PostgreSQL 15+
 - pip and venv
 
 ## Development Workflow
@@ -147,7 +145,7 @@ pip install -r requirements.txt
 
 # Set up environment
 cp .env.example .env
-# Edit .env with your database credentials
+# Edit .env if needed (database auto-creates)
 
 # Initialize database
 flask db init
@@ -198,22 +196,23 @@ pytest --cov=app tests/  # with coverage
 
 **Development Environment:**
 - Local machine running Flask development server
-- Local PostgreSQL database
+- Local SQLite database (data/notehelper.db)
 - Environment: `FLASK_ENV=development`, `FLASK_DEBUG=True`
 - Used for developing and testing new features
 - Safe to experiment and break things
 
 **Production Environment:**
-- Azure App Service: `notehelper.azurewebsites.net`
-- Azure PostgreSQL Flexible Server (database: "NoteHelper")
-- Deployed via GitHub Actions on push to `main` branch
+- Docker container running locally or on server
+- SQLite database (persisted in mounted `data/` volume)
+- Container images built automatically via GitHub Actions on push to `main` branch
+- Pull latest image with: `docker pull ghcr.io/rablaine/notehelper:latest`
 - Real user data - handle with care
 
 ## Git & Version Control
 
-**Branching Strategy:** Feature branches (main deploys to production)
+**Branching Strategy:** Feature branches (main builds Docker images)
 - **ALWAYS create feature branches for new work** - Never commit directly to `main`
-- `main` branch auto-deploys to production via GitHub Actions
+- `main` branch triggers Docker image build via GitHub Actions
 - Create feature branches from `main` for all changes
 - Merge back to `main` only when feature is complete and tested
 
@@ -236,7 +235,7 @@ pytest --cov=app tests/  # with coverage
 4. **Prompt user to manually test new features or bug fixes** - Before committing, always ask the user to test the changes in the running app to verify everything works as expected
 5. Commit to feature branch with descriptive message
 6. **Wait for user confirmation** before merging to `main`
-7. When user says ready: merge to `main` and push (triggers production deployment)
+7. When user says ready: merge to `main` and push (triggers Docker image build)
 
 **Merge to Production Checklist:**
 - All tests passing (`pytest tests/`)
