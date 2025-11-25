@@ -57,6 +57,10 @@ Thumbs.db
 # Future planning documents
 FUTURE_*.md
 
+# Personal import scripts (contain sensitive data)
+import_call_logs.py
+import_alignment_sheet.py
+
 # Testing
 .pytest_cache/
 .coverage
