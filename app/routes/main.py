@@ -508,6 +508,7 @@ def my_data_import_json():
                 customer_id=customer.id,
                 call_date=call_date,
                 content=call_data.get('content', ''),
+                user_id=g.user.id,
                 created_at=datetime.fromisoformat(call_data['created_at']) if call_data.get('created_at') else datetime.utcnow(),
                 updated_at=datetime.fromisoformat(call_data['updated_at']) if call_data.get('updated_at') else datetime.utcnow()
             )

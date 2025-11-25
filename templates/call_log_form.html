@@ -74,9 +74,11 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label for="topic_search" class="form-label mb-0">Topics</label>
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="aiSuggestBtn" style="display: none;">
+                            {% if ai_config and ai_config.is_enabled %}
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="aiSuggestBtn">
                                 <i class="bi bi-stars"></i> <span id="aiSuggestBtnText">Auto-tag with AI</span>
                             </button>
+                            {% endif %}
                         </div>
                         <input type="text" class="form-control" id="topic_search" 
                                placeholder="Search and add topics..." autocomplete="off">

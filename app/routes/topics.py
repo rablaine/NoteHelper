@@ -50,7 +50,8 @@ def topic_create():
         
         topic = Topic(
             name=name,
-            description=description if description else None)
+            description=description if description else None,
+            user_id=g.user.id)
         db.session.add(topic)
         db.session.commit()
         
@@ -140,7 +141,7 @@ def api_topic_create():
         }), 200
     
     # Create new topic
-    topic = Topic(name=name, description=None)
+    topic = Topic(name=name, description=None, user_id=g.user.id)
     db.session.add(topic)
     db.session.commit()
     

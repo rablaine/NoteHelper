@@ -134,7 +134,8 @@ def customer_create():
             tpid=tpid_value,
             tpid_url=tpid_url if tpid_url else None,
             seller_id=int(seller_id) if seller_id else None,
-            territory_id=int(territory_id) if territory_id else None)
+            territory_id=int(territory_id) if territory_id else None,
+            user_id=g.user.id)
         db.session.add(customer)
         db.session.commit()
         

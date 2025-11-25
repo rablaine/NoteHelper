@@ -70,7 +70,8 @@ def call_log_create():
         call_log = CallLog(
             customer_id=int(customer_id),
             call_date=call_date,
-            content=content)
+            content=content,
+            user_id=g.user.id)
         
         # Add topics
         if topic_ids:

@@ -38,7 +38,7 @@ def seller_create():
             flash(f'Seller "{name}" already exists.', 'warning')
             return redirect(url_for('sellers.seller_view', id=existing.id))
         
-        seller = Seller(name=name)
+        seller = Seller(name=name, user_id=g.user.id)
         
         # Add territories to many-to-many relationship
         if territory_ids:
@@ -138,7 +138,7 @@ def seller_create_inline():
     if name:
         existing = Seller.query.filter_by(name=name).first()
         if not existing:
-            seller = Seller(name=name)
+            seller = Seller(name=name, user_id=g.user.id)
             db.session.add(seller)
             db.session.commit()
             flash(f'Seller "{name}" created successfully!', 'success')

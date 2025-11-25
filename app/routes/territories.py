@@ -39,7 +39,7 @@ def territory_create():
             flash(f'Territory "{name}" already exists.', 'warning')
             return redirect(url_for('territories.territory_view', id=existing.id))
         
-        territory = Territory(name=name)
+        territory = Territory(name=name, user_id=g.user.id)
         db.session.add(territory)
         db.session.commit()
         
@@ -152,7 +152,7 @@ def territory_create_inline():
     if name:
         existing = Territory.query.filter_by(name=name).first()
         if not existing:
-            territory = Territory(name=name)
+            territory = Territory(name=name, user_id=g.user.id)
             db.session.add(territory)
             db.session.commit()
             flash(f'Territory "{name}" created successfully!', 'success')
