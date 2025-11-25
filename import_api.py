@@ -6,15 +6,13 @@ import csv
 import json
 import tempfile
 import os
-from flask import Response, stream_with_context
-from flask_login import login_required, current_user
+from flask import Response, stream_with_context, g
 
 
 def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Vertical, Customer):
     """Create the streaming import endpoint."""
     
     @app.route('/api/data-management/import', methods=['POST'])
-    @login_required
     def data_management_import():
         """Import alignment sheet CSV with real-time progress feedback."""
         from flask import request
@@ -75,11 +73,11 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                 # Create Territories
                 territory_names = set(row.get('Sales Territory', '').strip() for row in rows if row.get('Sales Territory', '').strip())
                 for territory_name in territory_names:
-                    existing = Territory.query.filter_by(name=territory_name, user_id=current_user.id).first()
+                    existing = Territory.query.filter_by(name=territory_name, user_id=g.user.id).first()
                     if existing:
                         territories_map[territory_name] = existing
                     else:
-                        territory = Territory(name=territory_name, user_id=current_user.id)
+                        territory = Territory(name=territory_name, user_id=g.user.id)
                         db.session.add(territory)
                         territories_map[territory_name] = territory
                 
@@ -92,7 +90,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                 # Create Sellers
                 seller_names = set(row.get('DSS (Growth/Acq)', '').strip() for row in rows if row.get('DSS (Growth/Acq)', '').strip())
                 for seller_name in seller_names:
-                    existing = Seller.query.filter_by(name=seller_name, user_id=current_user.id).first()
+                    existing = Seller.query.filter_by(name=seller_name, user_id=g.user.id).first()
                     if existing:
                         sellers_map[seller_name] = existing
                     else:
@@ -111,7 +109,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                                 seller_type = 'Growth'
                                 alias = None
                             
-                            seller = Seller(name=seller_name, seller_type=seller_type, alias=alias, user_id=current_user.id)
+                            seller = Seller(name=seller_name, seller_type=seller_type, alias=alias, user_id=g.user.id)
                             db.session.add(seller)
                             sellers_map[seller_name] = seller
                 
@@ -139,11 +137,11 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                 # Create PODs
                 pod_names = set(row.get('SME&C POD', '').strip() for row in rows if row.get('SME&C POD', '').strip())
                 for pod_name in pod_names:
-                    existing = POD.query.filter_by(name=pod_name, user_id=current_user.id).first()
+                    existing = POD.query.filter_by(name=pod_name, user_id=g.user.id).first()
                     if existing:
                         pods_map[pod_name] = existing
                     else:
-                        pod = POD(name=pod_name, user_id=current_user.id)
+                        pod = POD(name=pod_name, user_id=g.user.id)
                         db.session.add(pod)
                         pods_map[pod_name] = pod
                 
@@ -179,7 +177,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                             data_se_info[se_name]['pods'].add(pod_name)
                 
                 for se_name, info in data_se_info.items():
-                    existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Data', user_id=current_user.id).first()
+                    existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Data', user_id=g.user.id).first()
                     if existing:
                         solution_engineers_map[se_name] = existing
                         # Update POD associations for existing SE
@@ -188,7 +186,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                             if pod and pod not in existing.pods:
                                 existing.pods.append(pod)
                     else:
-                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Data', user_id=current_user.id)
+                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Data', user_id=g.user.id)
                         for pod_name in info['pods']:
                             se.pods.append(pods_map[pod_name])
                         db.session.add(se)
@@ -209,7 +207,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                             infra_se_info[se_name]['pods'].add(pod_name)
                 
                 for se_name, info in infra_se_info.items():
-                    existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Core and Infra', user_id=current_user.id).first()
+                    existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Core and Infra', user_id=g.user.id).first()
                     if existing:
                         solution_engineers_map[se_name] = existing
                         # Update POD associations for existing SE
@@ -218,7 +216,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                             if pod and pod not in existing.pods:
                                 existing.pods.append(pod)
                     else:
-                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Core and Infra', user_id=current_user.id)
+                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Core and Infra', user_id=g.user.id)
                         for pod_name in info['pods']:
                             se.pods.append(pods_map[pod_name])
                         db.session.add(se)
@@ -239,7 +237,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                             apps_se_info[se_name]['pods'].add(pod_name)
                 
                 for se_name, info in apps_se_info.items():
-                    existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Apps and AI', user_id=current_user.id).first()
+                    existing = SolutionEngineer.query.filter_by(name=se_name, specialty='Azure Apps and AI', user_id=g.user.id).first()
                     if existing:
                         solution_engineers_map[se_name] = existing
                         # Update POD associations for existing SE
@@ -248,7 +246,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                             if pod and pod not in existing.pods:
                                 existing.pods.append(pod)
                     else:
-                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Apps and AI', user_id=current_user.id)
+                        se = SolutionEngineer(name=se_name, alias=info['alias'] if info['alias'] else None, specialty='Azure Apps and AI', user_id=g.user.id)
                         for pod_name in info['pods']:
                             se.pods.append(pods_map[pod_name])
                         db.session.add(se)
@@ -273,11 +271,11 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                         vertical_names.add(category)
                 
                 for vertical_name in vertical_names:
-                    existing = Vertical.query.filter_by(name=vertical_name, user_id=current_user.id).first()
+                    existing = Vertical.query.filter_by(name=vertical_name, user_id=g.user.id).first()
                     if existing:
                         verticals_map[vertical_name] = existing
                     else:
-                        vertical = Vertical(name=vertical_name, user_id=current_user.id)
+                        vertical = Vertical(name=vertical_name, user_id=g.user.id)
                         db.session.add(vertical)
                         verticals_map[vertical_name] = vertical
                 
@@ -306,7 +304,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                         customers_skipped += 1
                         continue
                     
-                    existing = Customer.query.filter_by(tpid=tpid, user_id=current_user.id).first()
+                    existing = Customer.query.filter_by(tpid=tpid, user_id=g.user.id).first()
                     if existing:
                         customers_skipped += 1
                         continue
@@ -321,7 +319,7 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                         tpid=tpid,
                         territory=territories_map.get(territory_name),
                         seller=sellers_map.get(seller_name),
-                        user_id=current_user.id
+                        user_id=g.user.id
                     )
                     
                     # Associate both verticals if they exist and aren't N/A
@@ -370,3 +368,4 @@ def create_import_endpoint(app, db, Territory, Seller, POD, SolutionEngineer, Ve
                 yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
         
         return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
