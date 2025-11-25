@@ -268,11 +268,9 @@ def analytics():
     # Customer engagement
     total_customers = Customer.query.count()
     customers_called_this_week = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
-        CallLog.user_id == g.user.id,
         CallLog.call_date >= week_ago
     ).scalar()
     customers_called_this_month = db.session.query(func.count(distinct(CallLog.customer_id))).filter(
-        CallLog.user_id == g.user.id,
         CallLog.call_date >= month_ago
     ).scalar()
     
@@ -284,7 +282,6 @@ def analytics():
     ).join(
         CallLog.topics
     ).filter(
-        CallLog.user_id == g.user.id,
         CallLog.call_date >= three_months_ago
     ).group_by(
         Topic.id,
@@ -295,12 +292,10 @@ def analytics():
     
     # Customers not called recently (90+ days or never)
     customers_with_recent_calls = db.session.query(CallLog.customer_id).filter(
-        CallLog.user_id == g.user.id,
         CallLog.call_date >= three_months_ago
     ).distinct().subquery()
     
     customers_needing_attention = Customer.query.filter(
-        Customer.user_id == g.user.id,
         ~Customer.id.in_(customers_with_recent_calls)
     ).order_by(Customer.name).limit(10).all()
     
@@ -314,7 +309,6 @@ def analytics():
     ).join(
         CallLog, CallLog.customer_id == Customer.id
     ).filter(
-        CallLog.user_id == g.user.id,
         CallLog.call_date >= month_ago
     ).group_by(
         Seller.id,
