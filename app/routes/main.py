@@ -1713,6 +1713,23 @@ def show_customers_without_calls_preference():
     return jsonify({'show_customers_without_calls': pref.show_customers_without_calls}), 200
 
 
+@main_bp.route('/api/preferences/dismiss-welcome-modal', methods=['POST'])
+def dismiss_welcome_modal():
+    """Dismiss the first-run welcome modal."""
+    user_id = g.user.id if g.user.is_authenticated else 1
+    
+    # Get or create user preference
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, first_run_modal_dismissed=True)
+        db.session.add(pref)
+    else:
+        pref.first_run_modal_dismissed = True
+    
+    db.session.commit()
+    return jsonify({'first_run_modal_dismissed': True}), 200
+
+
 # =============================================================================
 # Context Processor
 # =============================================================================
@@ -1725,6 +1742,7 @@ def inject_preferences():
     customer_view_grouped = pref.customer_view_grouped if pref else False
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
     colored_sellers = pref.colored_sellers if pref else True
+    first_run_modal_dismissed = pref.first_run_modal_dismissed if pref else False
     
     # Get pending link requests count
     pending_link_requests_count = 0
@@ -1740,6 +1758,7 @@ def inject_preferences():
         customer_view_grouped=customer_view_grouped, 
         topic_sort_by_calls=topic_sort_by_calls,
         colored_sellers=colored_sellers,
+        first_run_modal_dismissed=first_run_modal_dismissed,
         get_seller_color=get_seller_color_with_pref,
         pending_link_requests_count=pending_link_requests_count
     )

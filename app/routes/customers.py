@@ -17,8 +17,8 @@ def customers_list():
     user_id = g.user.id if g.user.is_authenticated else 1
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     
-    # Check preference for showing customers without calls (default: False = hide them)
-    show_customers_without_calls = pref.show_customers_without_calls if pref else False
+    # Check preference for showing customers without calls (default: True = show all)
+    show_customers_without_calls = pref.show_customers_without_calls if pref else True
     
     # Determine sort method - check new field first, fall back to old grouped field for backwards compatibility
     sort_by = pref.customer_sort_by if pref else 'alphabetical'

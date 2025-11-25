@@ -267,6 +267,48 @@
         {% endwith %}
     </div>
 
+    <!-- First-Run Welcome Modal -->
+    {% if not first_run_modal_dismissed %}
+    <div class="modal fade" id="welcomeModal" tabindex="-1" aria-labelledby="welcomeModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="welcomeModalLabel">
+                        <i class="bi bi-rocket-takeoff"></i> Welcome to NoteHelper!
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <p class="lead mb-3">Let's get you set up in just a few steps:</p>
+                    
+                    <div class="mb-4">
+                        <h6 class="mb-2"><i class="bi bi-moon-stars"></i> Choose Your Theme</h6>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="welcomeDarkModeToggle" {{ 'checked' if dark_mode else '' }}>
+                            <label class="form-check-label" for="welcomeDarkModeToggle">
+                                <span id="welcomeDarkModeLabel">{{ 'Dark Mode' if dark_mode else 'Light Mode' }}</span>
+                            </label>
+                        </div>
+                        <small class="text-muted">You can always change this later in <i class="bi bi-sliders"></i> Settings</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="mb-2"><i class="bi bi-file-earmark-spreadsheet"></i> Import Your Data</h6>
+                        <p class="mb-2">Ready to import your alignment sheet? Head to <strong>Data Management</strong> to get started.</p>
+                        <a href="{{ url_for('main.data_management') }}" class="btn btn-outline-primary btn-sm" id="goToDataManagement">
+                            <i class="bi bi-database"></i> Go to Data Management
+                        </a>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="dismissWelcomeModal">
+                        Got it, thanks! <i class="bi bi-check-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Main Content -->
     <main class="container my-4">
         {% block content %}{% endblock %}
@@ -285,6 +327,78 @@
     <!-- Dark Mode and Colored Sellers Toggle Scripts -->
     <script defer>
         const htmlElement = document.documentElement;
+        
+        // Welcome Modal - Show on first run
+        window.addEventListener('load', () => {
+            const welcomeModal = document.getElementById('welcomeModal');
+            if (welcomeModal && typeof bootstrap !== 'undefined') {
+                const modal = new bootstrap.Modal(welcomeModal);
+                
+                // Show modal with slight delay to ensure everything is ready
+                setTimeout(() => modal.show(), 100);
+                
+                // Dark mode toggle in welcome modal
+                const welcomeDarkModeToggle = document.getElementById('welcomeDarkModeToggle');
+                const welcomeDarkModeLabel = document.getElementById('welcomeDarkModeLabel');
+                
+                if (welcomeDarkModeToggle) {
+                    welcomeDarkModeToggle.addEventListener('change', async function() {
+                        const isDark = this.checked;
+                        
+                        // Update UI immediately
+                        htmlElement.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+                        welcomeDarkModeLabel.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+                        
+                        // Save preference to server
+                        try {
+                            await fetch('/api/preferences/dark-mode', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ dark_mode: isDark })
+                            });
+                        } catch (error) {
+                            console.error('Failed to save dark mode preference:', error);
+                        }
+                    });
+                }
+                
+                // Helper function to dismiss modal
+                async function dismissModal() {
+                    try {
+                        await fetch('/api/preferences/dismiss-welcome-modal', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Failed to dismiss welcome modal:', error);
+                    }
+                }
+                
+                // Dismiss welcome modal button
+                const dismissButton = document.getElementById('dismissWelcomeModal');
+                if (dismissButton) {
+                    dismissButton.addEventListener('click', async function() {
+                        await dismissModal();
+                        modal.hide();
+                    });
+                }
+                
+                // Go to Data Management link - dismiss modal before navigating
+                const dataManagementLink = document.getElementById('goToDataManagement');
+                if (dataManagementLink) {
+                    dataManagementLink.addEventListener('click', async function(e) {
+                        e.preventDefault();
+                        await dismissModal();
+                        // Navigate after dismissing
+                        window.location.href = this.href;
+                    });
+                }
+            }
+        });
         
         // Dark Mode Toggle (only if it exists in menu)
         const darkModeToggle = document.getElementById('darkModeToggle');

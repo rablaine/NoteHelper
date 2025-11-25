@@ -69,7 +69,7 @@ def test_show_customers_without_calls_preference_get(client):
     data = json.loads(response.data)
     assert 'show_customers_without_calls' in data
     assert isinstance(data['show_customers_without_calls'], bool)
-    assert data['show_customers_without_calls'] is False  # Default should be False
+    assert data['show_customers_without_calls'] is True  # Default should be True (show all customers)
 
 
 def test_show_customers_without_calls_preference_post(client):

@@ -182,8 +182,8 @@ def test_preferences_page_loads(client):
 
 def test_customers_list_filters_without_calls(client, sample_data):
     """Test that customers without calls are filtered when preference is False."""
-    from app.models import Customer, db
-    
+    from app.models import Customer, UserPreference, db
+
     # Create a customer without any call logs
     customer = Customer(
         name='Empty Customer',
@@ -192,13 +192,20 @@ def test_customers_list_filters_without_calls(client, sample_data):
     )
     db.session.add(customer)
     db.session.commit()
-    
-    # Default preference is False (hide customers without calls)
+
+    # Default preference is True (show all customers), so customer should appear
     response = client.get('/customers')
     assert response.status_code == 200
-    assert b'Empty Customer' not in response.data
+    assert b'Empty Customer' in response.data
     
-    # Enable showing customers without calls
+    # Set preference to False (hide customers without calls)
+    client.post('/api/preferences/show-customers-without-calls',
+                json={'show_customers_without_calls': False})
+    
+    # Now customer should be filtered out
+    response = client.get('/customers')
+    assert response.status_code == 200
+    assert b'Empty Customer' not in response.data    # Enable showing customers without calls
     client.post('/api/preferences/show-customers-without-calls',
                 json={'show_customers_without_calls': True})
     
