@@ -2,7 +2,7 @@
 Seller routes for NoteHelper.
 Handles seller listing, creation, viewing, and editing.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from datetime import date
 
 from app.models import db, Seller, Territory, Customer
@@ -43,7 +43,7 @@ def seller_create():
         # Add territories to many-to-many relationship
         if territory_ids:
             for territory_id in territory_ids:
-                territory = Territory.query.get(int(territory_id))
+                territory = db.session.get(Territory, int(territory_id))
                 if territory:
                     seller.territories.append(territory)
         
@@ -84,7 +84,10 @@ def seller_view(id):
         return x['last_call'].call_date
     customers_data.sort(key=get_sort_key, reverse=True)
     
-    return render_template('seller_view.html', seller=seller, customers=customers_data)
+    # Check if seller can be deleted (no associated customers)
+    can_delete = len(seller.customers) == 0
+    
+    return render_template('seller_view.html', seller=seller, customers=customers_data, can_delete=can_delete)
 
 
 @sellers_bp.route('/seller/<int:id>/edit', methods=['GET', 'POST'])
@@ -115,7 +118,7 @@ def seller_edit(id):
         seller.territories = []
         if territory_ids:
             for territory_id in territory_ids:
-                territory = Territory.query.get(int(territory_id))
+                territory = db.session.get(Territory, int(territory_id))
                 if territory:
                     seller.territories.append(territory)
         
@@ -146,4 +149,23 @@ def seller_create_inline():
             flash(f'Seller "{name}" already exists.', 'info')
     
     return redirect(redirect_to)
+
+
+@sellers_bp.route('/seller/<int:id>/delete', methods=['POST'])
+def seller_delete(id):
+    """Delete seller if it has no associated customers."""
+    seller = Seller.query.filter_by(id=id).first_or_404()
+    seller_name = seller.name
+    
+    # Check if seller has any customers
+    if len(seller.customers) > 0:
+        flash(f'Cannot delete seller "{seller_name}" because it has {len(seller.customers)} associated customer(s).', 'danger')
+        return redirect(url_for('sellers.seller_view', id=id))
+    
+    # Delete the seller
+    db.session.delete(seller)
+    db.session.commit()
+    
+    flash(f'Seller "{seller_name}" deleted successfully.', 'success')
+    return redirect(url_for('sellers.sellers_list'))
 

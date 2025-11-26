@@ -2,7 +2,7 @@
 Call log routes for NoteHelper.
 Handles call log listing, creation, viewing, and editing.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from datetime import datetime
 
 from app.models import db, CallLog, Customer, Seller, Territory, Topic
@@ -114,6 +114,14 @@ def call_log_create():
     # Capture referrer for redirect after creation
     referrer = request.referrer or ''
     
+    # Pass today's date as default
+    from datetime import date
+    from app.models import AIConfig
+    today = date.today().strftime('%Y-%m-%d')
+    
+    # Load AI config for AI button visibility
+    ai_config = AIConfig.query.first()
+    
     return render_template('call_log_form.html', 
                          call_log=None, 
                          customers=customers,
@@ -123,7 +131,9 @@ def call_log_create():
                          preselect_customer=preselect_customer,
                          preselect_topic_id=preselect_topic_id,
                          previous_calls=previous_calls,
-                         referrer=referrer)
+                         referrer=referrer,
+                         today=today,
+                         ai_config=ai_config)
 
 
 @call_logs_bp.route('/call-log/<int:id>')
@@ -187,7 +197,12 @@ def call_log_edit(id):
     sellers = Seller.query.order_by(Seller.name).all()
     topics = Topic.query.order_by(Topic.name).all()
     
+    # Load AI config for AI button visibility
+    from app.models import AIConfig
+    ai_config = AIConfig.query.first()
+    
     return render_template('call_log_form.html',
+                         ai_config=ai_config,
                          call_log=call_log,
                          customers=customers,
                          sellers=sellers,

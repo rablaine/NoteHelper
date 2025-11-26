@@ -106,7 +106,7 @@ def topic_delete(id):
     topic_name = topic.name
     
     # Get all call logs associated with this topic
-    call_logs_count = topic.call_logs.count()
+    call_logs_count = len(topic.call_logs)
     
     # Delete the topic (SQLAlchemy will automatically remove associations from call_logs_topics table)
     db.session.delete(topic)

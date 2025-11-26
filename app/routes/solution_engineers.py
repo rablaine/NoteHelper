@@ -58,7 +58,7 @@ def solution_engineer_edit(id):
         # Update POD associations
         se.pods.clear()
         for pod_id in pod_ids:
-            pod = POD.query.get(int(pod_id))
+            pod = db.session.get(POD, int(pod_id))
             if pod:
                 se.pods.append(pod)
         

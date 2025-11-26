@@ -16,11 +16,11 @@
                                value="{{ seller.name if seller else '' }}" required>
                     </div>
                     
-                    <div class="mb-3">
+                    <div class="mb-3" style="position: relative;">
                         <label for="territory_search" class="form-label">Territories</label>
                         <input type="text" class="form-control" id="territory_search" 
                                placeholder="Search and add territories..." autocomplete="off">
-                        <div id="territory_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                        <div id="territory_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1050; max-height: 200px; overflow-y: auto; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
                         
                         <div id="selected_territories" class="mt-2 d-flex flex-wrap gap-2">
                             {% if seller %}
@@ -163,7 +163,7 @@ territorySearch.addEventListener('keydown', function(e) {
 function renderDropdown() {
     territoryDropdown.innerHTML = currentMatches.map((territory, index) => 
         `<a href="#" class="list-group-item list-group-item-action ${index === selectedIndex ? 'active' : ''}" 
-            onclick="addTerritory(${territory.id}, '${territory.name.replace(/'/g, "\\'")}'); return false;"
+            onmousedown="event.preventDefault(); addTerritory(${territory.id}, '${territory.name.replace(/'/g, "\\'")}'); return false;"
             onmouseover="selectedIndex = ${index}; renderDropdown();">
             <i class="bi bi-geo-alt"></i> ${territory.name}
         </a>`

@@ -25,7 +25,7 @@ def test_tpid_workflow_shows_customers_without_urls(client, sample_data):
 def test_tpid_workflow_update_single_url(client, sample_data, app):
     """Test updating a single TPID URL via workflow."""
     with app.app_context():
-        from app.models import Customer
+        from app.models import Customer, db
         
         # Find a customer without TPID URL
         customer = Customer.query.filter(
@@ -47,7 +47,7 @@ def test_tpid_workflow_update_single_url(client, sample_data, app):
         assert b'Successfully updated' in response.data
         
         # Verify URL was saved
-        customer = Customer.query.get(customer_id)
+        customer = db.session.get(Customer, customer_id)
         assert customer.tpid_url == test_url
 
 
@@ -73,8 +73,8 @@ def test_tpid_workflow_update_multiple_urls(client, sample_data, app):
         assert b'Successfully updated 2' in response.data
         
         # Verify all URLs were saved
-        customer2 = Customer.query.get(customer2_id)
-        customer3 = Customer.query.get(customer3_id)
+        customer2 = db.session.get(Customer, customer2_id)
+        customer3 = db.session.get(Customer, customer3_id)
         assert customer2.tpid_url == 'https://example.com/crm/customer-1'
         assert customer3.tpid_url == 'https://example.com/crm/customer-2'
 
@@ -82,7 +82,7 @@ def test_tpid_workflow_update_multiple_urls(client, sample_data, app):
 def test_tpid_workflow_ignores_empty_fields(client, sample_data, app):
     """Test that empty URL fields are ignored during update."""
     with app.app_context():
-        from app.models import Customer
+        from app.models import Customer, db
         
         # Use customer2 and customer3 from fixtures (both have no TPID URLs)
         customer2_id = sample_data['customer2_id']
@@ -99,8 +99,8 @@ def test_tpid_workflow_ignores_empty_fields(client, sample_data, app):
         assert b'Successfully updated 1' in response.data
         
         # Verify only the filled one was saved
-        customer2 = Customer.query.get(customer2_id)
-        customer3 = Customer.query.get(customer3_id)
+        customer2 = db.session.get(Customer, customer2_id)
+        customer3 = db.session.get(Customer, customer3_id)
         assert customer2.tpid_url == test_url
         assert not customer3.tpid_url  # Should still be empty
 

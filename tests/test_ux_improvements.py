@@ -226,10 +226,13 @@ def test_button_sizes_standardized(client):
         
         soup = BeautifulSoup(response.data, 'html.parser')
         
-        # Find "New X" buttons
+        # Find "New X" buttons (excluding navbar buttons which use regular size)
         new_buttons = soup.find_all('a', class_='btn-primary') + soup.find_all('button', class_='btn-success')
         
         for button in new_buttons:
             if 'New' in button.text:
+                # Skip navbar buttons (they intentionally use regular size to match user menu)
+                if button.find_parent('nav', class_='navbar'):
+                    continue
                 classes = button.get('class', [])
                 assert 'btn-sm' in classes, f"New button on {page} should use btn-sm, got: {classes}"

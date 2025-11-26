@@ -5,14 +5,9 @@
 {% block content %}
 <div class="row">
     <div class="col-md-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h1 class="mb-2">Welcome to NoteHelper</h1>
-                <p class="lead mb-0">Track and manage your customer call notes efficiently.</p>
-            </div>
-            <button type="button" class="btn btn-primary btn-lg home-cta-button" data-bs-toggle="modal" data-bs-target="#quickCallLogModal">
-                <i class="bi bi-plus-circle"></i> New Call Log
-            </button>
+        <div class="mb-4">
+            <h1 class="mb-2">Welcome to NoteHelper</h1>
+            <p class="lead mb-0">Track and manage your customer call notes efficiently.</p>
         </div>
     </div>
 </div>
@@ -140,7 +135,7 @@
             </div>
         {% else %}
             <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> No call logs yet. <a href="{{ url_for('call_logs.call_log_create') }}">Create your first call log</a>!
+                <i class="bi bi-info-circle"></i> No call logs yet. Use the <strong>New Call Log</strong> button in the navigation bar to get started!
             </div>
         {% endif %}
     </div>
@@ -204,26 +199,6 @@
     </div>
 </div>
 {% endif %}
-
-<!-- Quick Call Log Modal -->
-<div class="modal fade" id="quickCallLogModal" tabindex="-1" aria-labelledby="quickCallLogModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="quickCallLogModalLabel">Create Call Log</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="customerSearch" class="form-label">Search for Customer</label>
-                    <input type="text" class="form-control" id="customerSearch" placeholder="Start typing customer name..." autocomplete="off">
-                    <small class="form-text text-muted">Type at least 2 characters to search</small>
-                </div>
-                <div id="customerResults" class="list-group"></div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <script>
     // ===== DRAFT MANAGEMENT =====
@@ -370,59 +345,6 @@
         if (e.key && e.key.startsWith(DRAFT_KEY_PREFIX)) {
             loadDrafts();
         }
-    });
-    
-    // ===== CUSTOMER AUTOCOMPLETE =====
-    // Customer autocomplete for quick call log creation
-    let debounceTimer;
-    const customerSearch = document.getElementById('customerSearch');
-    const customerResults = document.getElementById('customerResults');
-    const modal = document.getElementById('quickCallLogModal');
-
-    // Focus input when modal opens
-    modal.addEventListener('shown.bs.modal', function () {
-        customerSearch.focus();
-    });
-
-    // Clear search when modal closes
-    modal.addEventListener('hidden.bs.modal', function () {
-        customerSearch.value = '';
-        customerResults.innerHTML = '';
-    });
-
-    customerSearch.addEventListener('input', function() {
-        clearTimeout(debounceTimer);
-        const query = this.value.trim();
-
-        if (query.length < 2) {
-            customerResults.innerHTML = '';
-            return;
-        }
-
-        debounceTimer = setTimeout(async () => {
-            try {
-                const response = await fetch(`{{ url_for('customers.api_customers_autocomplete') }}?q=${encodeURIComponent(query)}`);
-                const customers = await response.json();
-
-                if (customers.length === 0) {
-                    customerResults.innerHTML = '<div class="list-group-item text-muted">No customers found</div>';
-                    return;
-                }
-
-                customerResults.innerHTML = customers.map(customer => {
-                    const displayName = customer.nickname ? `${customer.name} (${customer.nickname})` : customer.name;
-                    const tpidBadge = customer.tpid ? `<span class="badge bg-secondary ms-2">TPID: ${customer.tpid}</span>` : '';
-                    return `
-                        <a href="{{ url_for('call_logs.call_log_create') }}?customer_id=${customer.id}" class="list-group-item list-group-item-action">
-                            <i class="bi bi-building"></i> ${displayName}${tpidBadge}
-                        </a>
-                    `;
-                }).join('');
-            } catch (error) {
-                console.error('Error fetching customers:', error);
-                customerResults.innerHTML = '<div class="list-group-item text-danger">Error loading results</div>';
-            }
-        }, 300);
     });
 </script>
 

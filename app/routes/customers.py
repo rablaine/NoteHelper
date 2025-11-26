@@ -274,7 +274,7 @@ def tpid_workflow_update():
         # Update customers
         updated_count = 0
         for customer_id, tpid_url in updates.items():
-            customer = Customer.query.get(customer_id)
+            customer = db.session.get(Customer, customer_id)
             if customer:
                 customer.tpid_url = tpid_url
                 updated_count += 1

@@ -67,14 +67,14 @@
                     <div class="mb-3">
                         <label for="call_date" class="form-label">Call Date *</label>
                         <input type="date" class="form-control" id="call_date" name="call_date" 
-                               value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% endif %}" 
+                               value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
                                required>
                     </div>
                     
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label for="topic_search" class="form-label mb-0">Topics</label>
-                            {% if ai_config and ai_config.is_enabled %}
+                            {% if ai_config and ai_config.enabled %}
                             <button type="button" class="btn btn-sm btn-outline-primary" id="aiSuggestBtn">
                                 <i class="bi bi-stars"></i> <span id="aiSuggestBtnText">Auto-tag with AI</span>
                             </button>
@@ -348,12 +348,17 @@ function addTopic(topicId, topicName) {
     currentMatches = [];
     selectedIndex = -1;
     topicSearch.focus(); // Keep focus on search box
+    
+    // Trigger debounced auto-save
+    debouncedAutoSave();
 }
 
 function removeTopic(topicId) {
     const badge = selectedTopicsContainer.querySelector(`span[data-topic-id="${topicId}"]`);
     if (badge) {
         badge.remove();
+        // Trigger debounced auto-save
+        debouncedAutoSave();
     }
 }
 
@@ -407,20 +412,10 @@ function createNewTopic(topicName) {
 let lastAiCallFailed = false;
 let aiButtonDisabledUntil = 0;
 
-// Check if AI is enabled and show button
-fetch('/api/admin/ai-config')
-    .then(response => response.json())
-    .then(data => {
-        // If AI config exists and is enabled, show the button
-        if (data && data.enabled) {
-            const aiBtn = document.getElementById('aiSuggestBtn');
-            aiBtn.style.display = 'block';
-        }
-    })
-    .catch(error => {
-        // Silently fail - button stays hidden if AI not configured
-        console.log('AI not configured or error checking status');
-    });
+// Show AI button if AI is enabled (no need for API call - we already have this from template)
+{% if ai_config and ai_config.enabled %}
+document.getElementById('aiSuggestBtn').style.display = 'block';
+{% endif %}
 
 document.getElementById('aiSuggestBtn').addEventListener('click', function() {
     const aiBtn = this;
@@ -499,7 +494,8 @@ document.getElementById('aiSuggestBtn').addEventListener('click', function() {
 // ===== AUTO-SAVE FUNCTIONALITY =====
 const DRAFT_KEY_PREFIX = 'notehelper_draft_';
 const MAX_DRAFTS = 5;
-let autoSaveInterval = null;
+const DEBOUNCE_DELAY = 1500; // 1.5 seconds after user stops typing
+let autoSaveTimeout = null;
 let draftRestored = false;
 
 // Get customer-specific draft key
@@ -668,16 +664,26 @@ window.addEventListener('storage', function(e) {
     }
 });
 
+// Debounced auto-save - saves after user stops typing for DEBOUNCE_DELAY ms
+function debouncedAutoSave() {
+    // Clear any existing timeout
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+    }
+    
+    // Set new timeout to save after delay
+    const customerId = document.getElementById('customer_id').value;
+    if (customerId) {
+        autoSaveTimeout = setTimeout(() => {
+            saveDraft();
+        }, DEBOUNCE_DELAY);
+    }
+}
+
 // Function to start auto-save for selected customer
 function startAutoSave() {
     const customerSelect = document.getElementById('customer_id');
     const customerId = customerSelect.value || customerSelect.querySelector('option[selected]')?.value;
-    
-    // Stop any existing auto-save
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-        autoSaveInterval = null;
-    }
     
     // Check for existing draft when customer changes
     if (customerId && !draftRestored) {
@@ -702,41 +708,88 @@ function startAutoSave() {
         }
     }
     
-    // Start auto-save if customer selected
+    // Set up debounced auto-save listeners if customer selected
     if (customerId) {
-        autoSaveInterval = setInterval(saveDraft, 10000); // Every 10 seconds
-        console.log('Auto-save started for customer', customerId);
+        // Listen to Quill text changes
+        quill.on('text-change', debouncedAutoSave);
+        
+        // Listen to date field changes
+        document.getElementById('call_date').addEventListener('input', debouncedAutoSave);
+        
+        console.log('Debounced auto-save enabled for customer', customerId);
     }
 }
 
 // Start auto-save when customer is selected
 document.getElementById('customer_id').addEventListener('change', startAutoSave);
 
-// Save draft before page unload
+// Flag to prevent saving after successful submission
+let formSubmittedSuccessfully = false;
+
+// Save draft before page unload (unless form was successfully submitted)
 window.addEventListener('beforeunload', function(e) {
     const customerId = document.getElementById('customer_id').value;
-    if (customerId) {
+    if (customerId && !formSubmittedSuccessfully) {
         saveDraft();
     }
 });
 
-// Clear draft on successful form submission
+// Clear draft only after successful form submission
 document.getElementById('callLogForm').addEventListener('submit', function(e) {
-    // The form will proceed with submission, just clear the draft
-    setTimeout(() => {
-        clearDraft();
-        if (autoSaveInterval) {
-            clearInterval(autoSaveInterval);
+    e.preventDefault(); // Prevent default form submission
+    
+    const form = e.target;
+    const formData = new FormData(form);
+    const submitButton = form.querySelector('button[type="submit"]');
+    
+    // Disable submit button to prevent double submission
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+    
+    // Submit via fetch so we can wait for response
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        redirect: 'follow' // Follow redirects automatically
+    })
+    .then(response => {
+        console.log('Response status:', response.status, 'OK:', response.ok, 'Redirected:', response.redirected);
+        if (response.ok || response.redirected) {
+            // Success! Set flag to prevent beforeunload from saving
+            console.log('Setting submission success flag...');
+            formSubmittedSuccessfully = true;
+            
+            // Stop auto-save first, then clear the draft
+            console.log('Stopping auto-save...');
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = null;
+            }
+            console.log('Clearing draft before redirect...');
+            clearDraft();
+            console.log('Draft cleared, redirecting to:', response.url);
+            // Redirect to the final URL (after any server redirects)
+            window.location.href = response.url;
+        } else {
+            // Server returned an error - keep the draft
+            throw new Error('Form submission failed');
         }
-    }, 100);
+    })
+    .catch(error => {
+        console.error('Form submission error:', error);
+        alert('Failed to save call log. Your draft has been preserved. Please try again.');
+        // Re-enable submit button
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i class="bi bi-save"></i> Save Call Log';
+    });
 });
 
 // Discard draft function
 function discardDraft() {
     if (confirm('Discard this draft? This will clear all unsaved changes and cannot be undone.')) {
         clearDraft();
-        if (autoSaveInterval) {
-            clearInterval(autoSaveInterval);
+        if (autoSaveTimeout) {
+            clearTimeout(autoSaveTimeout);
         }
         
         // Clear the form

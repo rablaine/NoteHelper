@@ -75,14 +75,14 @@ def pod_edit(id):
         # Update territories
         pod.territories.clear()
         for territory_id in territory_ids:
-            territory = Territory.query.get(int(territory_id))
+            territory = db.session.get(Territory, int(territory_id))
             if territory:
                 pod.territories.append(territory)
         
         # Update solution engineers
         pod.solution_engineers.clear()
         for se_id in se_ids:
-            se = SolutionEngineer.query.get(int(se_id))
+            se = db.session.get(SolutionEngineer, int(se_id))
             if se:
                 pod.solution_engineers.append(se)
         

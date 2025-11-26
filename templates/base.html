@@ -114,6 +114,28 @@
             cursor: pointer;
         }
         
+        /* New Call Log button styling for navbar visibility */
+        .navbar .btn-success {
+            background-color: #0e9544 !important; /* Saturated but slightly darker green */
+            border-color: #0c823b !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+        }
+        .navbar .btn-success:hover {
+            background-color: #0c7c36 !important;
+            border-color: #0a6b2f !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+        }
+        [data-bs-theme="dark"] .navbar .btn-success {
+            background-color: #10a54a !important;
+            border-color: #0e9142 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+        }
+        [data-bs-theme="dark"] .navbar .btn-success:hover {
+            background-color: #0d8d3d !important;
+            border-color: #0c7c36 !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35) !important;
+        }
+        
         /* Seller color palette for visual grouping */
         /* When colors are enabled (default), show colors */
         html:not([data-colored-sellers="false"]) .badge.seller-color-1 { background-color: #7c3aed !important; color: #fff !important; } /* Purple */
@@ -170,18 +192,8 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.index') }}">
-                            <i class="bi bi-house"></i> Home
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('pods.pods_list') }}">
-                            <i class="bi bi-diagram-3"></i> PODs
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('territories.territories_list') }}">
-                            <i class="bi bi-geo-alt"></i> Territories
+                        <a class="nav-link" href="{{ url_for('customers.customers_list') }}">
+                            <i class="bi bi-building"></i> Customers
                         </a>
                     </li>
                     <li class="nav-item">
@@ -190,37 +202,30 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('solution_engineers.solution_engineers_list') }}">
-                            <i class="bi bi-tools"></i> SEs
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('customers.customers_list') }}">
-                            <i class="bi bi-building"></i> Customers
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('topics.topics_list') }}">
-                            <i class="bi bi-tags"></i> Topics
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('call_logs.call_logs_list') }}">
                             <i class="bi bi-telephone"></i> Call Logs
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.search') }}">
-                            <i class="bi bi-search"></i> Search
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="moreMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-three-dots"></i> More
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.analytics') }}">
-                            <i class="bi bi-graph-up"></i> Analytics
-                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="moreMenuDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('main.index') }}"><i class="bi bi-house"></i> Home</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('topics.topics_list') }}"><i class="bi bi-tags"></i> Topics</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.search') }}"><i class="bi bi-search"></i> Search</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.analytics') }}"><i class="bi bi-graph-up"></i> Analytics</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('territories.territories_list') }}"><i class="bi bi-geo-alt"></i> Territories</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('pods.pods_list') }}"><i class="bi bi-diagram-3"></i> PODs</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('solution_engineers.solution_engineers_list') }}"><i class="bi bi-tools"></i> Solution Engineers</a></li>
+                        </ul>
                     </li>
                 </ul>
-                <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#quickCallLogModal">
+                        <i class="bi bi-plus-circle"></i> New Call Log
+                    </button>
                     <div class="dropdown">
                         <button class="btn btn-light dropdown-toggle" type="button" id="userMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i>
@@ -313,6 +318,26 @@
     <main class="container my-4">
         {% block content %}{% endblock %}
     </main>
+
+    <!-- Quick Call Log Modal -->
+    <div class="modal fade" id="quickCallLogModal" tabindex="-1" aria-labelledby="quickCallLogModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="quickCallLogModalLabel">Create Call Log</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="customerSearch" class="form-label">Search for Customer</label>
+                        <input type="text" class="form-control" id="customerSearch" placeholder="Start typing customer name..." autocomplete="off">
+                        <small class="form-text text-muted">Type at least 2 characters to search</small>
+                    </div>
+                    <div id="customerResults" class="list-group"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Footer -->
     <footer class="bg-light text-center text-muted py-3 mt-5">
@@ -465,6 +490,64 @@
                 }
             });
         }
+    </script>
+    
+    <!-- Quick Call Log Modal JavaScript -->
+    <script defer>
+        window.addEventListener('load', () => {
+            const customerSearch = document.getElementById('customerSearch');
+            const customerResults = document.getElementById('customerResults');
+            const modal = document.getElementById('quickCallLogModal');
+            let debounceTimer;
+
+            if (!customerSearch || !customerResults || !modal) return;
+
+            // Focus input when modal opens
+            modal.addEventListener('shown.bs.modal', function () {
+                customerSearch.focus();
+            });
+
+            // Clear search when modal closes
+            modal.addEventListener('hidden.bs.modal', function () {
+                customerSearch.value = '';
+                customerResults.innerHTML = '';
+            });
+
+            customerSearch.addEventListener('input', function() {
+                clearTimeout(debounceTimer);
+                const query = this.value.trim();
+
+                if (query.length < 2) {
+                    customerResults.innerHTML = '';
+                    return;
+                }
+
+                debounceTimer = setTimeout(async () => {
+                    try {
+                        const response = await fetch(`{{ url_for('customers.api_customers_autocomplete') }}?q=${encodeURIComponent(query)}`);
+                        const customers = await response.json();
+
+                        if (customers.length === 0) {
+                            customerResults.innerHTML = '<div class="list-group-item text-muted">No customers found</div>';
+                            return;
+                        }
+
+                        customerResults.innerHTML = customers.map(customer => {
+                            const displayName = customer.nickname ? `${customer.name} (${customer.nickname})` : customer.name;
+                            const tpidBadge = customer.tpid ? `<span class="badge bg-secondary ms-2">TPID: ${customer.tpid}</span>` : '';
+                            return `
+                                <a href="{{ url_for('call_logs.call_log_create') }}?customer_id=${customer.id}" class="list-group-item list-group-item-action">
+                                    <i class="bi bi-building"></i> ${displayName}${tpidBadge}
+                                </a>
+                            `;
+                        }).join('');
+                    } catch (error) {
+                        console.error('Error fetching customers:', error);
+                        customerResults.innerHTML = '<div class="list-group-item text-danger">Error loading results</div>';
+                    }
+                }, 300);
+            });
+        });
     </script>
     
     {% block extra_js %}{% endblock %}
