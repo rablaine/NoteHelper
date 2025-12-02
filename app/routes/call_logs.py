@@ -210,3 +210,27 @@ def call_log_edit(id):
                          preselect_customer_id=None,
                          preselect_topic_id=None)
 
+
+@call_logs_bp.route('/call-log/<int:id>/delete', methods=['POST'])
+def call_log_delete(id):
+    """Delete a call log."""
+    call_log = db.session.get(CallLog, id)
+    
+    if not call_log:
+        flash('Call log not found.', 'danger')
+        return redirect(url_for('call_logs.call_logs_list'))
+    
+    # Store customer for redirect
+    customer_id = call_log.customer_id
+    
+    # Delete the call log
+    db.session.delete(call_log)
+    db.session.commit()
+    
+    flash('Call log deleted successfully.', 'success')
+    
+    # Redirect to customer view if we have a customer, otherwise call logs list
+    if customer_id:
+        return redirect(url_for('customers.customer_view', id=customer_id))
+    else:
+        return redirect(url_for('call_logs.call_logs_list'))

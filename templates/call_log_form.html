@@ -525,6 +525,7 @@ function saveDraft() {
             id: parseInt(input.value),
             name: input.closest('.badge').textContent.trim().replace('×', '').trim()
         })),
+        call_log_id: {% if call_log %}{{ call_log.id }}{% else %}null{% endif %},
         timestamp: Date.now()
     };
     
@@ -592,6 +593,13 @@ function restoreDraft() {
                     addTopic(topic.id, topic.name);
                 }
             });
+        }
+        
+        // If draft has a call_log_id, we need to update the form action to edit that log
+        if (draft.call_log_id) {
+            const form = document.getElementById('callLogForm');
+            form.action = `/call-log/${draft.call_log_id}/edit`;
+            console.log('Draft restored for editing call log', draft.call_log_id);
         }
         
         return true;
