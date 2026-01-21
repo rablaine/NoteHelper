@@ -14,7 +14,7 @@ Integrate the revenue-analyzer tool into NoteHelper to provide revenue health in
 - Integrate analysis into NoteHelper web app
 - Surface recommendations on customer pages and a dedicated "Attention Needed" dashboard
 - Track changes between imports to highlight new/resolved issues
-- Allow sellers to create call logs directly from recommendations
+- Export per-seller CSVs and track engagement follow-ups
 
 ---
 
@@ -42,12 +42,31 @@ Integrate the revenue-analyzer tool into NoteHelper to provide revenue health in
 - New page: "Customers Needing Attention" or "Revenue Alerts"
 - Filter by: category, recommended action, seller, territory
 - Sort by: priority score, $ at risk, $ opportunity
-- Click-through to customer page or create call log directly
+- Click-through to customer page
 
 ### 5. Change Tracking
 - Compare current import to previous import
 - Highlight: new alerts, resolved alerts, status changes
 - Show "What's changed since last week" summary
+
+### 6. Engagement Tracking Workflow
+
+**Key insight:** You are the hub, not sellers using the app directly.
+
+**Workflow:**
+1. **You** run the import and generate leads
+2. **You** export per-seller CSVs to send them (email, Teams, etc.)
+3. **Sellers** report back to **you** with updates
+4. **You** record what they told you alongside the recommendation
+5. Same customer may be flagged multiple times - each needs its own engagement record
+
+**Features needed:**
+- Export filtered CSV by seller (with engagement ID for tracking)
+- Engagement record per recommendation sent out
+- Status tracking: pending → in_progress → resolved/dismissed
+- Store seller's response and your resolution notes
+- Optional link to a call log if one was created
+- History view: "This customer was flagged 3 times, here's what happened each time"
 
 ---
 
@@ -219,6 +238,50 @@ class RevenueConfig(db.Model):
     volatile_min_revenue = db.Column(db.Integer, default=5000)
     recent_drop_threshold = db.Column(db.Float, default=-0.15)  # -15%
     expansion_growth_threshold = db.Column(db.Float, default=0.08)  # 8%
+
+
+class RevenueEngagement(db.Model):
+    """Tracks follow-up on a specific revenue recommendation.
+    
+    Created when you export/send recommendations to a seller.
+    Each time a customer is flagged and sent out = one engagement record.
+    Allows tracking history: "Flagged 3 times, here's what we did each time."
+    """
+    __tablename__ = 'revenue_engagements'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    analysis_id = db.Column(db.Integer, db.ForeignKey('revenue_analyses.id'), nullable=False)
+    
+    # When was this sent out for follow-up?
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    assigned_to_seller = db.Column(db.String(200), nullable=True)  # Seller name from analysis
+    
+    # What was the recommendation when sent? (snapshot in case analysis updates)
+    category_when_sent = db.Column(db.String(50), nullable=False)
+    action_when_sent = db.Column(db.String(50), nullable=False)
+    rationale_when_sent = db.Column(db.Text, nullable=True)
+    
+    # Tracking status
+    status = db.Column(db.String(20), default='pending', nullable=False)
+    # pending = sent out, awaiting response
+    # in_progress = seller acknowledged, working on it
+    # resolved = issue addressed
+    # dismissed = not actionable / false positive
+    
+    # What did the seller report back?
+    seller_response = db.Column(db.Text, nullable=True)
+    response_date = db.Column(db.DateTime, nullable=True)
+    
+    # Your notes on resolution
+    resolution_notes = db.Column(db.Text, nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    
+    # Optional link to a call log if one was created from this engagement
+    call_log_id = db.Column(db.Integer, db.ForeignKey('call_logs.id'), nullable=True)
+    
+    # Relationships
+    analysis = db.relationship('RevenueAnalysis', backref='engagements')
+    call_log = db.relationship('CallLog', backref='revenue_engagement')
 ```
 
 ---
@@ -420,17 +483,24 @@ After re-import, show diff summary:
 - [ ] "Attention Needed" dashboard page
 - [ ] Filtering: category, action, seller, territory, bucket
 - [ ] Sorting: priority, $ at risk, $ opportunity
-- [ ] Click-through to customer or create call log
+- [ ] Click-through to customer page
 
-### Phase 5: Change Tracking & History
+### Phase 5: Engagement Tracking
+- [ ] RevenueEngagement model + migration
+- [ ] Export per-seller CSV (creates engagement records for items sent)
+- [ ] Engagement status tracking: pending → in_progress → resolved/dismissed
+- [ ] UI to record seller response and resolution notes
+- [ ] Link engagement to call log (optional)
+- [ ] Engagement history view per customer ("flagged 3 times, here's what happened")
+
+### Phase 6: Change Tracking & History
 - [ ] "What's Changed" summary after import
 - [ ] Show status changes on dashboard (new alerts, resolved, worsened)
 - [ ] Revenue trend visualization over time
 
-### Phase 6: Polish & UX
+### Phase 7: Polish & UX
 - [ ] Nice import UI with file picker and preview
 - [ ] Configuration UI for thresholds
-- [ ] Export current recommendations to CSV
 - [ ] Import history log
 
 ---
