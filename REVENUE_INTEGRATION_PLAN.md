@@ -446,7 +446,33 @@ New page accessible from nav: "Revenue Alerts" or "Customers Needing Attention"
 - Row actions: View Customer, Create Call Log
 - Badge in nav showing count of urgent items
 
-### 4. What's Changed View
+### 4. Seller Page Enhancement
+
+Add "Customers Needing Attention" section to seller detail view:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 📊 Customers Needing Attention (4)                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Customer          │ Category      │ Action        │ $ At Risk │ Status  │
+├───────────────────┼───────────────┼───────────────┼───────────┼─────────┤
+│ IAT Insurance     │ CHURN RISK    │ CHECK-IN (H)  │ $1,115/mo │ Pending │
+│ Acme Corp         │ RECENT DIP    │ CHECK-IN (M)  │ $890/mo   │ ✓ Done  │
+│ Priority1         │ EXPANSION     │ OUTREACH      │ —         │ Pending │
+│ Custom Data Proc  │ EXPANSION     │ OUTREACH      │ —         │ Pending │
+└─────────────────────────────────────────────────────────────────────────┘
+│ [Export CSV for this Seller]                                            │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+- Show all revenue alerts for this seller's customers
+- Display engagement status (pending, in_progress, resolved)
+- Expand row to see: rationale, seller response, resolution notes
+- Quick action: record engagement update
+- Export button: generates CSV for just this seller's customers
+
+### 5. What's Changed View
 
 After re-import, show diff summary:
 
@@ -479,11 +505,14 @@ After re-import, show diff summary:
 - [ ] Show mini revenue chart (sparkline) on customer list?
 - [ ] Handle unmatched customers (list them, allow manual linking)
 
-### Phase 4: Dashboard
+### Phase 4: Dashboard & Seller Page
 - [ ] "Attention Needed" dashboard page
 - [ ] Filtering: category, action, seller, territory, bucket
 - [ ] Sorting: priority, $ at risk, $ opportunity
 - [ ] Click-through to customer page
+- [ ] Seller page: "Customers Needing Attention" section
+- [ ] Seller page: show engagement status and notes per customer
+- [ ] Seller page: export CSV button for just that seller's alerts
 
 ### Phase 5: Engagement Tracking
 - [ ] RevenueEngagement model + migration
