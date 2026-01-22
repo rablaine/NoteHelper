@@ -30,4 +30,4 @@ gunicorn==21.2.0
 # HTML Parsing (for tests)
 beautifulsoup4==4.12.3
 # Data Analysis (for revenue import)
-pandas==2.2.0
+pandas==2.2.3
