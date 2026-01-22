@@ -19,8 +19,7 @@
 **Key Libraries/Packages:**
 - Flask - Web framework
 - Bootstrap 5 - UI components and styling
-- SQLAlchemy - Database ORM
-- Flask-Migrate - Database migrations
+- SQLAlchemy - Database ORM (with custom idempotent migrations)
 - Flask-Login - User session management
 - python-dotenv - Environment variable management
 - pytest - Testing framework
@@ -39,8 +38,7 @@
 │   └── js/
 ├── tests/              - pytest test files
 ├── .env                - Environment variables (not committed)
-├── requirements.txt    - Python dependencies
-└── migrations/         - Database migration files
+└── requirements.txt    - Python dependencies
 ```
 
 **Phase 2 (Future): Blueprint Structure**
@@ -118,6 +116,18 @@
 - Use GET for queries and searches
 - CSRF protection enabled
 
+**Database Migrations:** Custom idempotent migrations (NOT Flask-Migrate/Alembic)
+- Located in `app/migrations.py`
+- Runs automatically on every deployment via `startup.sh`
+- Safe to run multiple times - checks before making changes
+- `db.create_all()` creates new tables (never drops existing)
+- Custom migrations handle `ALTER TABLE` operations idempotently
+- To add a new migration:
+  1. Add the column/change to the model in `models.py`
+  2. Add a migration check in `app/migrations.py` using helper functions
+  3. Test locally, then deploy - migration runs automatically
+- **NEVER use DROP TABLE or DROP COLUMN without explicit data backup**
+
 ## Dependencies & Environment
 
 **Required Environment Variables:**
@@ -145,12 +155,7 @@ pip install -r requirements.txt
 
 # Set up environment
 cp .env.example .env
-# Edit .env if needed (database auto-creates)
-
-# Initialize database
-flask db init
-flask db migrate -m "Initial migration"
-flask db upgrade
+# Edit .env if needed (database auto-creates on first run)
 ```
 
 **Running Locally:**

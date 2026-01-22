@@ -35,10 +35,23 @@ python -c "from app import create_app, db; app = create_app(); app.app_context()
     exit 1
 }
 
-# Create any missing tables (safe - only creates tables that don't exist)
-echo "Ensuring database tables exist..."
-python -c "from app import create_app; from app.models import db; app = create_app(); app.app_context().push(); db.create_all(); print('Database tables verified!')" || {
-    echo "ERROR: Database table creation failed!"
+# Create any missing tables and run idempotent migrations
+echo "Ensuring database tables exist and running migrations..."
+python -c "
+from app import create_app
+from app.models import db
+from app.migrations import run_migrations
+
+app = create_app()
+with app.app_context():
+    # Create any new tables (safe - only creates tables that don't exist)
+    db.create_all()
+    print('Database tables verified!')
+    
+    # Run idempotent migrations (safe - checks before making changes)
+    run_migrations(db)
+" || {
+    echo "ERROR: Database setup failed!"
     exit 1
 }
 
