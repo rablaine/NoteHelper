@@ -240,7 +240,8 @@ pytest --cov=app tests/  # with coverage
 4. **Prompt user to manually test new features or bug fixes** - Before committing, always ask the user to test the changes in the running app to verify everything works as expected
 5. Commit to feature branch with descriptive message
 6. **Wait for user confirmation** before merging to `main`
-7. When user says ready: merge to `main` and push (triggers Docker image build)
+7. When user says ready: merge to `main` with `--no-ff` and push (triggers Docker image build)
+   - **Always use `git merge --no-ff`** to preserve feature branch history
 
 **Merge to Production Checklist:**
 - All tests passing (`pytest tests/`)
