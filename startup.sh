@@ -35,14 +35,14 @@ python -c "from app import create_app, db; app = create_app(); app.app_context()
     exit 1
 }
 
-# Run database migrations
-echo "Running database migrations..."
-python -m flask db upgrade || {
-    echo "ERROR: Database migration failed!"
+# Create any missing tables (safe - only creates tables that don't exist)
+echo "Ensuring database tables exist..."
+python -c "from app import create_app; from app.models import db; app = create_app(); app.app_context().push(); db.create_all(); print('Database tables verified!')" || {
+    echo "ERROR: Database table creation failed!"
     exit 1
 }
 
-echo "Database migrations completed successfully"
+echo "Database setup completed successfully"
 
 # Start Gunicorn with production settings
 echo "Starting Gunicorn server on port 8000..."
