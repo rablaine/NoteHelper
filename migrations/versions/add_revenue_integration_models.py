@@ -7,6 +7,7 @@ Create Date: 2026-01-21
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 # revision identifiers, used by Alembic.
@@ -16,7 +17,19 @@ branch_labels = None
 depends_on = None
 
 
+def table_exists(table_name):
+    """Check if a table already exists."""
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    return table_name in inspector.get_table_names()
+
+
 def upgrade():
+    # Skip if tables already exist (created by db.create_all())
+    if table_exists('revenue_imports'):
+        print("Revenue tables already exist, skipping migration")
+        return
+
     # Create revenue_imports table
     op.create_table('revenue_imports',
         sa.Column('id', sa.Integer(), nullable=False),
