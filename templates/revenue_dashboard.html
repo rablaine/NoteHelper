@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Revenue Alerts - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-currency-dollar"></i> Revenue Alerts</h1>
+            <p class="text-muted">Customers needing attention based on revenue trends</p>
+        </div>
+        <div class="col-auto">
+            <div class="btn-group">
+                <a href="{{ url_for('revenue.revenue_import') }}" class="btn btn-outline-primary">
+                    <i class="bi bi-upload"></i> Import Data
+                </a>
+                <form action="{{ url_for('revenue.revenue_analyze') }}" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-outline-secondary" title="Re-run analysis on all data">
+                        <i class="bi bi-arrow-clockwise"></i> Re-analyze
+                    </button>
+                </form>
+                <a href="{{ url_for('revenue.revenue_config') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-gear"></i> Configure
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-exclamation-triangle"></i> Churn Risk</h6>
+                    <h3>{{ category_counts.get('CHURN_RISK', {}).get('count', 0) }}</h3>
+                    <small>${{ '{:,.0f}'.format(category_counts.get('CHURN_RISK', {}).get('total_at_risk', 0)) }}/mo at risk</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-graph-down"></i> Recent Dip</h6>
+                    <h3>{{ category_counts.get('RECENT_DIP', {}).get('count', 0) }}</h3>
+                    <small>${{ '{:,.0f}'.format(category_counts.get('RECENT_DIP', {}).get('total_at_risk', 0)) }}/mo at risk</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-graph-up-arrow"></i> Expansion</h6>
+                    <h3>{{ category_counts.get('EXPANSION_OPPORTUNITY', {}).get('count', 0) }}</h3>
+                    <small>${{ '{:,.0f}'.format(category_counts.get('EXPANSION_OPPORTUNITY', {}).get('total_opportunity', 0)) }}/mo opportunity</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-activity"></i> Volatile</h6>
+                    <h3>{{ category_counts.get('VOLATILE', {}).get('count', 0) }}</h3>
+                    <small>Needs review</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Main Alert List -->
+        <div class="col-lg-9">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> Actionable Customers ({{ analyses|length }})</h5>
+                    <div>
+                        <a href="{{ url_for('revenue.engagement_history') }}" class="btn btn-sm btn-outline-secondary me-2">
+                            <i class="bi bi-clock-history"></i> History
+                        </a>
+                        {% if latest_import %}
+                        <small class="text-muted">
+                            Last import: {{ latest_import.imported_at.strftime('%b %d, %Y') }}
+                            ({{ latest_import.record_count }} rows)
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if analyses %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Priority</th>
+                                    <th>Customer</th>
+                                    <th>Bucket</th>
+                                    <th>Category</th>
+                                    <th>Action</th>
+                                    <th>Avg Revenue</th>
+                                    <th>$ Impact</th>
+                                    <th>Seller</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for a in analyses %}
+                                <tr>
+                                    <td>
+                                        <span class="badge {% if a.priority_score >= 80 %}bg-danger{% elif a.priority_score >= 60 %}bg-warning text-dark{% elif a.priority_score >= 40 %}bg-info{% else %}bg-secondary{% endif %}">
+                                            {{ a.priority_score }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('revenue.revenue_customer_view', customer_name=a.customer_name) }}">
+                                            {{ a.customer_name }}
+                                        </a>
+                                        {% if a.customer_id %}
+                                        <a href="{{ url_for('customers.customer_view', id=a.customer_id) }}" class="text-muted" title="View in NoteHelper">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </a>
+                                        {% endif %}
+                                    </td>
+                                    <td><small>{{ a.bucket }}</small></td>
+                                    <td>
+                                        {% if a.category == 'CHURN_RISK' %}
+                                        <span class="badge bg-danger">{{ a.category }}</span>
+                                        {% elif a.category == 'RECENT_DIP' %}
+                                        <span class="badge bg-warning text-dark">{{ a.category }}</span>
+                                        {% elif a.category == 'EXPANSION_OPPORTUNITY' %}
+                                        <span class="badge bg-success">{{ a.category }}</span>
+                                        {% elif a.category == 'VOLATILE' %}
+                                        <span class="badge bg-secondary">{{ a.category }}</span>
+                                        {% elif a.category == 'NEW_CUSTOMER' %}
+                                        <span class="badge bg-info">{{ a.category }}</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark">{{ a.category }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small>{{ a.recommended_action }}</small></td>
+                                    <td>${{ '{:,.0f}'.format(a.avg_revenue) }}</td>
+                                    <td>
+                                        {% if a.dollars_at_risk > 0 %}
+                                        <span class="text-danger">${{ '{:,.0f}'.format(a.dollars_at_risk) }}/mo risk</span>
+                                        {% elif a.dollars_opportunity > 0 %}
+                                        <span class="text-success">${{ '{:,.0f}'.format(a.dollars_opportunity) }}/mo opp</span>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if a.seller_name %}
+                                        <a href="{{ url_for('revenue.revenue_seller_view', seller_name=a.seller_name) }}" class="badge bg-primary text-decoration-none">
+                                            <i class="bi bi-person"></i> {{ a.seller_name }}
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('revenue.record_engagement', analysis_id=a.id) }}" 
+                                           class="btn btn-sm btn-outline-success" title="Record engagement">
+                                            <i class="bi bi-chat-square-text"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox display-1 text-muted"></i>
+                        <h4 class="mt-3">No alerts yet</h4>
+                        <p class="text-muted">Import revenue data to see customer alerts.</p>
+                        <a href="{{ url_for('revenue.revenue_import') }}" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Import Data
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-3">
+            <!-- Sellers with Alerts -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-people"></i> Sellers with Alerts</h6>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% if sellers_with_alerts %}
+                    {% for seller_name in sellers_with_alerts %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <a href="{{ url_for('revenue.revenue_seller_view', seller_name=seller_name) }}">
+                            {{ seller_name }}
+                        </a>
+                        <a href="{{ url_for('revenue.revenue_seller_export', seller_name=seller_name) }}" 
+                           class="btn btn-sm btn-outline-secondary" title="Export CSV for Teams">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </li>
+                    {% endfor %}
+                    {% else %}
+                    <li class="list-group-item text-muted">No seller alerts</li>
+                    {% endif %}
+                </ul>
+            </div>
+
+            <!-- Data Info -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-calendar3"></i> Data Range</h6>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% if months_data %}
+                    {% for m in months_data[:6] %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>{{ m.fiscal_month }}</span>
+                        <small class="text-muted">{{ m.record_count }} records</small>
+                    </li>
+                    {% endfor %}
+                    {% if months_data|length > 6 %}
+                    <li class="list-group-item text-muted">
+                        <small>+ {{ months_data|length - 6 }} more months</small>
+                    </li>
+                    {% endif %}
+                    {% else %}
+                    <li class="list-group-item text-muted">No data imported</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

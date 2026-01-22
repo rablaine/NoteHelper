@@ -74,6 +74,53 @@
                 <p><strong>Total Customers:</strong> {{ customers|length }}</p>
             </div>
         </div>
+        
+        {% if revenue_alerts %}
+        <div class="card mb-3 border-warning">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Revenue Alerts</h5>
+                <a href="{{ url_for('revenue.revenue_seller_view', seller_name=seller.name) }}" class="btn btn-sm btn-outline-dark">
+                    <i class="bi bi-eye"></i> Full View
+                </a>
+            </div>
+            <div class="card-body">
+                {% for alert in revenue_alerts[:5] %}
+                    <div class="{% if not loop.last %}mb-3 pb-3 border-bottom{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <strong>{{ alert.customer_name }}</strong>
+                            <span class="badge 
+                                {% if alert.category == 'CHURN_RISK' %}bg-danger
+                                {% elif alert.category == 'RECENT_DIP' %}bg-warning text-dark
+                                {% elif alert.category == 'EXPANSION_OPPORTUNITY' %}bg-success
+                                {% elif alert.category == 'VOLATILE' %}bg-info
+                                {% else %}bg-secondary{% endif %}"
+                                style="font-size: 0.7em;">
+                                {{ alert.category|replace('_', ' ')|title }}
+                            </span>
+                        </div>
+                        <div class="small text-muted">{{ alert.bucket }}</div>
+                        {% if alert.recommended_action and alert.recommended_action != 'NO ACTION' %}
+                            <div class="small mt-1">
+                                <i class="bi bi-arrow-right"></i> {{ alert.recommended_action }}
+                            </div>
+                        {% endif %}
+                        {% if alert.dollars_at_risk and alert.dollars_at_risk > 0 %}
+                            <div class="small text-danger mt-1">
+                                ${{ "{:,.0f}".format(alert.dollars_at_risk) }} at risk
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                {% if revenue_alerts|length > 5 %}
+                    <div class="text-center mt-2">
+                        <a href="{{ url_for('revenue.revenue_seller_view', seller_name=seller.name) }}" class="btn btn-sm btn-warning">
+                            View all {{ revenue_alerts|length }} alerts
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
     
     <div class="col-md-8">

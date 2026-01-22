@@ -87,7 +87,12 @@ def seller_view(id):
     # Check if seller can be deleted (no associated customers)
     can_delete = len(seller.customers) == 0
     
-    return render_template('seller_view.html', seller=seller, customers=customers_data, can_delete=can_delete)
+    # Get revenue alerts for this seller's customers
+    from app.services.revenue_analysis import get_seller_alerts
+    revenue_alerts = get_seller_alerts(seller.name)
+    
+    return render_template('seller_view.html', seller=seller, customers=customers_data, 
+                          can_delete=can_delete, revenue_alerts=revenue_alerts)
 
 
 @sellers_bp.route('/seller/<int:id>/edit', methods=['GET', 'POST'])

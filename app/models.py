@@ -464,3 +464,220 @@ class AIQueryLog(db.Model):
     def __repr__(self) -> str:
         status = 'success' if self.success else 'failed'
         return f'<AIQueryLog user_id={self.user_id} {status} at {self.timestamp}>'
+
+
+# =============================================================================
+# Revenue Integration Models
+# =============================================================================
+
+class RevenueImport(db.Model):
+    """Tracks each revenue data import from MSXI CSV."""
+    __tablename__ = 'revenue_imports'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(500), nullable=False)
+    imported_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Stats about this import
+    record_count = db.Column(db.Integer, nullable=False, default=0)  # Customer/bucket rows in CSV
+    new_months_added = db.Column(db.Integer, default=0)  # New month columns we hadn't seen
+    records_updated = db.Column(db.Integer, default=0)  # Existing records updated
+    records_created = db.Column(db.Integer, default=0)  # New records created
+    
+    # Month range in this import
+    earliest_month = db.Column(db.Date, nullable=True)
+    latest_month = db.Column(db.Date, nullable=True)
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id])
+    data_points = db.relationship('CustomerRevenueData', back_populates='last_import', lazy='select')
+    
+    def __repr__(self) -> str:
+        return f'<RevenueImport {self.filename} at {self.imported_at}>'
+
+
+class CustomerRevenueData(db.Model):
+    """Monthly revenue data point for a customer/bucket combination.
+    
+    This is the RAW DATA layer - stores every customer's monthly revenue
+    whether they're flagged for engagement or not. Accumulates over imports.
+    """
+    __tablename__ = 'customer_revenue_data'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Customer identification (from CSV)
+    customer_name = db.Column(db.String(500), nullable=False, index=True)
+    tpid = db.Column(db.String(50), nullable=True, index=True)
+    seller_name = db.Column(db.String(200), nullable=True)  # From territory alignment in CSV
+    bucket = db.Column(db.String(50), nullable=False)  # Core DBs, Analytics, Modern DBs
+    
+    # Link to NoteHelper customer (nullable until matched)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
+    
+    # Month identifier
+    fiscal_month = db.Column(db.String(20), nullable=False)  # e.g., "FY26-Jan" for display
+    month_date = db.Column(db.Date, nullable=False, index=True)  # First of month, for sorting
+    
+    # Revenue value
+    revenue = db.Column(db.Float, nullable=False, default=0.0)
+    
+    # Tracking
+    first_imported_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    last_updated_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    last_import_id = db.Column(db.Integer, db.ForeignKey('revenue_imports.id'), nullable=False)
+    
+    # Relationships
+    last_import = db.relationship('RevenueImport', back_populates='data_points')
+    customer = db.relationship('Customer', backref='revenue_data_points')
+    
+    # Unique constraint: one record per customer/bucket/month
+    __table_args__ = (
+        db.UniqueConstraint('customer_name', 'bucket', 'month_date', name='uq_customer_bucket_month'),
+        db.Index('ix_revenue_data_lookup', 'customer_name', 'bucket'),
+    )
+    
+    def __repr__(self) -> str:
+        return f'<CustomerRevenueData {self.customer_name} {self.bucket} {self.fiscal_month}: ${self.revenue:,.0f}>'
+
+
+class RevenueAnalysis(db.Model):
+    """Computed analysis for a customer/bucket - regenerated on demand or after import.
+    
+    This is the ANALYSIS layer - computed from CustomerRevenueData.
+    Can be regenerated anytime from the raw data.
+    """
+    __tablename__ = 'revenue_analyses'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Link to customer (by name for unmatched, by ID when matched)
+    customer_name = db.Column(db.String(500), nullable=False, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
+    tpid = db.Column(db.String(50), nullable=True)
+    seller_name = db.Column(db.String(200), nullable=True)
+    bucket = db.Column(db.String(50), nullable=False)
+    
+    # When was this analysis computed?
+    analyzed_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    months_analyzed = db.Column(db.Integer, nullable=False)  # How many months of data used
+    
+    # Revenue summary
+    avg_revenue = db.Column(db.Float, nullable=False)
+    latest_revenue = db.Column(db.Float, nullable=False)  # Most recent final month
+    
+    # Analysis results
+    category = db.Column(db.String(50), nullable=False)  # CHURN_RISK, RECENT_DIP, etc.
+    recommended_action = db.Column(db.String(50), nullable=False)  # CHECK-IN (Urgent), etc.
+    confidence = db.Column(db.String(20), nullable=False)  # LOW, MEDIUM, HIGH
+    priority_score = db.Column(db.Integer, nullable=False)  # 0-100
+    
+    # Dollar impact
+    dollars_at_risk = db.Column(db.Float, default=0.0)
+    dollars_opportunity = db.Column(db.Float, default=0.0)
+    
+    # Statistical signals
+    trend_slope = db.Column(db.Float, default=0.0)  # %/month
+    last_month_change = db.Column(db.Float, default=0.0)
+    last_2month_change = db.Column(db.Float, default=0.0)
+    volatility_cv = db.Column(db.Float, default=0.0)
+    max_drawdown = db.Column(db.Float, default=0.0)
+    current_vs_max = db.Column(db.Float, default=0.0)
+    current_vs_avg = db.Column(db.Float, default=0.0)
+    
+    # Engagement rationale (plain English)
+    engagement_rationale = db.Column(db.Text, nullable=True)
+    
+    # For change tracking - previous analysis values
+    previous_category = db.Column(db.String(50), nullable=True)
+    previous_priority_score = db.Column(db.Integer, nullable=True)
+    status_changed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    customer = db.relationship('Customer', backref='revenue_analyses')
+    engagements = db.relationship('RevenueEngagement', back_populates='analysis', lazy='select')
+    
+    # Unique constraint: one active analysis per customer/bucket
+    __table_args__ = (
+        db.UniqueConstraint('customer_name', 'bucket', name='uq_analysis_customer_bucket'),
+    )
+    
+    def __repr__(self) -> str:
+        return f'<RevenueAnalysis {self.customer_name} {self.bucket}: {self.category} ({self.priority_score})>'
+
+
+class RevenueConfig(db.Model):
+    """User-configurable thresholds for revenue analysis."""
+    __tablename__ = 'revenue_config'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Revenue gates
+    min_revenue_for_outreach = db.Column(db.Integer, default=3000)
+    min_dollar_impact = db.Column(db.Integer, default=1000)
+    dollar_at_risk_override = db.Column(db.Integer, default=2000)
+    dollar_opportunity_override = db.Column(db.Integer, default=1500)
+    
+    # Revenue tiers
+    high_value_threshold = db.Column(db.Integer, default=25000)
+    strategic_threshold = db.Column(db.Integer, default=50000)
+    
+    # Category thresholds
+    volatile_min_revenue = db.Column(db.Integer, default=5000)
+    recent_drop_threshold = db.Column(db.Float, default=-0.15)  # -15%
+    expansion_growth_threshold = db.Column(db.Float, default=0.08)  # 8%
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id])
+    
+    def __repr__(self) -> str:
+        return f'<RevenueConfig user_id={self.user_id}>'
+
+
+class RevenueEngagement(db.Model):
+    """Tracks follow-up on a specific revenue recommendation.
+    
+    Created when you export/send recommendations to a seller.
+    Each time a customer is flagged and sent out = one engagement record.
+    Allows tracking history: "Flagged 3 times, here's what we did each time."
+    """
+    __tablename__ = 'revenue_engagements'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    analysis_id = db.Column(db.Integer, db.ForeignKey('revenue_analyses.id'), nullable=False)
+    
+    # When was this sent out for follow-up?
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    assigned_to_seller = db.Column(db.String(200), nullable=True)  # Seller name from analysis
+    
+    # What was the recommendation when sent? (snapshot in case analysis updates)
+    category_when_sent = db.Column(db.String(50), nullable=False)
+    action_when_sent = db.Column(db.String(50), nullable=False)
+    rationale_when_sent = db.Column(db.Text, nullable=True)
+    
+    # Tracking status
+    status = db.Column(db.String(20), default='pending', nullable=False)
+    # pending = sent out, awaiting response
+    # in_progress = seller acknowledged, working on it
+    # resolved = issue addressed
+    # dismissed = not actionable / false positive
+    
+    # What did the seller report back?
+    seller_response = db.Column(db.Text, nullable=True)
+    response_date = db.Column(db.DateTime, nullable=True)
+    
+    # Your notes on resolution
+    resolution_notes = db.Column(db.Text, nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    
+    # Optional link to a call log if one was created from this engagement
+    call_log_id = db.Column(db.Integer, db.ForeignKey('call_logs.id'), nullable=True)
+    
+    # Relationships
+    analysis = db.relationship('RevenueAnalysis', back_populates='engagements')
+    call_log = db.relationship('CallLog', backref='revenue_engagement')
+    
+    def __repr__(self) -> str:
+        return f'<RevenueEngagement {self.id} for analysis {self.analysis_id}: {self.status}>'

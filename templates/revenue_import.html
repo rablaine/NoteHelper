@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Import Revenue Data - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Alerts</a></li>
+                    <li class="breadcrumb-item active">Import Data</li>
+                </ol>
+            </nav>
+            <h1><i class="bi bi-upload"></i> Import Revenue Data</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6">
+            <!-- Import Form -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Upload CSV</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('revenue.revenue_import') }}" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">MSXI Revenue CSV File</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".csv" required>
+                            <div class="form-text">
+                                Export from MSXI: ACR Details by Quarter / Month → Export Data → CSV
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="run_analysis" name="run_analysis" checked>
+                                <label class="form-check-label" for="run_analysis">
+                                    Run analysis after import
+                                </label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Import
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Instructions -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> How to Export from MSXI</h5>
+                </div>
+                <div class="card-body">
+                    <ol>
+                        <li>Go to <a href="https://aka.ms/msxi" target="_blank">aka.ms/msxi</a></li>
+                        <li>Open report: <strong>SME&C ACR Service Level Subscription Details SL4 - WW</strong></li>
+                        <li>Scroll to <strong>ACR Details by Quarter / Month</strong></li>
+                        <li>Click "Personalize this visual" and add <strong>ACR_Parameters Fields</strong> above TPAccountName</li>
+                        <li>Filter <strong>ServiceCompGrouping</strong> to: Analytics, ModernDBs, CoreDBs</li>
+                        <li>Expand all groups in the viewer</li>
+                        <li>Click <strong>... More Options</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
+                        <li>Save as CSV</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <!-- Import History -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Import History</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if import_history %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>File</th>
+                                    <th>Records</th>
+                                    <th>New/Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for imp in import_history %}
+                                <tr>
+                                    <td>{{ imp.imported_at.strftime('%b %d, %Y %H:%M') }}</td>
+                                    <td><small>{{ imp.filename }}</small></td>
+                                    <td>{{ imp.record_count }}</td>
+                                    <td>{{ imp.records_created }} / {{ imp.records_updated }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-inbox"></i> No imports yet
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Data Range -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-calendar3"></i> Months in Database</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% if months_data %}
+                    {% for m in months_data %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>{{ m.fiscal_month }}</span>
+                        <span class="badge bg-secondary">{{ m.record_count }} records</span>
+                    </li>
+                    {% endfor %}
+                    {% else %}
+                    <li class="list-group-item text-muted text-center">No data imported</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

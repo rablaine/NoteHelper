@@ -67,6 +67,60 @@
                 <p><strong>Total Calls:</strong> {{ call_logs|length }}</p>
             </div>
         </div>
+        
+        {% if revenue_analyses %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Revenue Alerts</h5>
+                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer.name) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-eye"></i> Details
+                </a>
+            </div>
+            <div class="card-body">
+                {% for analysis in revenue_analyses %}
+                    <div class="{% if not loop.last %}mb-3 pb-3 border-bottom{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <strong>{{ analysis.bucket }}</strong>
+                            <span class="badge 
+                                {% if analysis.category == 'CHURN_RISK' %}bg-danger
+                                {% elif analysis.category == 'RECENT_DIP' %}bg-warning text-dark
+                                {% elif analysis.category == 'EXPANSION_OPPORTUNITY' %}bg-success
+                                {% elif analysis.category == 'VOLATILE' %}bg-info
+                                {% elif analysis.category == 'STAGNANT' %}bg-secondary
+                                {% elif analysis.category == 'HEALTHY' %}bg-success
+                                {% elif analysis.category == 'NEW_CUSTOMER' %}bg-primary
+                                {% elif analysis.category == 'CHURNED' %}bg-dark
+                                {% else %}bg-secondary{% endif %}">
+                                {{ analysis.category|replace('_', ' ')|title }}
+                            </span>
+                        </div>
+                        
+                        {% if analysis.recommended_action and analysis.recommended_action != 'NO ACTION' %}
+                            <div class="small text-muted mb-1">
+                                <i class="bi bi-exclamation-circle"></i> {{ analysis.recommended_action }}
+                            </div>
+                        {% endif %}
+                        
+                        <div class="small">
+                            <span class="text-muted">Avg:</span> ${{ "{:,.0f}".format(analysis.avg_revenue) }}/mo
+                            {% if analysis.trend_slope %}
+                                <span class="ms-2 {% if analysis.trend_slope > 0 %}text-success{% elif analysis.trend_slope < 0 %}text-danger{% endif %}">
+                                    <i class="bi bi-{% if analysis.trend_slope > 0 %}arrow-up{% elif analysis.trend_slope < 0 %}arrow-down{% else %}dash{% endif %}"></i>
+                                    {{ "{:.1f}%".format(analysis.trend_slope * 100) }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        {% if analysis.dollars_at_risk and analysis.dollars_at_risk > 0 %}
+                            <div class="small text-danger mt-1">
+                                <i class="bi bi-exclamation-triangle"></i> ${{ "{:,.0f}".format(analysis.dollars_at_risk) }} at risk
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
     
     <div class="col-md-8">

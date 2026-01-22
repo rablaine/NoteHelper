@@ -187,7 +187,17 @@ def customer_view(id):
     customer = Customer.query.filter_by(id=id).first_or_404()
     # Sort call logs by date (descending) - customer.call_logs is already loaded as a list
     call_logs = sorted(customer.call_logs, key=lambda c: c.call_date, reverse=True)
-    return render_template('customer_view.html', customer=customer, call_logs=call_logs)
+    
+    # Get revenue analysis for this customer if available
+    from app.models import RevenueAnalysis
+    revenue_analyses = RevenueAnalysis.query.filter_by(
+        customer_name=customer.name
+    ).order_by(RevenueAnalysis.priority_score.desc()).all()
+    
+    return render_template('customer_view.html', 
+                          customer=customer, 
+                          call_logs=call_logs,
+                          revenue_analyses=revenue_analyses)
 
 
 @customers_bp.route('/customer/<int:id>/edit', methods=['GET', 'POST'])

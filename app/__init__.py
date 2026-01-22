@@ -98,6 +98,7 @@ def create_app():
     from app.routes.topics import topics_bp
     from app.routes.call_logs import call_logs_bp
     from app.routes.main import main_bp
+    from app.routes.revenue import revenue_bp
     
     app.register_blueprint(admin_bp)
     app.register_blueprint(ai_bp)
@@ -109,5 +110,6 @@ def create_app():
     app.register_blueprint(topics_bp)
     app.register_blueprint(call_logs_bp)
     app.register_blueprint(main_bp)
+    app.register_blueprint(revenue_bp)
     
     return app
