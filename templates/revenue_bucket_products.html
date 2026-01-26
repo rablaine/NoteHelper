@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}{{ bucket }} Products - {{ customer_name }} - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Alerts</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer_name) }}">{{ customer_name }}</a></li>
+            <li class="breadcrumb-item active">{{ bucket }} Products</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="bi bi-boxes"></i> {{ bucket }} Products</h1>
+            <p class="text-muted mb-0">{{ customer_name }}</p>
+        </div>
+        <a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer_name) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Customer
+        </a>
+    </div>
+
+    {% if analysis %}
+    <div class="alert {% if analysis.category == 'CHURN_RISK' %}alert-danger{% elif analysis.category == 'RECENT_DIP' %}alert-warning{% elif analysis.category == 'EXPANSION_OPPORTUNITY' %}alert-success{% else %}alert-info{% endif %} mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <strong>{{ analysis.category|replace('_', ' ')|title }}</strong>
+                {% if analysis.engagement_rationale %}
+                <p class="mb-0 mt-1">{{ analysis.engagement_rationale }}</p>
+                {% endif %}
+            </div>
+            <div class="text-end">
+                <div><strong>Priority:</strong> {{ analysis.priority_score }}</div>
+                {% if analysis.dollars_at_risk > 0 %}
+                <div class="text-danger">${{ '{:,.0f}'.format(analysis.dollars_at_risk) }}/mo at risk</div>
+                {% elif analysis.dollars_opportunity > 0 %}
+                <div class="text-success">${{ '{:,.0f}'.format(analysis.dollars_opportunity) }}/mo opportunity</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Months Summary Table -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-table"></i> Recent Product Revenue ({{ products|length }} products)</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if product_summary %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Product</th>
+                            {% for month in recent_months %}
+                            <th class="text-end">{{ month }}</th>
+                            {% endfor %}
+                            <th class="text-end pe-3"><strong>Total</strong></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in product_summary %}
+                        <tr>
+                            <td class="ps-3">
+                                <a href="{{ url_for('revenue.revenue_product_view', product=p.product) }}">
+                                    {{ p.product }}
+                                </a>
+                            </td>
+                            {% for month in recent_months %}
+                            <td class="text-end">
+                                {% set current_rev = p.month_revenues.get(month, 0) %}
+                                {% set prev_month = recent_months[loop.index0 - 1] if loop.index0 > 0 else None %}
+                                {% set prev_rev = p.month_revenues.get(prev_month, 0) if prev_month else 0 %}
+                                {% if current_rev %}
+                                    {% if prev_rev > 0 %}
+                                        {% set change = ((current_rev - prev_rev) / prev_rev * 100) %}
+                                        <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
+                                            ${{ '{:,.0f}'.format(current_rev) }}
+                                        </span>
+                                    {% else %}
+                                        ${{ '{:,.0f}'.format(current_rev) }}
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="text-end pe-3"><strong>${{ '{:,.0f}'.format(p.total_revenue) }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-inbox display-4"></i>
+                <p class="mt-2">No product data available for this bucket.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Full Product History (Expandable) -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <a class="text-decoration-none" data-bs-toggle="collapse" href="#fullHistory" role="button" aria-expanded="false">
+                    <i class="bi bi-clock-history"></i> Full Product History <i class="bi bi-chevron-down small"></i>
+                </a>
+            </h5>
+        </div>
+        <div class="collapse" id="fullHistory">
+            {% for product, history in product_history.items() %}
+            <div class="card-body border-bottom">
+                <h6 class="mb-3">
+                    <a href="{{ url_for('revenue.revenue_product_view', product=product) }}" class="text-decoration-none">
+                        {{ product }}
+                    </a>
+                    <span class="badge bg-secondary ms-2">{{ history|length }} months</span>
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th class="text-end">Revenue</th>
+                                <th class="text-end">Change</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {# Build a lookup for correct change calculation #}
+                            {% set prev_revenues = {} %}
+                            {% set prev_val = namespace(value=0) %}
+                            {% for rd in history %}
+                                {% if prev_revenues.update({rd.fiscal_month: prev_val.value}) %}{% endif %}
+                                {% set prev_val.value = rd.revenue %}
+                            {% endfor %}
+                            
+                            {% for rd in history|reverse %}
+                            <tr>
+                                <td>{{ rd.fiscal_month }}</td>
+                                <td class="text-end">${{ '{:,.0f}'.format(rd.revenue) }}</td>
+                                <td class="text-end">
+                                    {% set prev_rev = prev_revenues.get(rd.fiscal_month, 0) %}
+                                    {% if prev_rev > 0 %}
+                                        {% set change = ((rd.revenue - prev_rev) / prev_rev * 100) %}
+                                        <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
+                                            {{ '{:+.1f}'.format(change) }}%
+                                        </span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

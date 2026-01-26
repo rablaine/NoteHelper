@@ -8,12 +8,14 @@ import csv
 from io import StringIO
 
 from app.models import (
-    db, RevenueImport, CustomerRevenueData, RevenueAnalysis, 
+    db, RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis, 
     RevenueConfig, RevenueEngagement, Customer, Seller
 )
 from app.services.revenue_import import (
     import_revenue_csv, get_import_history, get_months_in_database,
-    get_customer_revenue_history, RevenueImportError
+    get_customer_revenue_history, get_product_revenue_history,
+    get_products_for_bucket, get_all_products, get_customers_using_product,
+    RevenueImportError
 )
 from app.services.revenue_analysis import (
     run_analysis_for_all, get_actionable_analyses, get_seller_alerts,
@@ -221,11 +223,14 @@ def revenue_customer_view(customer_name: str):
     # Get revenue history by bucket
     buckets = ['Core DBs', 'Analytics', 'Modern DBs']
     revenue_by_bucket = {}
+    products_by_bucket = {}
     
     for bucket in buckets:
         history = get_customer_revenue_history(customer_name, bucket)
         if history:
             revenue_by_bucket[bucket] = history
+            # Get products for this bucket
+            products_by_bucket[bucket] = get_products_for_bucket(customer_name, bucket)
     
     # Try to match to a NoteHelper Customer
     customer = Customer.query.filter(
@@ -237,7 +242,97 @@ def revenue_customer_view(customer_name: str):
         customer_name=customer_name,
         customer=customer,
         analyses=analyses,
-        revenue_by_bucket=revenue_by_bucket
+        revenue_by_bucket=revenue_by_bucket,
+        products_by_bucket=products_by_bucket
+    )
+
+
+@revenue_bp.route('/revenue/customer/<customer_name>/bucket/<bucket>')
+def revenue_bucket_products(customer_name: str, bucket: str):
+    """View product-level revenue breakdown for a customer/bucket."""
+    # Get products with totals
+    products = get_products_for_bucket(customer_name, bucket)
+    
+    # Get product history for drill-down
+    product_history = {}
+    for p in products:
+        history = get_product_revenue_history(customer_name, bucket, p['product'])
+        if history:
+            product_history[p['product']] = history
+    
+    # Get the 7 most recent months across all products for the summary table
+    # Use (month_date, fiscal_month) tuples to sort chronologically
+    all_months = {}
+    for history in product_history.values():
+        for rd in history:
+            all_months[rd.fiscal_month] = rd.month_date
+    # Sort by actual date, then take most recent 7
+    sorted_months = sorted(all_months.items(), key=lambda x: x[1])
+    recent_months = [m[0] for m in sorted_months[-7:]]
+    
+    # Build summary data for each product: monthly revenue for recent months
+    product_summary = []
+    for p in products:
+        history = product_history.get(p['product'], [])
+        month_revenues = {rd.fiscal_month: rd.revenue for rd in history}
+        product_summary.append({
+            'product': p['product'],
+            'total_revenue': p['total_revenue'],
+            'month_revenues': month_revenues
+        })
+    
+    # Get the bucket-level analysis if it exists
+    analysis = RevenueAnalysis.query.filter_by(
+        customer_name=customer_name,
+        bucket=bucket
+    ).first()
+    
+    # Try to match to NoteHelper customer
+    customer = Customer.query.filter(
+        db.func.lower(Customer.name) == customer_name.lower()
+    ).first()
+    
+    return render_template(
+        'revenue_bucket_products.html',
+        customer_name=customer_name,
+        customer=customer,
+        bucket=bucket,
+        products=products,
+        product_history=product_history,
+        product_summary=product_summary,
+        recent_months=recent_months,
+        analysis=analysis
+    )
+
+
+@revenue_bp.route('/revenue/products')
+def revenue_products_list():
+    """List all products with usage statistics."""
+    products = get_all_products()
+    return render_template('revenue_products_list.html', products=products)
+
+
+@revenue_bp.route('/revenue/product/<product>')
+def revenue_product_view(product: str):
+    """View all customers using a specific product."""
+    customers = get_customers_using_product(product)
+    
+    # Get historical revenue for each customer
+    customer_history = {}
+    for c in customers:
+        history = ProductRevenueData.query.filter_by(
+            customer_name=c['customer_name'],
+            bucket=c['bucket'],
+            product=product
+        ).order_by(ProductRevenueData.month_date).all()
+        if history:
+            customer_history[c['customer_name']] = history
+    
+    return render_template(
+        'revenue_product_view.html',
+        product=product,
+        customers=customers,
+        customer_history=customer_history
     )
 
 

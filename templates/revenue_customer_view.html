@@ -98,8 +98,14 @@
     <!-- Revenue History Tables -->
     {% for bucket, history in revenue_by_bucket.items() %}
     <div class="card mb-4">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ bucket }} Revenue History</h5>
+            {% if products_by_bucket.get(bucket) %}
+            <a href="{{ url_for('revenue.revenue_bucket_products', customer_name=customer_name, bucket=bucket) }}" 
+               class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-boxes"></i> View {{ products_by_bucket[bucket]|length }} Products
+            </a>
+            {% endif %}
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">

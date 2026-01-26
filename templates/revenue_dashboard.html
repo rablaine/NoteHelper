@@ -13,6 +13,9 @@
                 <a href="{{ url_for('revenue.revenue_import') }}" class="btn btn-outline-primary">
                     <i class="bi bi-upload"></i> Import Data
                 </a>
+                <a href="{{ url_for('revenue.revenue_products_list') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-boxes"></i> Products
+                </a>
                 <form action="{{ url_for('revenue.revenue_analyze') }}" method="post" class="d-inline">
                     <button type="submit" class="btn btn-outline-secondary" title="Re-run analysis on all data">
                         <i class="bi bi-arrow-clockwise"></i> Re-analyze

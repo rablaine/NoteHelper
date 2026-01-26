@@ -542,6 +542,51 @@ class CustomerRevenueData(db.Model):
         return f'<CustomerRevenueData {self.customer_name} {self.bucket} {self.fiscal_month}: ${self.revenue:,.0f}>'
 
 
+class ProductRevenueData(db.Model):
+    """Monthly revenue data for a specific product within a customer/bucket.
+    
+    This provides drill-down capability - when a bucket is flagged for attention,
+    you can see which specific products are driving the revenue changes.
+    """
+    __tablename__ = 'product_revenue_data'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Customer/bucket identification
+    customer_name = db.Column(db.String(500), nullable=False, index=True)
+    bucket = db.Column(db.String(50), nullable=False)  # Core DBs, Analytics, Modern DBs
+    product = db.Column(db.String(200), nullable=False, index=True)  # ServiceLevel4 from CSV
+    
+    # Link to NoteHelper customer (nullable until matched)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
+    
+    # Month identifier
+    fiscal_month = db.Column(db.String(20), nullable=False)
+    month_date = db.Column(db.Date, nullable=False, index=True)
+    
+    # Revenue value
+    revenue = db.Column(db.Float, nullable=False, default=0.0)
+    
+    # Tracking
+    first_imported_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    last_updated_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    last_import_id = db.Column(db.Integer, db.ForeignKey('revenue_imports.id'), nullable=False)
+    
+    # Relationships
+    last_import = db.relationship('RevenueImport', backref='product_data_points')
+    customer = db.relationship('Customer', backref='product_revenue_data_points')
+    
+    # Unique constraint: one record per customer/bucket/product/month
+    __table_args__ = (
+        db.UniqueConstraint('customer_name', 'bucket', 'product', 'month_date', name='uq_customer_bucket_product_month'),
+        db.Index('ix_product_revenue_lookup', 'customer_name', 'bucket', 'product'),
+        db.Index('ix_product_name', 'product'),
+    )
+    
+    def __repr__(self) -> str:
+        return f'<ProductRevenueData {self.customer_name} {self.bucket}/{self.product} {self.fiscal_month}: ${self.revenue:,.0f}>'
+
+
 class RevenueAnalysis(db.Model):
     """Computed analysis for a customer/bucket - regenerated on demand or after import.
     

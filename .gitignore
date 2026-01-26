@@ -61,6 +61,10 @@ FUTURE_*.md
 import_call_logs.py
 import_alignment_sheet.py
 
+# Revenue data files (contain customer financial data)
+*.csv
+!tests/*.csv
+
 # Testing
 .pytest_cache/
 .coverage
