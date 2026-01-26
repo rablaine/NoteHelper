@@ -4,10 +4,15 @@ Revenue Import Service
 Handles importing MSXI revenue CSV data into the database.
 Stores ALL customer data (not just flagged ones) to build historical records.
 
-CSV Format (from MSXI):
-Row 0: FiscalMonth, , FY26-Jul, FY26-Aug, ..., Total
-Row 1: ServiceCompGrouping, TPAccountName, $ ACR, $ ACR, ...
-Row 2+: Bucket, CustomerName, $revenue, $revenue, ...
+CSV Format (from MSXI ACR Details by Quarter Month SL4):
+Row 0: FiscalMonth, , , FY26-Jul, FY26-Aug, ..., Total
+Row 1: TPAccountName, ServiceCompGrouping, ServiceLevel4, $ ACR, $ ACR, ...
+Row 2+: CustomerName, Bucket, Product, $revenue, $revenue, ...
+
+Where:
+- Bucket = "Total" means customer total across all buckets
+- Bucket = "Analytics"/"Core DBs"/etc with Product = "Total" means bucket total
+- Bucket = "Analytics"/"Core DBs"/etc with Product = specific name means product detail
 
 Fiscal Month Format: "FY26-Jan" where FY26 = July 2025 - June 2026
 """
@@ -27,8 +32,71 @@ except ImportError:
     HAS_PANDAS = False
 
 from app.models import (
-    db, RevenueImport, CustomerRevenueData, Customer
+    db, RevenueImport, CustomerRevenueData, ProductRevenueData, Customer
 )
+
+
+# Product consolidation rules - products starting with these prefixes get rolled up
+PRODUCT_CONSOLIDATION_PREFIXES = [
+    'Azure Synapse Analytics',
+]
+
+
+def consolidate_product_name(product: str) -> str:
+    """Get the consolidated product name for display purposes.
+    
+    Products starting with certain prefixes (like 'Azure Synapse Analytics')
+    get consolidated into a single display name.
+    
+    Args:
+        product: Original product name
+        
+    Returns:
+        Consolidated product name (or original if no consolidation applies)
+    """
+    for prefix in PRODUCT_CONSOLIDATION_PREFIXES:
+        if product.startswith(prefix):
+            return prefix
+    return product
+
+
+def consolidate_products_list(products: list[dict]) -> list[dict]:
+    """Consolidate a list of product dicts by rolling up matching prefixes.
+    
+    Products starting with consolidation prefixes get merged into a single entry
+    with summed revenues and customer counts.
+    
+    Args:
+        products: List of dicts with 'product', 'customer_count', 'total_revenue'
+        
+    Returns:
+        Consolidated list with rolled-up products
+    """
+    consolidated = {}
+    
+    for p in products:
+        display_name = consolidate_product_name(p['product'])
+        
+        if display_name not in consolidated:
+            consolidated[display_name] = {
+                'product': display_name,
+                'customer_count': 0,
+                'total_revenue': 0,
+                '_original_products': []
+            }
+        
+        # For customer count, we need to be careful not to double-count
+        # if multiple sub-products have the same customer
+        consolidated[display_name]['total_revenue'] += p.get('total_revenue', 0)
+        consolidated[display_name]['_original_products'].append(p['product'])
+        # Note: customer_count may over-count if same customer uses multiple sub-products
+        # For now, we'll use the max of the individual counts as a rough estimate
+        consolidated[display_name]['customer_count'] = max(
+            consolidated[display_name]['customer_count'],
+            p.get('customer_count', 0)
+        )
+    
+    return list(consolidated.values())
 
 
 class RevenueImportError(Exception):
@@ -160,52 +228,59 @@ def load_csv(file_content: bytes | str, filename: str = "upload.csv") -> Any:
 def process_csv(df: Any) -> tuple[Any, list[str]]:
     """Process raw DataFrame to extract structured data.
     
+    New format (ACR Details by Quarter Month SL4):
+    Row 0: FiscalMonth, , , FY26-Jul, FY26-Aug, ..., Total
+    Row 1: TPAccountName, ServiceCompGrouping, ServiceLevel4, $ ACR, ...
+    
     Args:
         df: Raw DataFrame (pandas) from CSV
         
     Returns:
         Tuple of (processed DataFrame, list of month column names)
     """
-    # Get month columns from row 0
+    # Get month columns from row 0 (starts at column 3 in new format)
     month_row = df.iloc[0].tolist()
-    month_cols = [str(m) for m in month_row[2:-1] if pd.notna(m) and 'FY' in str(m)]
     
-    if not month_cols:
+    # Find where month columns start (look for FY pattern)
+    month_start_idx = None
+    for i, val in enumerate(month_row):
+        if pd.notna(val) and 'FY' in str(val):
+            month_start_idx = i
+            break
+    
+    if month_start_idx is None:
         raise RevenueImportError("No fiscal month columns found (expecting FYxx-Mon format)")
     
-    # Build column names
-    num_cols = len(df.columns)
-    col_names = ['ServiceCompGrouping', 'TPAccountName'] + month_cols + ['Total']
+    # Extract month columns (everything from first FY column to "Total" or end)
+    month_cols = []
+    for val in month_row[month_start_idx:]:
+        if pd.notna(val):
+            val_str = str(val).strip()
+            if 'FY' in val_str:
+                month_cols.append(val_str)
+            elif val_str.lower() == 'total':
+                break  # Stop at Total column
     
-    # Adjust if column count doesn't match
-    if len(col_names) != num_cols:
-        col_names = ['ServiceCompGrouping', 'TPAccountName']
-        for i, m in enumerate(month_row[2:]):
-            if pd.notna(m) and str(m) != 'nan':
-                if 'FY' in str(m):
-                    col_names.append(str(m))
-                elif str(m).lower() == 'total':
-                    col_names.append('Total')
-                else:
-                    col_names.append(f'Col_{i}')
-            else:
-                col_names.append(f'Col_{i}')
-        while len(col_names) < num_cols:
-            col_names.append(f'Extra_{len(col_names)}')
-        col_names = col_names[:num_cols]
+    if not month_cols:
+        raise RevenueImportError("No fiscal month columns found")
+    
+    # Build column names based on new format
+    # Columns: TPAccountName, ServiceCompGrouping, ServiceLevel4, [months...], Total
+    col_names = ['TPAccountName', 'ServiceCompGrouping', 'ServiceLevel4'] + month_cols + ['Total']
+    
+    # Pad if needed
+    while len(col_names) < len(df.columns):
+        col_names.append(f'Extra_{len(col_names)}')
+    col_names = col_names[:len(df.columns)]
     
     df.columns = col_names
     
     # Skip header rows (row 0 = month names, row 1 = column labels)
     df = df.iloc[2:].copy()
     
-    # Refresh month columns from actual column names
-    month_cols = [c for c in df.columns if 'FY' in str(c)]
-    
-    # Filter out empty rows and totals
-    df = df[df['ServiceCompGrouping'].notna()]
-    df = df[~df['TPAccountName'].isin(['Total', '', None])]
+    # Filter out empty rows
     df = df[df['TPAccountName'].notna()]
+    df = df[df['TPAccountName'] != '']
     df = df.reset_index(drop=True)
     
     return df, month_cols
@@ -221,6 +296,11 @@ def import_revenue_csv(
     
     This stores ALL customer/month data, not just flagged ones.
     Uses upsert logic: updates existing records, creates new ones.
+    
+    New format handles:
+    - Bucket totals (ServiceLevel4 = "Total") -> CustomerRevenueData (for analysis)
+    - Product details (ServiceLevel4 = product name) -> ProductRevenueData (for drill-down)
+    - Customer totals (ServiceCompGrouping = "Total") -> skipped (can be calculated)
     
     Args:
         file_content: Raw CSV content
@@ -263,84 +343,122 @@ def import_revenue_csv(
     db.session.flush()  # Get the ID
     
     # Track stats
-    records_created = 0
-    records_updated = 0
+    bucket_records_created = 0
+    bucket_records_updated = 0
+    product_records_created = 0
+    product_records_updated = 0
     new_months = set()
+    
+    # Build a lookup of existing NoteHelper customers
+    customer_lookup = {}
+    for customer in Customer.query.all():
+        customer_lookup[customer.name.lower()] = customer.id
+        if customer.nickname:
+            customer_lookup[customer.nickname.lower()] = customer.id
     
     # Process each row
     for _, row in df.iterrows():
-        bucket = str(row['ServiceCompGrouping']).strip()
         customer_name = str(row['TPAccountName']).strip()
+        bucket = str(row['ServiceCompGrouping']).strip() if pd.notna(row.get('ServiceCompGrouping')) else ''
+        product = str(row['ServiceLevel4']).strip() if pd.notna(row.get('ServiceLevel4')) else ''
         
-        if not customer_name or customer_name.lower() == 'total':
+        if not customer_name:
             continue
+        
+        # Skip customer total rows (bucket = "Total")
+        if bucket.lower() == 'total':
+            continue
+        
+        # Try to match to existing NoteHelper customer
+        customer_id = customer_lookup.get(customer_name.lower())
         
         # Get seller from territory alignments if provided
         seller_name = None
         if territory_alignments:
             seller_name = territory_alignments.get((customer_name, bucket))
         
-        # Try to match to existing NoteHelper customer
-        customer_id = None
-        customer = Customer.query.filter(
-            db.func.lower(Customer.name) == customer_name.lower()
-        ).first()
-        if customer:
-            customer_id = customer.id
-        
         # Process each month column
         for month_col, month_date in month_dates.items():
             revenue = parse_currency(row.get(month_col, 0))
             fiscal_month = month_col
             
-            # Check if record exists (upsert logic)
-            existing = CustomerRevenueData.query.filter_by(
-                customer_name=customer_name,
-                bucket=bucket,
-                month_date=month_date
-            ).first()
+            # Determine if this is a bucket total or product detail
+            is_bucket_total = (product.lower() == 'total' or product == '')
             
-            if existing:
-                # Update if value changed
-                if existing.revenue != revenue:
-                    existing.revenue = revenue
-                    existing.last_updated_at = datetime.utcnow()
-                    existing.last_import_id = import_record.id
-                    records_updated += 1
-                # Update customer_id if we now have a match
-                if customer_id and not existing.customer_id:
-                    existing.customer_id = customer_id
-                # Update seller if we now have alignment
-                if seller_name and not existing.seller_name:
-                    existing.seller_name = seller_name
-            else:
-                # Create new record
-                new_record = CustomerRevenueData(
+            if is_bucket_total:
+                # Store in CustomerRevenueData (for analysis)
+                existing = CustomerRevenueData.query.filter_by(
                     customer_name=customer_name,
                     bucket=bucket,
-                    customer_id=customer_id,
-                    seller_name=seller_name,
-                    fiscal_month=fiscal_month,
-                    month_date=month_date,
-                    revenue=revenue,
-                    last_import_id=import_record.id
-                )
-                db.session.add(new_record)
-                records_created += 1
-                
-                # Track if this is a new month we've never seen
-                existing_months = db.session.query(
-                    CustomerRevenueData.month_date
-                ).filter(
-                    CustomerRevenueData.month_date == month_date,
-                    CustomerRevenueData.id != new_record.id
+                    month_date=month_date
                 ).first()
-                if not existing_months:
-                    new_months.add(month_date)
+                
+                if existing:
+                    if existing.revenue != revenue:
+                        existing.revenue = revenue
+                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_import_id = import_record.id
+                        bucket_records_updated += 1
+                    if customer_id and not existing.customer_id:
+                        existing.customer_id = customer_id
+                    if seller_name and not existing.seller_name:
+                        existing.seller_name = seller_name
+                else:
+                    new_record = CustomerRevenueData(
+                        customer_name=customer_name,
+                        bucket=bucket,
+                        customer_id=customer_id,
+                        seller_name=seller_name,
+                        fiscal_month=fiscal_month,
+                        month_date=month_date,
+                        revenue=revenue,
+                        last_import_id=import_record.id
+                    )
+                    db.session.add(new_record)
+                    bucket_records_created += 1
+                    
+                    # Track new months
+                    existing_months = db.session.query(
+                        CustomerRevenueData.month_date
+                    ).filter(
+                        CustomerRevenueData.month_date == month_date
+                    ).first()
+                    if not existing_months:
+                        new_months.add(month_date)
+            else:
+                # Store in ProductRevenueData (for drill-down)
+                existing = ProductRevenueData.query.filter_by(
+                    customer_name=customer_name,
+                    bucket=bucket,
+                    product=product,
+                    month_date=month_date
+                ).first()
+                
+                if existing:
+                    if existing.revenue != revenue:
+                        existing.revenue = revenue
+                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_import_id = import_record.id
+                        product_records_updated += 1
+                    if customer_id and not existing.customer_id:
+                        existing.customer_id = customer_id
+                else:
+                    new_record = ProductRevenueData(
+                        customer_name=customer_name,
+                        bucket=bucket,
+                        product=product,
+                        customer_id=customer_id,
+                        fiscal_month=fiscal_month,
+                        month_date=month_date,
+                        revenue=revenue,
+                        last_import_id=import_record.id
+                    )
+                    db.session.add(new_record)
+                    product_records_created += 1
     
     # Update import stats
-    import_record.records_created = records_created
-    import_record.records_updated = records_updated
+    import_record.records_created = bucket_records_created + product_records_created
+    import_record.records_updated = bucket_records_updated + product_records_updated
     import_record.new_months_added = len(new_months)
     
     db.session.commit()
@@ -436,3 +554,211 @@ def get_customer_revenue_history(
         query = query.filter_by(bucket=bucket)
     
     return query.order_by(CustomerRevenueData.month_date).all()
+
+
+def get_product_revenue_history(
+    customer_name: str,
+    bucket: str,
+    product: Optional[str] = None
+) -> list[ProductRevenueData]:
+    """Get product-level revenue history for a customer/bucket.
+    
+    Args:
+        customer_name: Customer name to look up
+        bucket: Bucket name (Core DBs, Analytics, Modern DBs)
+        product: Optional specific product filter
+        
+    Returns:
+        List of ProductRevenueData records ordered by product then month
+    """
+    query = ProductRevenueData.query.filter_by(
+        customer_name=customer_name,
+        bucket=bucket
+    )
+    
+    if product:
+        query = query.filter_by(product=product)
+    
+    return query.order_by(
+        ProductRevenueData.product,
+        ProductRevenueData.month_date
+    ).all()
+
+
+def get_products_for_bucket(customer_name: str, bucket: str) -> list[dict]:
+    """Get all products used by a customer in a specific bucket with totals.
+    
+    Args:
+        customer_name: Customer name
+        bucket: Bucket name
+        
+    Returns:
+        List of dicts with product name and total revenue
+    """
+    results = db.session.query(
+        ProductRevenueData.product,
+        db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
+        db.func.count(ProductRevenueData.id).label('month_count')
+    ).filter_by(
+        customer_name=customer_name,
+        bucket=bucket
+    ).group_by(
+        ProductRevenueData.product
+    ).order_by(
+        db.func.sum(ProductRevenueData.revenue).desc()
+    ).all()
+    
+    return [
+        {
+            'product': r.product,
+            'total_revenue': r.total_revenue or 0,
+            'month_count': r.month_count
+        }
+        for r in results
+    ]
+
+
+def get_all_products() -> list[dict]:
+    """Get all unique products in the database with usage stats.
+    
+    Returns:
+        List of dicts with product name, customer count, total revenue
+    """
+    results = db.session.query(
+        ProductRevenueData.product,
+        db.func.count(db.distinct(ProductRevenueData.customer_name)).label('customer_count'),
+        db.func.sum(ProductRevenueData.revenue).label('total_revenue')
+    ).group_by(
+        ProductRevenueData.product
+    ).order_by(
+        db.func.sum(ProductRevenueData.revenue).desc()
+    ).all()
+    
+    return [
+        {
+            'product': r.product,
+            'customer_count': r.customer_count,
+            'total_revenue': r.total_revenue or 0
+        }
+        for r in results
+    ]
+
+
+def get_customers_using_product(product: str) -> list[dict]:
+    """Get all customers using a specific product with their revenue history.
+    
+    Args:
+        product: Product name to look up
+        
+    Returns:
+        List of dicts with customer info and revenue data
+    """
+    # Get latest revenue for each customer using this product
+    results = db.session.query(
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket,
+        ProductRevenueData.customer_id,
+        db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
+        db.func.max(ProductRevenueData.month_date).label('latest_month')
+    ).filter_by(
+        product=product
+    ).group_by(
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket,
+        ProductRevenueData.customer_id
+    ).order_by(
+        db.func.sum(ProductRevenueData.revenue).desc()
+    ).all()
+    
+    return [
+        {
+            'customer_name': r.customer_name,
+            'bucket': r.bucket,
+            'customer_id': r.customer_id,
+            'total_revenue': r.total_revenue or 0,
+            'latest_month': r.latest_month
+        }
+        for r in results
+    ]
+
+
+def get_seller_products(seller_name: str) -> list[dict]:
+    """Get all unique products used by a seller's customers.
+    
+    Args:
+        seller_name: Seller name to filter by
+        
+    Returns:
+        List of dicts with product name, customer count, total revenue
+    """
+    # Get customer names for this seller from analyses
+    from app.models import RevenueAnalysis
+    seller_customers = db.session.query(
+        db.distinct(RevenueAnalysis.customer_name)
+    ).filter_by(seller_name=seller_name).subquery()
+    
+    results = db.session.query(
+        ProductRevenueData.product,
+        db.func.count(db.distinct(ProductRevenueData.customer_name)).label('customer_count'),
+        db.func.sum(ProductRevenueData.revenue).label('total_revenue')
+    ).filter(
+        ProductRevenueData.customer_name.in_(seller_customers)
+    ).group_by(
+        ProductRevenueData.product
+    ).order_by(
+        db.func.sum(ProductRevenueData.revenue).desc()
+    ).all()
+    
+    return [
+        {
+            'product': r.product,
+            'customer_count': r.customer_count,
+            'total_revenue': r.total_revenue or 0
+        }
+        for r in results
+    ]
+
+
+def get_seller_customers_using_product(seller_name: str, product: str) -> list[dict]:
+    """Get seller's customers using a specific product.
+    
+    Args:
+        seller_name: Seller name to filter by
+        product: Product name to look up
+        
+    Returns:
+        List of dicts with customer info and revenue data
+    """
+    # Get customer names for this seller from analyses
+    from app.models import RevenueAnalysis
+    seller_customers = db.session.query(
+        db.distinct(RevenueAnalysis.customer_name)
+    ).filter_by(seller_name=seller_name).subquery()
+    
+    results = db.session.query(
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket,
+        ProductRevenueData.customer_id,
+        db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
+        db.func.max(ProductRevenueData.month_date).label('latest_month')
+    ).filter(
+        ProductRevenueData.product == product,
+        ProductRevenueData.customer_name.in_(seller_customers)
+    ).group_by(
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket,
+        ProductRevenueData.customer_id
+    ).order_by(
+        db.func.sum(ProductRevenueData.revenue).desc()
+    ).all()
+    
+    return [
+        {
+            'customer_name': r.customer_name,
+            'bucket': r.bucket,
+            'customer_id': r.customer_id,
+            'total_revenue': r.total_revenue or 0,
+            'latest_month': r.latest_month
+        }
+        for r in results
+    ]

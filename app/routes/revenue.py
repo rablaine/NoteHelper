@@ -8,12 +8,16 @@ import csv
 from io import StringIO
 
 from app.models import (
-    db, RevenueImport, CustomerRevenueData, RevenueAnalysis, 
+    db, RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis, 
     RevenueConfig, RevenueEngagement, Customer, Seller
 )
 from app.services.revenue_import import (
     import_revenue_csv, get_import_history, get_months_in_database,
-    get_customer_revenue_history, RevenueImportError
+    get_customer_revenue_history, get_product_revenue_history,
+    get_products_for_bucket, get_all_products, get_customers_using_product,
+    get_seller_products, get_seller_customers_using_product,
+    consolidate_products_list, consolidate_product_name,
+    RevenueImportError
 )
 from app.services.revenue_analysis import (
     run_analysis_for_all, get_actionable_analyses, get_seller_alerts,
@@ -171,35 +175,81 @@ def revenue_seller_view(seller_name: str):
 
 @revenue_bp.route('/revenue/seller/<seller_name>/export')
 def revenue_seller_export(seller_name: str):
-    """Export seller's alerts as CSV for sending via Teams."""
+    """Export seller's alerts as CSV for sending via Teams with product details."""
     alerts = get_seller_alerts(seller_name)
+    
+    # Get all months in database for product columns
+    all_months_data = get_months_in_database()
+    # Sort chronologically and take last 7
+    recent_months = [m['fiscal_month'] for m in all_months_data[-7:]] if all_months_data else []
     
     output = StringIO()
     writer = csv.writer(output)
     
-    # Header
-    writer.writerow([
-        'Customer', 'TPID', 'Bucket', 'Avg Revenue', 'Category',
+    # Header - includes month columns for products
+    header = [
+        'Customer', 'TPID', 'Bucket', 'Product', 'Category',
         'Recommended Action', 'Rationale', '$ At Risk/Month', '$ Opportunity/Month',
-        'Priority Score', 'Confidence', 'Trend %/Month'
-    ])
+        'Priority Score', 'Trend %/Month'
+    ]
+    header.extend(recent_months)
+    header.append('Total')
+    writer.writerow(header)
     
-    # Data rows
+    # Data rows with product breakdown
     for a in alerts:
-        writer.writerow([
+        # Write the bucket summary row
+        bucket_row = [
             a.customer_name,
             a.tpid or '',
             a.bucket,
-            f'${a.avg_revenue:,.0f}',
+            '** BUCKET TOTAL **',
             a.category,
             a.recommended_action,
             a.engagement_rationale,
             f'${a.dollars_at_risk:,.0f}' if a.dollars_at_risk else '',
             f'${a.dollars_opportunity:,.0f}' if a.dollars_opportunity else '',
             a.priority_score,
-            a.confidence,
             f'{a.trend_slope:+.1f}%'
-        ])
+        ]
+        # Get bucket totals by month
+        bucket_history = get_customer_revenue_history(a.customer_name, a.bucket)
+        bucket_month_revenues = {rd.fiscal_month: rd.revenue for rd in bucket_history}
+        bucket_total = sum(rd.revenue for rd in bucket_history)
+        for month in recent_months:
+            rev = bucket_month_revenues.get(month)
+            bucket_row.append(f'${rev:,.0f}' if rev else '')
+        bucket_row.append(f'${bucket_total:,.0f}')
+        writer.writerow(bucket_row)
+        
+        # Get products for this bucket and write product rows
+        products = get_products_for_bucket(a.customer_name, a.bucket)
+        for p in products:
+            product_history = get_product_revenue_history(a.customer_name, a.bucket, p['product'])
+            month_revenues = {rd.fiscal_month: rd.revenue for rd in product_history}
+            product_total = sum(rd.revenue for rd in product_history)
+            
+            product_row = [
+                '',  # Customer name only on first row
+                '',  # TPID
+                '',  # Bucket
+                p['product'],
+                '',  # Category
+                '',  # Recommended Action
+                '',  # Rationale
+                '',  # $ At Risk
+                '',  # $ Opportunity
+                '',  # Priority Score
+                ''   # Trend
+            ]
+            for month in recent_months:
+                rev = month_revenues.get(month)
+                product_row.append(f'${rev:,.0f}' if rev else '')
+            product_row.append(f'${product_total:,.0f}')
+            writer.writerow(product_row)
+        
+        # Add blank row between customers for readability
+        writer.writerow([])
     
     output.seek(0)
     
@@ -212,6 +262,130 @@ def revenue_seller_export(seller_name: str):
     )
 
 
+@revenue_bp.route('/revenue/seller/<seller_name>/products')
+def revenue_seller_products(seller_name: str):
+    """View all products used by a seller's customers."""
+    products = get_seller_products(seller_name)
+    
+    # Consolidate products (e.g., roll up Azure Synapse Analytics*)
+    products = consolidate_products_list(products)
+    
+    # Handle sorting
+    sort = request.args.get('sort', 'revenue')
+    if sort == 'customers':
+        products = sorted(products, key=lambda x: x['customer_count'], reverse=True)
+    else:  # default to revenue
+        sort = 'revenue'
+        products = sorted(products, key=lambda x: x['total_revenue'], reverse=True)
+    
+    # Try to match to a NoteHelper Seller
+    seller = Seller.query.filter(
+        db.func.lower(Seller.name) == seller_name.lower()
+    ).first()
+    
+    return render_template(
+        'revenue_seller_products.html',
+        seller_name=seller_name,
+        seller=seller,
+        products=products,
+        sort=sort
+    )
+
+
+@revenue_bp.route('/revenue/seller/<seller_name>/product/<product>')
+def revenue_seller_product_view(seller_name: str, product: str):
+    """View seller's customers using a specific product with revenue grid."""
+    from app.services.revenue_import import PRODUCT_CONSOLIDATION_PREFIXES
+    
+    # Check if this is a consolidated product (e.g., "Azure Synapse Analytics")
+    is_consolidated = product in PRODUCT_CONSOLIDATION_PREFIXES
+    
+    if is_consolidated:
+        # Get all sub-products for this consolidated product
+        # Query all products that start with this prefix
+        all_seller_products = get_seller_products(seller_name)
+        matching_products = [p['product'] for p in all_seller_products if p['product'].startswith(product)]
+    else:
+        matching_products = [product]
+    
+    # Aggregate customers across all matching products
+    customers_dict = {}
+    for prod in matching_products:
+        prod_customers = get_seller_customers_using_product(seller_name, prod)
+        for c in prod_customers:
+            key = (c['customer_name'], c['bucket'])
+            if key not in customers_dict:
+                customers_dict[key] = {
+                    'customer_name': c['customer_name'],
+                    'bucket': c['bucket'],
+                    'customer_id': c.get('customer_id'),
+                    'total_revenue': 0,
+                    'latest_month': c.get('latest_month')
+                }
+            customers_dict[key]['total_revenue'] += c['total_revenue']
+    
+    customers = list(customers_dict.values())
+    customers.sort(key=lambda x: x['total_revenue'], reverse=True)
+    
+    # Get historical revenue for each customer (aggregated across matching products)
+    customer_history = {}
+    all_months = {}
+    
+    for c in customers:
+        aggregated_history = {}
+        for prod in matching_products:
+            history = ProductRevenueData.query.filter_by(
+                customer_name=c['customer_name'],
+                bucket=c['bucket'],
+                product=prod
+            ).order_by(ProductRevenueData.month_date).all()
+            for rd in history:
+                if rd.fiscal_month not in aggregated_history:
+                    aggregated_history[rd.fiscal_month] = {
+                        'fiscal_month': rd.fiscal_month,
+                        'month_date': rd.month_date,
+                        'revenue': 0
+                    }
+                aggregated_history[rd.fiscal_month]['revenue'] += rd.revenue
+                all_months[rd.fiscal_month] = rd.month_date
+        
+        if aggregated_history:
+            customer_history[c['customer_name']] = list(aggregated_history.values())
+    
+    # Get 7 most recent months sorted chronologically
+    sorted_months = sorted(all_months.items(), key=lambda x: x[1])
+    recent_months = [m[0] for m in sorted_months[-7:]]
+    
+    # Build customer summary with monthly revenues
+    customer_summary = []
+    for c in customers:
+        history = customer_history.get(c['customer_name'], [])
+        month_revenues = {h['fiscal_month']: h['revenue'] for h in history}
+        customer_summary.append({
+            'customer_name': c['customer_name'],
+            'bucket': c['bucket'],
+            'total_revenue': c['total_revenue'],
+            'month_revenues': month_revenues
+        })
+    
+    # Try to match to a NoteHelper Seller
+    seller = Seller.query.filter(
+        db.func.lower(Seller.name) == seller_name.lower()
+    ).first()
+    
+    return render_template(
+        'revenue_seller_product_view.html',
+        seller_name=seller_name,
+        seller=seller,
+        product=product,
+        customers=customers,
+        customer_summary=customer_summary,
+        recent_months=recent_months,
+        is_consolidated=is_consolidated,
+        sub_products=matching_products if is_consolidated else None
+    )
+
+
 @revenue_bp.route('/revenue/customer/<customer_name>')
 def revenue_customer_view(customer_name: str):
     """View revenue history and analysis for a specific customer."""
@@ -221,11 +395,55 @@ def revenue_customer_view(customer_name: str):
     # Get revenue history by bucket
     buckets = ['Core DBs', 'Analytics', 'Modern DBs']
     revenue_by_bucket = {}
+    products_by_bucket = {}
+    bucket_product_data = {}  # Full product data with monthly revenues
     
     for bucket in buckets:
         history = get_customer_revenue_history(customer_name, bucket)
         if history:
             revenue_by_bucket[bucket] = history
+            # Get products for this bucket
+            products = get_products_for_bucket(customer_name, bucket)
+            products_by_bucket[bucket] = products
+            
+            # Get product history for grid display
+            product_history = {}
+            for p in products:
+                p_history = get_product_revenue_history(customer_name, bucket, p['product'])
+                if p_history:
+                    product_history[p['product']] = p_history
+            
+            # Get the 7 most recent months for this bucket
+            all_months = {}
+            for ph in product_history.values():
+                for rd in ph:
+                    all_months[rd.fiscal_month] = rd.month_date
+            # Also include bucket totals months
+            for rd in history:
+                all_months[rd.fiscal_month] = rd.month_date
+            sorted_months = sorted(all_months.items(), key=lambda x: x[1])
+            recent_months = [m[0] for m in sorted_months[-7:]]
+            
+            # Build product summary with monthly revenues
+            product_summary = []
+            for p in products:
+                p_hist = product_history.get(p['product'], [])
+                month_revenues = {rd.fiscal_month: rd.revenue for rd in p_hist}
+                product_summary.append({
+                    'product': p['product'],
+                    'total_revenue': p['total_revenue'],
+                    'month_revenues': month_revenues
+                })
+            
+            # Build bucket total monthly revenues
+            bucket_month_revenues = {rd.fiscal_month: rd.revenue for rd in history}
+            
+            bucket_product_data[bucket] = {
+                'recent_months': recent_months,
+                'product_summary': product_summary,
+                'bucket_month_revenues': bucket_month_revenues,
+                'bucket_total': sum(rd.revenue for rd in history)
+            }
     
     # Try to match to a NoteHelper Customer
     customer = Customer.query.filter(
@@ -237,7 +455,144 @@ def revenue_customer_view(customer_name: str):
         customer_name=customer_name,
         customer=customer,
         analyses=analyses,
-        revenue_by_bucket=revenue_by_bucket
+        revenue_by_bucket=revenue_by_bucket,
+        products_by_bucket=products_by_bucket,
+        bucket_product_data=bucket_product_data
+    )
+
+
+@revenue_bp.route('/revenue/customer/<customer_name>/bucket/<bucket>')
+def revenue_bucket_products(customer_name: str, bucket: str):
+    """View product-level revenue breakdown for a customer/bucket."""
+    # Get products with totals
+    products = get_products_for_bucket(customer_name, bucket)
+    
+    # Get product history for drill-down
+    product_history = {}
+    for p in products:
+        history = get_product_revenue_history(customer_name, bucket, p['product'])
+        if history:
+            product_history[p['product']] = history
+    
+    # Get the 7 most recent months across all products for the summary table
+    # Use (month_date, fiscal_month) tuples to sort chronologically
+    all_months = {}
+    for history in product_history.values():
+        for rd in history:
+            all_months[rd.fiscal_month] = rd.month_date
+    # Sort by actual date, then take most recent 7
+    sorted_months = sorted(all_months.items(), key=lambda x: x[1])
+    recent_months = [m[0] for m in sorted_months[-7:]]
+    
+    # Build summary data for each product: monthly revenue for recent months
+    product_summary = []
+    for p in products:
+        history = product_history.get(p['product'], [])
+        month_revenues = {rd.fiscal_month: rd.revenue for rd in history}
+        product_summary.append({
+            'product': p['product'],
+            'total_revenue': p['total_revenue'],
+            'month_revenues': month_revenues
+        })
+    
+    # Get the bucket-level analysis if it exists
+    analysis = RevenueAnalysis.query.filter_by(
+        customer_name=customer_name,
+        bucket=bucket
+    ).first()
+    
+    # Try to match to NoteHelper customer
+    customer = Customer.query.filter(
+        db.func.lower(Customer.name) == customer_name.lower()
+    ).first()
+    
+    return render_template(
+        'revenue_bucket_products.html',
+        customer_name=customer_name,
+        customer=customer,
+        bucket=bucket,
+        products=products,
+        product_history=product_history,
+        product_summary=product_summary,
+        recent_months=recent_months,
+        analysis=analysis
+    )
+
+
+@revenue_bp.route('/revenue/products')
+def revenue_products_list():
+    """List all products with usage statistics."""
+    products = get_all_products()
+    # Consolidate products (e.g., roll up Azure Synapse Analytics*)
+    products = consolidate_products_list(products)
+    # Sort by total revenue
+    products = sorted(products, key=lambda x: x['total_revenue'], reverse=True)
+    return render_template('revenue_products_list.html', products=products)
+
+
+@revenue_bp.route('/revenue/product/<product>')
+def revenue_product_view(product: str):
+    """View all customers using a specific product."""
+    from app.services.revenue_import import PRODUCT_CONSOLIDATION_PREFIXES
+    
+    # Check if this is a consolidated product (e.g., "Azure Synapse Analytics")
+    is_consolidated = product in PRODUCT_CONSOLIDATION_PREFIXES
+    
+    if is_consolidated:
+        # Get all sub-products for this consolidated product
+        all_products = get_all_products()
+        matching_products = [p['product'] for p in all_products if p['product'].startswith(product)]
+    else:
+        matching_products = [product]
+    
+    # Aggregate customers across all matching products
+    customers_dict = {}
+    for prod in matching_products:
+        prod_customers = get_customers_using_product(prod)
+        for c in prod_customers:
+            key = (c['customer_name'], c['bucket'])
+            if key not in customers_dict:
+                customers_dict[key] = {
+                    'customer_name': c['customer_name'],
+                    'bucket': c['bucket'],
+                    'customer_id': c.get('customer_id'),
+                    'total_revenue': 0,
+                    'latest_month': c.get('latest_month')
+                }
+            customers_dict[key]['total_revenue'] += c['total_revenue']
+    
+    customers = list(customers_dict.values())
+    customers.sort(key=lambda x: x['total_revenue'], reverse=True)
+    
+    # Get historical revenue for each customer (aggregated across matching products)
+    customer_history = {}
+    for c in customers:
+        aggregated_history = {}
+        for prod in matching_products:
+            history = ProductRevenueData.query.filter_by(
+                customer_name=c['customer_name'],
+                bucket=c['bucket'],
+                product=prod
+            ).order_by(ProductRevenueData.month_date).all()
+            for rd in history:
+                if rd.fiscal_month not in aggregated_history:
+                    aggregated_history[rd.fiscal_month] = {
+                        'fiscal_month': rd.fiscal_month,
+                        'month_date': rd.month_date,
+                        'revenue': 0
+                    }
+                aggregated_history[rd.fiscal_month]['revenue'] += rd.revenue
+        
+        if aggregated_history:
+            customer_history[c['customer_name']] = list(aggregated_history.values())
+    
+    return render_template(
+        'revenue_product_view.html',
+        product=product,
+        customers=customers,
+        customer_history=customer_history,
+        is_consolidated=is_consolidated,
+        sub_products=matching_products if is_consolidated else None
     )
 
 

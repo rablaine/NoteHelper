@@ -73,10 +73,12 @@ class TestCSVImport:
     
     def test_import_basic_csv(self, app, test_user):
         """Test importing a basic revenue CSV."""
-        csv_content = b"""FiscalMonth,,FY26-Jul,FY26-Aug,FY26-Sep,Total
-ServiceCompGrouping,TPAccountName,$ ACR,$ ACR,$ ACR,$ ACR
-Core DBs,Test Customer,"$10,000","$11,000","$12,000","$33,000"
-Analytics,Test Customer,"$5,000","$5,500","$6,000","$16,500"
+        # New format: TPAccountName, ServiceCompGrouping, ServiceLevel4, months...
+        csv_content = b"""FiscalMonth,,,FY26-Jul,FY26-Aug,FY26-Sep,Total
+TPAccountName,ServiceCompGrouping,ServiceLevel4,$ ACR,$ ACR,$ ACR,$ ACR
+Test Customer,Core DBs,Total,"$10,000","$11,000","$12,000","$33,000"
+Test Customer,Core DBs,SQL Server,"$5,000","$5,500","$6,000","$16,500"
+Test Customer,Analytics,Total,"$5,000","$5,500","$6,000","$16,500"
 """
         
         with app.app_context():
@@ -86,19 +88,25 @@ Analytics,Test Customer,"$5,000","$5,500","$6,000","$16,500"
                 user_id=test_user.id
             )
             
-            assert import_record.record_count == 2
-            assert import_record.records_created == 6  # 2 customers * 3 months
+            assert import_record.record_count == 3
+            # 2 bucket totals * 3 months = 6 bucket records + 1 product * 3 months = 3 product records
+            assert import_record.records_created == 9
             assert import_record.records_updated == 0
             
-            # Verify data was stored
+            # Verify bucket data was stored
             data = CustomerRevenueData.query.filter_by(customer_name="Test Customer").all()
             assert len(data) == 6  # 2 buckets * 3 months
+            
+            # Verify product data was stored
+            from app.models import ProductRevenueData
+            product_data = ProductRevenueData.query.filter_by(customer_name="Test Customer").all()
+            assert len(product_data) == 3  # 1 product * 3 months
     
     def test_import_updates_existing(self, app, test_user):
         """Test that re-importing updates existing records."""
-        csv_content = b"""FiscalMonth,,FY26-Jul,Total
-ServiceCompGrouping,TPAccountName,$ ACR,$ ACR
-Core DBs,Existing Customer,"$10,000","$10,000"
+        csv_content = b"""FiscalMonth,,,FY26-Jul,Total
+TPAccountName,ServiceCompGrouping,ServiceLevel4,$ ACR,$ ACR
+Existing Customer,Core DBs,Total,"$10,000","$10,000"
 """
         
         with app.app_context():
@@ -106,9 +114,9 @@ Core DBs,Existing Customer,"$10,000","$10,000"
             import_revenue_csv(csv_content, "test1.csv", test_user.id)
             
             # Second import with updated value
-            csv_content2 = b"""FiscalMonth,,FY26-Jul,Total
-ServiceCompGrouping,TPAccountName,$ ACR,$ ACR
-Core DBs,Existing Customer,"$15,000","$15,000"
+            csv_content2 = b"""FiscalMonth,,,FY26-Jul,Total
+TPAccountName,ServiceCompGrouping,ServiceLevel4,$ ACR,$ ACR
+Existing Customer,Core DBs,Total,"$15,000","$15,000"
 """
             import_record = import_revenue_csv(csv_content2, "test2.csv", test_user.id)
             
@@ -378,10 +386,11 @@ class TestDatabaseAnalysis:
     
     def test_run_analysis_with_data(self, app, test_user):
         """Test analysis after importing data."""
-        csv_content = b"""FiscalMonth,,FY26-Jul,FY26-Aug,FY26-Sep,FY26-Oct,FY26-Nov,FY26-Dec,Total
-ServiceCompGrouping,TPAccountName,$ ACR,$ ACR,$ ACR,$ ACR,$ ACR,$ ACR,$ ACR
-Core DBs,Healthy Customer,"$10,000","$10,100","$10,050","$10,200","$10,150","$10,250","$60,750"
-Core DBs,At Risk Customer,"$20,000","$18,000","$16,000","$14,000","$12,000","$10,000","$90,000"
+        # New format with ServiceLevel4 column
+        csv_content = b"""FiscalMonth,,,FY26-Jul,FY26-Aug,FY26-Sep,FY26-Oct,FY26-Nov,FY26-Dec,Total
+TPAccountName,ServiceCompGrouping,ServiceLevel4,$ ACR,$ ACR,$ ACR,$ ACR,$ ACR,$ ACR,$ ACR
+Healthy Customer,Core DBs,Total,"$10,000","$10,100","$10,050","$10,200","$10,150","$10,250","$60,750"
+At Risk Customer,Core DBs,Total,"$20,000","$18,000","$16,000","$14,000","$12,000","$10,000","$90,000"
 """
         
         with app.app_context():

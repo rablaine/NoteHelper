@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ product }} - {{ seller_name }} - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Alerts</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_seller_view', seller_name=seller_name) }}">{{ seller_name }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_seller_products', seller_name=seller_name) }}">Products</a></li>
+            <li class="breadcrumb-item active">{{ product }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="bi bi-box"></i> {{ product }}</h1>
+            <p class="text-muted mb-0">{{ seller_name }}'s customers using this product</p>
+            {% if is_consolidated and sub_products %}
+            <small class="text-info">
+                <i class="bi bi-layers"></i> Consolidated from {{ sub_products|length }} products: 
+                {{ sub_products[:3]|join(', ') }}{% if sub_products|length > 3 %}, ...{% endif %}
+            </small>
+            {% endif %}
+        </div>
+        <div>
+            <a href="{{ url_for('revenue.revenue_product_view', product=product) }}" class="btn btn-outline-info me-2">
+                <i class="bi bi-globe"></i> View All Customers
+            </a>
+            <a href="{{ url_for('revenue.revenue_seller_products', seller_name=seller_name) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Products
+            </a>
+        </div>
+    </div>
+
+    <!-- Customer Revenue Grid -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-table"></i> Customer Revenue ({{ customers|length }} customers)</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if customer_summary %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Customer</th>
+                            <th>Bucket</th>
+                            {% for month in recent_months %}
+                            <th class="text-end">{{ month }}</th>
+                            {% endfor %}
+                            <th class="text-end pe-3"><strong>Total</strong></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in customer_summary %}
+                        <tr>
+                            <td class="ps-3">
+                                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=c.customer_name) }}">
+                                    {{ c.customer_name }}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('revenue.revenue_bucket_products', customer_name=c.customer_name, bucket=c.bucket) }}" class="text-muted">
+                                    {{ c.bucket }}
+                                </a>
+                            </td>
+                            {% for month in recent_months %}
+                            <td class="text-end">
+                                {% set current_rev = c.month_revenues.get(month, 0) %}
+                                {% set prev_month = recent_months[loop.index0 - 1] if loop.index0 > 0 else None %}
+                                {% set prev_rev = c.month_revenues.get(prev_month, 0) if prev_month else 0 %}
+                                {% if current_rev %}
+                                    {% if prev_rev > 0 %}
+                                        {% set change = ((current_rev - prev_rev) / prev_rev * 100) %}
+                                        <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
+                                            ${{ '{:,.0f}'.format(current_rev) }}
+                                        </span>
+                                    {% else %}
+                                        ${{ '{:,.0f}'.format(current_rev) }}
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="text-end pe-3"><strong>${{ '{:,.0f}'.format(c.total_revenue) }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-inbox display-4"></i>
+                <p class="mt-2">No customers found using this product.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

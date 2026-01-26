@@ -22,6 +22,9 @@
             <p class="text-muted">Customers needing attention</p>
         </div>
         <div class="col-auto">
+            <a href="{{ url_for('revenue.revenue_seller_products', seller_name=seller_name) }}" class="btn btn-outline-primary me-2">
+                <i class="bi bi-boxes"></i> Products
+            </a>
             <a href="{{ url_for('revenue.revenue_seller_export', seller_name=seller_name) }}" class="btn btn-primary">
                 <i class="bi bi-download"></i> Export CSV for Teams
             </a>

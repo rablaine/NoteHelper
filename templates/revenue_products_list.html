@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Products - Revenue - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Alerts</a></li>
+            <li class="breadcrumb-item active">Products</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="bi bi-boxes"></i> Products</h1>
+            <p class="text-muted mb-0">All Azure products with revenue data</p>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <input type="text" class="form-control" id="productSearch" placeholder="Search products..." onkeyup="filterProducts()">
+        </div>
+    </div>
+
+    <!-- Products Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> {{ products|length }} Products</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if products %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="productsTable">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th class="text-center">Customers</th>
+                            <th class="text-end">Total Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in products %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('revenue.revenue_product_view', product=p.product) }}">
+                                    {{ p.product }}
+                                </a>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary">{{ p.customer_count }}</span>
+                            </td>
+                            <td class="text-end">${{ '{:,.0f}'.format(p.total_revenue) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-inbox display-1"></i>
+                <h4 class="mt-3">No product data yet</h4>
+                <p>Import revenue data to see products.</p>
+                <a href="{{ url_for('revenue.revenue_import') }}" class="btn btn-primary">
+                    <i class="bi bi-upload"></i> Import Data
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function filterProducts() {
+    const search = document.getElementById('productSearch').value.toLowerCase();
+    const table = document.getElementById('productsTable');
+    const rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(search) ? '' : 'none';
+    }
+}
+</script>
+{% endblock %}

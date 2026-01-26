@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}{{ product }} - Products - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Alerts</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_products_list') }}">Products</a></li>
+            <li class="breadcrumb-item active">{{ product }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="bi bi-box"></i> {{ product }}</h1>
+            <p class="text-muted mb-0">{{ customers|length }} customers using this product</p>
+            {% if is_consolidated and sub_products %}
+            <small class="text-info">
+                <i class="bi bi-layers"></i> Consolidated from {{ sub_products|length }} products: 
+                {{ sub_products[:3]|join(', ') }}{% if sub_products|length > 3 %}, ...{% endif %}
+            </small>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('revenue.revenue_products_list') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Products
+        </a>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h3>{{ customers|length }}</h3>
+                    <small class="text-muted">Customers</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h3>${{ '{:,.0f}'.format(customers|sum(attribute='total_revenue')) }}</h3>
+                    <small class="text-muted">Total Revenue</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h3>
+                        {% if customers|length > 0 %}
+                        ${{ '{:,.0f}'.format((customers|sum(attribute='total_revenue')) / customers|length) }}
+                        {% else %}
+                        $0
+                        {% endif %}
+                    </h3>
+                    <small class="text-muted">Avg per Customer</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <input type="text" class="form-control" id="customerSearch" placeholder="Search customers..." onkeyup="filterCustomers()">
+        </div>
+    </div>
+
+    <!-- Customers Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-people"></i> Customers Using {{ product }}</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if customers %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="customersTable">
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Bucket</th>
+                            <th class="text-end">Total Revenue</th>
+                            <th>Latest Month</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in customers %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=c.customer_name) }}">
+                                    {{ c.customer_name }}
+                                </a>
+                                {% if c.customer_id %}
+                                <a href="{{ url_for('customers.customer_view', id=c.customer_id) }}" class="text-muted ms-1" title="View in NoteHelper">
+                                    <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge bg-secondary">{{ c.bucket }}</span></td>
+                            <td class="text-end">${{ '{:,.0f}'.format(c.total_revenue) }}</td>
+                            <td>
+                                {% if c.latest_month %}
+                                {{ c.latest_month.strftime('%b %Y') }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('revenue.revenue_bucket_products', customer_name=c.customer_name, bucket=c.bucket) }}" 
+                                   class="btn btn-sm btn-outline-primary" title="View all products">
+                                    <i class="bi bi-boxes"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-inbox display-1"></i>
+                <h4 class="mt-3">No customers found</h4>
+                <p>No customers are currently using this product.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Revenue History by Customer -->
+    {% if customer_history %}
+    <h4 class="mt-4 mb-3"><i class="bi bi-graph-up"></i> Revenue History</h4>
+    {% for customer_name, history in customer_history.items() %}
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer_name) }}" class="text-decoration-none">
+                    {{ customer_name }}
+                </a>
+            </h6>
+            <span class="badge bg-secondary">{{ history|length }} months</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th class="text-end">Revenue</th>
+                            <th class="text-end">Change</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Build a lookup for correct change calculation #}
+                        {% set prev_revenues = {} %}
+                        {% set prev_val = namespace(value=0) %}
+                        {% for rd in history %}
+                            {% if prev_revenues.update({rd.fiscal_month: prev_val.value}) %}{% endif %}
+                            {% set prev_val.value = rd.revenue %}
+                        {% endfor %}
+                        
+                        {% for rd in history|reverse %}
+                        <tr>
+                            <td>{{ rd.fiscal_month }}</td>
+                            <td class="text-end">${{ '{:,.0f}'.format(rd.revenue) }}</td>
+                            <td class="text-end">
+                                {% set prev_rev = prev_revenues.get(rd.fiscal_month, 0) %}
+                                {% if prev_rev > 0 %}
+                                    {% set change = ((rd.revenue - prev_rev) / prev_rev * 100) %}
+                                    <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
+                                        {{ '{:+.1f}'.format(change) }}%
+                                    </span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+
+<script>
+function filterCustomers() {
+    const search = document.getElementById('customerSearch').value.toLowerCase();
+    const table = document.getElementById('customersTable');
+    const rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(search) ? '' : 'none';
+    }
+}
+</script>
+{% endblock %}
