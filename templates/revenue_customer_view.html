@@ -112,14 +112,23 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% set prev_revenue = namespace(value=0) %}
+                        {# Build a lookup of month -> previous month's revenue for correct change calculation #}
+                        {% set prev_revenues = {} %}
+                        {% set prev_val = namespace(value=0) %}
+                        {% for rd in history %}
+                            {% if prev_revenues.update({rd.fiscal_month: prev_val.value}) %}{% endif %}
+                            {% set prev_val.value = rd.revenue %}
+                        {% endfor %}
+                        
+                        {# Display newest first, but use chronologically-correct previous month for change #}
                         {% for rd in history|reverse %}
                         <tr>
                             <td>{{ rd.fiscal_month }}</td>
                             <td>${{ '{:,.0f}'.format(rd.revenue) }}</td>
                             <td>
-                                {% if prev_revenue.value > 0 %}
-                                    {% set change = ((rd.revenue - prev_revenue.value) / prev_revenue.value * 100) %}
+                                {% set prev_rev = prev_revenues.get(rd.fiscal_month, 0) %}
+                                {% if prev_rev > 0 %}
+                                    {% set change = ((rd.revenue - prev_rev) / prev_rev * 100) %}
                                     <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
                                         {{ '{:+.1f}'.format(change) }}%
                                     </span>
@@ -128,7 +137,6 @@
                                 {% endif %}
                             </td>
                         </tr>
-                        {% set prev_revenue.value = rd.revenue %}
                         {% endfor %}
                     </tbody>
                 </table>
