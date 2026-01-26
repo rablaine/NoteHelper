@@ -224,13 +224,54 @@ def revenue_customer_view(customer_name: str):
     buckets = ['Core DBs', 'Analytics', 'Modern DBs']
     revenue_by_bucket = {}
     products_by_bucket = {}
+    bucket_product_data = {}  # Full product data with monthly revenues
     
     for bucket in buckets:
         history = get_customer_revenue_history(customer_name, bucket)
         if history:
             revenue_by_bucket[bucket] = history
             # Get products for this bucket
-            products_by_bucket[bucket] = get_products_for_bucket(customer_name, bucket)
+            products = get_products_for_bucket(customer_name, bucket)
+            products_by_bucket[bucket] = products
+            
+            # Get product history for grid display
+            product_history = {}
+            for p in products:
+                p_history = get_product_revenue_history(customer_name, bucket, p['product'])
+                if p_history:
+                    product_history[p['product']] = p_history
+            
+            # Get the 7 most recent months for this bucket
+            all_months = {}
+            for ph in product_history.values():
+                for rd in ph:
+                    all_months[rd.fiscal_month] = rd.month_date
+            # Also include bucket totals months
+            for rd in history:
+                all_months[rd.fiscal_month] = rd.month_date
+            sorted_months = sorted(all_months.items(), key=lambda x: x[1])
+            recent_months = [m[0] for m in sorted_months[-7:]]
+            
+            # Build product summary with monthly revenues
+            product_summary = []
+            for p in products:
+                p_hist = product_history.get(p['product'], [])
+                month_revenues = {rd.fiscal_month: rd.revenue for rd in p_hist}
+                product_summary.append({
+                    'product': p['product'],
+                    'total_revenue': p['total_revenue'],
+                    'month_revenues': month_revenues
+                })
+            
+            # Build bucket total monthly revenues
+            bucket_month_revenues = {rd.fiscal_month: rd.revenue for rd in history}
+            
+            bucket_product_data[bucket] = {
+                'recent_months': recent_months,
+                'product_summary': product_summary,
+                'bucket_month_revenues': bucket_month_revenues,
+                'bucket_total': sum(rd.revenue for rd in history)
+            }
     
     # Try to match to a NoteHelper Customer
     customer = Customer.query.filter(
@@ -243,7 +284,8 @@ def revenue_customer_view(customer_name: str):
         customer=customer,
         analyses=analyses,
         revenue_by_bucket=revenue_by_bucket,
-        products_by_bucket=products_by_bucket
+        products_by_bucket=products_by_bucket,
+        bucket_product_data=bucket_product_data
     )
 
 

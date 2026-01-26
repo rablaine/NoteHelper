@@ -95,58 +95,102 @@
     </div>
     {% endif %}
 
-    <!-- Revenue History Tables -->
+    <!-- Revenue History Tables with Product Grids -->
     {% for bucket, history in revenue_by_bucket.items() %}
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ bucket }} Revenue History</h5>
+            <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ bucket }}</h5>
             {% if products_by_bucket.get(bucket) %}
             <a href="{{ url_for('revenue.revenue_bucket_products', customer_name=customer_name, bucket=bucket) }}" 
                class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-boxes"></i> View {{ products_by_bucket[bucket]|length }} Products
+                <i class="bi bi-clock-history"></i> Full History
             </a>
             {% endif %}
         </div>
         <div class="card-body p-0">
+            {% set bdata = bucket_product_data.get(bucket, {}) %}
+            {% set recent_months = bdata.get('recent_months', []) %}
+            {% set product_summary = bdata.get('product_summary', []) %}
+            {% set bucket_month_revenues = bdata.get('bucket_month_revenues', {}) %}
+            {% set bucket_total = bdata.get('bucket_total', 0) %}
+            
+            {% if product_summary %}
             <div class="table-responsive">
-                <table class="table table-sm mb-0">
+                <table class="table table-hover table-sm mb-0">
                     <thead>
                         <tr>
-                            <th>Month</th>
-                            <th>Revenue</th>
-                            <th>Change</th>
+                            <th class="ps-3">Product</th>
+                            {% for month in recent_months %}
+                            <th class="text-end">{{ month }}</th>
+                            {% endfor %}
+                            <th class="text-end pe-3"><strong>Total</strong></th>
                         </tr>
                     </thead>
                     <tbody>
-                        {# Build a lookup of month -> previous month's revenue for correct change calculation #}
-                        {% set prev_revenues = {} %}
-                        {% set prev_val = namespace(value=0) %}
-                        {% for rd in history %}
-                            {% if prev_revenues.update({rd.fiscal_month: prev_val.value}) %}{% endif %}
-                            {% set prev_val.value = rd.revenue %}
-                        {% endfor %}
-                        
-                        {# Display newest first, but use chronologically-correct previous month for change #}
-                        {% for rd in history|reverse %}
-                        <tr>
-                            <td>{{ rd.fiscal_month }}</td>
-                            <td>${{ '{:,.0f}'.format(rd.revenue) }}</td>
-                            <td>
-                                {% set prev_rev = prev_revenues.get(rd.fiscal_month, 0) %}
-                                {% if prev_rev > 0 %}
-                                    {% set change = ((rd.revenue - prev_rev) / prev_rev * 100) %}
-                                    <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
-                                        {{ '{:+.1f}'.format(change) }}%
-                                    </span>
+                        <!-- Bucket Total Row -->
+                        <tr class="fw-bold border-bottom border-2">
+                            <td class="ps-3">{{ bucket }} Total</td>
+                            {% for month in recent_months %}
+                            <td class="text-end">
+                                {% set current_rev = bucket_month_revenues.get(month, 0) %}
+                                {% set prev_month = recent_months[loop.index0 - 1] if loop.index0 > 0 else None %}
+                                {% set prev_rev = bucket_month_revenues.get(prev_month, 0) if prev_month else 0 %}
+                                {% if current_rev %}
+                                    {% if prev_rev > 0 %}
+                                        {% set change = ((current_rev - prev_rev) / prev_rev * 100) %}
+                                        <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
+                                            ${{ '{:,.0f}'.format(current_rev) }}
+                                        </span>
+                                    {% else %}
+                                        ${{ '{:,.0f}'.format(current_rev) }}
+                                    {% endif %}
                                 {% else %}
-                                -
+                                <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
+                            {% endfor %}
+                            <td class="text-end pe-3">${{ '{:,.0f}'.format(bucket_total) }}</td>
+                        </tr>
+                        
+                        <!-- Product Rows -->
+                        {% for p in product_summary %}
+                        <tr>
+                            <td class="ps-3">
+                                <a href="{{ url_for('revenue.revenue_product_view', product=p.product) }}">
+                                    {{ p.product }}
+                                </a>
+                            </td>
+                            {% for month in recent_months %}
+                            <td class="text-end">
+                                {% set current_rev = p.month_revenues.get(month, 0) %}
+                                {% set prev_month = recent_months[loop.index0 - 1] if loop.index0 > 0 else None %}
+                                {% set prev_rev = p.month_revenues.get(prev_month, 0) if prev_month else 0 %}
+                                {% if current_rev %}
+                                    {% if prev_rev > 0 %}
+                                        {% set change = ((current_rev - prev_rev) / prev_rev * 100) %}
+                                        <span class="{% if change < -10 %}text-danger{% elif change > 10 %}text-success{% endif %}">
+                                            ${{ '{:,.0f}'.format(current_rev) }}
+                                        </span>
+                                    {% else %}
+                                        ${{ '{:,.0f}'.format(current_rev) }}
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="text-end pe-3">${{ '{:,.0f}'.format(p.total_revenue) }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-inbox display-4"></i>
+                <p class="mt-2">No product data available for this bucket.</p>
+            </div>
+            {% endif %}
         </div>
     </div>
     {% else %}
