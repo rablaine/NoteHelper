@@ -762,3 +762,126 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
         }
         for r in results
     ]
+
+
+def get_new_product_users(consolidated_product: str, months_lookback: int = 6) -> list[dict]:
+    """Find customers who recently started using a consolidated product.
+    
+    A customer is a "new user" if:
+    - They have at least one non-zero month for the product
+    - Their first non-zero month is within the lookback period
+    - (Meaning they had $0 in all months before that)
+    
+    Args:
+        consolidated_product: The consolidated product name (e.g., 'Azure Synapse Analytics')
+        months_lookback: How many recent months to consider as "recently started"
+        
+    Returns:
+        List of dicts with customer info, seller, first usage month, and current usage
+    """
+    from app.models import RevenueAnalysis
+    
+    # Get the recent months in the database (sorted chronologically - newest first from query)
+    months = get_months_in_database()
+    if not months:
+        return []
+    
+    # Reverse to get chronological order (oldest first) for easier reasoning
+    months_chrono = list(reversed(months))
+    
+    # Get the lookback threshold - we want customers whose first usage is within the last N months
+    # If we have 7 months and want 6 months lookback, we exclude only month[0] (the oldest)
+    if len(months_chrono) > months_lookback:
+        oldest_allowed_first_usage = months_chrono[-months_lookback]['month_date']
+    else:
+        # Not enough history - include everyone
+        oldest_allowed_first_usage = months_chrono[0]['month_date']
+    
+    # Find all products that belong to this consolidated group
+    matching_products = []
+    for prefix in PRODUCT_CONSOLIDATION_PREFIXES:
+        if consolidated_product == prefix:
+            # Get all products starting with this prefix
+            product_rows = db.session.query(
+                db.distinct(ProductRevenueData.product)
+            ).filter(
+                ProductRevenueData.product.like(f"{prefix}%")
+            ).all()
+            matching_products.extend([p[0] for p in product_rows])
+            break
+    
+    if not matching_products:
+        # Not a consolidated product, just use exact match
+        matching_products = [consolidated_product]
+    
+    # For each customer, find their first month with non-zero revenue for these products
+    # Subquery to get first usage month per customer
+    first_usage_subq = db.session.query(
+        ProductRevenueData.customer_name,
+        db.func.min(ProductRevenueData.month_date).label('first_usage_date')
+    ).filter(
+        ProductRevenueData.product.in_(matching_products),
+        ProductRevenueData.revenue > 0
+    ).group_by(
+        ProductRevenueData.customer_name
+    ).subquery()
+    
+    # Get customers whose first usage is within the lookback period
+    new_users_query = db.session.query(
+        first_usage_subq.c.customer_name,
+        first_usage_subq.c.first_usage_date
+    ).filter(
+        first_usage_subq.c.first_usage_date >= oldest_allowed_first_usage
+    ).all()
+    
+    if not new_users_query:
+        return []
+    
+    new_user_names = {r.customer_name: r.first_usage_date for r in new_users_query}
+    
+    # Get seller info and total revenue for these customers
+    results = []
+    for customer_name, first_usage_date in new_user_names.items():
+        # Get seller from RevenueAnalysis
+        analysis = RevenueAnalysis.query.filter_by(customer_name=customer_name).first()
+        seller_name = analysis.seller_name if analysis else None
+        
+        # Get total revenue for this customer on these products
+        total_rev = db.session.query(
+            db.func.sum(ProductRevenueData.revenue)
+        ).filter(
+            ProductRevenueData.customer_name == customer_name,
+            ProductRevenueData.product.in_(matching_products)
+        ).scalar() or 0
+        
+        # Get the most recent month's revenue (months_chrono[-1] is newest)
+        latest_month = months_chrono[-1]['month_date']
+        latest_rev = db.session.query(
+            db.func.sum(ProductRevenueData.revenue)
+        ).filter(
+            ProductRevenueData.customer_name == customer_name,
+            ProductRevenueData.product.in_(matching_products),
+            ProductRevenueData.month_date == latest_month
+        ).scalar() or 0
+        
+        # Get the fiscal month string for the first usage
+        first_usage_fiscal = None
+        for m in months_chrono:
+            if m['month_date'] == first_usage_date:
+                first_usage_fiscal = m['fiscal_month']
+                break
+        
+        results.append({
+            'customer_name': customer_name,
+            'seller_name': seller_name,
+            'first_usage_date': first_usage_date,
+            'first_usage_fiscal': first_usage_fiscal,
+            'total_revenue': total_rev,
+            'latest_month_revenue': latest_rev,
+            'customer_id': analysis.customer_id if analysis else None
+        })
+    
+    # Sort by seller name (None last), then by customer name
+    results.sort(key=lambda x: (x['seller_name'] is None, x['seller_name'] or '', x['customer_name']))
+    
+    return results
