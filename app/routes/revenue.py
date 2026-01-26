@@ -788,3 +788,52 @@ def api_delete_engagement(engagement_id: int):
     
     return jsonify({'success': True, 'message': 'Engagement deleted'})
 
+
+# =============================================================================
+# BESPOKE REPORTS
+# =============================================================================
+
+@revenue_bp.route('/revenue/reports')
+def reports_list():
+    """List of available bespoke reports."""
+    reports = [
+        {
+            'id': 'new-synapse-users',
+            'name': 'New Azure Synapse Analytics Users',
+            'description': 'Customers who have started using Azure Synapse Analytics in the last 6 months, grouped by seller.',
+            'icon': 'bi-database-gear',
+            'url': url_for('revenue.report_new_synapse_users')
+        },
+    ]
+    
+    return render_template('revenue_reports_list.html', reports=reports)
+
+
+@revenue_bp.route('/revenue/reports/new-synapse-users')
+def report_new_synapse_users():
+    """Report: Customers who recently started using Azure Synapse Analytics."""
+    from app.services.revenue_import import get_new_product_users, get_months_in_database
+    
+    # Get new users for Azure Synapse Analytics
+    new_users = get_new_product_users('Azure Synapse Analytics', months_lookback=6)
+    
+    # Group by seller
+    sellers = {}
+    for user in new_users:
+        seller = user['seller_name'] or '(No Seller Assigned)'
+        if seller not in sellers:
+            sellers[seller] = []
+        sellers[seller].append(user)
+    
+    # Get months for context
+    months = get_months_in_database()
+    lookback_months = months[-6:] if len(months) >= 6 else months
+    
+    return render_template(
+        'revenue_report_new_synapse_users.html',
+        sellers=sellers,
+        new_users=new_users,
+        total_count=len(new_users),
+        lookback_months=lookback_months,
+        product_name='Azure Synapse Analytics'
+    )
