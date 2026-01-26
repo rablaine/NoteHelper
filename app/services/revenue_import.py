@@ -36,6 +36,69 @@ from app.models import (
 )
 
 
+# Product consolidation rules - products starting with these prefixes get rolled up
+PRODUCT_CONSOLIDATION_PREFIXES = [
+    'Azure Synapse Analytics',
+]
+
+
+def consolidate_product_name(product: str) -> str:
+    """Get the consolidated product name for display purposes.
+    
+    Products starting with certain prefixes (like 'Azure Synapse Analytics')
+    get consolidated into a single display name.
+    
+    Args:
+        product: Original product name
+        
+    Returns:
+        Consolidated product name (or original if no consolidation applies)
+    """
+    for prefix in PRODUCT_CONSOLIDATION_PREFIXES:
+        if product.startswith(prefix):
+            return prefix
+    return product
+
+
+def consolidate_products_list(products: list[dict]) -> list[dict]:
+    """Consolidate a list of product dicts by rolling up matching prefixes.
+    
+    Products starting with consolidation prefixes get merged into a single entry
+    with summed revenues and customer counts.
+    
+    Args:
+        products: List of dicts with 'product', 'customer_count', 'total_revenue'
+        
+    Returns:
+        Consolidated list with rolled-up products
+    """
+    consolidated = {}
+    
+    for p in products:
+        display_name = consolidate_product_name(p['product'])
+        
+        if display_name not in consolidated:
+            consolidated[display_name] = {
+                'product': display_name,
+                'customer_count': 0,
+                'total_revenue': 0,
+                '_original_products': []
+            }
+        
+        # For customer count, we need to be careful not to double-count
+        # if multiple sub-products have the same customer
+        consolidated[display_name]['total_revenue'] += p.get('total_revenue', 0)
+        consolidated[display_name]['_original_products'].append(p['product'])
+        # Note: customer_count may over-count if same customer uses multiple sub-products
+        # For now, we'll use the max of the individual counts as a rough estimate
+        consolidated[display_name]['customer_count'] = max(
+            consolidated[display_name]['customer_count'],
+            p.get('customer_count', 0)
+        )
+    
+    return list(consolidated.values())
+
+
 class RevenueImportError(Exception):
     """Raised when import fails."""
     pass
@@ -599,6 +662,88 @@ def get_customers_using_product(product: str) -> list[dict]:
         db.func.max(ProductRevenueData.month_date).label('latest_month')
     ).filter_by(
         product=product
+    ).group_by(
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket,
+        ProductRevenueData.customer_id
+    ).order_by(
+        db.func.sum(ProductRevenueData.revenue).desc()
+    ).all()
+    
+    return [
+        {
+            'customer_name': r.customer_name,
+            'bucket': r.bucket,
+            'customer_id': r.customer_id,
+            'total_revenue': r.total_revenue or 0,
+            'latest_month': r.latest_month
+        }
+        for r in results
+    ]
+
+
+def get_seller_products(seller_name: str) -> list[dict]:
+    """Get all unique products used by a seller's customers.
+    
+    Args:
+        seller_name: Seller name to filter by
+        
+    Returns:
+        List of dicts with product name, customer count, total revenue
+    """
+    # Get customer names for this seller from analyses
+    from app.models import RevenueAnalysis
+    seller_customers = db.session.query(
+        db.distinct(RevenueAnalysis.customer_name)
+    ).filter_by(seller_name=seller_name).subquery()
+    
+    results = db.session.query(
+        ProductRevenueData.product,
+        db.func.count(db.distinct(ProductRevenueData.customer_name)).label('customer_count'),
+        db.func.sum(ProductRevenueData.revenue).label('total_revenue')
+    ).filter(
+        ProductRevenueData.customer_name.in_(seller_customers)
+    ).group_by(
+        ProductRevenueData.product
+    ).order_by(
+        db.func.sum(ProductRevenueData.revenue).desc()
+    ).all()
+    
+    return [
+        {
+            'product': r.product,
+            'customer_count': r.customer_count,
+            'total_revenue': r.total_revenue or 0
+        }
+        for r in results
+    ]
+
+
+def get_seller_customers_using_product(seller_name: str, product: str) -> list[dict]:
+    """Get seller's customers using a specific product.
+    
+    Args:
+        seller_name: Seller name to filter by
+        product: Product name to look up
+        
+    Returns:
+        List of dicts with customer info and revenue data
+    """
+    # Get customer names for this seller from analyses
+    from app.models import RevenueAnalysis
+    seller_customers = db.session.query(
+        db.distinct(RevenueAnalysis.customer_name)
+    ).filter_by(seller_name=seller_name).subquery()
+    
+    results = db.session.query(
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket,
+        ProductRevenueData.customer_id,
+        db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
+        db.func.max(ProductRevenueData.month_date).label('latest_month')
+    ).filter(
+        ProductRevenueData.product == product,
+        ProductRevenueData.customer_name.in_(seller_customers)
     ).group_by(
         ProductRevenueData.customer_name,
         ProductRevenueData.bucket,

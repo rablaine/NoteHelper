@@ -15,6 +15,12 @@
         <div>
             <h1><i class="bi bi-box"></i> {{ product }}</h1>
             <p class="text-muted mb-0">{{ customers|length }} customers using this product</p>
+            {% if is_consolidated and sub_products %}
+            <small class="text-info">
+                <i class="bi bi-layers"></i> Consolidated from {{ sub_products|length }} products: 
+                {{ sub_products[:3]|join(', ') }}{% if sub_products|length > 3 %}, ...{% endif %}
+            </small>
+            {% endif %}
         </div>
         <a href="{{ url_for('revenue.revenue_products_list') }}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Back to Products
