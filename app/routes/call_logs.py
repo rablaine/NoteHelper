@@ -5,7 +5,7 @@ Handles call log listing, creation, viewing, and editing.
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from datetime import datetime
 
-from app.models import db, CallLog, Customer, Seller, Territory, Topic
+from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner
 
 # Create blueprint
 call_logs_bp = Blueprint('call_logs', __name__)
@@ -17,7 +17,8 @@ def call_logs_list():
     call_logs = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
         db.joinedload(CallLog.customer).joinedload(Customer.territory),
-        db.joinedload(CallLog.topics)
+        db.joinedload(CallLog.topics),
+        db.joinedload(CallLog.partners)
     ).order_by(CallLog.call_date.desc()).all()
     return render_template('call_logs_list.html', call_logs=call_logs)
 
@@ -31,6 +32,7 @@ def call_log_create():
         call_date_str = request.form.get('call_date')
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
+        partner_ids = request.form.getlist('partner_ids')
         referrer = request.form.get('referrer', '')
         
         # Validation
@@ -78,6 +80,11 @@ def call_log_create():
             topics = Topic.query.filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
             call_log.topics.extend(topics)
         
+        # Add partners
+        if partner_ids:
+            partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
+            call_log.partners.extend(partners)
+        
         db.session.add(call_log)
         db.session.commit()
         
@@ -107,6 +114,7 @@ def call_log_create():
     customers = Customer.query.order_by(Customer.name).all()
     sellers = Seller.query.order_by(Seller.name).all()
     topics = Topic.query.order_by(Topic.name).all()
+    partners = Partner.query.order_by(Partner.name).all()
     
     # Pre-select topic from query params
     preselect_topic_id = request.args.get('topic_id', type=int)
@@ -127,6 +135,7 @@ def call_log_create():
                          customers=customers,
                          sellers=sellers,
                          topics=topics,
+                         partners=partners,
                          preselect_customer_id=preselect_customer_id,
                          preselect_customer=preselect_customer,
                          preselect_topic_id=preselect_topic_id,
@@ -154,6 +163,7 @@ def call_log_edit(id):
         call_date_str = request.form.get('call_date')
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
+        partner_ids = request.form.getlist('partner_ids')
         
         # Validation
         if not customer_id:
@@ -187,6 +197,12 @@ def call_log_edit(id):
             topics = Topic.query.filter(Topic.id.in_([int(tid) for tid in topic_ids])).all()
             call_log.topics = topics
         
+        # Update partners - remove all existing associations first
+        call_log.partners = []
+        if partner_ids:
+            partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
+            call_log.partners = partners
+        
         db.session.commit()
         
         flash('Call log updated successfully!', 'success')
@@ -196,6 +212,7 @@ def call_log_edit(id):
     customers = Customer.query.order_by(Customer.name).all()
     sellers = Seller.query.order_by(Seller.name).all()
     topics = Topic.query.order_by(Topic.name).all()
+    partners = Partner.query.order_by(Partner.name).all()
     
     # Load AI config for AI button visibility
     from app.models import AIConfig
@@ -207,6 +224,7 @@ def call_log_edit(id):
                          customers=customers,
                          sellers=sellers,
                          topics=topics,
+                         partners=partners,
                          preselect_customer_id=None,
                          preselect_topic_id=None)
 

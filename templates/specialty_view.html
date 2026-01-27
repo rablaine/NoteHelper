@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ specialty.name }} - Specialties - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('partners.partners_list') }}">Partners</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('partners.specialties_list') }}">Specialties</a></li>
+            <li class="breadcrumb-item active">{{ specialty.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="row mb-4">
+        <div class="col">
+            <h1>
+                <span class="badge bg-warning text-dark">
+                    <i class="bi bi-star"></i> {{ specialty.name }}
+                </span>
+            </h1>
+            {% if specialty.description %}
+            <p class="text-muted">{{ specialty.description }}</p>
+            {% endif %}
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('partners.specialty_edit', id=specialty.id) }}" class="btn btn-outline-primary">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                <i class="bi bi-trash"></i> Delete
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-building"></i> Partners with this Specialty ({{ specialty.partners|length }})</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if specialty.partners %}
+            <ul class="list-group list-group-flush">
+                {% for partner in specialty.partners|sort(attribute='name') %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="text-decoration-none">
+                            <i class="bi bi-building"></i> {{ partner.name }}
+                        </a>
+                        {% if partner.contacts %}
+                        <br><small class="text-muted">{{ partner.contacts|length }} contact{{ 's' if partner.contacts|length != 1 else '' }}</small>
+                        {% endif %}
+                    </div>
+                    <span class="badge bg-secondary">{{ partner.call_logs|length }} calls</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="p-3 text-center text-muted">
+                No partners have this specialty yet
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Specialty</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong>{{ specialty.name }}</strong>?</p>
+                <p class="text-muted mb-0">This will remove the specialty from all associated partners but will not delete the partners themselves.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('partners.specialty_delete', id=specialty.id) }}" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-danger">Delete Specialty</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

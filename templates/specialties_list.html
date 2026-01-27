@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Specialties - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('partners.partners_list') }}">Partners</a></li>
+            <li class="breadcrumb-item active">Specialties</li>
+        </ol>
+    </nav>
+
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-star"></i> Specialties</h1>
+            <p class="text-muted">Manage partner specialty areas</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('partners.specialty_new') }}" class="btn btn-success">
+                <i class="bi bi-plus-lg"></i> New Specialty
+            </a>
+        </div>
+    </div>
+
+    {% if specialties %}
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Specialty</th>
+                            <th>Description</th>
+                            <th>Partners</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for specialty in specialties %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('partners.specialty_view', id=specialty.id) }}" class="badge bg-warning text-dark text-decoration-none">
+                                    <i class="bi bi-star"></i> {{ specialty.name }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if specialty.description %}
+                                {{ specialty.description[:100] }}{% if specialty.description|length > 100 %}...{% endif %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ specialty.partners|length }}</span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('partners.specialty_edit', id=specialty.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No specialties yet. 
+        <a href="{{ url_for('partners.specialty_new') }}">Create your first specialty</a>.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

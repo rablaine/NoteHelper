@@ -299,6 +299,24 @@ def tpid_workflow_update():
     return redirect(url_for('customers.tpid_workflow'))
 
 
+@customers_bp.route('/customer/<int:id>/notes', methods=['POST'])
+def customer_update_notes(id):
+    """Update customer notes via AJAX or form POST."""
+    customer = Customer.query.filter_by(id=id).first_or_404()
+    
+    notes = request.form.get('notes', '').strip()
+    customer.notes = notes if notes else None
+    
+    db.session.commit()
+    
+    # Check if AJAX request
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': True, 'notes': customer.notes})
+    
+    flash('Notes updated successfully.', 'success')
+    return redirect(url_for('customers.customer_view', id=id))
+
+
 # API route
 @customers_bp.route('/api/customers/autocomplete', methods=['GET'])
 def api_customers_autocomplete():

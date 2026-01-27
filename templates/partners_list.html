@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Partners - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-building"></i> Partners</h1>
+            <p class="text-muted">Manage partner organizations and contacts</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('partners.partner_new') }}" class="btn btn-success">
+                <i class="bi bi-plus-lg"></i> New Partner
+            </a>
+            <a href="{{ url_for('partners.specialties_list') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-star"></i> Manage Specialties
+            </a>
+        </div>
+    </div>
+
+    {% if partners %}
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Partner</th>
+                            <th>Rating</th>
+                            <th>Specialties</th>
+                            <th>Contacts</th>
+                            <th>Calls</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for partner in partners %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="text-decoration-none">
+                                    <i class="bi bi-building"></i> {{ partner.name }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if partner.rating is not none %}
+                                    {% for i in range(5) %}
+                                        <i class="bi bi-star{{ '-fill text-warning' if i < partner.rating else ' text-muted' }}" style="font-size: 0.85rem;"></i>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% for specialty in partner.specialties %}
+                                <a href="{{ url_for('partners.specialty_view', id=specialty.id) }}" class="badge bg-warning text-dark text-decoration-none me-1">
+                                    <i class="bi bi-star"></i> {{ specialty.name }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% if partner.contacts %}
+                                {{ partner.contacts|length }} contact{{ 's' if partner.contacts|length != 1 else '' }}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if partner.call_logs %}
+                                <span class="badge bg-secondary">{{ partner.call_logs|length }}</span>
+                                {% else %}
+                                <span class="text-muted">0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No partners yet. 
+        <a href="{{ url_for('partners.partner_new') }}">Create your first partner</a>.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
