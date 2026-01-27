@@ -466,6 +466,199 @@ def import_revenue_csv(
     return import_record
 
 
+def import_revenue_csv_streaming(
+    file_content: bytes | str,
+    filename: str,
+    user_id: int,
+    territory_alignments: Optional[dict] = None
+):
+    """Import revenue data from CSV with streaming progress updates.
+    
+    Yields progress dicts and finally a completion dict with the result.
+    
+    Args:
+        file_content: Raw CSV content
+        filename: Original filename
+        user_id: ID of user performing import
+        territory_alignments: Optional dict mapping (customer_name, bucket) -> seller_name
+        
+    Yields:
+        Progress dicts: {"message": "..."} or {"error": "..."} or {"complete": True, "result": RevenueImport}
+    """
+    yield {"message": "Reading CSV file..."}
+    
+    # Load and process CSV
+    df = load_csv(file_content, filename)
+    df, month_cols = process_csv(df)
+    
+    if df.empty:
+        yield {"error": "No data rows found in CSV"}
+        return
+    
+    yield {"message": f"Found {len(df)} rows with {len(month_cols)} months of data"}
+    
+    # Convert month columns to dates
+    month_dates = {}
+    for mc in month_cols:
+        d = fiscal_month_to_date(mc)
+        if d:
+            month_dates[mc] = d
+    
+    if not month_dates:
+        yield {"error": "Could not parse any fiscal month columns"}
+        return
+    
+    yield {"message": f"Processing months: {', '.join(month_cols)}"}
+    
+    # Create import record
+    earliest = min(month_dates.values())
+    latest = max(month_dates.values())
+    
+    import_record = RevenueImport(
+        filename=filename,
+        user_id=user_id,
+        record_count=len(df),
+        earliest_month=earliest,
+        latest_month=latest
+    )
+    db.session.add(import_record)
+    db.session.flush()
+    
+    # Track stats
+    bucket_records_created = 0
+    bucket_records_updated = 0
+    product_records_created = 0
+    product_records_updated = 0
+    new_months = set()
+    
+    # Build customer lookup
+    yield {"message": "Loading customer database..."}
+    customer_lookup = {}
+    for customer in Customer.query.all():
+        customer_lookup[customer.name.lower()] = customer.id
+        if customer.nickname:
+            customer_lookup[customer.nickname.lower()] = customer.id
+    
+    # Process rows with progress updates
+    total_rows = len(df)
+    last_progress = 0
+    
+    yield {"message": f"Processing {total_rows} revenue records...", "progress": 0}
+    
+    for idx, (_, row) in enumerate(df.iterrows()):
+        # Update progress every 10% (use idx+1 since we calculate after starting to process)
+        progress = int(((idx + 1) / total_rows) * 100)
+        if progress >= last_progress + 10:
+            yield {"message": f"Processing records... ({progress}%)", "progress": progress}
+            last_progress = progress
+        
+        customer_name = str(row['TPAccountName']).strip()
+        bucket = str(row['ServiceCompGrouping']).strip() if pd.notna(row.get('ServiceCompGrouping')) else ''
+        product = str(row['ServiceLevel4']).strip() if pd.notna(row.get('ServiceLevel4')) else ''
+        
+        if not customer_name:
+            continue
+        
+        # Skip customer total rows (bucket = "Total")
+        if bucket.lower() == 'total':
+            continue
+        
+        # Try to match to existing NoteHelper customer
+        customer_id = customer_lookup.get(customer_name.lower())
+        
+        # Get seller from territory alignments if provided
+        seller_name = None
+        if territory_alignments:
+            seller_name = territory_alignments.get((customer_name, bucket))
+        
+        # Process each month column
+        for month_col, month_date in month_dates.items():
+            revenue = parse_currency(row.get(month_col, 0))
+            fiscal_month = month_col
+            
+            is_bucket_total = (product.lower() == 'total' or product == '')
+            
+            if is_bucket_total:
+                existing = CustomerRevenueData.query.filter_by(
+                    customer_name=customer_name,
+                    bucket=bucket,
+                    month_date=month_date
+                ).first()
+                
+                if existing:
+                    if existing.revenue != revenue:
+                        existing.revenue = revenue
+                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_import_id = import_record.id
+                        bucket_records_updated += 1
+                    if customer_id and not existing.customer_id:
+                        existing.customer_id = customer_id
+                    if seller_name and not existing.seller_name:
+                        existing.seller_name = seller_name
+                else:
+                    new_record = CustomerRevenueData(
+                        customer_name=customer_name,
+                        bucket=bucket,
+                        customer_id=customer_id,
+                        seller_name=seller_name,
+                        fiscal_month=fiscal_month,
+                        month_date=month_date,
+                        revenue=revenue,
+                        last_import_id=import_record.id
+                    )
+                    db.session.add(new_record)
+                    bucket_records_created += 1
+                    
+                    existing_months = db.session.query(
+                        CustomerRevenueData.month_date
+                    ).filter(
+                        CustomerRevenueData.month_date == month_date
+                    ).first()
+                    if not existing_months:
+                        new_months.add(month_date)
+            else:
+                existing = ProductRevenueData.query.filter_by(
+                    customer_name=customer_name,
+                    bucket=bucket,
+                    product=product,
+                    month_date=month_date
+                ).first()
+                
+                if existing:
+                    if existing.revenue != revenue:
+                        existing.revenue = revenue
+                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_import_id = import_record.id
+                        product_records_updated += 1
+                    if customer_id and not existing.customer_id:
+                        existing.customer_id = customer_id
+                else:
+                    new_record = ProductRevenueData(
+                        customer_name=customer_name,
+                        bucket=bucket,
+                        product=product,
+                        customer_id=customer_id,
+                        fiscal_month=fiscal_month,
+                        month_date=month_date,
+                        revenue=revenue,
+                        last_import_id=import_record.id
+                    )
+                    db.session.add(new_record)
+                    product_records_created += 1
+    
+    yield {"message": "Saving to database...", "progress": 95}
+    
+    # Update import stats
+    import_record.records_created = bucket_records_created + product_records_created
+    import_record.records_updated = bucket_records_updated + product_records_updated
+    import_record.new_months_added = len(new_months)
+    
+    db.session.commit()
+    
+    yield {"message": f"Import complete: {import_record.records_created} created, {import_record.records_updated} updated", "progress": 100}
+    yield {"complete": True, "result": import_record}
+
+
 def load_territory_alignments(file_content: bytes | str) -> dict:
     """Load territory alignments CSV to map customers to sellers.
     

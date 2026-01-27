@@ -2,9 +2,11 @@
 Revenue routes for NoteHelper.
 Handles revenue data import, analysis, and attention dashboard.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, Response, stream_with_context
 from werkzeug.utils import secure_filename
 import csv
+import json
+import tempfile
 from io import StringIO
 
 from app.models import (
@@ -17,6 +19,7 @@ from app.services.revenue_import import (
     get_products_for_bucket, get_all_products, get_customers_using_product,
     get_seller_products, get_seller_customers_using_product,
     consolidate_products_list, consolidate_product_name,
+    import_revenue_csv_streaming,
     RevenueImportError
 )
 from app.services.revenue_analysis import (
@@ -67,58 +70,11 @@ def revenue_dashboard():
 
 @revenue_bp.route('/revenue/import', methods=['GET', 'POST'])
 def revenue_import():
-    """Import revenue CSV data."""
+    """Import revenue CSV data (form display only, POST redirects to streaming)."""
     if request.method == 'POST':
-        if 'file' not in request.files:
-            flash('No file selected', 'error')
-            return redirect(request.url)
-        
-        file = request.files['file']
-        if file.filename == '':
-            flash('No file selected', 'error')
-            return redirect(request.url)
-        
-        if not file.filename.endswith('.csv'):
-            flash('Only CSV files are supported', 'error')
-            return redirect(request.url)
-        
-        try:
-            filename = secure_filename(file.filename)
-            content = file.read()
-            
-            # Import the data
-            import_record = import_revenue_csv(
-                file_content=content,
-                filename=filename,
-                user_id=g.user.id
-            )
-            
-            # Run analysis after import
-            run_analysis = request.form.get('run_analysis', 'on') == 'on'
-            if run_analysis:
-                analysis_stats = run_analysis_for_all(user_id=g.user.id)
-                flash(
-                    f'Imported {import_record.records_created} new records, '
-                    f'updated {import_record.records_updated}. '
-                    f'Analyzed {analysis_stats["analyzed"]} customers, '
-                    f'{analysis_stats["actionable"]} need attention.',
-                    'success'
-                )
-            else:
-                flash(
-                    f'Imported {import_record.records_created} new records, '
-                    f'updated {import_record.records_updated}.',
-                    'success'
-                )
-            
-            return redirect(url_for('revenue.revenue_dashboard'))
-            
-        except RevenueImportError as e:
-            flash(f'Import error: {str(e)}', 'error')
-            return redirect(request.url)
-        except Exception as e:
-            flash(f'Unexpected error: {str(e)}', 'error')
-            return redirect(request.url)
+        # Redirect to dashboard - actual import handled by streaming endpoint
+        flash('Please use the import form', 'info')
+        return redirect(request.url)
     
     # GET - show import form
     import_history = get_import_history(limit=10)
@@ -128,6 +84,71 @@ def revenue_import():
         'revenue_import.html',
         import_history=import_history,
         months_data=months_data
+    )
+
+
+@revenue_bp.route('/api/revenue/import', methods=['POST'])
+def revenue_import_stream():
+    """Import revenue CSV with streaming progress updates."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file selected'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    if not file.filename.endswith('.csv'):
+        return jsonify({'error': 'Only CSV files are supported'}), 400
+    
+    filename = secure_filename(file.filename)
+    content = file.read()
+    run_analysis = request.form.get('run_analysis', 'on') == 'on'
+    user_id = g.user.id
+    
+    def generate():
+        """Generator for streaming progress updates."""
+        try:
+            # Stream import progress
+            import_result = None
+            for progress in import_revenue_csv_streaming(content, filename, user_id):
+                if progress.get('complete'):
+                    import_result = progress.get('result')
+                else:
+                    yield "data: " + json.dumps(progress) + "\n\n"
+            
+            if not import_result:
+                yield "data: " + json.dumps({"error": "Import failed - no result"}) + "\n\n"
+                return
+            
+            # Run analysis if requested
+            if run_analysis:
+                yield "data: " + json.dumps({"message": "Running analysis on imported data..."}) + "\n\n"
+                analysis_stats = run_analysis_for_all(user_id=user_id)
+                yield "data: " + json.dumps({
+                    "message": f"Analysis complete: {analysis_stats['analyzed']} customers, {analysis_stats['actionable']} need attention"
+                }) + "\n\n"
+            
+            # Send final result
+            yield "data: " + json.dumps({
+                "result": {
+                    "records_created": import_result.records_created,
+                    "records_updated": import_result.records_updated,
+                    "new_months": import_result.new_months_added
+                }
+            }) + "\n\n"
+            
+        except RevenueImportError as e:
+            yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
+        except Exception as e:
+            yield "data: " + json.dumps({"error": f"Unexpected error: {str(e)}"}) + "\n\n"
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
     )
 
 
