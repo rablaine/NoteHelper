@@ -65,6 +65,53 @@
                     </p>
                 {% endif %}
                 <p><strong>Total Calls:</strong> {{ call_logs|length }}</p>
+                
+                {% set partner_dict = {} %}
+                {% for call in call_logs %}
+                    {% for partner in call.partners %}
+                        {% if partner.id not in partner_dict %}
+                            {% set _ = partner_dict.update({partner.id: partner}) %}
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+                {% if partner_dict %}
+                <p><strong>Partners:</strong><br>
+                    {% for partner_id, partner in partner_dict.items()|sort(attribute='1.name') %}
+                        <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;">
+                            <i class="bi bi-building"></i> {{ partner.name }}
+                        </a>
+                    {% endfor %}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Customer Notes Card -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-sticky"></i> Notes</h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="editNotesBtn" onclick="toggleNotesEdit()">
+                    <i class="bi bi-pencil"></i> Edit
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="notesDisplay" {% if not customer.notes %}style="display: none;"{% endif %}>
+                    <p class="mb-0" style="white-space: pre-wrap;">{{ customer.notes or '' }}</p>
+                </div>
+                <div id="notesEmpty" {% if customer.notes %}style="display: none;"{% endif %}>
+                    <p class="text-muted mb-0">No notes yet. Click Edit to add notes about opportunities or milestones.</p>
+                </div>
+                <form id="notesForm" action="{{ url_for('customers.customer_update_notes', id=customer.id) }}" method="post" style="display: none;">
+                    <textarea class="form-control mb-2" name="notes" id="notesTextarea" rows="5" placeholder="Track opportunities, milestones, key contacts, etc.">{{ customer.notes or '' }}</textarea>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="bi bi-check-lg"></i> Save
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelNotesEdit()">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
         
@@ -158,10 +205,13 @@
                                     {% endif %}
                                 </div>
                                 <div class="mb-2">{{ call.content|safe }}</div>
-                                {% if call.topics|length > 0 %}
+                                {% if call.topics|length > 0 or call.partners|length > 0 %}
                                     <div>
                                         {% for topic in call.topics %}
                                             <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
+                                        {% endfor %}
+                                        {% for partner in call.partners %}
+                                            <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;" onclick="event.stopPropagation();"><i class="bi bi-building"></i> {{ partner.name }}</a>
                                         {% endfor %}
                                     </div>
                                 {% endif %}
@@ -175,6 +225,37 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleNotesEdit() {
+    document.getElementById('notesDisplay').style.display = 'none';
+    document.getElementById('notesEmpty').style.display = 'none';
+    document.getElementById('notesForm').style.display = 'block';
+    document.getElementById('editNotesBtn').style.display = 'none';
+    document.getElementById('notesTextarea').focus();
+}
+
+function cancelNotesEdit() {
+    const textarea = document.getElementById('notesTextarea');
+    const hasNotes = textarea.defaultValue.trim().length > 0;
+    
+    // Reset textarea to original value
+    textarea.value = textarea.defaultValue;
+    
+    document.getElementById('notesForm').style.display = 'none';
+    document.getElementById('editNotesBtn').style.display = 'inline-block';
+    
+    if (hasNotes) {
+        document.getElementById('notesDisplay').style.display = 'block';
+        document.getElementById('notesEmpty').style.display = 'none';
+    } else {
+        document.getElementById('notesDisplay').style.display = 'none';
+        document.getElementById('notesEmpty').style.display = 'block';
+    }
+}
+</script>
 {% endblock %}
 
 

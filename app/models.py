@@ -31,6 +31,20 @@ call_logs_topics = db.Table(
     db.Column('topic_id', db.Integer, db.ForeignKey('topics.id'), primary_key=True)
 )
 
+# Association table for many-to-many relationship between CallLog and Partner
+call_logs_partners = db.Table(
+    'call_logs_partners',
+    db.Column('call_log_id', db.Integer, db.ForeignKey('call_logs.id'), primary_key=True),
+    db.Column('partner_id', db.Integer, db.ForeignKey('partners.id'), primary_key=True)
+)
+
+# Association table for many-to-many relationship between Partner and Specialty
+partners_specialties = db.Table(
+    'partners_specialties',
+    db.Column('partner_id', db.Integer, db.ForeignKey('partners.id'), primary_key=True),
+    db.Column('specialty_id', db.Integer, db.ForeignKey('specialties.id'), primary_key=True)
+)
+
 # Association table for many-to-many relationship between Seller and Territory
 sellers_territories = db.Table(
     'sellers_territories',
@@ -289,6 +303,7 @@ class Customer(db.Model):
     nickname = db.Column(db.String(200), nullable=True)
     tpid = db.Column(db.BigInteger, nullable=False)
     tpid_url = db.Column(db.String(500), nullable=True)
+    notes = db.Column(db.Text, nullable=True)  # General notes for tracking opportunities/milestones
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -352,6 +367,85 @@ class Topic(db.Model):
         return f'<Topic {self.name}>'
 
 
+class Specialty(db.Model):
+    """Specialty area that can be associated with partners."""
+    __tablename__ = 'specialties'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    # Relationships
+    partners = db.relationship(
+        'Partner',
+        secondary=partners_specialties,
+        back_populates='specialties',
+        lazy='select'
+    )
+    
+    def __repr__(self) -> str:
+        return f'<Specialty {self.name}>'
+
+
+class Partner(db.Model):
+    """Partner organization that can be associated with call logs."""
+    __tablename__ = 'partners'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    rating = db.Column(db.Integer, nullable=True)  # 0-5 star rating, null = not rated
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    
+    # Relationships
+    contacts = db.relationship('PartnerContact', back_populates='partner', lazy='select', cascade='all, delete-orphan')
+    specialties = db.relationship(
+        'Specialty',
+        secondary=partners_specialties,
+        back_populates='partners',
+        lazy='select'
+    )
+    call_logs = db.relationship(
+        'CallLog',
+        secondary=call_logs_partners,
+        back_populates='partners',
+        lazy='select'
+    )
+    
+    def get_primary_contact(self):
+        """Get the primary contact if one is designated."""
+        for contact in self.contacts:
+            if contact.is_primary:
+                return contact
+        return self.contacts[0] if self.contacts else None
+    
+    def __repr__(self) -> str:
+        return f'<Partner {self.name}>'
+
+
+class PartnerContact(db.Model):
+    """Contact person at a partner organization."""
+    __tablename__ = 'partner_contacts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    partner_id = db.Column(db.Integer, db.ForeignKey('partners.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    email = db.Column(db.String(255), nullable=True)
+    is_primary = db.Column(db.Boolean, default=False, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    # Relationships
+    partner = db.relationship('Partner', back_populates='contacts')
+    
+    def __repr__(self) -> str:
+        return f'<PartnerContact {self.name} at {self.partner.name if self.partner else "Unknown"}>'
+
+
 class CallLog(db.Model):
     """Call log entry with rich text content and associated metadata."""
     __tablename__ = 'call_logs'
@@ -369,6 +463,12 @@ class CallLog(db.Model):
     topics = db.relationship(
         'Topic',
         secondary=call_logs_topics,
+        back_populates='call_logs',
+        lazy='select'
+    )
+    partners = db.relationship(
+        'Partner',
+        secondary=call_logs_partners,
         back_populates='call_logs',
         lazy='select'
     )

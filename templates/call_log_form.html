@@ -109,7 +109,25 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="content" class="form-label">Call Notes *</label>
+                        <label for="partner_search" class="form-label">Partners</label>
+                        <input type="text" class="form-control" id="partner_search" 
+                               placeholder="Search and add partners..." autocomplete="off">
+                        <div id="partner_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                        
+                        <div id="selected_partners" class="mt-2 d-flex flex-wrap gap-2">
+                            {% if call_log %}
+                                {% for partner in call_log.partners %}
+                                    <span class="badge d-flex align-items-center" style="background-color: #6f42c1;" data-partner-id="{{ partner.id }}">
+                                        <i class="bi bi-building me-1"></i> {{ partner.name }}
+                                        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removePartner({{ partner.id }})"></button>
+                                        <input type="hidden" name="partner_ids" value="{{ partner.id }}">
+                                    </span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
                         <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
                         <textarea name="content" id="content" style="display:none;"></textarea>
                         <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
@@ -408,6 +426,207 @@ function createNewTopic(topicName) {
     });
 }
 
+// ===== PARTNER SEARCH AND SELECTION FUNCTIONALITY =====
+const allPartners = [
+    {% for partner in partners %}
+        { id: {{ partner.id }}, name: "{{ partner.name|escape }}" },
+    {% endfor %}
+];
+
+const partnerSearch = document.getElementById('partner_search');
+const partnerDropdown = document.getElementById('partner_dropdown');
+const selectedPartnersContainer = document.getElementById('selected_partners');
+let currentPartnerMatches = [];
+let selectedPartnerIndex = -1;
+
+partnerSearch.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase().trim();
+    
+    if (searchTerm.length === 0) {
+        partnerDropdown.style.display = 'none';
+        currentPartnerMatches = [];
+        selectedPartnerIndex = -1;
+        return;
+    }
+    
+    // Filter partners case-insensitively
+    currentPartnerMatches = allPartners.filter(partner => 
+        partner.name.toLowerCase().includes(searchTerm) && 
+        !isPartnerSelected(partner.id)
+    );
+    
+    if (currentPartnerMatches.length > 0) {
+        selectedPartnerIndex = 0; // Auto-select first item
+        renderPartnerDropdown();
+        partnerDropdown.style.display = 'block';
+        partnerDropdown.style.width = partnerSearch.offsetWidth + 'px';
+    } else {
+        partnerDropdown.style.display = 'none';
+        currentPartnerMatches = [];
+        selectedPartnerIndex = -1;
+    }
+});
+
+// Keyboard navigation for partners
+partnerSearch.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowDown' && currentPartnerMatches.length > 0) {
+        e.preventDefault();
+        selectedPartnerIndex = (selectedPartnerIndex + 1) % currentPartnerMatches.length;
+        renderPartnerDropdown();
+    } else if (e.key === 'ArrowUp' && currentPartnerMatches.length > 0) {
+        e.preventDefault();
+        selectedPartnerIndex = selectedPartnerIndex <= 0 ? currentPartnerMatches.length - 1 : selectedPartnerIndex - 1;
+        renderPartnerDropdown();
+    } else if (e.key === 'Tab') {
+        e.preventDefault();
+        
+        if (currentPartnerMatches.length > 0 && selectedPartnerIndex >= 0 && selectedPartnerIndex < currentPartnerMatches.length) {
+            // Select existing partner from search results
+            const partner = currentPartnerMatches[selectedPartnerIndex];
+            addPartner(partner.id, partner.name);
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        // Only create new partner on Enter if there are no matches
+        if (currentPartnerMatches.length === 0) {
+            const searchTerm = partnerSearch.value.trim();
+            if (searchTerm.length > 0) {
+                createNewPartner(searchTerm);
+            }
+        } else if (selectedPartnerIndex >= 0 && selectedPartnerIndex < currentPartnerMatches.length) {
+            // Select the highlighted partner
+            const partner = currentPartnerMatches[selectedPartnerIndex];
+            addPartner(partner.id, partner.name);
+        }
+    } else if (e.key === 'Escape') {
+        partnerDropdown.style.display = 'none';
+        currentPartnerMatches = [];
+        selectedPartnerIndex = -1;
+    }
+});
+
+function renderPartnerDropdown() {
+    partnerDropdown.innerHTML = currentPartnerMatches.map((partner, index) => 
+        `<button type="button" class="list-group-item list-group-item-action ${index === selectedPartnerIndex ? 'active' : ''}" 
+            data-partner-id="${partner.id}" 
+            data-partner-name="${partner.name.replace(/"/g, '&quot;')}"
+            data-partner-index="${index}"
+            onmouseenter="handlePartnerHover(${index})"
+            onclick="handlePartnerClick(${partner.id}, '${partner.name.replace(/'/g, "\\'")}')">
+            <i class="bi bi-building"></i> ${partner.name}
+        </button>`
+    ).join('');
+}
+
+function handlePartnerHover(index) {
+    selectedPartnerIndex = index;
+    // Update active class
+    partnerDropdown.querySelectorAll('button').forEach((btn, i) => {
+        if (i === index) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
+function handlePartnerClick(partnerId, partnerName) {
+    addPartner(partnerId, partnerName);
+}
+
+// Hide partner dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    // Only hide if clicking outside both the search input and the dropdown
+    if (!partnerSearch.contains(e.target) && !partnerDropdown.contains(e.target)) {
+        partnerDropdown.style.display = 'none';
+        currentPartnerMatches = [];
+        selectedPartnerIndex = -1;
+    }
+});
+
+function isPartnerSelected(partnerId) {
+    return selectedPartnersContainer.querySelector(`[data-partner-id="${partnerId}"]`) !== null;
+}
+
+function addPartner(partnerId, partnerName) {
+    if (isPartnerSelected(partnerId)) return;
+    
+    const badge = document.createElement('span');
+    badge.className = 'badge d-flex align-items-center';
+    badge.style.backgroundColor = '#6f42c1'; // Purple color
+    badge.setAttribute('data-partner-id', partnerId);
+    badge.innerHTML = `
+        <i class="bi bi-building me-1"></i> ${partnerName}
+        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removePartner(${partnerId})"></button>
+        <input type="hidden" name="partner_ids" value="${partnerId}">
+    `;
+    
+    selectedPartnersContainer.appendChild(badge);
+    partnerSearch.value = '';
+    partnerDropdown.style.display = 'none';
+    currentPartnerMatches = [];
+    selectedPartnerIndex = -1;
+    partnerSearch.focus(); // Keep focus on search box
+    
+    // Trigger debounced auto-save
+    debouncedAutoSave();
+}
+
+function removePartner(partnerId) {
+    const badge = selectedPartnersContainer.querySelector(`span[data-partner-id="${partnerId}"]`);
+    if (badge) {
+        badge.remove();
+        // Trigger debounced auto-save
+        debouncedAutoSave();
+    }
+}
+
+function createNewPartner(partnerName) {
+    // Show loading indicator
+    partnerSearch.disabled = true;
+    partnerSearch.placeholder = 'Creating partner...';
+    
+    fetch('/api/partners/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: partnerName })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.id) {
+            // Add newly created or existing partner to the list
+            allPartners.push({
+                id: data.id,
+                name: data.name
+            });
+            
+            // Add to selected partners
+            addPartner(data.id, data.name);
+            
+            // Show feedback
+            if (data.existed) {
+                console.log('Partner already existed, added to selection');
+            } else {
+                console.log('New partner created and added');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error creating partner:', error);
+        alert('Failed to create partner. Please try again.');
+    })
+    .finally(() => {
+        // Reset search box
+        partnerSearch.disabled = false;
+        partnerSearch.placeholder = 'Search and add partners...';
+        partnerSearch.value = '';
+        partnerSearch.focus();
+    });
+}
+
 // AI Topic Suggestion
 let lastAiCallFailed = false;
 let aiButtonDisabledUntil = 0;
@@ -525,6 +744,10 @@ function saveDraft() {
             id: parseInt(input.value),
             name: input.closest('.badge').textContent.trim().replace('×', '').trim()
         })),
+        partners: Array.from(selectedPartnersContainer.querySelectorAll('input[name="partner_ids"]')).map(input => ({
+            id: parseInt(input.value),
+            name: input.closest('.badge').textContent.trim().replace('×', '').trim()
+        })),
         call_log_id: {% if call_log %}{{ call_log.id }}{% else %}null{% endif %},
         timestamp: Date.now()
     };
@@ -534,7 +757,7 @@ function saveDraft() {
     tempDiv.innerHTML = draftData.content;
     const textContent = (tempDiv.textContent || tempDiv.innerText || '').trim();
     
-    if (textContent.length > 0 || draftData.topics.length > 0) {
+    if (textContent.length > 0 || draftData.topics.length > 0 || draftData.partners.length > 0) {
         try {
             localStorage.setItem(draftKey, JSON.stringify(draftData));
             console.log('Draft auto-saved');
@@ -574,7 +797,7 @@ function restoreDraft() {
         tempDiv.innerHTML = draft.content || '';
         const textContent = (tempDiv.textContent || tempDiv.innerText || '').trim();
         
-        if (textContent.length === 0 && (!draft.topics || draft.topics.length === 0)) {
+        if (textContent.length === 0 && (!draft.topics || draft.topics.length === 0) && (!draft.partners || draft.partners.length === 0)) {
             return false; // No content to restore
         }
         
@@ -591,6 +814,14 @@ function restoreDraft() {
             draft.topics.forEach(topic => {
                 if (!isTopicSelected(topic.id)) {
                     addTopic(topic.id, topic.name);
+                }
+            });
+        }
+        
+        if (draft.partners && draft.partners.length > 0) {
+            draft.partners.forEach(partner => {
+                if (!isPartnerSelected(partner.id)) {
+                    addPartner(partner.id, partner.name);
                 }
             });
         }
@@ -804,6 +1035,7 @@ function discardDraft() {
         quill.setContents([]);
         document.getElementById('call_date').value = '';
         document.querySelectorAll('.badge[data-topic-id]').forEach(badge => badge.remove());
+        document.querySelectorAll('.badge[data-partner-id]').forEach(badge => badge.remove());
         
         // Redirect back to call logs list
         window.location.href = '{{ url_for("call_logs.call_logs_list") }}';

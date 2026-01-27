@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if partner else 'New' }} Partner - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('partners.partners_list') }}">Partners</a></li>
+            {% if partner %}
+            <li class="breadcrumb-item"><a href="{{ url_for('partners.partner_view', id=partner.id) }}">{{ partner.name }}</a></li>
+            <li class="breadcrumb-item active">Edit</li>
+            {% else %}
+            <li class="breadcrumb-item active">New Partner</li>
+            {% endif %}
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-building"></i> {{ 'Edit' if partner else 'New' }} Partner
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="partnerForm">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Partner Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   value="{{ partner.name if partner else '' }}" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="specialty_search" class="form-label">Specialties</label>
+                            <input type="text" class="form-control" id="specialty_search" 
+                                   placeholder="Search and add specialties..." autocomplete="off">
+                            <div id="specialty_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                            
+                            <div id="selected_specialties" class="mt-2 d-flex flex-wrap gap-2">
+                                {% if partner %}
+                                    {% for specialty in partner.specialties %}
+                                        <span class="badge bg-secondary d-flex align-items-center" data-specialty-id="{{ specialty.id }}">
+                                            <i class="bi bi-award me-1"></i> {{ specialty.name }}
+                                            <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeSpecialty({{ specialty.id }})"></button>
+                                            <input type="hidden" name="specialty_ids" value="{{ specialty.id }}">
+                                        </span>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            <div class="form-text">Type to search. Press Tab to select, Enter to create new.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Rating</label>
+                            <div class="star-rating" id="star-rating">
+                                <input type="hidden" name="rating" id="rating" value="{{ partner.rating if partner and partner.rating is not none else '' }}">
+                                <span class="star" data-value="1"><i class="bi bi-star{{ '-fill' if partner and partner.rating and partner.rating >= 1 else '' }}"></i></span>
+                                <span class="star" data-value="2"><i class="bi bi-star{{ '-fill' if partner and partner.rating and partner.rating >= 2 else '' }}"></i></span>
+                                <span class="star" data-value="3"><i class="bi bi-star{{ '-fill' if partner and partner.rating and partner.rating >= 3 else '' }}"></i></span>
+                                <span class="star" data-value="4"><i class="bi bi-star{{ '-fill' if partner and partner.rating and partner.rating >= 4 else '' }}"></i></span>
+                                <span class="star" data-value="5"><i class="bi bi-star{{ '-fill' if partner and partner.rating and partner.rating >= 5 else '' }}"></i></span>
+                                <button type="button" class="btn btn-sm btn-link text-muted ms-2" id="clear-rating" {% if not partner or partner.rating is none %}style="display: none;"{% endif %}>
+                                    <i class="bi bi-x-circle"></i> Clear
+                                </button>
+                            </div>
+                            <div class="form-text">Click a star to rate, or leave blank for no rating.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="5">{{ partner.notes if partner and partner.notes else '' }}</textarea>
+                        </div>
+                        
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg"></i> {{ 'Save Changes' if partner else 'Create Partner' }}
+                            </button>
+                            <a href="{{ url_for('partners.partner_view', id=partner.id) if partner else url_for('partners.partners_list') }}" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.star-rating {
+    display: flex;
+    align-items: center;
+}
+.star-rating .star {
+    font-size: 1.5rem;
+    color: #ffc107;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+.star-rating .star:hover {
+    transform: scale(1.2);
+}
+.star-rating .star i.bi-star {
+    color: #dee2e6;
+}
+.star-rating .star i.bi-star-fill {
+    color: #ffc107;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Specialty search and selection functionality
+const allSpecialties = [
+    {% for specialty in specialties %}
+        { id: {{ specialty.id }}, name: "{{ specialty.name|escape }}", description: "{{ specialty.description|escape if specialty.description else '' }}" },
+    {% endfor %}
+];
+
+const specialtySearch = document.getElementById('specialty_search');
+const specialtyDropdown = document.getElementById('specialty_dropdown');
+const selectedSpecialtiesContainer = document.getElementById('selected_specialties');
+let currentMatches = [];
+let selectedIndex = -1;
+
+specialtySearch.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase().trim();
+    
+    if (searchTerm.length === 0) {
+        specialtyDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+        return;
+    }
+    
+    // Filter specialties case-insensitively
+    currentMatches = allSpecialties.filter(specialty => 
+        specialty.name.toLowerCase().includes(searchTerm) && 
+        !isSpecialtySelected(specialty.id)
+    );
+    
+    if (currentMatches.length > 0) {
+        selectedIndex = 0; // Auto-select first item
+        renderDropdown();
+        specialtyDropdown.style.display = 'block';
+        specialtyDropdown.style.width = specialtySearch.offsetWidth + 'px';
+    } else {
+        specialtyDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+    }
+});
+
+// Keyboard navigation
+specialtySearch.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowDown' && currentMatches.length > 0) {
+        e.preventDefault();
+        selectedIndex = (selectedIndex + 1) % currentMatches.length;
+        renderDropdown();
+    } else if (e.key === 'ArrowUp' && currentMatches.length > 0) {
+        e.preventDefault();
+        selectedIndex = selectedIndex <= 0 ? currentMatches.length - 1 : selectedIndex - 1;
+        renderDropdown();
+    } else if (e.key === 'Tab') {
+        e.preventDefault();
+        
+        if (currentMatches.length > 0 && selectedIndex >= 0 && selectedIndex < currentMatches.length) {
+            // Select existing specialty from search results
+            const specialty = currentMatches[selectedIndex];
+            addSpecialty(specialty.id, specialty.name);
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        // Only create new specialty on Enter if there are no matches
+        if (currentMatches.length === 0) {
+            const searchTerm = specialtySearch.value.trim();
+            if (searchTerm.length > 0) {
+                createNewSpecialty(searchTerm);
+            }
+        } else if (selectedIndex >= 0 && selectedIndex < currentMatches.length) {
+            // Select the highlighted specialty
+            const specialty = currentMatches[selectedIndex];
+            addSpecialty(specialty.id, specialty.name);
+        }
+    } else if (e.key === 'Escape') {
+        specialtyDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+    }
+});
+
+function renderDropdown() {
+    specialtyDropdown.innerHTML = currentMatches.map((specialty, index) => 
+        `<button type="button" class="list-group-item list-group-item-action ${index === selectedIndex ? 'active' : ''}" 
+            data-specialty-id="${specialty.id}" 
+            data-specialty-name="${specialty.name.replace(/"/g, '&quot;')}"
+            data-specialty-index="${index}"
+            onmouseenter="handleSpecialtyHover(${index})"
+            onclick="handleSpecialtyClick(${specialty.id}, '${specialty.name.replace(/'/g, "\\'")}')">
+            <i class="bi bi-award"></i> ${specialty.name}
+            ${specialty.description ? '<br><small class="text-muted">' + specialty.description + '</small>' : ''}
+        </button>`
+    ).join('');
+}
+
+function handleSpecialtyHover(index) {
+    selectedIndex = index;
+    // Update active class
+    specialtyDropdown.querySelectorAll('button').forEach((btn, i) => {
+        if (i === index) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
+function handleSpecialtyClick(specialtyId, specialtyName) {
+    addSpecialty(specialtyId, specialtyName);
+}
+
+// Hide dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    // Only hide if clicking outside both the search input and the dropdown
+    if (!specialtySearch.contains(e.target) && !specialtyDropdown.contains(e.target)) {
+        specialtyDropdown.style.display = 'none';
+        currentMatches = [];
+        selectedIndex = -1;
+    }
+});
+
+function isSpecialtySelected(specialtyId) {
+    return selectedSpecialtiesContainer.querySelector(`[data-specialty-id="${specialtyId}"]`) !== null;
+}
+
+function addSpecialty(specialtyId, specialtyName) {
+    if (isSpecialtySelected(specialtyId)) return;
+    
+    const badge = document.createElement('span');
+    badge.className = 'badge bg-secondary d-flex align-items-center';
+    badge.setAttribute('data-specialty-id', specialtyId);
+    badge.innerHTML = `
+        <i class="bi bi-award me-1"></i> ${specialtyName}
+        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeSpecialty(${specialtyId})"></button>
+        <input type="hidden" name="specialty_ids" value="${specialtyId}">
+    `;
+    
+    selectedSpecialtiesContainer.appendChild(badge);
+    specialtySearch.value = '';
+    specialtyDropdown.style.display = 'none';
+    currentMatches = [];
+    selectedIndex = -1;
+    specialtySearch.focus(); // Keep focus on search box
+}
+
+function removeSpecialty(specialtyId) {
+    const badge = selectedSpecialtiesContainer.querySelector(`span[data-specialty-id="${specialtyId}"]`);
+    if (badge) {
+        badge.remove();
+    }
+}
+
+function createNewSpecialty(specialtyName) {
+    // Show loading indicator
+    specialtySearch.disabled = true;
+    specialtySearch.placeholder = 'Creating specialty...';
+    
+    fetch('/api/specialties/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: specialtyName })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.id) {
+            // Add newly created or existing specialty to the list
+            allSpecialties.push({
+                id: data.id,
+                name: data.name,
+                description: data.description
+            });
+            
+            // Add to selected specialties
+            addSpecialty(data.id, data.name);
+            
+            // Show feedback
+            if (data.existed) {
+                console.log('Specialty already existed, added to selection');
+            } else {
+                console.log('New specialty created and added');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error creating specialty:', error);
+        alert('Failed to create specialty. Please try again.');
+    })
+    .finally(() => {
+        // Reset search box
+        specialtySearch.disabled = false;
+        specialtySearch.placeholder = 'Search and add specialties...';
+        specialtySearch.value = '';
+        specialtySearch.focus();
+    });
+}
+
+// Star rating functionality
+const stars = document.querySelectorAll('.star-rating .star');
+const ratingInput = document.getElementById('rating');
+const clearBtn = document.getElementById('clear-rating');
+
+function updateStars(value) {
+    stars.forEach((star, index) => {
+        const icon = star.querySelector('i');
+        if (index < value) {
+            icon.className = 'bi bi-star-fill';
+        } else {
+            icon.className = 'bi bi-star';
+        }
+    });
+}
+
+stars.forEach(star => {
+    star.addEventListener('click', function() {
+        const value = parseInt(this.dataset.value);
+        ratingInput.value = value;
+        updateStars(value);
+        clearBtn.style.display = 'inline-block';
+    });
+    
+    star.addEventListener('mouseenter', function() {
+        const value = parseInt(this.dataset.value);
+        updateStars(value);
+    });
+    
+    star.addEventListener('mouseleave', function() {
+        const currentValue = ratingInput.value ? parseInt(ratingInput.value) : 0;
+        updateStars(currentValue);
+    });
+});
+
+clearBtn.addEventListener('click', function() {
+    ratingInput.value = '';
+    updateStars(0);
+    this.style.display = 'none';
+});
+</script>
+{% endblock %}

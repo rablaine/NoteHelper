@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}{{ partner.name }} - Partners - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('partners.partners_list') }}">Partners</a></li>
+            <li class="breadcrumb-item active">{{ partner.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-building"></i> {{ partner.name }}</h1>
+            <div class="mt-2">
+                {% if partner.rating is not none %}
+                <span class="me-3" title="{{ partner.rating }} out of 5 stars">
+                    {% for i in range(5) %}
+                        <i class="bi bi-star{{ '-fill text-warning' if i < partner.rating else ' text-muted' }}"></i>
+                    {% endfor %}
+                </span>
+                {% endif %}
+                {% for specialty in partner.specialties %}
+                <a href="{{ url_for('partners.specialty_view', id=specialty.id) }}" class="badge bg-warning text-dark text-decoration-none me-1">
+                    <i class="bi bi-star"></i> {{ specialty.name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('partners.partner_edit', id=partner.id) }}" class="btn btn-outline-primary">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                <i class="bi bi-trash"></i> Delete
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Left Column: Details -->
+        <div class="col-lg-6">
+            <!-- Notes -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-sticky"></i> Notes</h5>
+                </div>
+                <div class="card-body">
+                    {% if partner.notes %}
+                    <p class="mb-0" style="white-space: pre-wrap;">{{ partner.notes }}</p>
+                    {% else %}
+                    <p class="text-muted mb-0">No notes yet. <a href="{{ url_for('partners.partner_edit', id=partner.id) }}">Add notes</a></p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Contacts -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-people"></i> Contacts</h5>
+                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addContactModal">
+                        <i class="bi bi-plus-lg"></i> Add
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    {% if partner.contacts %}
+                    <ul class="list-group list-group-flush">
+                        {% for contact in partner.contacts %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ contact.name }}</strong>
+                                {% if contact.is_primary %}
+                                <span class="badge bg-primary ms-1">Primary</span>
+                                {% endif %}
+                                {% if contact.email %}
+                                <br><small class="text-muted"><a href="mailto:{{ contact.email }}">{{ contact.email }}</a></small>
+                                {% endif %}
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                {% if not contact.is_primary %}
+                                <form action="{{ url_for('partners.contact_set_primary', partner_id=partner.id, contact_id=contact.id) }}" method="post" class="d-inline">
+                                    <button type="submit" class="btn btn-outline-primary" title="Set as primary">
+                                        <i class="bi bi-star"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <form action="{{ url_for('partners.contact_delete', partner_id=partner.id, contact_id=contact.id) }}" method="post" class="d-inline" onsubmit="return confirm('Delete this contact?')">
+                                    <button type="submit" class="btn btn-outline-danger" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="p-3 text-center text-muted">
+                        No contacts yet
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Call Logs -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-telephone"></i> Associated Calls ({{ partner.call_logs|length }})</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if partner.call_logs %}
+                    <ul class="list-group list-group-flush">
+                        {% for call in partner.call_logs|sort(attribute='call_date', reverse=True) %}
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <a href="{{ url_for('call_logs.call_log_view', id=call.id) }}" class="text-decoration-none fw-bold">
+                                        {{ call.customer.name }}
+                                    </a>
+                                    <br>
+                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
+                                </div>
+                            </div>
+                            <p class="mb-0 mt-1 text-muted small">{{ call.content|striptags|truncate(150, true) }}</p>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="p-3 text-center text-muted">
+                        No calls associated with this partner yet
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Contact Modal -->
+<div class="modal fade" id="addContactModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('partners.contact_new', partner_id=partner.id) }}" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Contact</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="contact_name" class="form-label">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="contact_name" name="contact_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="contact_email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="contact_email" name="contact_email">
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="is_primary" name="is_primary">
+                        <label class="form-check-label" for="is_primary">Set as primary contact</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Contact</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Partner</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong>{{ partner.name }}</strong>?</p>
+                <p class="text-muted mb-0">This will remove the partner from all associated call logs but will not delete the call logs themselves.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('partners.partner_delete', id=partner.id) }}" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-danger">Delete Partner</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
