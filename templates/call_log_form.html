@@ -43,6 +43,8 @@
             <div class="card-body">
                 <form method="POST" id="callLogForm">
                     <input type="hidden" name="referrer" value="{{ referrer if referrer else '' }}">
+                    
+                    <!-- Customer (full width) -->
                     <div class="mb-3">
                         <label for="customer_id" class="form-label">Customer *</label>
                         <select class="form-select" id="customer_id" name="customer_id" required {% if not call_log and preselect_customer_id %}disabled{% endif %}>
@@ -64,11 +66,33 @@
                         {% endif %}
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="call_date" class="form-label">Call Date *</label>
-                        <input type="date" class="form-control" id="call_date" name="call_date" 
-                               value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
-                               required>
+                    <!-- Call Date and Partners side-by-side -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="call_date" class="form-label">Call Date *</label>
+                            <input type="date" class="form-control" id="call_date" name="call_date" 
+                                   value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
+                                   required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="partner_search" class="form-label">Partners</label>
+                            <input type="text" class="form-control" id="partner_search" 
+                                   placeholder="Search and add partners..." autocomplete="off">
+                            <div id="partner_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                            
+                            <div id="selected_partners" class="mt-2 d-flex flex-wrap gap-2">
+                                {% if call_log %}
+                                    {% for partner in call_log.partners %}
+                                        <span class="badge d-flex align-items-center" style="background-color: #6f42c1;" data-partner-id="{{ partner.id }}">
+                                            <i class="bi bi-building me-1"></i> {{ partner.name }}
+                                            <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removePartner({{ partner.id }})"></button>
+                                            <input type="hidden" name="partner_ids" value="{{ partner.id }}">
+                                        </span>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -103,25 +127,6 @@
                                             <input type="hidden" name="topic_ids" value="{{ topic.id }}">
                                         </span>
                                     {% endif %}
-                                {% endfor %}
-                            {% endif %}
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="partner_search" class="form-label">Partners</label>
-                        <input type="text" class="form-control" id="partner_search" 
-                               placeholder="Search and add partners..." autocomplete="off">
-                        <div id="partner_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
-                        
-                        <div id="selected_partners" class="mt-2 d-flex flex-wrap gap-2">
-                            {% if call_log %}
-                                {% for partner in call_log.partners %}
-                                    <span class="badge d-flex align-items-center" style="background-color: #6f42c1;" data-partner-id="{{ partner.id }}">
-                                        <i class="bi bi-building me-1"></i> {{ partner.name }}
-                                        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removePartner({{ partner.id }})"></button>
-                                        <input type="hidden" name="partner_ids" value="{{ partner.id }}">
-                                    </span>
                                 {% endfor %}
                             {% endif %}
                         </div>
