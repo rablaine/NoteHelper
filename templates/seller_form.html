@@ -17,10 +17,19 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email Address</label>
-                        <input type="email" class="form-control" id="email" name="email" 
-                               value="{{ seller.email or seller.get_email() if seller else '' }}" 
-                               placeholder="seller@example.com">
+                        <label for="alias" class="form-label">Email Address</label>
+                        <input type="text" class="form-control" id="alias" name="alias" 
+                               value="{{ seller.get_email() if seller and seller.alias else '' }}" 
+                               placeholder="alias or alias@microsoft.com">
+                        <div class="form-text">Enter alias or full email - @microsoft.com will be added automatically</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="seller_type" class="form-label">Seller Type</label>
+                        <select class="form-select" id="seller_type" name="seller_type">
+                            <option value="Growth" {% if not seller or seller.seller_type == 'Growth' %}selected{% endif %}>Growth</option>
+                            <option value="Acquisition" {% if seller and seller.seller_type == 'Acquisition' %}selected{% endif %}>Acquisition</option>
+                        </select>
                     </div>
                     
                     <div class="mb-3" style="position: relative;">
