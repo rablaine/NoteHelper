@@ -6,7 +6,7 @@
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Alerts</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer_name) }}">{{ customer_name }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_customer_view', customer_id=customer.id) }}">{{ customer_name }}</a></li>
             <li class="breadcrumb-item active">{{ bucket }} Products</li>
         </ol>
     </nav>
@@ -16,7 +16,7 @@
             <h1><i class="bi bi-boxes"></i> {{ bucket }} Products</h1>
             <p class="text-muted mb-0">{{ customer_name }}</p>
         </div>
-        <a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer_name) }}" class="btn btn-outline-secondary">
+        <a href="{{ url_for('revenue.revenue_customer_view', customer_id=customer.id) }}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Back to Customer
         </a>
     </div>

@@ -90,13 +90,15 @@
                         {% for c in customers %}
                         <tr>
                             <td>
-                                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=c.customer_name) }}">
+                                {% if c.customer_id %}
+                                <a href="{{ url_for('revenue.revenue_customer_view', customer_id=c.customer_id) }}">
                                     {{ c.customer_name }}
                                 </a>
-                                {% if c.customer_id %}
                                 <a href="{{ url_for('customers.customer_view', id=c.customer_id) }}" class="text-muted ms-1" title="View in NoteHelper">
                                     <i class="bi bi-box-arrow-up-right"></i>
                                 </a>
+                                {% else %}
+                                {{ c.customer_name }}
                                 {% endif %}
                             </td>
                             <td><span class="badge bg-secondary">{{ c.bucket }}</span></td>
@@ -133,12 +135,17 @@
     {% if customer_history %}
     <h4 class="mt-4 mb-3"><i class="bi bi-graph-up"></i> Revenue History</h4>
     {% for customer_name, history in customer_history.items() %}
+    {% set cust = customers|selectattr('customer_name', 'equalto', customer_name)|first %}
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h6 class="mb-0">
-                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer_name) }}" class="text-decoration-none">
+                {% if cust and cust.customer_id %}
+                <a href="{{ url_for('revenue.revenue_customer_view', customer_id=cust.customer_id) }}" class="text-decoration-none">
                     {{ customer_name }}
                 </a>
+                {% else %}
+                {{ customer_name }}
+                {% endif %}
             </h6>
             <span class="badge bg-secondary">{{ history|length }} months</span>
         </div>

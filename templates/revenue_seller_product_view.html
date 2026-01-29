@@ -56,14 +56,22 @@
                         {% for c in customer_summary %}
                         <tr>
                             <td class="ps-3">
-                                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=c.customer_name) }}">
+                                {% if c.customer_id %}
+                                <a href="{{ url_for('revenue.revenue_customer_view', customer_id=c.customer_id) }}">
                                     {{ c.customer_name }}
                                 </a>
+                                {% else %}
+                                {{ c.customer_name }}
+                                {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('revenue.revenue_bucket_products', customer_name=c.customer_name, bucket=c.bucket) }}" class="text-muted">
+                                {% if c.customer_id %}
+                                <a href="{{ url_for('revenue.revenue_bucket_products', customer_id=c.customer_id, bucket=c.bucket) }}" class="text-muted">
                                     {{ c.bucket }}
                                 </a>
+                                {% else %}
+                                {{ c.bucket }}
+                                {% endif %}
                             </td>
                             {% for month in recent_months %}
                             <td class="text-end">

@@ -94,9 +94,13 @@
                         {% for customer in customers %}
                         <tr>
                             <td>
-                                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=customer.customer_name) }}">
+                                {% if customer.customer_id %}
+                                <a href="{{ url_for('revenue.revenue_customer_view', customer_id=customer.customer_id) }}">
                                     {{ customer.customer_name }}
                                 </a>
+                                {% else %}
+                                {{ customer.customer_name }}
+                                {% endif %}
                             </td>
                             <td class="text-center">
                                 <span class="badge bg-success">{{ customer.first_usage_fiscal or 'Unknown' }}</span>

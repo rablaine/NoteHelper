@@ -326,9 +326,12 @@ def api_customers_autocomplete():
     if not query or len(query) < 2:
         return jsonify([]), 200
     
-    # Search customers by name (case-insensitive, contains)
+    # Search customers by name OR nickname (case-insensitive, contains)
     customers = Customer.query.filter(
-        Customer.name.ilike(f'%{query}%')
+        db.or_(
+            Customer.name.ilike(f'%{query}%'),
+            Customer.nickname.ilike(f'%{query}%')
+        )
     ).order_by(Customer.name).limit(10).all()
     
     results = [{

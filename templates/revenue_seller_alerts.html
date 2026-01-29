@@ -88,13 +88,15 @@
                                 </span>
                             </td>
                             <td>
-                                <a href="{{ url_for('revenue.revenue_customer_view', customer_name=a.customer_name) }}">
+                                {% if a.customer_id %}
+                                <a href="{{ url_for('revenue.revenue_customer_view', customer_id=a.customer_id) }}">
                                     {{ a.customer_name }}
                                 </a>
-                                {% if a.customer_id %}
                                 <a href="{{ url_for('customers.customer_view', id=a.customer_id) }}" class="text-muted" title="View in NoteHelper">
                                     <i class="bi bi-box-arrow-up-right"></i>
                                 </a>
+                                {% else %}
+                                {{ a.customer_name }}
                                 {% endif %}
                             </td>
                             <td><small class="text-muted">{{ a.tpid or '-' }}</small></td>
