@@ -407,9 +407,18 @@ def revenue_seller_product_view(seller_name: str, product: str):
     )
 
 
-@revenue_bp.route('/revenue/customer/<customer_name>')
-def revenue_customer_view(customer_name: str):
+@revenue_bp.route('/revenue/customer/<int:customer_id>')
+def revenue_customer_view(customer_id: int):
     """View revenue history and analysis for a specific customer."""
+    # Get the NoteHelper customer
+    customer = db.session.get(Customer, customer_id)
+    if not customer:
+        flash('Customer not found.', 'danger')
+        return redirect(url_for('revenue.revenue_dashboard'))
+    
+    # Use customer name to look up revenue data (revenue tables store customer_name)
+    customer_name = customer.name
+    
     # Get all analyses for this customer (all buckets)
     analyses = RevenueAnalysis.query.filter_by(customer_name=customer_name).all()
     
@@ -466,11 +475,6 @@ def revenue_customer_view(customer_name: str):
                 'bucket_total': sum(rd.revenue for rd in history)
             }
     
-    # Try to match to a NoteHelper Customer
-    customer = Customer.query.filter(
-        db.func.lower(Customer.name) == customer_name.lower()
-    ).first()
-    
     return render_template(
         'revenue_customer_view.html',
         customer_name=customer_name,
@@ -482,9 +486,16 @@ def revenue_customer_view(customer_name: str):
     )
 
 
-@revenue_bp.route('/revenue/customer/<customer_name>/bucket/<bucket>')
-def revenue_bucket_products(customer_name: str, bucket: str):
+@revenue_bp.route('/revenue/customer/<int:customer_id>/bucket/<bucket>')
+def revenue_bucket_products(customer_id: int, bucket: str):
     """View product-level revenue breakdown for a customer/bucket."""
+    # Get the NoteHelper customer
+    customer = db.session.get(Customer, customer_id)
+    if not customer:
+        flash('Customer not found.', 'danger')
+        return redirect(url_for('revenue.revenue_dashboard'))
+    
+    customer_name = customer.name
     # Get products with totals
     products = get_products_for_bucket(customer_name, bucket)
     
@@ -520,11 +531,6 @@ def revenue_bucket_products(customer_name: str, bucket: str):
     analysis = RevenueAnalysis.query.filter_by(
         customer_name=customer_name,
         bucket=bucket
-    ).first()
-    
-    # Try to match to NoteHelper customer
-    customer = Customer.query.filter(
-        db.func.lower(Customer.name) == customer_name.lower()
     ).first()
     
     return render_template(
