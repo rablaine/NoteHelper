@@ -26,6 +26,7 @@ def seller_create():
     """Create a new seller (FR002)."""
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip() or None
         territory_ids = request.form.getlist('territory_ids')
         
         if not name:
@@ -38,7 +39,7 @@ def seller_create():
             flash(f'Seller "{name}" already exists.', 'warning')
             return redirect(url_for('sellers.seller_view', id=existing.id))
         
-        seller = Seller(name=name, user_id=g.user.id)
+        seller = Seller(name=name, email=email, user_id=g.user.id)
         
         # Add territories to many-to-many relationship
         if territory_ids:
@@ -102,6 +103,7 @@ def seller_edit(id):
     
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip() or None
         territory_ids = request.form.getlist('territory_ids')
         
         if not name:
@@ -118,6 +120,7 @@ def seller_edit(id):
             return redirect(url_for('sellers.seller_edit', id=id))
         
         seller.name = name
+        seller.email = email
         
         # Update territories - replace the collection
         seller.territories = []

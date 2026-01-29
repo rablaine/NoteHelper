@@ -16,6 +16,13 @@
                                value="{{ seller.name if seller else '' }}" required>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="email" name="email" 
+                               value="{{ seller.email or seller.get_email() if seller else '' }}" 
+                               placeholder="seller@example.com">
+                    </div>
+                    
                     <div class="mb-3" style="position: relative;">
                         <label for="territory_search" class="form-label">Territories</label>
                         <input type="text" class="form-control" id="territory_search" 
