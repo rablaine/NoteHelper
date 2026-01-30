@@ -232,3 +232,43 @@ def reset_db(app):
         db.session.commit()
     
     yield
+
+@pytest.fixture
+def db_session(app):
+    """Provide database session for tests."""
+    with app.app_context():
+        from app.models import db
+        yield db.session
+
+
+@pytest.fixture
+def sample_user(app):
+    """Get the test user."""
+    with app.app_context():
+        from app.models import User
+        return User.query.first()
+
+
+@pytest.fixture
+def sample_customer(app):
+    """Create a sample customer for tests and return its ID."""
+    with app.app_context():
+        from app.models import db, Customer, User
+        test_user = User.query.first()
+        
+        customer = Customer(
+            name='Test Customer',
+            tpid=9999,
+            user_id=test_user.id
+        )
+        db.session.add(customer)
+        db.session.commit()
+        
+        # Create a simple object to hold the ID (avoid detached instance issues)
+        class CustomerData:
+            def __init__(self, id, name, tpid):
+                self.id = id
+                self.name = name
+                self.tpid = tpid
+        
+        return CustomerData(customer.id, customer.name, customer.tpid)

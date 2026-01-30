@@ -38,6 +38,13 @@ call_logs_partners = db.Table(
     db.Column('partner_id', db.Integer, db.ForeignKey('partners.id'), primary_key=True)
 )
 
+# Association table for many-to-many relationship between CallLog and Milestone
+call_logs_milestones = db.Table(
+    'call_logs_milestones',
+    db.Column('call_log_id', db.Integer, db.ForeignKey('call_logs.id'), primary_key=True),
+    db.Column('milestone_id', db.Integer, db.ForeignKey('milestones.id'), primary_key=True)
+)
+
 # Association table for many-to-many relationship between Partner and Specialty
 partners_specialties = db.Table(
     'partners_specialties',
@@ -472,6 +479,12 @@ class CallLog(db.Model):
         back_populates='call_logs',
         lazy='select'
     )
+    milestones = db.relationship(
+        'Milestone',
+        secondary=call_logs_milestones,
+        back_populates='call_logs',
+        lazy='select'
+    )
     
     @property
     def seller(self):
@@ -485,6 +498,34 @@ class CallLog(db.Model):
     
     def __repr__(self) -> str:
         return f'<CallLog {self.id} for {self.customer.name}>'
+
+
+class Milestone(db.Model):
+    """Milestone from MSX sales platform that can be linked to call logs."""
+    __tablename__ = 'milestones'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(2000), nullable=False, unique=True)
+    title = db.Column(db.String(500), nullable=True)  # Optional friendly title
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    
+    # Relationships
+    call_logs = db.relationship(
+        'CallLog',
+        secondary=call_logs_milestones,
+        back_populates='milestones',
+        lazy='select'
+    )
+    
+    @property
+    def display_text(self):
+        """Return title if set, otherwise a default text."""
+        return self.title if self.title else 'View in MSX'
+    
+    def __repr__(self) -> str:
+        return f'<Milestone {self.id}: {self.title or self.url[:50]}>'
 
 
 # =============================================================================

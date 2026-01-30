@@ -132,6 +132,27 @@
                         </div>
                     </div>
                     
+                    <!-- Milestone URL -->
+                    <div class="mb-3">
+                        <label for="milestone_url" class="form-label">
+                            <i class="bi bi-flag"></i> Milestone URL (optional)
+                        </label>
+                        <input type="url" class="form-control" id="milestone_url" name="milestone_url" 
+                               value="{% if call_log and call_log.milestones %}{{ call_log.milestones[0].url }}{% endif %}"
+                               placeholder="Paste MSX milestone URL...">
+                        <div class="form-text">Link this call to a milestone in MSX</div>
+                        <div id="selected_milestones" class="mt-2 d-flex flex-wrap gap-2">
+                            {% if call_log and call_log.milestones %}
+                                {% for milestone in call_log.milestones %}
+                                <span class="badge bg-success d-flex align-items-center" data-milestone-id="{{ milestone.id }}">
+                                    <i class="bi bi-flag me-1"></i> {{ milestone.display_text }}
+                                    <input type="hidden" name="milestone_ids" value="{{ milestone.id }}">
+                                </span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
                     <div class="mb-3">
                         <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
                         <textarea name="content" id="content" style="display:none;"></textarea>
