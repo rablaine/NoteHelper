@@ -175,6 +175,17 @@
             background-color: #6c757d !important; /* Bootstrap secondary */
             color: #fff !important;
         }
+        
+        /* Focus styling for keyboard navigation in modals */
+        .list-group-item-action:focus {
+            outline: 2px solid #0d6efd;
+            outline-offset: -2px;
+            background-color: #e9ecef;
+        }
+        [data-bs-theme="dark"] .list-group-item-action:focus {
+            outline-color: #6ea8fe;
+            background-color: #3a3f44;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -551,11 +562,17 @@
             // Keyboard navigation for search input
             customerSearch.addEventListener('keydown', function(e) {
                 const items = customerResults.querySelectorAll('a.list-group-item-action');
-                if (items.length === 0) return;
                 
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    items[0].focus();
+                    if (items.length > 0) {
+                        items[0].focus();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (items.length > 0) {
+                        items[items.length - 1].focus();
+                    }
                 }
             });
             

@@ -71,32 +71,28 @@
                     {% endif %}
                 </p>
                 
+                {% if call_log.partners|length > 0 %}
                 <p><strong>Partners:</strong><br>
-                    {% if call_log.partners|length > 0 %}
-                        {% for partner in call_log.partners %}
-                            <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;">
-                                <i class="bi bi-building"></i> {{ partner.name }}
-                            </a>
-                        {% endfor %}
-                    {% else %}
-                        <span class="text-muted">No partners</span>
-                    {% endif %}
+                    {% for partner in call_log.partners %}
+                        <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;">
+                            <i class="bi bi-building"></i> {{ partner.name }}
+                        </a>
+                    {% endfor %}
                 </p>
+                {% endif %}
                 
+                {% if call_log.milestones|length > 0 %}
                 <p><strong>Milestones:</strong><br>
-                    {% if call_log.milestones|length > 0 %}
-                        {% for milestone in call_log.milestones %}
-                            <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none">
-                                <i class="bi bi-flag"></i> {{ milestone.display_text }} <i class="bi bi-box-arrow-up-right"></i>
-                            </a>
-                            <a href="{{ url_for('milestones.milestone_view', id=milestone.id) }}" class="btn btn-sm btn-link p-0 ms-1" title="Edit milestone">
-                                <i class="bi bi-pencil-square"></i>
-                            </a>
-                        {% endfor %}
-                    {% else %}
-                        <span class="text-muted">No milestones linked</span>
-                    {% endif %}
+                    {% for milestone in call_log.milestones %}
+                        <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none">
+                            <i class="bi bi-flag"></i> {{ milestone.display_text }} <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                        <a href="{{ url_for('milestones.milestone_view', id=milestone.id) }}" class="btn btn-sm btn-link p-0 ms-1" title="Edit milestone">
+                            <i class="bi bi-pencil-square"></i>
+                        </a>
+                    {% endfor %}
                 </p>
+                {% endif %}
                 
                 <hr>
                 
