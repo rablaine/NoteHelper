@@ -208,9 +208,8 @@ document.getElementById('aiFullUrl').addEventListener('input', function() {
             const deploymentName = pathMatch[1];
             document.getElementById('aiDeployment').value = deploymentName;
             
-            // Build base endpoint URL (without /chat/completions and query params)
-            const baseUrl = `${url.origin}${url.pathname.replace(/\/chat\/completions$/, '')}`;
-            document.getElementById('aiEndpoint').value = baseUrl;
+            // Use just the origin (base URL) - SDK adds the path automatically
+            document.getElementById('aiEndpoint').value = url.origin;
         }
         
         // Extract api-version from query params
