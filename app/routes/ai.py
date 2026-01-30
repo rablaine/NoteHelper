@@ -1,15 +1,51 @@
 """
 AI routes for NoteHelper.
 Handles AI-powered topic suggestion and related features.
+Uses Azure OpenAI with Entra ID (Service Principal) authentication.
 """
 from flask import Blueprint, request, jsonify, g
 from datetime import date
 import json
+import os
 
 from app.models import db, AIConfig, AIQueryLog, Topic
 
 # Create blueprint
 ai_bp = Blueprint('ai', __name__)
+
+
+def get_azure_openai_client(ai_config):
+    """Create an Azure OpenAI client with Entra ID authentication."""
+    from openai import AzureOpenAI
+    from azure.identity import ClientSecretCredential, get_bearer_token_provider
+    
+    # Get service principal credentials from environment
+    client_id = os.environ.get('AZURE_CLIENT_ID')
+    client_secret = os.environ.get('AZURE_CLIENT_SECRET')
+    tenant_id = os.environ.get('AZURE_TENANT_ID')
+    
+    if not all([client_id, client_secret, tenant_id]):
+        raise ValueError("Missing Azure service principal environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)")
+    
+    # Create credential and token provider
+    credential = ClientSecretCredential(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret
+    )
+    token_provider = get_bearer_token_provider(
+        credential, 
+        "https://cognitiveservices.azure.com/.default"
+    )
+    
+    # Create Azure OpenAI client
+    client = AzureOpenAI(
+        api_version=ai_config.api_version,
+        azure_endpoint=ai_config.endpoint_url,
+        azure_ad_token_provider=token_provider,
+    )
+    
+    return client
 
 
 @ai_bp.route('/api/ai/suggest-topics', methods=['POST'])
@@ -21,8 +57,8 @@ def api_ai_suggest_topics():
     if not ai_config or not ai_config.enabled:
         return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
     
-    if not ai_config.endpoint_url or not ai_config.api_key or not ai_config.deployment_name:
-        return jsonify({'success': False, 'error': 'AI configuration is incomplete'}), 400
+    if not ai_config.endpoint_url or not ai_config.deployment_name:
+        return jsonify({'success': False, 'error': 'AI configuration is incomplete (missing endpoint or deployment name)'}), 400
     
     # Get call notes from request
     data = request.get_json()
@@ -33,48 +69,21 @@ def api_ai_suggest_topics():
     
     # Make AI API call
     try:
-        import requests
+        client = get_azure_openai_client(ai_config)
         
-        # Azure AI Foundry Serverless API uses direct HTTP calls with Bearer auth
-        full_url = ai_config.endpoint_url
-        if not full_url.endswith('/chat/completions'):
-            full_url = full_url.rstrip('/') + '/chat/completions'
-        
-        full_url = f"{full_url}?api-version={ai_config.api_version}"
-        
-        headers = {
-            "Content-Type": "application/json",
-            "api-key": ai_config.api_key
-        }
-        
-        payload = {
-            "messages": [
+        response = client.chat.completions.create(
+            messages=[
                 {"role": "system", "content": ai_config.system_prompt},
                 {"role": "user", "content": f"Call notes:\n\n{call_notes}"}
             ],
-            "max_tokens": 150,
-            "model": ai_config.deployment_name
-        }
+            max_tokens=150,
+            model=ai_config.deployment_name
+        )
         
-        response = requests.post(full_url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        
-        result_data = response.json()
-        
-        # Log the full response structure for debugging
-        full_response_debug = json.dumps(result_data, indent=2)[:2000]
-        
-        # Check if response has expected structure
-        if 'choices' not in result_data or not result_data['choices']:
-            raise ValueError(f"API response missing 'choices'. Full response:\n{full_response_debug}")
-        
-        if 'message' not in result_data['choices'][0] or 'content' not in result_data['choices'][0]['message']:
-            raise ValueError(f"API response missing 'message.content'. Full response:\n{full_response_debug}")
-        
-        response_text = result_data['choices'][0]['message']['content']
+        response_text = response.choices[0].message.content
         
         if not response_text or not response_text.strip():
-            raise ValueError(f"API returned empty content. Full response:\n{full_response_debug}")
+            raise ValueError("AI returned empty content")
         
         response_text = response_text.strip()
         
@@ -82,11 +91,10 @@ def api_ai_suggest_topics():
         raw_response_text = response_text
         
         # Extract token usage and model info
-        model_used = result_data.get('model', ai_config.deployment_name)
-        usage_data = result_data.get('usage', {})
-        prompt_tokens = usage_data.get('prompt_tokens')
-        completion_tokens = usage_data.get('completion_tokens')
-        total_tokens = usage_data.get('total_tokens')
+        model_used = response.model or ai_config.deployment_name
+        prompt_tokens = response.usage.prompt_tokens if response.usage else None
+        completion_tokens = response.usage.completion_tokens if response.usage else None
+        total_tokens = response.usage.total_tokens if response.usage else None
         
         # Parse JSON response - be flexible with different formats
         suggested_topics = []
@@ -125,7 +133,7 @@ def api_ai_suggest_topics():
             log_entry = AIQueryLog(
                 user_id=g.user.id,
                 request_text=call_notes[:1000],
-                response_text=raw_response_text[:1000],  # Use raw response, not cleaned version
+                response_text=raw_response_text[:1000],
                 success=False,
                 error_message=f"Parse error: {str(e)}",
                 model=model_used,
@@ -144,7 +152,7 @@ def api_ai_suggest_topics():
         log_entry = AIQueryLog(
             user_id=g.user.id,
             request_text=call_notes[:1000],
-            response_text=raw_response_text[:1000],  # Use raw response before parsing
+            response_text=raw_response_text[:1000],
             success=True,
             error_message=None,
             model=model_used,
@@ -180,41 +188,20 @@ def api_ai_suggest_topics():
             'topics': topic_ids
         })
     
-    except requests.exceptions.RequestException as e:
-        error_msg = str(e)
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_detail = e.response.json()
-                error_msg = f"{e.response.status_code} - {error_detail}"
-            except:
-                error_msg = f"{e.response.status_code} - {e.response.text}"
-        
-        # Log the error
-        log_entry = AIQueryLog(
-            user_id=g.user.id,
-            request_text=call_notes[:1000],
-            response_text=None,
-            success=False,
-            error_message=error_msg
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-        
-        return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
-    
     except Exception as e:
         # Log failed query
+        error_msg = str(e)
+        
         log_entry = AIQueryLog(
             user_id=g.user.id,
             request_text=call_notes[:1000],
             response_text=None,
             success=False,
-            error_message=str(e)
+            error_message=error_msg[:500]
         )
         db.session.add(log_entry)
         db.session.commit()
         
-        error_msg = str(e)
         return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
 
 

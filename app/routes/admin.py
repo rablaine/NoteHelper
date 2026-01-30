@@ -78,63 +78,60 @@ def api_admin_ai_config_update():
 
 @admin_bp.route('/api/admin/ai-config/test', methods=['POST'])
 def api_admin_ai_config_test():
-    """Test AI configuration by making a sample API call."""
+    """Test AI configuration by making a sample API call using Entra ID auth."""
+    import os
+    from openai import AzureOpenAI
+    from azure.identity import ClientSecretCredential, get_bearer_token_provider
+    
     # Get current form values from request instead of database
     data = request.get_json() or {}
     endpoint_url = data.get('endpoint_url', '').strip()
-    api_key = data.get('api_key', '').strip()
     deployment_name = data.get('deployment_name', '').strip()
+    api_version = data.get('api_version', '2024-12-01-preview').strip()
     
     # Validate required fields
-    if not endpoint_url or not api_key or not deployment_name:
-        return jsonify({'error': 'Please fill in endpoint URL, API key, and deployment name before testing'}), 400
+    if not endpoint_url or not deployment_name:
+        return jsonify({'error': 'Please fill in endpoint URL and deployment name before testing'}), 400
+    
+    # Check for service principal credentials in environment
+    client_id = os.environ.get('AZURE_CLIENT_ID')
+    client_secret = os.environ.get('AZURE_CLIENT_SECRET')
+    tenant_id = os.environ.get('AZURE_TENANT_ID')
+    
+    if not all([client_id, client_secret, tenant_id]):
+        return jsonify({'error': 'Missing Azure service principal environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)'}), 400
     
     try:
-        import requests
+        # Create credential and token provider
+        credential = ClientSecretCredential(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+        token_provider = get_bearer_token_provider(
+            credential, 
+            "https://cognitiveservices.azure.com/.default"
+        )
         
-        # Azure AI Foundry Serverless API uses direct HTTP calls with Bearer auth
-        # Construct full URL - if user included /chat/completions, use as-is, otherwise append it
-        full_url = endpoint_url
-        if not full_url.endswith('/chat/completions'):
-            full_url = full_url.rstrip('/') + '/chat/completions'
+        # Create Azure OpenAI client
+        client = AzureOpenAI(
+            api_version=api_version,
+            azure_endpoint=endpoint_url,
+            azure_ad_token_provider=token_provider,
+        )
         
-        # Add api-version parameter from form (user can specify which version)
-        api_version = data.get('api_version', '2024-08-01-preview').strip()
-        full_url = f"{full_url}?api-version={api_version}"
-        
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-        
-        payload = {
-            "messages": [
+        response = client.chat.completions.create(
+            messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": "Say 'Connection successful!' and nothing else."}
             ],
-            "max_completion_tokens": 20,
-            "model": deployment_name
-        }
-        
-        response = requests.post(full_url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        
-        result_data = response.json()
-        result = result_data['choices'][0]['message']['content'].strip()
-        return jsonify({'success': True, 'message': 'Connection successful!', 'response': result})
+            max_tokens=20,
+            model=deployment_name
+        )
         
         result = response.choices[0].message.content.strip()
         return jsonify({'success': True, 'message': 'Connection successful!', 'response': result})
     
-    except requests.exceptions.RequestException as e:
-        error_msg = str(e)
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_detail = e.response.json()
-                error_msg = f"{e.response.status_code} - {error_detail}"
-            except:
-                error_msg = f"{e.response.status_code} - {e.response.text}"
-        return jsonify({'success': False, 'error': f'Connection failed: {error_msg}'}), 400
     except Exception as e:
         error_msg = str(e)
         return jsonify({'success': False, 'error': f'Connection failed: {error_msg}'}), 400

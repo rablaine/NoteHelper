@@ -23,6 +23,7 @@ Flask-DebugToolbar==0.14.1
 
 # AI/ML
 openai==1.58.1
+azure-identity==1.19.0
 
 # Production Server
 gunicorn==21.2.0
