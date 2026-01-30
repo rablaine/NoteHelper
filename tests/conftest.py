@@ -81,19 +81,17 @@ def app():
 
 @pytest.fixture
 def client(app):
-    """Create a test client with authenticated user."""
+    """Create a test client with user context."""
     client = app.test_client()
     
-    # Log in the test user for all tests
+    # Set up user context for all tests (single-user mode)
     with app.app_context():
         from app.models import User
-        from flask_login import login_user
         test_user = User.query.first()
         
         with client.session_transaction() as sess:
-            # Manually set the user ID in the session to simulate login
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
+            # Set the user ID in the session
+            sess['user_id'] = str(test_user.id)
     
     return client
 
