@@ -132,6 +132,12 @@
                         </div>
                     </div>
                     
+                    <div class="mb-3">
+                        <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
+                        <textarea name="content" id="content" style="display:none;"></textarea>
+                        <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
+                    </div>
+                    
                     <!-- Milestone URL -->
                     <div class="mb-3">
                         <label for="milestone_url" class="form-label">
@@ -151,12 +157,6 @@
                                 {% endfor %}
                             {% endif %}
                         </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
-                        <textarea name="content" id="content" style="display:none;"></textarea>
-                        <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
                     </div>
                     
                     <div class="d-flex justify-content-between">
@@ -242,6 +242,7 @@ document.getElementById('callLogForm').onsubmit = function(e) {
     
     if (textContent.trim().length === 0) {
         e.preventDefault();
+        e.stopImmediatePropagation(); // Stop other submit handlers from running
         alert('Call notes cannot be empty.');
         quill.focus();
         return false;
