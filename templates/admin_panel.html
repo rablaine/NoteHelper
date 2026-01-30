@@ -61,18 +61,16 @@
             </div>
             <div class="card-body">
                 <form id="aiConfigForm">
-                    <div class="mb-3">
-                        <label for="aiFullUrl" class="form-label">Azure AI Foundry Endpoint URL</label>
-                        <input type="text" class="form-control form-control-sm" id="aiFullUrl" 
-                               placeholder="Paste full URL to auto-fill fields below">
+                    <div class="alert alert-info small mb-3">
+                        <i class="bi bi-info-circle"></i> Uses Entra ID authentication via service principal configured in environment variables (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET).
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-8">
-                            <label for="aiApiKey" class="form-label">API Key</label>
-                            <input type="password" class="form-control form-control-sm" id="aiApiKey" 
-                                   value="{{ ai_config.api_key or '' }}" 
-                                   placeholder="From Azure portal">
+                            <label for="aiEndpoint" class="form-label">Azure OpenAI Endpoint URL</label>
+                            <input type="url" class="form-control form-control-sm" id="aiEndpoint" 
+                                   value="{{ ai_config.endpoint_url or '' }}" 
+                                   placeholder="https://your-resource.cognitiveservices.azure.com/">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Enabled</label>
@@ -82,31 +80,24 @@
                         </div>
                     </div>
 
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="aiDeployment" class="form-label">Deployment Name</label>
+                            <input type="text" class="form-control form-control-sm" id="aiDeployment" 
+                                   value="{{ ai_config.deployment_name or '' }}" 
+                                   placeholder="gpt-4o-mini">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="aiApiVersion" class="form-label">API Version</label>
+                            <input type="text" class="form-control form-control-sm" id="aiApiVersion" 
+                                   value="{{ ai_config.api_version or '2024-12-01-preview' }}" 
+                                   placeholder="2024-12-01-preview">
+                        </div>
+                    </div>
+
                     <details class="mb-3">
                         <summary style="cursor: pointer;" class="text-muted small">Advanced Configuration</summary>
-                        <div class="row mt-2">
-                            <div class="col-md-12 mb-2">
-                                <label for="aiEndpoint" class="form-label small">Endpoint URL</label>
-                                <input type="url" class="form-control form-control-sm" id="aiEndpoint" 
-                                       value="{{ ai_config.endpoint_url or '' }}" 
-                                       placeholder="Auto-filled">
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-2">
-                                <label for="aiDeployment" class="form-label small">Deployment Name</label>
-                                <input type="text" class="form-control form-control-sm" id="aiDeployment" 
-                                       value="{{ ai_config.deployment_name or '' }}" 
-                                       placeholder="Auto-filled">
-                            </div>
-                            <div class="col-md-6 mb-2">
-                                <label for="aiApiVersion" class="form-label small">API Version</label>
-                                <input type="text" class="form-control form-control-sm" id="aiApiVersion" 
-                                       value="{{ ai_config.api_version or '2024-08-01-preview' }}" 
-                                       placeholder="Auto-filled">
-                            </div>
-                        </div>
-                        <div class="mb-2">
+                        <div class="mb-2 mt-2">
                             <label for="aiSystemPrompt" class="form-label small">System Prompt</label>
                             <textarea class="form-control form-control-sm" id="aiSystemPrompt" rows="3">{{ ai_config.system_prompt }}</textarea>
                         </div>
@@ -250,7 +241,6 @@ document.getElementById('aiConfigForm').addEventListener('submit', function(e) {
     const data = {
         enabled: document.getElementById('aiEnabled').checked,
         endpoint_url: document.getElementById('aiEndpoint').value.trim(),
-        api_key: document.getElementById('aiApiKey').value.trim(),
         deployment_name: document.getElementById('aiDeployment').value.trim(),
         api_version: document.getElementById('aiApiVersion').value.trim(),
         system_prompt: document.getElementById('aiSystemPrompt').value.trim()
@@ -283,7 +273,6 @@ document.getElementById('testAiBtn').addEventListener('click', function() {
     // Get current form values to test
     const testData = {
         endpoint_url: document.getElementById('aiEndpoint').value.trim(),
-        api_key: document.getElementById('aiApiKey').value.trim(),
         deployment_name: document.getElementById('aiDeployment').value.trim(),
         api_version: document.getElementById('aiApiVersion').value.trim()
     };
