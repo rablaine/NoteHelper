@@ -20,7 +20,6 @@
 - Flask - Web framework
 - Bootstrap 5 - UI components and styling
 - SQLAlchemy - Database ORM (with custom idempotent migrations)
-- Flask-Login - User session management
 - python-dotenv - Environment variable management
 - pytest - Testing framework
 
@@ -109,12 +108,11 @@
 - Views: Jinja2 templates
 - Controllers: Flask route handlers
 
-**State Management:** Server-side sessions with Flask-Login
+**State Management:** Single-user mode (no authentication required)
 
 **API Design:** Server-rendered templates with Jinja2 (not REST API)
 - Use POST for data modifications
 - Use GET for queries and searches
-- CSRF protection enabled
 
 **Database Migrations:** Custom idempotent migrations (NOT Flask-Migrate/Alembic)
 - Located in `app/migrations.py`
@@ -184,10 +182,7 @@ pytest --cov=app tests/  # with coverage
 
 - Never commit .env file or secrets to Git
 - Use SQLAlchemy ORM to prevent SQL injection (no raw SQL)
-- Enable CSRF protection on all forms
-- Hash passwords with werkzeug.security (never store plain text)
 - Sanitize user input before displaying in templates
-- Use Flask-Login's login_required decorator for protected routes
 
 ## Performance Guidelines
 
@@ -276,9 +271,9 @@ pytest --cov=app tests/  # with coverage
 ## Additional Notes
 
 **Development Phases:**
-- **Phase 1 (Current):** Single-file app with Flask-Login authentication
+- **Phase 1 (Complete):** Single-user local deployment mode
 - **Phase 2 (Future):** Refactor to blueprints when complexity grows
-- **Phase 3 (Optional):** Add Azure AD OAuth as additional login method
+- **Phase 3 (Optional):** Add multi-user authentication if needed
 
 **Key Features:**
 - Create/edit/delete notes (call logs)

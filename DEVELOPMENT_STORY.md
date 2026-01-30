@@ -155,8 +155,6 @@ This conversational approach allowed me to focus on product vision and user expe
   - `textContent` instead of `innerHTML` for user data
   - Helper functions like `setAlert()` to prevent injection
   - HTML escaping in templates (Jinja2 auto-escape)
-- **CSRF Protection Ready:** Flask-WTF integration prepared for production
-- **Rate Limiting Ready:** Flask-Limiter configured for sensitive endpoints
 - **Session Security:**
   - HTTPOnly cookies
   - Secure flag (production)

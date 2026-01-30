@@ -96,7 +96,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     last_login = db.Column(db.DateTime, default=utc_now, nullable=False)
     
-    # Flask-Login required properties
+    # User state properties (kept for compatibility)
     @property
     def is_authenticated(self):
         return True
