@@ -7,6 +7,12 @@ SQLAlchemy==2.0.35
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.0.5
 
+# Authentication & Security
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+Flask-Limiter==3.5.0
+flask-talisman==1.1.0
+
 # HTTP requests (for AI features)
 requests==2.32.3
 
