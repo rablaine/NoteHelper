@@ -175,6 +175,17 @@
             background-color: #6c757d !important; /* Bootstrap secondary */
             color: #fff !important;
         }
+        
+        /* Focus styling for keyboard navigation in modals */
+        .list-group-item-action:focus {
+            outline: 2px solid #0d6efd;
+            outline-offset: -2px;
+            background-color: #e9ecef;
+        }
+        [data-bs-theme="dark"] .list-group-item-action:focus {
+            outline-color: #6ea8fe;
+            background-color: #3a3f44;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -546,6 +557,50 @@
             modal.addEventListener('hidden.bs.modal', function () {
                 customerSearch.value = '';
                 customerResults.innerHTML = '';
+            });
+            
+            // Keyboard navigation for search input
+            customerSearch.addEventListener('keydown', function(e) {
+                const items = customerResults.querySelectorAll('a.list-group-item-action');
+                
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (items.length > 0) {
+                        items[0].focus();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (items.length > 0) {
+                        items[items.length - 1].focus();
+                    }
+                }
+            });
+            
+            // Keyboard navigation for results list
+            customerResults.addEventListener('keydown', function(e) {
+                const items = Array.from(customerResults.querySelectorAll('a.list-group-item-action'));
+                const currentIndex = items.indexOf(document.activeElement);
+                
+                if (currentIndex === -1) return;
+                
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (currentIndex < items.length - 1) {
+                        items[currentIndex + 1].focus();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (currentIndex > 0) {
+                        items[currentIndex - 1].focus();
+                    } else {
+                        // Go back to search input
+                        customerSearch.focus();
+                    }
+                } else if (e.key === ' ') {
+                    // Space to select (only when not in text input)
+                    e.preventDefault();
+                    document.activeElement.click();
+                }
             });
 
             customerSearch.addEventListener('input', function() {
