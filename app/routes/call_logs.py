@@ -5,7 +5,7 @@ Handles call log listing, creation, viewing, and editing.
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from datetime import datetime
 
-from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner
+from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone
 
 # Create blueprint
 call_logs_bp = Blueprint('call_logs', __name__)
@@ -33,6 +33,7 @@ def call_log_create():
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
         partner_ids = request.form.getlist('partner_ids')
+        milestone_url = request.form.get('milestone_url', '').strip()
         referrer = request.form.get('referrer', '')
         
         # Validation
@@ -84,6 +85,15 @@ def call_log_create():
         if partner_ids:
             partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
             call_log.partners.extend(partners)
+        
+        # Add milestone if URL provided
+        if milestone_url:
+            # Find or create milestone
+            milestone = Milestone.query.filter_by(url=milestone_url).first()
+            if not milestone:
+                milestone = Milestone(url=milestone_url, user_id=g.user.id)
+                db.session.add(milestone)
+            call_log.milestones.append(milestone)
         
         db.session.add(call_log)
         db.session.commit()
@@ -164,6 +174,7 @@ def call_log_edit(id):
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
         partner_ids = request.form.getlist('partner_ids')
+        milestone_url = request.form.get('milestone_url', '').strip()
         
         # Validation
         if not customer_id:
@@ -202,6 +213,16 @@ def call_log_edit(id):
         if partner_ids:
             partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
             call_log.partners = partners
+        
+        # Update milestones - handle URL-based milestone
+        call_log.milestones = []
+        if milestone_url:
+            # Find or create milestone
+            milestone = Milestone.query.filter_by(url=milestone_url).first()
+            if not milestone:
+                milestone = Milestone(url=milestone_url, user_id=g.user.id)
+                db.session.add(milestone)
+            call_log.milestones.append(milestone)
         
         db.session.commit()
         
