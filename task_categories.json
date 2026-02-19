@@ -1,0 +1,844 @@
+{
+  "@odata.context": "https://microsoftsales.crm.dynamics.com/api/data/v9.2/$metadata#EntityDefinitions('task')/Attributes/Microsoft.Dynamics.CRM.PicklistAttributeMetadata(OptionSet())",
+  "value": [
+    {
+      "MetadataId": "5029a0b2-20a8-4447-827f-ab5e88e60612",
+      "HasChanged": null,
+      "AttributeOf": null,
+      "AttributeType": "Picklist",
+      "ColumnNumber": 10001,
+      "DeprecatedVersion": null,
+      "IntroducedVersion": "18.0.1.0",
+      "EntityLogicalName": "task",
+      "IsCustomAttribute": true,
+      "IsPrimaryId": false,
+      "IsValidODataAttribute": true,
+      "IsPrimaryName": false,
+      "IsValidForCreate": true,
+      "IsValidForRead": true,
+      "IsValidForUpdate": true,
+      "CanBeSecuredForRead": true,
+      "CanBeSecuredForCreate": true,
+      "CanBeSecuredForUpdate": true,
+      "IsSecured": false,
+      "IsRetrievable": false,
+      "IsFilterable": false,
+      "IsSearchable": false,
+      "IsManaged": true,
+      "LinkedAttributeId": null,
+      "LogicalName": "msp_taskcategory",
+      "IsValidForForm": true,
+      "IsRequiredForForm": false,
+      "IsValidForGrid": true,
+      "SchemaName": "msp_TaskCategory",
+      "ExternalName": null,
+      "IsLogical": false,
+      "IsDataSourceSecret": false,
+      "InheritsFrom": null,
+      "CreatedOn": "1900-01-01T00:00:00Z",
+      "ModifiedOn": "2026-01-10T04:09:38Z",
+      "SourceType": 0,
+      "AutoNumberFormat": "",
+      "DefaultFormValue": -1,
+      "FormulaDefinition": "",
+      "SourceTypeMask": 0,
+      "ParentPicklistLogicalName": null,
+      "ChildPicklistLogicalNames": [],
+      "AttributeTypeName": {
+        "Value": "PicklistType"
+      },
+      "Description": {
+        "LocalizedLabels": [
+          {
+            "Label": "",
+            "LanguageCode": 1033,
+            "IsManaged": true,
+            "MetadataId": "9ad36a5e-361f-e611-80e4-5065f38bc1d1",
+            "HasChanged": null
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "",
+          "LanguageCode": 1033,
+          "IsManaged": true,
+          "MetadataId": "9ad36a5e-361f-e611-80e4-5065f38bc1d1",
+          "HasChanged": null
+        }
+      },
+      "DisplayName": {
+        "LocalizedLabels": [
+          {
+            "Label": "Task Category",
+            "LanguageCode": 1033,
+            "IsManaged": true,
+            "MetadataId": "99d36a5e-361f-e611-80e4-5065f38bc1d1",
+            "HasChanged": null
+          }
+        ],
+        "UserLocalizedLabel": {
+          "Label": "Task Category",
+          "LanguageCode": 1033,
+          "IsManaged": true,
+          "MetadataId": "99d36a5e-361f-e611-80e4-5065f38bc1d1",
+          "HasChanged": null
+        }
+      },
+      "IsAuditEnabled": {
+        "Value": true,
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyauditsettings"
+      },
+      "IsGlobalFilterEnabled": {
+        "Value": false,
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyglobalfiltersettings"
+      },
+      "IsSortableEnabled": {
+        "Value": false,
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyissortablesettings"
+      },
+      "IsCustomizable": {
+        "Value": true,
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "iscustomizable"
+      },
+      "IsRenameable": {
+        "Value": true,
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "isrenameable"
+      },
+      "IsValidForAdvancedFind": {
+        "Value": true,
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifysearchsettings"
+      },
+      "RequiredLevel": {
+        "Value": "None",
+        "CanBeChanged": true,
+        "ManagedPropertyLogicalName": "canmodifyrequirementlevelsettings"
+      },
+      "CanModifyAdditionalSettings": {
+        "Value": true,
+        "CanBeChanged": false,
+        "ManagedPropertyLogicalName": "canmodifyadditionalsettings"
+      },
+      "Settings": [],
+      "OptionSet": {
+        "MetadataId": "b6d36a5e-361f-e611-80e4-5065f38bc1d1",
+        "HasChanged": null,
+        "IsCustomOptionSet": true,
+        "IsGlobal": false,
+        "IsManaged": true,
+        "Name": "msp_task_msp_taskcategory",
+        "ExternalTypeName": null,
+        "OptionSetType": "Picklist",
+        "IntroducedVersion": "17.0.4.0",
+        "ParentOptionSetName": null,
+        "Description": {
+          "LocalizedLabels": [
+            {
+              "Label": "",
+              "LanguageCode": 1033,
+              "IsManaged": true,
+              "MetadataId": "b8d36a5e-361f-e611-80e4-5065f38bc1d1",
+              "HasChanged": null
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "",
+            "LanguageCode": 1033,
+            "IsManaged": true,
+            "MetadataId": "b8d36a5e-361f-e611-80e4-5065f38bc1d1",
+            "HasChanged": null
+          }
+        },
+        "DisplayName": {
+          "LocalizedLabels": [
+            {
+              "Label": "Task Category",
+              "LanguageCode": 1033,
+              "IsManaged": true,
+              "MetadataId": "b7d36a5e-361f-e611-80e4-5065f38bc1d1",
+              "HasChanged": null
+            }
+          ],
+          "UserLocalizedLabel": {
+            "Label": "Task Category",
+            "LanguageCode": 1033,
+            "IsManaged": true,
+            "MetadataId": "b7d36a5e-361f-e611-80e4-5065f38bc1d1",
+            "HasChanged": null
+          }
+        },
+        "IsCustomizable": {
+          "Value": true,
+          "CanBeChanged": false,
+          "ManagedPropertyLogicalName": "iscustomizable"
+        },
+        "Options": [
+          {
+            "Value": 606820000,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "ACE",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "876acab6-8595-4589-9986-338644780b60",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "ACE",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "876acab6-8595-4589-9986-338644780b60",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980004,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Architecture Design Session",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "c8a2128a-6ba3-e611-80e4-c4346bdcb261",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Architecture Design Session",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "c8a2128a-6ba3-e611-80e4-c4346bdcb261",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980006,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Blocker Escalation",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "c9a2128a-6ba3-e611-80e4-c4346bdcb261",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Blocker Escalation",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "c9a2128a-6ba3-e611-80e4-c4346bdcb261",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980008,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Briefing",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "caa2128a-6ba3-e611-80e4-c4346bdcb261",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Briefing",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "caa2128a-6ba3-e611-80e4-c4346bdcb261",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980010,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Call Back Requested",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "a12c2a15-bfea-e611-80ed-5065f38b0231",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Call Back Requested",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "a12c2a15-bfea-e611-80ed-5065f38b0231",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980007,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Consumption Plan",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "cba2128a-6ba3-e611-80e4-c4346bdcb261",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Consumption Plan",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "cba2128a-6ba3-e611-80e4-c4346bdcb261",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 606820001,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Cross Segment",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "f3579bf9-428e-43cf-8204-2dd9bece8ee8",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Cross Segment",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "f3579bf9-428e-43cf-8204-2dd9bece8ee8",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 606820002,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Cross Workload",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "b2dbb78f-d72f-49e9-93fa-13d3cab7f024",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Cross Workload",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "b2dbb78f-d72f-49e9-93fa-13d3cab7f024",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980000,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Customer Engagement",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "af11dfa3-70a3-4f42-aa64-94ecabb78de9",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Customer Engagement",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "af11dfa3-70a3-4f42-aa64-94ecabb78de9",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980002,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Demo",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "9dd36a5e-361f-e611-80e4-5065f38bc1d1",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Demo",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "9dd36a5e-361f-e611-80e4-5065f38bc1d1",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980003,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Negotiate Pricing",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "9ed36a5e-361f-e611-80e4-5065f38bc1d1",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Negotiate Pricing",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "9ed36a5e-361f-e611-80e4-5065f38bc1d1",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980011,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "New Partner Request",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "a52c2a15-bfea-e611-80ed-5065f38b0231",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "New Partner Request",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "a52c2a15-bfea-e611-80ed-5065f38b0231",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980005,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "PoC/Pilot",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "cea2128a-6ba3-e611-80e4-c4346bdcb261",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "PoC/Pilot",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "cea2128a-6ba3-e611-80e4-c4346bdcb261",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 606820003,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Post Sales",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "c527dc12-804f-4eed-8a8a-3218ed3abc5b",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Post Sales",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "c527dc12-804f-4eed-8a8a-3218ed3abc5b",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980009,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "RFP/RFI",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "cfa2128a-6ba3-e611-80e4-c4346bdcb261",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "RFP/RFI",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "cfa2128a-6ba3-e611-80e4-c4346bdcb261",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 606820004,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Tech Support",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "f936afcc-3380-4d89-83d0-7951ed5f6302",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Tech Support",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "f936afcc-3380-4d89-83d0-7951ed5f6302",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 606820005,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Technical Close/Win Plan",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "dd3c622d-5d6e-479e-8885-ed54963f7ecf",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Technical Close/Win Plan",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "dd3c622d-5d6e-479e-8885-ed54963f7ecf",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980001,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Workshop",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "9cd36a5e-361f-e611-80e4-5065f38bc1d1",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Workshop",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "9cd36a5e-361f-e611-80e4-5065f38bc1d1",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980012,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "Internal",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "6b3e228b-c3e4-452a-8b86-a7674bb22b25",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "Internal",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "6b3e228b-c3e4-452a-8b86-a7674bb22b25",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          },
+          {
+            "Value": 861980013,
+            "Color": "#0000ff",
+            "IsManaged": true,
+            "ExternalValue": "",
+            "ParentValues": [],
+            "Tag": null,
+            "IsHidden": false,
+            "MetadataId": null,
+            "HasChanged": null,
+            "Label": {
+              "LocalizedLabels": [
+                {
+                  "Label": "External (Co-creation of Value)",
+                  "LanguageCode": 1033,
+                  "IsManaged": true,
+                  "MetadataId": "9810e3ee-f1a8-462e-aed7-1b990101e27a",
+                  "HasChanged": null
+                }
+              ],
+              "UserLocalizedLabel": {
+                "Label": "External (Co-creation of Value)",
+                "LanguageCode": 1033,
+                "IsManaged": true,
+                "MetadataId": "9810e3ee-f1a8-462e-aed7-1b990101e27a",
+                "HasChanged": null
+              }
+            },
+            "Description": {
+              "LocalizedLabels": [],
+              "UserLocalizedLabel": null
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

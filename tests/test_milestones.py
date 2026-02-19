@@ -35,9 +35,10 @@ class TestMilestoneModel:
         
         assert milestone.display_text == 'View in MSX'
     
-    def test_milestone_unique_url(self, app, db_session, sample_user):
-        """Test that milestone URLs must be unique."""
+    def test_milestone_unique_msx_id(self, app, db_session, sample_user):
+        """Test that MSX milestone IDs must be unique."""
         milestone1 = Milestone(
+            msx_milestone_id='12345678-1234-1234-1234-123456789abc',
             url='https://msxsalesplatform.dynamics.com/milestone/unique',
             user_id=sample_user.id
         )
@@ -45,7 +46,8 @@ class TestMilestoneModel:
         db_session.commit()
         
         milestone2 = Milestone(
-            url='https://msxsalesplatform.dynamics.com/milestone/unique',
+            msx_milestone_id='12345678-1234-1234-1234-123456789abc',
+            url='https://msxsalesplatform.dynamics.com/milestone/unique2',
             user_id=sample_user.id
         )
         db_session.add(milestone2)
@@ -186,15 +188,22 @@ class TestMilestoneCRUD:
 class TestCallLogMilestoneIntegration:
     """Tests for milestone integration with call logs."""
     
-    def test_call_log_with_milestone_url_creates_milestone(self, client, app, db_session, sample_customer):
-        """Test that adding milestone URL to call log creates a new milestone."""
+    def test_call_log_with_msx_milestone_creates_milestone(self, client, app, db_session, sample_customer):
+        """Test that adding MSX milestone to call log creates a new milestone."""
+        msx_milestone_id = 'test-msx-id-12345678'
         milestone_url = 'https://msxsalesplatform.dynamics.com/new/milestone'
         
         response = client.post(f'/call-log/new?customer_id={sample_customer.id}', data={
             'customer_id': sample_customer.id,
             'call_date': '2026-01-30',
             'content': '<p>Test call log with milestone</p>',
-            'milestone_url': milestone_url
+            'milestone_msx_id': msx_milestone_id,
+            'milestone_url': milestone_url,
+            'milestone_name': 'Test Milestone',
+            'milestone_number': 'MS-001',
+            'milestone_status': 'On Track',
+            'milestone_status_code': '1',
+            'milestone_opportunity_name': 'Test Opportunity'
         }, follow_redirects=True)
         
         assert response.status_code == 200
@@ -202,24 +211,29 @@ class TestCallLogMilestoneIntegration:
         # Verify milestone was created
         with app.app_context():
             from app.models import Milestone, CallLog
-            milestone = Milestone.query.filter_by(url=milestone_url).first()
+            milestone = Milestone.query.filter_by(msx_milestone_id=msx_milestone_id).first()
             assert milestone is not None
+            assert milestone.url == milestone_url
+            assert milestone.msx_status == 'On Track'
             
             # Verify call log is linked to milestone
             call_log = CallLog.query.filter_by(customer_id=sample_customer.id).first()
             assert call_log is not None
             assert milestone in call_log.milestones
     
-    def test_call_log_with_existing_milestone_url(self, client, app, db_session, sample_customer, sample_user):
-        """Test that adding existing milestone URL links to existing milestone."""
+    def test_call_log_with_existing_msx_milestone(self, client, app, db_session, sample_customer, sample_user):
+        """Test that adding existing MSX milestone links to existing milestone."""
+        msx_milestone_id = 'existing-msx-id-12345'
+        
         # Create existing milestone
         with app.app_context():
             from app.models import db, Milestone, User, CallLog
             test_user = User.query.first()
             
             existing_milestone = Milestone(
+                msx_milestone_id=msx_milestone_id,
                 url='https://msxsalesplatform.dynamics.com/existing/milestone',
-                title='Existing Milestone',
+                msx_status='On Track',
                 user_id=test_user.id
             )
             db.session.add(existing_milestone)
@@ -230,7 +244,11 @@ class TestCallLogMilestoneIntegration:
             'customer_id': sample_customer.id,
             'call_date': '2026-01-30',
             'content': '<p>Test call log linking to existing milestone</p>',
-            'milestone_url': 'https://msxsalesplatform.dynamics.com/existing/milestone'
+            'milestone_msx_id': msx_milestone_id,
+            'milestone_url': 'https://msxsalesplatform.dynamics.com/existing/milestone',
+            'milestone_name': 'Existing Milestone',
+            'milestone_status': 'Blocked',
+            'milestone_status_code': '3'
         }, follow_redirects=True)
         
         assert response.status_code == 200
@@ -238,8 +256,12 @@ class TestCallLogMilestoneIntegration:
         # Should not create duplicate milestone
         with app.app_context():
             from app.models import Milestone, CallLog
-            milestones = Milestone.query.filter_by(url='https://msxsalesplatform.dynamics.com/existing/milestone').all()
+            milestones = Milestone.query.filter_by(msx_milestone_id=msx_milestone_id).all()
             assert len(milestones) == 1
+            
+            # Milestone should be updated with new status
+            milestone = milestones[0]
+            assert milestone.msx_status == 'Blocked'
             
             # Call log should be linked to existing milestone
             call_log = CallLog.query.filter_by(customer_id=sample_customer.id).first()
@@ -285,6 +307,7 @@ class TestCallLogMilestoneIntegration:
             
             # Create call log with initial milestone
             old_milestone = Milestone(
+                msx_milestone_id='old-msx-id-12345',
                 url='https://example.com/old/milestone',
                 user_id=test_user.id
             )
@@ -301,12 +324,15 @@ class TestCallLogMilestoneIntegration:
             db.session.commit()
             call_log_id = call_log.id
         
-        # Edit with new milestone URL
+        # Edit with new MSX milestone
         response = client.post(f'/call-log/{call_log_id}/edit', data={
             'customer_id': sample_customer.id,
             'call_date': '2026-01-30',
             'content': '<p>Updated content</p>',
-            'milestone_url': 'https://example.com/new/milestone'
+            'milestone_msx_id': 'new-msx-id-67890',
+            'milestone_url': 'https://example.com/new/milestone',
+            'milestone_name': 'New Milestone',
+            'milestone_status': 'On Track'
         }, follow_redirects=True)
         
         assert response.status_code == 200
@@ -316,6 +342,7 @@ class TestCallLogMilestoneIntegration:
             from app.models import CallLog
             call_log = CallLog.query.get(call_log_id)
             assert len(call_log.milestones) == 1
+            assert call_log.milestones[0].msx_milestone_id == 'new-msx-id-67890'
             assert call_log.milestones[0].url == 'https://example.com/new/milestone'
 
 

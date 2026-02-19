@@ -138,24 +138,120 @@
                         <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
                     </div>
                     
-                    <!-- Milestone URL -->
+                    <!-- Milestone Picker -->
                     <div class="mb-3">
-                        <label for="milestone_url" class="form-label">
-                            <i class="bi bi-flag"></i> Milestone URL (optional)
-                        </label>
-                        <input type="url" class="form-control" id="milestone_url" name="milestone_url" 
-                               value="{% if call_log and call_log.milestones %}{{ call_log.milestones[0].url }}{% endif %}"
-                               placeholder="Paste MSX milestone URL...">
-                        <div class="form-text">Link this call to a milestone in MSX</div>
-                        <div id="selected_milestones" class="mt-2 d-flex flex-wrap gap-2">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label for="milestone_search" class="form-label mb-0">
+                                <i class="bi bi-flag"></i> Milestone (optional)
+                            </label>
+                            <div id="milestone_loading" class="text-muted small" style="display: none;">
+                                <span class="spinner-border spinner-border-sm me-1"></span> Loading milestones...
+                            </div>
+                        </div>
+                        <input type="text" class="form-control" id="milestone_search" 
+                               placeholder="Search milestones..." autocomplete="off" disabled>
+                        <div id="milestone_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 300px; overflow-y: auto;"></div>
+                        <div class="form-text" id="milestone_help_text">Select a customer to load milestones from MSX</div>
+                        
+                        <!-- Inline TPID Link Section (shown when customer has no MSX link) -->
+                        <div id="inline_tpid_link" class="mt-2" style="display: none;">
+                            <div class="card border-warning">
+                                <div class="card-header bg-warning text-dark py-2">
+                                    <i class="bi bi-link-45deg me-1"></i> Link Customer to MSX
+                                </div>
+                                <div class="card-body py-2">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <span class="text-muted small">TPID:</span>
+                                        <strong id="inline_tpid_value">-</strong>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="inline_lookup_btn" onclick="inlineLookupTPID()">
+                                            <i class="bi bi-search"></i> Lookup
+                                        </button>
+                                    </div>
+                                    <div class="input-group input-group-sm">
+                                        <input type="url" class="form-control" id="inline_tpid_url" 
+                                               placeholder="MSX Account URL will appear here..." readonly>
+                                        <button type="button" class="btn btn-success" id="inline_save_btn" style="display: none;" onclick="inlineSaveTPID()">
+                                            <i class="bi bi-check"></i> Save & Load Milestones
+                                        </button>
+                                    </div>
+                                    <div id="inline_lookup_result" class="small mt-1"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="selected_milestone" class="mt-2">
                             {% if call_log and call_log.milestones %}
                                 {% for milestone in call_log.milestones %}
-                                <span class="badge bg-success d-flex align-items-center" data-milestone-id="{{ milestone.id }}">
-                                    <i class="bi bi-flag me-1"></i> {{ milestone.display_text }}
+                                <div class="card border-success" data-milestone-id="{{ milestone.id }}" data-msx-milestone-id="{{ milestone.msx_milestone_id }}">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <strong>
+                                                    <i class="bi bi-flag me-1"></i>
+                                                    {% if milestone.msx_milestone_id %}
+                                                        <a href="{{ milestone.url }}" target="_blank">{{ milestone.display_text }}</a>
+                                                    {% else %}
+                                                        {{ milestone.display_text }}
+                                                    {% endif %}
+                                                </strong>
+                                                {% if milestone.msx_status %}
+                                                <span class="badge ms-2 
+                                                    {% if milestone.msx_status == 'On Track' %}bg-success
+                                                    {% elif milestone.msx_status == 'At Risk' %}bg-warning text-dark
+                                                    {% elif milestone.msx_status == 'Blocked' %}bg-danger
+                                                    {% elif milestone.msx_status == 'Completed' %}bg-secondary
+                                                    {% else %}bg-light text-dark{% endif %}">
+                                                    {{ milestone.msx_status }}
+                                                </span>
+                                                {% endif %}
+                                                {% if milestone.opportunity_name %}
+                                                <br><small class="text-muted">{{ milestone.opportunity_name }}</small>
+                                                {% endif %}
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeMilestone()">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" name="milestone_msx_id" value="{{ milestone.msx_milestone_id }}">
                                     <input type="hidden" name="milestone_ids" value="{{ milestone.id }}">
-                                </span>
+                                </div>
                                 {% endfor %}
                             {% endif %}
+                        </div>
+                        
+                        <!-- Task Creation Section (appears when milestone selected) -->
+                        <div id="task_creation_section" class="mt-3" style="display: none;">
+                            <div class="card border-primary">
+                                <div class="card-header bg-primary text-white py-2">
+                                    <i class="bi bi-plus-circle me-1"></i> Create Task on Milestone
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-2">
+                                        <label for="task_subject" class="form-label small mb-1">Task Title *</label>
+                                        <input type="text" class="form-control form-control-sm" id="task_subject" name="task_subject" 
+                                               placeholder="Brief task description...">
+                                    </div>
+                                    <div class="row mb-2">
+                                        <div class="col-md-8">
+                                            <label for="task_category" class="form-label small mb-1">Category *</label>
+                                            <select class="form-select form-select-sm" id="task_category" name="task_category">
+                                                <option value="">-- Select task category --</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="task_duration" class="form-label small mb-1">Duration (min)</label>
+                                            <input type="number" class="form-control form-control-sm" id="task_duration" name="task_duration" 
+                                                   value="60" min="15" step="15">
+                                        </div>
+                                    </div>
+                                    <div class="mb-0">
+                                        <label for="task_description" class="form-label small mb-1">Description (optional)</label>
+                                        <textarea class="form-control form-control-sm" id="task_description" name="task_description" 
+                                                  rows="2" placeholder="Additional details..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -257,6 +353,13 @@ const allTopics = [
         { id: {{ topic.id }}, name: "{{ topic.name|escape }}", description: "{{ topic.description|escape if topic.description else '' }}" },
     {% endfor %}
 ];
+
+// Customer data for inline TPID lookup
+const customerData = {
+    {% for customer in customers %}
+        {{ customer.id }}: { tpid: "{{ customer.tpid or '' }}", name: {{ customer.name | tojson }} },
+    {% endfor %}
+};
 
 const topicSearch = document.getElementById('topic_search');
 const topicDropdown = document.getElementById('topic_dropdown');
@@ -652,6 +755,411 @@ function createNewPartner(partnerName) {
         partnerSearch.value = '';
         partnerSearch.focus();
     });
+}
+
+// ===== MILESTONE SEARCH AND SELECTION FUNCTIONALITY =====
+let allMilestones = [];
+let currentMilestoneMatches = [];
+let selectedMilestoneIndex = -1;
+let taskCategories = [];
+let selectedMilestoneData = null;
+
+const milestoneSearch = document.getElementById('milestone_search');
+const milestoneDropdown = document.getElementById('milestone_dropdown');
+const selectedMilestoneContainer = document.getElementById('selected_milestone');
+const milestoneLoading = document.getElementById('milestone_loading');
+const milestoneHelpText = document.getElementById('milestone_help_text');
+const taskCreationSection = document.getElementById('task_creation_section');
+const taskCategorySelect = document.getElementById('task_category');
+
+// Load task categories on page load
+fetch('/api/msx/task-categories')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.categories) {
+            taskCategories = data.categories;
+            populateTaskCategories();
+        }
+    })
+    .catch(error => console.error('Failed to load task categories:', error));
+
+function populateTaskCategories() {
+    taskCategorySelect.innerHTML = '<option value="">-- Select task category --</option>';
+    taskCategories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.value;
+        option.textContent = cat.label;
+        if (cat.is_hok) {
+            option.style.fontWeight = 'bold';
+            option.textContent = '★ ' + cat.label;
+        }
+        taskCategorySelect.appendChild(option);
+    });
+}
+
+// Load milestones when customer is selected
+let currentCustomerId = null;
+
+function loadMilestonesForCustomer(customerId) {
+    currentCustomerId = customerId;
+    const inlineTpidSection = document.getElementById('inline_tpid_link');
+    
+    if (!customerId) {
+        allMilestones = [];
+        milestoneSearch.disabled = true;
+        milestoneSearch.placeholder = 'Search milestones...';
+        milestoneHelpText.textContent = 'Select a customer to load milestones from MSX';
+        inlineTpidSection.style.display = 'none';
+        return;
+    }
+    
+    // Hide inline TPID section initially
+    inlineTpidSection.style.display = 'none';
+    
+    // Show loading
+    milestoneLoading.style.display = 'inline';
+    milestoneSearch.disabled = true;
+    milestoneSearch.placeholder = 'Loading milestones...';
+    milestoneHelpText.textContent = 'Fetching milestones from MSX...';
+    
+    fetch(`/api/msx/milestones-for-customer/${customerId}`)
+        .then(response => response.json())
+        .then(data => {
+            milestoneLoading.style.display = 'none';
+            
+            if (data.success && data.milestones) {
+                allMilestones = data.milestones;
+                milestoneSearch.disabled = false;
+                milestoneSearch.placeholder = `Search ${allMilestones.length} milestone${allMilestones.length !== 1 ? 's' : ''}...`;
+                milestoneHelpText.textContent = `Found ${allMilestones.length} milestone${allMilestones.length !== 1 ? 's' : ''} for this customer`;
+                inlineTpidSection.style.display = 'none';
+            } else if (data.needs_tpid) {
+                milestoneSearch.placeholder = 'Link customer to MSX first';
+                milestoneHelpText.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Customer has no MSX account linked</span>';
+                
+                // Show inline TPID link section
+                const customer = customerData[customerId];
+                if (customer) {
+                    document.getElementById('inline_tpid_value').textContent = customer.tpid || 'Not set';
+                    document.getElementById('inline_tpid_url').value = '';
+                    document.getElementById('inline_lookup_result').innerHTML = '';
+                    document.getElementById('inline_save_btn').style.display = 'none';
+                    document.getElementById('inline_tpid_url').readOnly = true;
+                    inlineTpidSection.style.display = 'block';
+                }
+            } else {
+                milestoneSearch.placeholder = 'Could not load milestones';
+                milestoneHelpText.innerHTML = `<span class="text-danger">${data.error || 'Unknown error'}</span>`;
+            }
+        })
+        .catch(error => {
+            console.error('Failed to load milestones:', error);
+            milestoneLoading.style.display = 'none';
+            milestoneSearch.placeholder = 'Error loading milestones';
+            milestoneHelpText.innerHTML = '<span class="text-danger">Failed to connect to MSX</span>';
+        });
+}
+
+// Inline TPID lookup
+async function inlineLookupTPID() {
+    const btn = document.getElementById('inline_lookup_btn');
+    const resultEl = document.getElementById('inline_lookup_result');
+    const urlInput = document.getElementById('inline_tpid_url');
+    const saveBtn = document.getElementById('inline_save_btn');
+    
+    const customer = customerData[currentCustomerId];
+    if (!customer || !customer.tpid) {
+        resultEl.innerHTML = '<span class="text-danger">Customer has no TPID set</span>';
+        return;
+    }
+    
+    // Show loading
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    resultEl.innerHTML = '<span class="text-muted">Looking up in MSX...</span>';
+    
+    try {
+        const response = await fetch(`/api/msx/lookup-tpid/${customer.tpid}?customer_name=${encodeURIComponent(customer.name)}`);
+        const data = await response.json();
+        
+        if (!data.success) {
+            resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${data.error || 'Lookup failed'}</span>`;
+        } else if (data.count === 0) {
+            resultEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> No accounts found for this TPID</span>';
+        } else if (data.url) {
+            // Success - auto-fill URL
+            urlInput.value = data.url;
+            urlInput.readOnly = false;
+            saveBtn.style.display = 'inline-block';
+            resultEl.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Found: ${data.account_name || 'Account'}</span>`;
+        } else if (data.name_mismatch) {
+            resultEl.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> MSX has "${data.msx_account_name}" - verify this is correct</span>`;
+            // Still allow manual selection
+            if (data.accounts && data.accounts.length > 0) {
+                urlInput.value = data.accounts[0].url;
+                urlInput.readOnly = false;
+                saveBtn.style.display = 'inline-block';
+            }
+        } else if (data.count > 1) {
+            // Multiple matches - show first Top parent or first account
+            const topAccount = data.accounts.find(a => a.parenting_level && a.parenting_level.toLowerCase().includes('top')) || data.accounts[0];
+            urlInput.value = topAccount.url;
+            urlInput.readOnly = false;
+            saveBtn.style.display = 'inline-block';
+            resultEl.innerHTML = `<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> ${data.count} accounts found - using: ${topAccount.name}</span>`;
+        }
+    } catch (error) {
+        console.error('Inline TPID lookup error:', error);
+        resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Network error</span>';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-search"></i> Lookup';
+    }
+}
+
+// Save TPID URL and reload milestones
+async function inlineSaveTPID() {
+    const urlInput = document.getElementById('inline_tpid_url');
+    const saveBtn = document.getElementById('inline_save_btn');
+    const resultEl = document.getElementById('inline_lookup_result');
+    
+    const url = urlInput.value.trim();
+    if (!url) {
+        resultEl.innerHTML = '<span class="text-danger">No URL to save</span>';
+        return;
+    }
+    
+    // Show saving
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+    
+    try {
+        const response = await fetch(`/api/customer/${currentCustomerId}/tpid-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tpid_url: url })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> Saved! Loading milestones...</span>';
+            
+            // Hide the TPID link section and reload milestones
+            setTimeout(() => {
+                loadMilestonesForCustomer(currentCustomerId);
+            }, 500);
+        } else {
+            resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${data.error || 'Save failed'}</span>`;
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check"></i> Save & Load Milestones';
+        }
+    } catch (error) {
+        console.error('Save TPID URL error:', error);
+        resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Network error</span>';
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="bi bi-check"></i> Save & Load Milestones';
+    }
+}
+
+// Listen for customer changes
+document.getElementById('customer_id').addEventListener('change', function() {
+    loadMilestonesForCustomer(this.value);
+    // Clear selected milestone when customer changes
+    removeMilestone();
+});
+
+// Load milestones on page load if customer is already selected
+const initialCustomerId = document.getElementById('customer_id').value;
+if (initialCustomerId) {
+    loadMilestonesForCustomer(initialCustomerId);
+}
+
+milestoneSearch.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase().trim();
+    
+    if (searchTerm.length === 0) {
+        milestoneDropdown.style.display = 'none';
+        currentMilestoneMatches = [];
+        selectedMilestoneIndex = -1;
+        return;
+    }
+    
+    // Filter milestones - search in name, number, opportunity name, and workload
+    currentMilestoneMatches = allMilestones.filter(milestone => {
+        const name = (milestone.name || '').toLowerCase();
+        const number = (milestone.number || '').toLowerCase();
+        const oppName = (milestone.opportunity_name || '').toLowerCase();
+        const workload = (milestone.workload || '').toLowerCase();
+        return name.includes(searchTerm) || number.includes(searchTerm) || oppName.includes(searchTerm) || workload.includes(searchTerm);
+    });
+    
+    if (currentMilestoneMatches.length > 0) {
+        selectedMilestoneIndex = 0;
+        renderMilestoneDropdown();
+        milestoneDropdown.style.display = 'block';
+        milestoneDropdown.style.width = milestoneSearch.offsetWidth + 'px';
+    } else {
+        milestoneDropdown.style.display = 'none';
+        currentMilestoneMatches = [];
+        selectedMilestoneIndex = -1;
+    }
+});
+
+// Keyboard navigation for milestones
+milestoneSearch.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowDown' && currentMilestoneMatches.length > 0) {
+        e.preventDefault();
+        selectedMilestoneIndex = (selectedMilestoneIndex + 1) % currentMilestoneMatches.length;
+        renderMilestoneDropdown();
+    } else if (e.key === 'ArrowUp' && currentMilestoneMatches.length > 0) {
+        e.preventDefault();
+        selectedMilestoneIndex = selectedMilestoneIndex <= 0 ? currentMilestoneMatches.length - 1 : selectedMilestoneIndex - 1;
+        renderMilestoneDropdown();
+    } else if ((e.key === 'Tab' || e.key === 'Enter') && currentMilestoneMatches.length > 0) {
+        e.preventDefault();
+        if (selectedMilestoneIndex >= 0 && selectedMilestoneIndex < currentMilestoneMatches.length) {
+            selectMilestone(currentMilestoneMatches[selectedMilestoneIndex]);
+        }
+    } else if (e.key === 'Escape') {
+        milestoneDropdown.style.display = 'none';
+        currentMilestoneMatches = [];
+        selectedMilestoneIndex = -1;
+    }
+});
+
+function getStatusBadgeClass(status) {
+    switch (status) {
+        case 'On Track': return 'bg-success';
+        case 'At Risk': return 'bg-warning text-dark';
+        case 'Blocked': return 'bg-danger';
+        case 'Completed': return 'bg-secondary';
+        case 'Cancelled': return 'bg-light text-dark';
+        case 'Lost to Competitor': return 'bg-dark';
+        case 'Hygiene/Duplicate': return 'bg-light text-dark';
+        default: return 'bg-secondary';
+    }
+}
+
+function renderMilestoneDropdown() {
+    milestoneDropdown.innerHTML = currentMilestoneMatches.map((milestone, index) => {
+        const name = milestone.name || 'Unnamed Milestone';
+        const number = milestone.number || '';
+        const status = milestone.status || 'Unknown';
+        const oppName = milestone.opportunity_name || '';
+        const workload = milestone.workload || '';
+        const monthlyUsage = milestone.monthly_usage;
+        const usedIn = milestone.used_in_call_logs || 0;
+        const statusClass = getStatusBadgeClass(status);
+        
+        // Format monthly usage as currency
+        const usageDisplay = monthlyUsage ? '$' + monthlyUsage.toLocaleString() : '';
+        
+        return `<button type="button" class="list-group-item list-group-item-action ${index === selectedMilestoneIndex ? 'active' : ''}" 
+            data-milestone-index="${index}"
+            onmouseenter="handleMilestoneHover(${index})"
+            onclick="selectMilestone(currentMilestoneMatches[${index}])">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <i class="bi bi-flag"></i> <strong>${name}</strong>
+                    ${number ? '<span class="text-muted small">(' + number + ')</span>' : ''}
+                    <span class="badge ${statusClass} ms-1">${status}</span>
+                    ${usedIn > 0 ? '<span class="badge bg-info ms-1" title="Used in ' + usedIn + ' call log(s)"><i class="bi bi-journal-text"></i> ' + usedIn + '</span>' : ''}
+                </div>
+                ${usageDisplay ? '<span class="badge bg-success">' + usageDisplay + '/mo</span>' : ''}
+            </div>
+            ${oppName ? '<small class="text-muted">' + oppName + '</small>' : ''}
+            ${workload ? '<br><small class="text-info">' + workload + '</small>' : ''}
+        </button>`;
+    }).join('');
+}
+
+function handleMilestoneHover(index) {
+    selectedMilestoneIndex = index;
+    milestoneDropdown.querySelectorAll('button').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+    });
+}
+
+// Hide milestone dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!milestoneSearch.contains(e.target) && !milestoneDropdown.contains(e.target)) {
+        milestoneDropdown.style.display = 'none';
+        currentMilestoneMatches = [];
+        selectedMilestoneIndex = -1;
+    }
+});
+
+function selectMilestone(milestone) {
+    selectedMilestoneData = milestone;
+    const msxId = milestone.id;
+    const name = milestone.name || 'Unnamed Milestone';
+    const number = milestone.number || '';
+    const status = milestone.status || 'Unknown';
+    const oppName = milestone.opportunity_name || '';
+    const workload = milestone.workload || '';
+    const monthlyUsage = milestone.monthly_usage;
+    const url = milestone.url || '';
+    const statusClass = getStatusBadgeClass(status);
+    
+    // Format monthly usage as currency
+    const usageDisplay = monthlyUsage ? '$' + monthlyUsage.toLocaleString() + '/mo' : '';
+    
+    selectedMilestoneContainer.innerHTML = `
+        <div class="card border-success" data-msx-milestone-id="${msxId}">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong>
+                            <i class="bi bi-flag me-1"></i>
+                            ${url ? '<a href="' + url + '" target="_blank">' + name + '</a>' : name}
+                        </strong>
+                        ${number ? '<span class="text-muted small">(' + number + ')</span>' : ''}
+                        <span class="badge ${statusClass} ms-1">${status}</span>
+                        ${usageDisplay ? '<span class="badge bg-success ms-1">' + usageDisplay + '</span>' : ''}
+                        ${oppName ? '<br><small class="text-muted">' + oppName + '</small>' : ''}
+                        ${workload ? '<br><small class="text-info"><i class="bi bi-cpu"></i> ' + workload + '</small>' : ''}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeMilestone()">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            </div>
+            <input type="hidden" name="milestone_msx_id" value="${msxId}">
+            <input type="hidden" name="milestone_name" value="${name}">
+            <input type="hidden" name="milestone_number" value="${number}">
+            <input type="hidden" name="milestone_status" value="${status}">
+            <input type="hidden" name="milestone_status_code" value="${milestone.status_code || ''}">
+            <input type="hidden" name="milestone_opportunity_name" value="${oppName}">
+            <input type="hidden" name="milestone_workload" value="${workload}">
+            <input type="hidden" name="milestone_monthly_usage" value="${monthlyUsage || ''}">
+            <input type="hidden" name="milestone_url" value="${url}">
+        </div>
+    `;
+    
+    // Show task creation section
+    taskCreationSection.style.display = 'block';
+    
+    // Clear search
+    milestoneSearch.value = '';
+    milestoneDropdown.style.display = 'none';
+    currentMilestoneMatches = [];
+    selectedMilestoneIndex = -1;
+    
+    debouncedAutoSave();
+}
+
+function removeMilestone() {
+    selectedMilestoneData = null;
+    selectedMilestoneContainer.innerHTML = '';
+    taskCreationSection.style.display = 'none';
+    
+    // Clear task fields
+    document.getElementById('task_subject').value = '';
+    document.getElementById('task_category').value = '';
+    document.getElementById('task_duration').value = '60';
+    document.getElementById('task_description').value = '';
+    
+    debouncedAutoSave();
 }
 
 // AI Topic Suggestion

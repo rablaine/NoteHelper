@@ -12,7 +12,7 @@ import requests
 import logging
 from typing import Optional, Dict, Any, List
 
-from app.services.msx_auth import get_msx_token, CRM_BASE_URL
+from app.services.msx_auth import get_msx_token, refresh_token, CRM_BASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,83 @@ def _get_headers(token: str) -> Dict[str, str]:
     }
 
 
+def _msx_request(
+    method: str,
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    json_data: Optional[Dict] = None,
+    retry_on_auth_failure: bool = True
+) -> requests.Response:
+    """
+    Make an MSX API request with automatic token refresh on 401/403.
+    
+    If we get a 401 (expired) or 403 (access denied), forces a token refresh
+    and retries once. This handles cases where the cached token looks valid
+    but has been invalidated server-side.
+    
+    Args:
+        method: HTTP method ('GET', 'POST', etc.)
+        url: Full URL to request
+        headers: Request headers (if None, will get fresh token and build headers)
+        json_data: JSON body for POST requests
+        retry_on_auth_failure: Whether to auto-retry on 401/403 (default True)
+        
+    Returns:
+        requests.Response object
+        
+    Raises:
+        requests.exceptions.Timeout, ConnectionError, etc.
+    """
+    # Get token and build headers if not provided
+    if headers is None:
+        token = get_msx_token()
+        if not token:
+            # Create a fake response for "not authenticated"
+            response = requests.models.Response()
+            response.status_code = 401
+            response._content = b'{"error": "Not authenticated"}'
+            return response
+        headers = _get_headers(token)
+    
+    # Make the request
+    if method.upper() == 'GET':
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    elif method.upper() == 'POST':
+        response = requests.post(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
+    else:
+        raise ValueError(f"Unsupported HTTP method: {method}")
+    
+    # Check for auth failures that might be due to stale token
+    if response.status_code in (401, 403) and retry_on_auth_failure:
+        logger.info(f"Got {response.status_code} from MSX, forcing token refresh and retrying...")
+        
+        # Force token refresh
+        refresh_success = refresh_token()
+        if not refresh_success:
+            logger.warning("Token refresh failed, returning original error response")
+            return response
+        
+        # Get fresh token and rebuild headers
+        fresh_token = get_msx_token()
+        if not fresh_token:
+            logger.warning("No token after refresh, returning original error response")
+            return response
+        
+        fresh_headers = _get_headers(fresh_token)
+        
+        # Retry the request (without retry flag to prevent infinite loop)
+        logger.info("Retrying MSX request with fresh token...")
+        if method.upper() == 'GET':
+            response = requests.get(url, headers=fresh_headers, timeout=REQUEST_TIMEOUT)
+        elif method.upper() == 'POST':
+            response = requests.post(url, headers=fresh_headers, json=json_data, timeout=REQUEST_TIMEOUT)
+        
+        if response.status_code in (401, 403):
+            logger.warning(f"Still got {response.status_code} after token refresh - likely a real permission issue")
+    
+    return response
+
+
 def test_connection() -> Dict[str, Any]:
     """
     Test the MSX connection by calling WhoAmI.
@@ -43,16 +120,8 @@ def test_connection() -> Dict[str, Any]:
         - user_id: str (GUID) if successful
         - error: str if failed
     """
-    token = get_msx_token()
-    if not token:
-        return {"success": False, "error": "Not authenticated. Run 'az login' first."}
-    
     try:
-        response = requests.get(
-            f"{CRM_BASE_URL}/WhoAmI",
-            headers=_get_headers(token),
-            timeout=REQUEST_TIMEOUT
-        )
+        response = _msx_request('GET', f"{CRM_BASE_URL}/WhoAmI")
         
         if response.status_code == 200:
             data = response.json()
@@ -62,6 +131,8 @@ def test_connection() -> Dict[str, Any]:
                 "business_unit_id": data.get("BusinessUnitId"),
                 "organization_id": data.get("OrganizationId"),
             }
+        elif response.status_code == 401:
+            return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         else:
             return {
                 "success": False,
@@ -131,10 +202,6 @@ def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Di
         - url: Direct MSX URL if exactly one match
         - error: str if failed
     """
-    token = get_msx_token()
-    if not token:
-        return {"success": False, "error": "Not authenticated. Run 'az login' first."}
-    
     # Sanitize TPID - should be numeric
     tpid_clean = str(tpid).strip()
     
@@ -146,11 +213,7 @@ def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Di
             f"&$select=accountid,name,msp_mstopparentid,msp_parentinglevelcode"
         )
         
-        response = requests.get(
-            url,
-            headers=_get_headers(token),
-            timeout=REQUEST_TIMEOUT
-        )
+        response = _msx_request('GET', url)
         
         if response.status_code == 200:
             data = response.json()
@@ -242,7 +305,7 @@ def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Di
             return result
             
         elif response.status_code == 401:
-            return {"success": False, "error": "Token expired. Re-authenticate with 'az login'."}
+            return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         elif response.status_code == 403:
             return {"success": False, "error": "Access denied. You may not have permission to query accounts."}
         else:
@@ -277,3 +340,307 @@ def build_account_url(account_id: str) -> str:
         f"&etn=account"
         f"&id={account_id}"
     )
+
+
+def build_milestone_url(milestone_id: str) -> str:
+    """
+    Build a direct MSX URL for a milestone.
+    
+    Args:
+        milestone_id: The milestone GUID (msp_engagementmilestoneid).
+        
+    Returns:
+        Full MSX URL to open the milestone record.
+    """
+    return (
+        f"https://microsoftsales.crm.dynamics.com/main.aspx"
+        f"?appid={MSX_APP_ID}"
+        f"&pagetype=entityrecord"
+        f"&etn=msp_engagementmilestone"
+        f"&id={milestone_id}"
+    )
+
+
+def build_task_url(task_id: str) -> str:
+    """
+    Build a direct MSX URL for a task.
+    
+    Args:
+        task_id: The task GUID (activityid).
+        
+    Returns:
+        Full MSX URL to open the task record.
+    """
+    return (
+        f"https://microsoftsales.crm.dynamics.com/main.aspx"
+        f"?appid={MSX_APP_ID}"
+        f"&pagetype=entityrecord"
+        f"&etn=task"
+        f"&id={task_id}"
+    )
+
+
+# Milestone status sort order (lower = more important in UI)
+MILESTONE_STATUS_ORDER = {
+    'On Track': 1,
+    'At Risk': 2,
+    'Blocked': 3,
+    'Completed': 4,
+    'Cancelled': 5,
+    'Lost to Competitor': 6,
+    'Hygiene/Duplicate': 7,
+}
+
+# HOK task categories (eligible for hands-on-keyboard credit)
+HOK_TASK_CATEGORIES = {
+    861980004,  # Architecture Design Session
+    861980006,  # Blocker Escalation
+    861980008,  # Briefing
+    861980007,  # Consumption Plan
+    861980002,  # Demo
+    861980005,  # PoC/Pilot
+    606820005,  # Technical Close/Win Plan
+    861980001,  # Workshop
+}
+
+# All task categories
+TASK_CATEGORIES = [
+    # HOK categories (sorted first)
+    {"label": "Architecture Design Session", "value": 861980004, "is_hok": True},
+    {"label": "Blocker Escalation", "value": 861980006, "is_hok": True},
+    {"label": "Briefing", "value": 861980008, "is_hok": True},
+    {"label": "Consumption Plan", "value": 861980007, "is_hok": True},
+    {"label": "Demo", "value": 861980002, "is_hok": True},
+    {"label": "PoC/Pilot", "value": 861980005, "is_hok": True},
+    {"label": "Technical Close/Win Plan", "value": 606820005, "is_hok": True},
+    {"label": "Workshop", "value": 861980001, "is_hok": True},
+    # Non-HOK categories
+    {"label": "ACE", "value": 606820000, "is_hok": False},
+    {"label": "Call Back Requested", "value": 861980010, "is_hok": False},
+    {"label": "Cross Segment", "value": 606820001, "is_hok": False},
+    {"label": "Cross Workload", "value": 606820002, "is_hok": False},
+    {"label": "Customer Engagement", "value": 861980000, "is_hok": False},
+    {"label": "External (Co-creation of Value)", "value": 861980013, "is_hok": False},
+    {"label": "Internal", "value": 861980012, "is_hok": False},
+    {"label": "Negotiate Pricing", "value": 861980003, "is_hok": False},
+    {"label": "New Partner Request", "value": 861980011, "is_hok": False},
+    {"label": "Post Sales", "value": 606820003, "is_hok": False},
+    {"label": "RFP/RFI", "value": 861980009, "is_hok": False},
+    {"label": "Tech Support", "value": 606820004, "is_hok": False},
+]
+
+
+def extract_account_id_from_url(tpid_url: str) -> Optional[str]:
+    """
+    Extract the account GUID from an MSX account URL.
+    
+    Args:
+        tpid_url: MSX URL like https://microsoftsales.crm.dynamics.com/main.aspx?...&id={guid}
+        
+    Returns:
+        The account GUID if found, None otherwise.
+    """
+    if not tpid_url:
+        return None
+    
+    import re
+    # Look for id= parameter (GUID format)
+    match = re.search(r'[&?]id=([a-f0-9-]{36})', tpid_url, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    
+    # Also try %7B and %7D encoded braces
+    match = re.search(r'[&?]id=%7B([a-f0-9-]{36})%7D', tpid_url, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    
+    return None
+
+
+def get_milestones_by_account(account_id: str) -> Dict[str, Any]:
+    """
+    Get all milestones for an account.
+    
+    Args:
+        account_id: The account GUID.
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - milestones: List of milestone dicts with id, name, status, number, url, opportunity
+        - error: str if failed
+    """
+    try:
+        # Query milestones by parent account
+        url = (
+            f"{CRM_BASE_URL}/msp_engagementmilestones"
+            f"?$filter=_msp_parentaccount_value eq '{account_id}'"
+            f"&$select=msp_engagementmilestoneid,msp_name,msp_milestonestatus,"
+            f"msp_milestonenumber,_msp_opportunityid_value,msp_monthlyuse,_msp_workloadlkid_value"
+            f"&$orderby=msp_name"
+        )
+        
+        response = _msx_request('GET', url)
+        
+        if response.status_code == 200:
+            data = response.json()
+            raw_milestones = data.get("value", [])
+            
+            milestones = []
+            for raw in raw_milestones:
+                milestone_id = raw.get("msp_engagementmilestoneid")
+                status = raw.get(
+                    "msp_milestonestatus@OData.Community.Display.V1.FormattedValue",
+                    "Unknown"
+                )
+                status_code = raw.get("msp_milestonestatus")
+                opp_name = raw.get(
+                    "_msp_opportunityid_value@OData.Community.Display.V1.FormattedValue",
+                    ""
+                )
+                workload = raw.get(
+                    "_msp_workloadlkid_value@OData.Community.Display.V1.FormattedValue",
+                    ""
+                )
+                monthly_usage = raw.get("msp_monthlyuse")
+                
+                milestones.append({
+                    "id": milestone_id,
+                    "name": raw.get("msp_name", ""),
+                    "number": raw.get("msp_milestonenumber", ""),
+                    "status": status,
+                    "status_code": status_code,
+                    "status_sort": MILESTONE_STATUS_ORDER.get(status, 99),
+                    "opportunity_name": opp_name,
+                    "workload": workload,
+                    "monthly_usage": monthly_usage,
+                    "url": build_milestone_url(milestone_id),
+                })
+            
+            # Sort by status (active first), then by name
+            milestones.sort(key=lambda m: (m["status_sort"], m["name"].lower()))
+            
+            return {
+                "success": True,
+                "milestones": milestones,
+                "count": len(milestones),
+            }
+            
+        elif response.status_code == 401:
+            return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 403:
+            return {"success": False, "error": "Access denied. You may not have permission to query milestones."}
+        else:
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {response.text[:200]}"
+            }
+            
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error getting milestones for account {account_id}")
+        return {"success": False, "error": str(e)}
+
+
+def get_current_user_id() -> Optional[str]:
+    """
+    Get the current user's system user ID from MSX.
+    
+    Returns:
+        User GUID if successful, None otherwise.
+    """
+    result = test_connection()
+    if result.get("success"):
+        return result.get("user_id")
+    return None
+
+
+def create_task(
+    milestone_id: str,
+    subject: str,
+    task_category: int,
+    duration_minutes: int = 60,
+    description: str = None,
+) -> Dict[str, Any]:
+    """
+    Create a task in MSX linked to a milestone.
+    
+    Args:
+        milestone_id: The milestone GUID to link the task to.
+        subject: Task subject/title.
+        task_category: Numeric task category code.
+        duration_minutes: Task duration (default 60).
+        description: Optional task description.
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - task_id: str (GUID) if successful
+        - task_url: str (MSX URL) if successful
+        - error: str if failed
+    """
+    # Get current user ID for task owner
+    user_id = get_current_user_id()
+    if not user_id:
+        return {"success": False, "error": "Could not determine current user."}
+    
+    try:
+        # Build task payload
+        task_data = {
+            "subject": subject,
+            "msp_taskcategory": task_category,
+            "scheduleddurationminutes": duration_minutes,
+            "prioritycode": 2,  # Normal priority
+            "regardingobjectid_msp_engagementmilestone@odata.bind": f"/msp_engagementmilestones({milestone_id})",
+            "ownerid@odata.bind": f"/systemusers({user_id})",
+        }
+        
+        if description:
+            task_data["description"] = description
+        
+        response = _msx_request('POST', f"{CRM_BASE_URL}/tasks", json_data=task_data)
+        
+        if response.status_code in (200, 201, 204):
+            # Extract task ID from OData-EntityId header
+            entity_id_header = response.headers.get("OData-EntityId", "")
+            task_id = None
+            
+            import re
+            match = re.search(r'tasks\(([a-f0-9-]{36})\)', entity_id_header, re.IGNORECASE)
+            if match:
+                task_id = match.group(1)
+            
+            if task_id:
+                return {
+                    "success": True,
+                    "task_id": task_id,
+                    "task_url": build_task_url(task_id),
+                }
+            else:
+                return {
+                    "success": True,
+                    "task_id": None,
+                    "task_url": None,
+                    "warning": "Task created but could not extract ID from response.",
+                }
+                
+        elif response.status_code == 401:
+            return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 403:
+            return {"success": False, "error": "Access denied. You may not have permission to create tasks."}
+        else:
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {response.text[:300]}"
+            }
+            
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error creating task for milestone {milestone_id}")
+        return {"success": False, "error": str(e)}
