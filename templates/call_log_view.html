@@ -94,6 +94,27 @@
                 </p>
                 {% endif %}
                 
+                {% if call_log.msx_tasks.count() > 0 %}
+                <p><strong>MSX Tasks:</strong><br>
+                    {% for task in call_log.msx_tasks %}
+                        {% if task.msx_task_url %}
+                        <a href="{{ task.msx_task_url }}" target="_blank" class="badge bg-primary text-decoration-none">
+                            <i class="bi bi-check2-circle"></i> {{ task.subject }} <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                        {% else %}
+                        <span class="badge bg-primary">
+                            <i class="bi bi-check2-circle"></i> {{ task.subject }}
+                        </span>
+                        {% endif %}
+                        {% if task.is_hok %}
+                        <span class="badge bg-warning text-dark" title="Hands-On Keyboard">★ HOK</span>
+                        {% endif %}
+                        <small class="text-muted ms-1">{{ task.task_category_name }}</small>
+                        <br>
+                    {% endfor %}
+                </p>
+                {% endif %}
+                
                 <hr>
                 
                 <p class="mb-1"><small class="text-muted">
