@@ -76,12 +76,25 @@ def test_connection() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def lookup_account_by_tpid(tpid: str) -> Dict[str, Any]:
+def _normalize_name(name: str) -> str:
+    """Normalize company name for comparison."""
+    if not name:
+        return ""
+    # Lowercase, remove common suffixes, extra whitespace
+    normalized = name.lower().strip()
+    for suffix in [" inc", " inc.", " llc", " llc.", " corp", " corp.", " co", " co.", " ltd", " ltd."]:
+        if normalized.endswith(suffix):
+            normalized = normalized[:-len(suffix)].strip()
+    return normalized
+
+
+def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Look up an MSX account by TPID (msp_mstopparentid).
     
     Args:
         tpid: The Top Parent ID to search for.
+        customer_name: Optional customer name to match against (for better auto-selection).
         
     Returns:
         Dict with:
@@ -117,7 +130,9 @@ def lookup_account_by_tpid(tpid: str) -> Dict[str, Any]:
             
             # Process accounts - extract parenting level from OData annotations
             accounts = []
-            top_account = None
+            top_accounts = []  # Track ALL top-level accounts
+            name_match = None  # Account matching customer name
+            normalized_customer = _normalize_name(customer_name) if customer_name else None
             
             for raw in raw_accounts:
                 account = {
@@ -132,9 +147,15 @@ def lookup_account_by_tpid(tpid: str) -> Dict[str, Any]:
                 }
                 accounts.append(account)
                 
-                # Track the "Top" parent account
+                # Track all "Top" parent accounts
                 if account["parenting_level"] and "top" in str(account["parenting_level"]).lower():
-                    top_account = account
+                    top_accounts.append(account)
+                
+                # Check for name match (if customer_name provided)
+                if normalized_customer and not name_match:
+                    normalized_account = _normalize_name(account["name"])
+                    if normalized_account == normalized_customer:
+                        name_match = account
             
             result = {
                 "success": True,
@@ -142,15 +163,28 @@ def lookup_account_by_tpid(tpid: str) -> Dict[str, Any]:
                 "count": len(accounts),
             }
             
-            # If exactly one match, or one "Top" among multiple, auto-select
+            # Selection priority:
+            # 1. If only one account, use it
+            # 2. If customer name matches an account, use that
+            # 3. If exactly ONE Top parent, use it
+            # 4. Otherwise, don't auto-select (let user choose)
+            
             if len(accounts) == 1:
                 result["url"] = accounts[0]["url"]
                 result["account_name"] = accounts[0]["name"]
-            elif top_account:
-                # Found a Top parent - recommend it
-                result["url"] = top_account["url"]
-                result["account_name"] = top_account["name"]
+            elif name_match:
+                # Found matching customer name - use it
+                result["url"] = name_match["url"]
+                result["account_name"] = name_match["name"]
+                result["name_match"] = True
+            elif len(top_accounts) == 1:
+                # Exactly one Top parent - safe to auto-select
+                result["url"] = top_accounts[0]["url"]
+                result["account_name"] = top_accounts[0]["name"]
                 result["top_parent"] = True
+            elif len(top_accounts) > 1:
+                # Multiple Top parents - show them for selection
+                result["multiple_tops"] = len(top_accounts)
             
             return result
             

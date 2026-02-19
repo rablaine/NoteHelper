@@ -78,10 +78,14 @@ def lookup_tpid(tpid: str):
     """
     Look up an MSX account by TPID.
     
+    Args (query params):
+        customer_name: Optional customer name for better matching.
+    
     Returns:
         JSON with accounts found and direct MSX URL if exactly one match.
     """
-    result = lookup_account_by_tpid(tpid)
+    customer_name = request.args.get('customer_name')
+    result = lookup_account_by_tpid(tpid, customer_name=customer_name)
     return jsonify(result)
 
 

@@ -179,7 +179,7 @@
                                 <button 
                                     class="btn btn-outline-primary lookup-btn" 
                                     type="button" 
-                                    onclick="lookupTPID('{{ customer.tpid }}', {{ customer.id }})"
+                                    onclick="lookupTPID('{{ customer.tpid }}', {{ customer.id }}, {{ customer.name | tojson }})"
                                     title="Lookup in MSX"
                                     id="lookup_btn_{{ customer.id }}"
                                 >
@@ -386,7 +386,7 @@
     }
 
     // Lookup TPID via API
-    async function lookupTPID(tpid, customerId) {
+    async function lookupTPID(tpid, customerId, customerName) {
         const btn = document.getElementById(`lookup_btn_${customerId}`);
         const resultEl = document.getElementById(`lookup_result_${customerId}`);
         const urlInput = document.getElementById(`tpid_url_${customerId}`);
@@ -398,7 +398,9 @@
         resultEl.textContent = 'Looking up...';
         
         try {
-            const response = await fetch(`/api/msx/lookup-tpid/${tpid}`);
+            // Include customer name for better matching
+            const params = customerName ? `?customer_name=${encodeURIComponent(customerName)}` : '';
+            const response = await fetch(`/api/msx/lookup-tpid/${tpid}${params}`);
             const data = await response.json();
             
             if (!data.success) {
@@ -414,6 +416,13 @@
                 urlInput.value = data.url;
                 updateFilledCount();
                 formChanged = true;
+            } else if (data.name_match) {
+                // Name matched - auto-fill with confirmation
+                resultEl.className = 'lookup-result small mt-1 success';
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${data.account_name} <span class="badge bg-success">Name Match</span> (${data.count} total)`;
+                urlInput.value = data.url;
+                updateFilledCount();
+                formChanged = true;
             } else if (data.top_parent) {
                 // Multiple matches but found "Top" parent - auto-fill with note
                 resultEl.className = 'lookup-result small mt-1 success';
@@ -424,11 +433,23 @@
             } else {
                 // Multiple matches - show options with parenting level
                 resultEl.className = 'lookup-result small mt-1 warning';
-                let html = `<strong>${data.count} accounts found:</strong><br>`;
-                data.accounts.forEach((acct, i) => {
-                    const level = acct.parenting_level ? ` <span class="text-muted">(${acct.parenting_level})</span>` : '';
-                    html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}, '${acct.name}'); return false;" class="me-2">${i+1}. ${acct.name}${level}</a>`;
-                });
+                
+                // If multiple Top parents, show them first for easier selection
+                if (data.multiple_tops) {
+                    const tops = data.accounts.filter(a => a.parenting_level && a.parenting_level.toLowerCase() === 'top');
+                    let html = `<strong>${data.multiple_tops} Top Parents found</strong> (${data.count} total):<br>`;
+                    tops.forEach((acct, i) => {
+                        html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}, '${acct.name}'); return false;" class="me-2"><strong>${i+1}. ${acct.name}</strong></a>`;
+                    });
+                    resultEl.innerHTML = html;
+                } else {
+                    let html = `<strong>${data.count} accounts found:</strong><br>`;
+                    data.accounts.forEach((acct, i) => {
+                        const level = acct.parenting_level ? ` <span class="text-muted">(${acct.parenting_level})</span>` : '';
+                        html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}, '${acct.name}'); return false;" class="me-2">${i+1}. ${acct.name}${level}</a>`;
+                    });
+                    resultEl.innerHTML = html;
+                }
                 resultEl.innerHTML = html;
             }
         } catch (err) {
