@@ -88,6 +88,34 @@ def _normalize_name(name: str) -> str:
     return normalized
 
 
+def _names_similar(name1: str, name2: str) -> bool:
+    """
+    Check if two company names are similar enough to be confident they match.
+    Returns True if names are similar, False if they're too different.
+    """
+    n1 = _normalize_name(name1)
+    n2 = _normalize_name(name2)
+    
+    if not n1 or not n2:
+        return False
+    
+    # Exact match after normalization
+    if n1 == n2:
+        return True
+    
+    # One contains the other (handles "ABC" vs "ABC Company")
+    if n1 in n2 or n2 in n1:
+        return True
+    
+    # Check if first word matches (handles "Acme Corp" vs "Acme Industries")
+    words1 = n1.split()
+    words2 = n2.split()
+    if words1 and words2 and words1[0] == words2[0] and len(words1[0]) >= 4:
+        return True
+    
+    return False
+
+
 def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Look up an MSX account by TPID (msp_mstopparentid).
@@ -164,20 +192,45 @@ def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Di
             }
             
             # Selection priority:
-            # 1. If only one account, use it
-            # 2. If customer name matches an account, use that
-            # 3. If exactly ONE Top parent, use it
+            # 1. If customer name matches an account, use that (most confident)
+            # 2. If only one account AND names are similar, use it
+            # 3. If exactly ONE Top parent AND names similar, use it
             # 4. Otherwise, don't auto-select (let user choose)
             
-            if len(accounts) == 1:
-                result["url"] = accounts[0]["url"]
-                result["account_name"] = accounts[0]["name"]
-            elif name_match:
-                # Found matching customer name - use it
+            if name_match:
+                # Found matching customer name - most confident
                 result["url"] = name_match["url"]
                 result["account_name"] = name_match["name"]
                 result["name_match"] = True
+            elif len(accounts) == 1:
+                # Single account - check if name is similar before auto-selecting
+                if customer_name and _names_similar(customer_name, accounts[0]["name"]):
+                    result["url"] = accounts[0]["url"]
+                    result["account_name"] = accounts[0]["name"]
+                elif not customer_name:
+                    # No customer name provided - can't verify, still auto-select
+                    result["url"] = accounts[0]["url"]
+                    result["account_name"] = accounts[0]["name"]
+                else:
+                    # Name mismatch warning - don't auto-select
+                    result["name_mismatch"] = True
+                    result["msx_account_name"] = accounts[0]["name"]
             elif len(top_accounts) == 1:
+                # Single Top parent - check name similarity
+                if customer_name and _names_similar(customer_name, top_accounts[0]["name"]):
+                    result["url"] = top_accounts[0]["url"]
+                    result["account_name"] = top_accounts[0]["name"]
+                    result["top_parent"] = True
+                elif not customer_name:
+                    result["url"] = top_accounts[0]["url"]
+                    result["account_name"] = top_accounts[0]["name"]
+                    result["top_parent"] = True
+                else:
+                    # Name mismatch warning
+                    result["name_mismatch"] = True
+                    result["msx_account_name"] = top_accounts[0]["name"]
+                    result["multiple_tops"] = 0  # Flag to show options
+            elif len(top_accounts) > 1:
                 # Exactly one Top parent - safe to auto-select
                 result["url"] = top_accounts[0]["url"]
                 result["account_name"] = top_accounts[0]["name"]

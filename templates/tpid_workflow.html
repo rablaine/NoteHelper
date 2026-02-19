@@ -584,12 +584,16 @@
                 resultEl.className = 'lookup-result small mt-1 manual-review';
                 resultEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Manual review: No accounts found`;
                 return { status: 'manual', reason: 'No accounts found' };
-            } else if (data.name_match || data.count === 1) {
-                // Confident match - save immediately!
+            } else if (data.name_mismatch) {
+                // Name doesn't match - TPID might be wrong, flag for manual review
+                resultEl.className = 'lookup-result small mt-1 manual-review';
+                resultEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Manual review: MSX has "${data.msx_account_name}" - name mismatch`;
+                return { status: 'manual', reason: 'Name mismatch' };
+            } else if (data.name_match) {
+                // Confident name match - save immediately!
                 urlInput.value = data.url;
                 resultEl.className = 'lookup-result small mt-1 auto-filled';
-                const badge = data.name_match ? '<span class="badge bg-success">Name Match</span>' : '';
-                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${data.account_name} ${badge}`;
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${data.account_name} <span class="badge bg-success">Name Match</span>`;
                 
                 // Save to database
                 const saveResult = await saveCustomerUrl(customer.customerId, data.url);
@@ -600,7 +604,22 @@
                     resultEl.innerHTML += ' <span class="text-danger">(save failed)</span>';
                     return { status: 'filled', account: data.account_name };
                 }
-            } else if (data.top_parent && data.count <= 3) {
+            } else if (data.url && data.count === 1) {
+                // Single account with similar name - save immediately!
+                urlInput.value = data.url;
+                resultEl.className = 'lookup-result small mt-1 auto-filled';
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${data.account_name}`;
+                
+                // Save to database
+                const saveResult = await saveCustomerUrl(customer.customerId, data.url);
+                if (saveResult.success) {
+                    markRowComplete(customer.card);
+                    return { status: 'saved', account: data.account_name };
+                } else {
+                    resultEl.innerHTML += ' <span class="text-danger">(save failed)</span>';
+                    return { status: 'filled', account: data.account_name };
+                }
+            } else if (data.top_parent && data.url) {
                 // Single Top parent among few accounts - save immediately!
                 urlInput.value = data.url;
                 resultEl.className = 'lookup-result small mt-1 auto-filled';
