@@ -97,6 +97,26 @@
         background-color: rgba(25, 135, 84, 0.2);
         color: #75b798;
     }
+    /* Auto-fill progress */
+    .autofill-progress {
+        display: none;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .autofill-progress.active {
+        display: flex;
+    }
+    .autofill-progress .progress {
+        width: 150px;
+        height: 8px;
+    }
+    .manual-review {
+        color: #fd7e14;
+        font-style: italic;
+    }
+    .auto-filled {
+        color: #198754;
+    }
     [data-bs-theme="dark"] .msx-status.disconnected {
         background-color: rgba(220, 53, 69, 0.2);
         color: #ea868f;
@@ -218,7 +238,20 @@
                             <span id="filledCount">0</span> of {{ customers|length }} filled
                         </span>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 align-items-center">
+                        <!-- Auto-fill progress -->
+                        <div id="autofillProgress" class="autofill-progress">
+                            <span id="autofillStatus">Processing...</span>
+                            <div class="progress">
+                                <div id="autofillBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="stopAutoFill()">
+                                <i class="bi bi-stop-fill"></i> Stop
+                            </button>
+                        </div>
+                        <button type="button" id="autoFillBtn" class="btn btn-success" onclick="startAutoFill()">
+                            <i class="bi bi-magic"></i> Auto Fill All
+                        </button>
                         <button type="button" class="btn btn-outline-secondary" onclick="window.location.href='{{ url_for('customers.customers_list') }}'">
                             Cancel
                         </button>
@@ -472,6 +505,196 @@
         resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${accountName || 'URL filled'}`;
         updateFilledCount();
         formChanged = true;
+    }
+
+    // ========================================
+    // Auto Fill All functionality
+    // ========================================
+    
+    let autoFillRunning = false;
+    let autoFillAborted = false;
+    
+    // Get all customers that need lookup (no URL filled yet)
+    function getCustomersToFill() {
+        const customers = [];
+        document.querySelectorAll('.tpid-card').forEach(card => {
+            const urlInput = card.querySelector('.url-input');
+            const lookupBtn = card.querySelector('.lookup-btn');
+            if (urlInput && lookupBtn && !urlInput.value.trim()) {
+                // Extract customer info from the onclick attribute
+                const onclick = lookupBtn.getAttribute('onclick');
+                const match = onclick.match(/lookupTPID\("(\d+)",\s*(\d+),\s*"([^"]+)"\)/);
+                if (match) {
+                    customers.push({
+                        tpid: match[1],
+                        customerId: parseInt(match[2]),
+                        customerName: match[3],
+                        card: card
+                    });
+                }
+            }
+        });
+        return customers;
+    }
+    
+    // Sleep helper
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    
+    // Save a customer's URL to the database
+    async function saveCustomerUrl(customerId, url) {
+        const response = await fetch(`/api/customer/${customerId}/tpid-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tpid_url: url })
+        });
+        return response.json();
+    }
+    
+    // Fade out and remove a completed row
+    function markRowComplete(card) {
+        card.style.transition = 'opacity 0.5s, max-height 0.5s';
+        card.style.opacity = '0.3';
+        card.style.pointerEvents = 'none';
+        // Add a "saved" indicator
+        const resultEl = card.querySelector('.lookup-result');
+        if (resultEl) {
+            resultEl.innerHTML += ' <span class="badge bg-secondary">Saved</span>';
+        }
+    }
+    
+    // Auto-fill a single customer
+    async function autoFillCustomer(customer) {
+        const resultEl = document.getElementById(`lookup_result_${customer.customerId}`);
+        const urlInput = document.getElementById(`tpid_url_${customer.customerId}`);
+        
+        try {
+            const params = `?customer_name=${encodeURIComponent(customer.customerName)}`;
+            const response = await fetch(`/api/msx/lookup-tpid/${customer.tpid}${params}`);
+            const data = await response.json();
+            
+            if (!data.success) {
+                // Error - mark for manual review
+                resultEl.className = 'lookup-result small mt-1 manual-review';
+                resultEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Manual review: ${data.error || 'Error'}`;
+                return { status: 'error', reason: data.error };
+            } else if (data.count === 0) {
+                // No matches - mark for manual review
+                resultEl.className = 'lookup-result small mt-1 manual-review';
+                resultEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Manual review: No accounts found`;
+                return { status: 'manual', reason: 'No accounts found' };
+            } else if (data.name_match || data.count === 1) {
+                // Confident match - save immediately!
+                urlInput.value = data.url;
+                resultEl.className = 'lookup-result small mt-1 auto-filled';
+                const badge = data.name_match ? '<span class="badge bg-success">Name Match</span>' : '';
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${data.account_name} ${badge}`;
+                
+                // Save to database
+                const saveResult = await saveCustomerUrl(customer.customerId, data.url);
+                if (saveResult.success) {
+                    markRowComplete(customer.card);
+                    return { status: 'saved', account: data.account_name };
+                } else {
+                    resultEl.innerHTML += ' <span class="text-danger">(save failed)</span>';
+                    return { status: 'filled', account: data.account_name };
+                }
+            } else if (data.top_parent && data.count <= 3) {
+                // Single Top parent among few accounts - save immediately!
+                urlInput.value = data.url;
+                resultEl.className = 'lookup-result small mt-1 auto-filled';
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${data.account_name} <span class="badge bg-primary">Top Parent</span>`;
+                
+                // Save to database
+                const saveResult = await saveCustomerUrl(customer.customerId, data.url);
+                if (saveResult.success) {
+                    markRowComplete(customer.card);
+                    return { status: 'saved', account: data.account_name };
+                } else {
+                    resultEl.innerHTML += ' <span class="text-danger">(save failed)</span>';
+                    return { status: 'filled', account: data.account_name };
+                }
+            } else {
+                // Multiple matches need manual review
+                const reason = data.multiple_tops 
+                    ? `${data.multiple_tops} Top Parents (${data.count} total)` 
+                    : `${data.count} accounts found`;
+                resultEl.className = 'lookup-result small mt-1 manual-review';
+                resultEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Manual review: ${reason}`;
+                return { status: 'manual', reason: reason };
+            }
+        } catch (err) {
+            resultEl.className = 'lookup-result small mt-1 manual-review';
+            resultEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Manual review: Network error`;
+            return { status: 'error', reason: err.message };
+        }
+    }
+    
+    // Start auto-fill process
+    async function startAutoFill() {
+        if (autoFillRunning) return;
+        
+        const customers = getCustomersToFill();
+        if (customers.length === 0) {
+            alert('All customers already have URLs filled!');
+            return;
+        }
+        
+        // Show progress UI
+        autoFillRunning = true;
+        autoFillAborted = false;
+        document.getElementById('autoFillBtn').style.display = 'none';
+        document.getElementById('autofillProgress').classList.add('active');
+        
+        let saved = 0;
+        let manual = 0;
+        let errors = 0;
+        
+        for (let i = 0; i < customers.length; i++) {
+            if (autoFillAborted) break;
+            
+            const customer = customers[i];
+            const progress = Math.round(((i + 1) / customers.length) * 100);
+            
+            // Update progress
+            document.getElementById('autofillStatus').textContent = `${i + 1}/${customers.length}: ${customer.customerName}`;
+            document.getElementById('autofillBar').style.width = `${progress}%`;
+            
+            // Scroll to current customer
+            customer.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Process this customer
+            const result = await autoFillCustomer(customer);
+            
+            if (result.status === 'saved') saved++;
+            else if (result.status === 'manual') manual++;
+            else if (result.status === 'error') errors++;
+            // 'filled' means it was matched but save failed - count as error
+            else if (result.status === 'filled') errors++;
+            
+            // Wait 1 second before next (be nice to MSX server)
+            if (i < customers.length - 1 && !autoFillAborted) {
+                await sleep(1000);
+            }
+        }
+        
+        // Done - show summary
+        autoFillRunning = false;
+        document.getElementById('autofillProgress').classList.remove('active');
+        document.getElementById('autoFillBtn').style.display = '';
+        
+        const summary = autoFillAborted 
+            ? `Stopped! Saved: ${saved}, Manual Review: ${manual}, Errors: ${errors}`
+            : `Done! Saved: ${saved}, Manual Review: ${manual}` + (errors > 0 ? `, Errors: ${errors}` : '');
+        
+        alert(summary);
+    }
+    
+    // Stop auto-fill process
+    function stopAutoFill() {
+        autoFillAborted = true;
+        document.getElementById('autofillStatus').textContent = 'Stopping...';
     }
 
     // Check MSX status on page load

@@ -299,6 +299,38 @@ def tpid_workflow_update():
     return redirect(url_for('customers.tpid_workflow'))
 
 
+@customers_bp.route('/api/customer/<int:customer_id>/tpid-url', methods=['POST'])
+def api_save_tpid_url(customer_id):
+    """
+    API endpoint to save a single customer's MSX Account URL.
+    Used by auto-fill to save immediately on confident matches.
+    
+    Expected JSON: { "tpid_url": "https://..." }
+    """
+    try:
+        customer = db.session.get(Customer, customer_id)
+        if not customer:
+            return jsonify({"success": False, "error": "Customer not found"}), 404
+        
+        data = request.get_json()
+        if not data or not data.get('tpid_url'):
+            return jsonify({"success": False, "error": "No tpid_url provided"}), 400
+        
+        tpid_url = data['tpid_url'].strip()
+        customer.tpid_url = tpid_url
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "customer_id": customer_id,
+            "customer_name": customer.name
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @customers_bp.route('/customer/<int:id>/notes', methods=['POST'])
 def customer_update_notes(id):
     """Update customer notes via AJAX or form POST."""
