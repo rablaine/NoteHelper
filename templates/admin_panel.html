@@ -137,40 +137,24 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <h6>Device Code Login</h6>
-                        <div id="msxDeviceCodePanel">
-                            <p class="small text-muted mb-2">Authenticate with your Microsoft account to enable MSX features.</p>
-                            <button type="button" class="btn btn-primary" id="msxLoginBtn">
-                                <i class="bi bi-box-arrow-in-right"></i> Sign in with Microsoft
-                            </button>
-                        </div>
-                        <div id="msxDeviceCodeFlow" style="display: none;">
-                            <div class="alert alert-warning mb-2">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="spinner-border spinner-border-sm mt-1" role="status"></div>
-                                    <div>
-                                        <strong>Complete sign-in in your browser:</strong>
-                                        <ol class="mb-0 mt-2 small">
-                                            <li>Go to <a href="#" id="msxDeviceCodeUrl" target="_blank" class="fw-bold">microsoft.com/devicelogin</a></li>
-                                            <li>Enter code: <code id="msxDeviceCode" class="fs-5 user-select-all">--------</code>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1" onclick="copyDeviceCode()">
-                                                    <i class="bi bi-clipboard"></i>
-                                                </button>
-                                            </li>
-                                            <li>Sign in with your Microsoft account</li>
-                                        </ol>
-                                    </div>
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="msxCancelLoginBtn">
-                                <i class="bi bi-x-lg"></i> Cancel
-                            </button>
+                        <h6>How to Authenticate</h6>
+                        <div id="msxLoginInstructions">
+                            <p class="small text-muted mb-2">MSX uses your Azure CLI session. To authenticate:</p>
+                            <ol class="small mb-2">
+                                <li>Open a terminal on this machine</li>
+                                <li>Run: <code>az login --tenant 72f988bf-86f1-41af-91ab-2d7cd011db47</code></li>
+                                <li>Complete the browser sign-in</li>
+                                <li>Click "Refresh Token" below</li>
+                            </ol>
+                            <p class="small text-muted mb-0">
+                                <i class="bi bi-info-circle"></i> The browser-based login works better with Microsoft's security policies than device code flow.
+                            </p>
                         </div>
                     </div>
                 </div>
 
                 <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="msxRefreshBtn">
+                    <button type="button" class="btn btn-sm btn-primary" id="msxRefreshBtn">
                         <i class="bi bi-arrow-clockwise"></i> Refresh Token
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-success" id="msxTestBtn">
@@ -231,6 +215,8 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+
 // Clear All Data
 document.getElementById('clearAllDataBtn').addEventListener('click', function() {
     const confirmation = prompt('⚠️ WARNING: This will delete ALL data from ALL users!\n\nType "DELETE ALL DATA" to confirm:');
@@ -258,42 +244,45 @@ document.getElementById('clearAllDataBtn').addEventListener('click', function() 
     }
 });
 
-// Parse full AI Foundry URL and auto-fill fields
-document.getElementById('aiFullUrl').addEventListener('input', function() {
-    const fullUrl = this.value.trim();
-    if (!fullUrl) return;
-    
-    try {
-        const url = new URL(fullUrl);
+// Parse full AI Foundry URL and auto-fill fields (optional feature)
+const aiFullUrlInput = document.getElementById('aiFullUrl');
+if (aiFullUrlInput) {
+    aiFullUrlInput.addEventListener('input', function() {
+        const fullUrl = this.value.trim();
+        if (!fullUrl) return;
         
-        // Extract deployment name from path
-        // Pattern: /openai/deployments/{deployment_name}/chat/completions
-        const pathMatch = url.pathname.match(/\/deployments\/([^\/]+)/);
-        if (pathMatch) {
-            const deploymentName = pathMatch[1];
-            document.getElementById('aiDeployment').value = deploymentName;
+        try {
+            const url = new URL(fullUrl);
             
-            // Use just the origin (base URL) - SDK adds the path automatically
-            document.getElementById('aiEndpoint').value = url.origin;
+            // Extract deployment name from path
+            // Pattern: /openai/deployments/{deployment_name}/chat/completions
+            const pathMatch = url.pathname.match(/\/deployments\/([^\/]+)/);
+            if (pathMatch) {
+                const deploymentName = pathMatch[1];
+                document.getElementById('aiDeployment').value = deploymentName;
+                
+                // Use just the origin (base URL) - SDK adds the path automatically
+                document.getElementById('aiEndpoint').value = url.origin;
+            }
+            
+            // Extract api-version from query params
+            const apiVersion = url.searchParams.get('api-version');
+            if (apiVersion) {
+                document.getElementById('aiApiVersion').value = apiVersion;
+            }
+            
+            // Show success feedback
+            this.classList.add('is-valid');
+            setTimeout(() => this.classList.remove('is-valid'), 2000);
+        } catch (e) {
+            // Invalid URL, show error feedback
+            if (fullUrl.length > 10) {
+                this.classList.add('is-invalid');
+                setTimeout(() => this.classList.remove('is-invalid'), 2000);
+            }
         }
-        
-        // Extract api-version from query params
-        const apiVersion = url.searchParams.get('api-version');
-        if (apiVersion) {
-            document.getElementById('aiApiVersion').value = apiVersion;
-        }
-        
-        // Show success feedback
-        this.classList.add('is-valid');
-        setTimeout(() => this.classList.remove('is-valid'), 2000);
-    } catch (e) {
-        // Invalid URL, show error feedback
-        if (fullUrl.length > 10) {
-            this.classList.add('is-invalid');
-            setTimeout(() => this.classList.remove('is-invalid'), 2000);
-        }
-    }
-});
+    });
+}
 
 // AI Configuration Form
 document.getElementById('aiConfigForm').addEventListener('submit', function(e) {
@@ -519,121 +508,7 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
 // Load MSX status on page load
 loadMsxStatus();
 
-// MSX Device Code Flow
-let deviceCodePollingInterval = null;
-
-function copyDeviceCode() {
-    const code = document.getElementById('msxDeviceCode').textContent;
-    navigator.clipboard.writeText(code).then(() => {
-        // Brief visual feedback
-        const btn = event.target.closest('button');
-        const icon = btn.querySelector('i');
-        icon.className = 'bi bi-check';
-        setTimeout(() => { icon.className = 'bi bi-clipboard'; }, 1000);
-    });
-}
-
-function showDeviceCodePanel(show) {
-    document.getElementById('msxDeviceCodePanel').style.display = show ? 'none' : 'block';
-    document.getElementById('msxDeviceCodeFlow').style.display = show ? 'block' : 'none';
-}
-
-function startDeviceCodePolling() {
-    // Poll every 2 seconds to check if user completed login
-    deviceCodePollingInterval = setInterval(async () => {
-        try {
-            const response = await fetch('/api/msx/device-code/status');
-            const data = await response.json();
-            
-            if (data.completed) {
-                clearInterval(deviceCodePollingInterval);
-                deviceCodePollingInterval = null;
-                
-                if (data.success) {
-                    // Login successful!
-                    showDeviceCodePanel(false);
-                    document.getElementById('msxTestResult').innerHTML = `
-                        <div class="alert alert-success">
-                            <i class="bi bi-check-circle"></i> <strong>Successfully signed in!</strong>
-                        </div>
-                    `;
-                    loadMsxStatus();
-                    setTimeout(() => {
-                        document.getElementById('msxTestResult').innerHTML = '';
-                    }, 5000);
-                } else {
-                    // Login failed
-                    showDeviceCodePanel(false);
-                    document.getElementById('msxTestResult').innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="bi bi-x-circle"></i> <strong>Sign-in failed</strong><br>
-                            <small>${data.error || 'Unknown error'}</small>
-                        </div>
-                    `;
-                }
-            }
-        } catch (err) {
-            console.error('Polling error:', err);
-        }
-    }, 2000);
-}
-
-// Start device code login
-document.getElementById('msxLoginBtn').addEventListener('click', async function() {
-    const btn = this;
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
-    btn.disabled = true;
-    
-    try {
-        const response = await fetch('/api/msx/device-code/start', { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.success) {
-            // Show the device code flow UI
-            document.getElementById('msxDeviceCode').textContent = data.user_code || '--------';
-            const urlEl = document.getElementById('msxDeviceCodeUrl');
-            urlEl.href = data.verification_uri || 'https://microsoft.com/devicelogin';
-            urlEl.textContent = (data.verification_uri || 'https://microsoft.com/devicelogin').replace('https://', '');
-            
-            showDeviceCodePanel(true);
-            startDeviceCodePolling();
-        } else {
-            document.getElementById('msxTestResult').innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-x-circle"></i> <strong>Could not start login</strong><br>
-                    <small>${data.error || 'Unknown error'}</small>
-                </div>
-            `;
-        }
-    } catch (err) {
-        document.getElementById('msxTestResult').innerHTML = `
-            <div class="alert alert-danger">
-                <i class="bi bi-x-circle"></i> <strong>Error</strong><br>
-                <small>${err.message}</small>
-            </div>
-        `;
-    } finally {
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-    }
-});
-
-// Cancel device code login
-document.getElementById('msxCancelLoginBtn').addEventListener('click', async function() {
-    if (deviceCodePollingInterval) {
-        clearInterval(deviceCodePollingInterval);
-        deviceCodePollingInterval = null;
-    }
-    
-    try {
-        await fetch('/api/msx/device-code/cancel', { method: 'POST' });
-    } catch (err) {
-        console.error('Cancel error:', err);
-    }
-    
-    showDeviceCodePanel(false);
-});
+}); // end DOMContentLoaded
 </script>
 {% endblock %}
 

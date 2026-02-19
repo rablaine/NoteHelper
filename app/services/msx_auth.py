@@ -22,6 +22,7 @@ import threading
 import time
 import logging
 import re
+import sys
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 CRM_RESOURCE = "https://microsoftsales.crm.dynamics.com"
 CRM_BASE_URL = "https://microsoftsales.crm.dynamics.com/api/data/v9.2"
 TENANT_ID = "72f988bf-86f1-41af-91ab-2d7cd011db47"  # Microsoft corporate tenant
+
+# On Windows, we need shell=True for subprocess to find az in PATH
+IS_WINDOWS = sys.platform == "win32"
 
 # Token cache
 _token_cache: Dict[str, Any] = {
@@ -81,7 +85,8 @@ def _run_az_command() -> Dict[str, Any]:
             cmd,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            shell=IS_WINDOWS  # Required on Windows to find az in PATH
         )
         
         if result.returncode != 0:
@@ -343,7 +348,8 @@ def start_device_code_flow() -> Dict[str, Any]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1
+            bufsize=1,
+            shell=IS_WINDOWS  # Required on Windows to find az in PATH
         )
         _device_code_state["process"] = process
         
