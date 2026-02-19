@@ -179,7 +179,7 @@
                                 <button 
                                     class="btn btn-outline-primary lookup-btn" 
                                     type="button" 
-                                    onclick="lookupTPID('{{ customer.tpid }}', {{ customer.id }}, {{ customer.name | tojson }})"
+                                    onclick='lookupTPID("{{ customer.tpid }}", {{ customer.id }}, {{ customer.name | tojson }})'
                                     title="Lookup in MSX"
                                     id="lookup_btn_{{ customer.id }}"
                                 >
@@ -434,23 +434,25 @@
                 // Multiple matches - show options with parenting level
                 resultEl.className = 'lookup-result small mt-1 warning';
                 
+                // Helper to escape strings for JS onclick handlers
+                const escapeJs = (str) => str.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                
                 // If multiple Top parents, show them first for easier selection
                 if (data.multiple_tops) {
                     const tops = data.accounts.filter(a => a.parenting_level && a.parenting_level.toLowerCase() === 'top');
                     let html = `<strong>${data.multiple_tops} Top Parents found</strong> (${data.count} total):<br>`;
                     tops.forEach((acct, i) => {
-                        html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}, '${acct.name}'); return false;" class="me-2"><strong>${i+1}. ${acct.name}</strong></a>`;
+                        html += `<a href="#" onclick="selectAccount('${escapeJs(acct.url)}', ${customerId}, '${escapeJs(acct.name)}'); return false;" class="me-2"><strong>${i+1}. ${acct.name}</strong></a>`;
                     });
                     resultEl.innerHTML = html;
                 } else {
                     let html = `<strong>${data.count} accounts found:</strong><br>`;
                     data.accounts.forEach((acct, i) => {
                         const level = acct.parenting_level ? ` <span class="text-muted">(${acct.parenting_level})</span>` : '';
-                        html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}, '${acct.name}'); return false;" class="me-2">${i+1}. ${acct.name}${level}</a>`;
+                        html += `<a href="#" onclick="selectAccount('${escapeJs(acct.url)}', ${customerId}, '${escapeJs(acct.name)}'); return false;" class="me-2">${i+1}. ${acct.name}${level}</a>`;
                     });
                     resultEl.innerHTML = html;
                 }
-                resultEl.innerHTML = html;
             }
         } catch (err) {
             resultEl.className = 'lookup-result small mt-1 error';
