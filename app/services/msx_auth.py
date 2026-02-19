@@ -4,17 +4,16 @@ MSX (Dynamics 365) Authentication Service using Azure CLI.
 This module handles authentication to Microsoft Sales Experience (MSX) CRM
 using az login tokens. It provides:
 - Token acquisition via `az account get-access-token`
+- Device code flow for browser-based authentication
 - Token caching to avoid repeated CLI calls
 - Background refresh to keep tokens fresh
 - Status checking for the admin panel
 
 Usage:
-    from app.services.msx_auth import get_msx_token, get_msx_auth_status, start_token_refresh_job
+    from app.services.msx_auth import get_msx_token, get_msx_auth_status, start_device_code_flow
 
 Prerequisites:
     - Azure CLI installed and in PATH
-    - User must be logged in via `az login`
-    - User must have access to Microsoft's corporate tenant
 """
 
 import subprocess
@@ -22,6 +21,7 @@ import json
 import threading
 import time
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
@@ -38,6 +38,19 @@ _token_cache: Dict[str, Any] = {
     "expires_on": None,
     "user": None,
     "last_refresh": None,
+    "error": None,
+}
+
+# Device code flow state
+_device_code_state: Dict[str, Any] = {
+    "active": False,
+    "process": None,
+    "user_code": None,
+    "verification_uri": None,
+    "message": None,
+    "started_at": None,
+    "completed": False,
+    "success": False,
     "error": None,
 }
 
@@ -270,3 +283,211 @@ def clear_token_cache():
         "error": None,
     }
     logger.info("MSX token cache cleared")
+
+
+def start_device_code_flow() -> Dict[str, Any]:
+    """
+    Start the Azure CLI device code login flow.
+    
+    This runs `az login --use-device-code` which outputs a message like:
+    "To sign in, use a web browser to open the page https://microsoft.com/devicelogin 
+    and enter the code ABCD1234 to authenticate."
+    
+    Returns:
+        Dict with:
+        - success: bool
+        - user_code: str (the code to enter)
+        - verification_uri: str (the URL to visit)
+        - message: str (full message from az login)
+        - error: str if failed
+    """
+    global _device_code_state
+    
+    # Check if already running
+    if _device_code_state.get("active") and _device_code_state.get("process"):
+        proc = _device_code_state["process"]
+        if proc.poll() is None:  # Still running
+            return {
+                "success": True,
+                "already_active": True,
+                "user_code": _device_code_state.get("user_code"),
+                "verification_uri": _device_code_state.get("verification_uri"),
+                "message": _device_code_state.get("message"),
+            }
+    
+    # Reset state
+    _device_code_state = {
+        "active": True,
+        "process": None,
+        "user_code": None,
+        "verification_uri": None,
+        "message": None,
+        "started_at": datetime.now(timezone.utc),
+        "completed": False,
+        "success": False,
+        "error": None,
+    }
+    
+    cmd = [
+        "az", "login",
+        "--use-device-code",
+        "--tenant", TENANT_ID,
+        "--allow-no-subscriptions",
+        "--output", "json"
+    ]
+    
+    try:
+        # Start the process
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
+        _device_code_state["process"] = process
+        
+        # Read stderr to get the device code message (az login outputs to stderr)
+        # We need to read until we get the device code, but not block forever
+        import select
+        import sys
+        
+        message_lines = []
+        start_time = time.time()
+        
+        # On Windows, select doesn't work with pipes, so we use a thread
+        def read_stderr():
+            for line in process.stderr:
+                message_lines.append(line)
+                # Stop once we've likely got the device code message
+                if "devicelogin" in line.lower() or "code" in line.lower():
+                    break
+        
+        reader_thread = threading.Thread(target=read_stderr, daemon=True)
+        reader_thread.start()
+        reader_thread.join(timeout=10)  # Wait up to 10s for device code
+        
+        full_message = "".join(message_lines).strip()
+        
+        if not full_message:
+            _device_code_state["active"] = False
+            _device_code_state["error"] = "No output from az login. Is Azure CLI installed?"
+            return {"success": False, "error": _device_code_state["error"]}
+        
+        # Parse the message to extract the code and URL
+        # Format: "To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code ABCD1234 to authenticate."
+        code_match = re.search(r'enter the code\s+([A-Z0-9]+)', full_message, re.IGNORECASE)
+        url_match = re.search(r'(https://[^\s]+devicelogin[^\s]*)', full_message, re.IGNORECASE)
+        
+        user_code = code_match.group(1) if code_match else None
+        verification_uri = url_match.group(1) if url_match else "https://microsoft.com/devicelogin"
+        
+        _device_code_state["user_code"] = user_code
+        _device_code_state["verification_uri"] = verification_uri
+        _device_code_state["message"] = full_message
+        
+        # Start a background thread to wait for completion
+        def wait_for_completion():
+            global _device_code_state, _token_cache
+            try:
+                stdout, stderr = process.communicate(timeout=300)  # 5 minute timeout
+                
+                if process.returncode == 0:
+                    _device_code_state["completed"] = True
+                    _device_code_state["success"] = True
+                    _device_code_state["active"] = False
+                    logger.info("Device code flow completed successfully")
+                    
+                    # Now get the CRM token
+                    refresh_token()
+                else:
+                    _device_code_state["completed"] = True
+                    _device_code_state["success"] = False
+                    _device_code_state["error"] = stderr or "Login failed"
+                    _device_code_state["active"] = False
+                    logger.warning(f"Device code flow failed: {stderr}")
+                    
+            except subprocess.TimeoutExpired:
+                process.kill()
+                _device_code_state["completed"] = True
+                _device_code_state["success"] = False
+                _device_code_state["error"] = "Login timed out (5 minutes)"
+                _device_code_state["active"] = False
+                logger.warning("Device code flow timed out")
+            except Exception as e:
+                _device_code_state["completed"] = True
+                _device_code_state["success"] = False
+                _device_code_state["error"] = str(e)
+                _device_code_state["active"] = False
+                logger.exception("Device code flow error")
+        
+        completion_thread = threading.Thread(target=wait_for_completion, daemon=True)
+        completion_thread.start()
+        
+        return {
+            "success": True,
+            "user_code": user_code,
+            "verification_uri": verification_uri,
+            "message": full_message,
+        }
+        
+    except FileNotFoundError:
+        _device_code_state["active"] = False
+        _device_code_state["error"] = "Azure CLI not installed"
+        return {"success": False, "error": "Azure CLI not installed. Install from https://aka.ms/installazurecli"}
+    except Exception as e:
+        _device_code_state["active"] = False
+        _device_code_state["error"] = str(e)
+        logger.exception("Failed to start device code flow")
+        return {"success": False, "error": str(e)}
+
+
+def get_device_code_status() -> Dict[str, Any]:
+    """
+    Check the status of an active device code flow.
+    
+    Returns:
+        Dict with:
+        - active: bool (is a flow in progress)
+        - completed: bool
+        - success: bool (if completed)
+        - user_code: str
+        - verification_uri: str
+        - error: str if failed
+    """
+    global _device_code_state
+    
+    return {
+        "active": _device_code_state.get("active", False),
+        "completed": _device_code_state.get("completed", False),
+        "success": _device_code_state.get("success", False),
+        "user_code": _device_code_state.get("user_code"),
+        "verification_uri": _device_code_state.get("verification_uri"),
+        "message": _device_code_state.get("message"),
+        "error": _device_code_state.get("error"),
+        "started_at": _device_code_state.get("started_at").isoformat() if _device_code_state.get("started_at") else None,
+    }
+
+
+def cancel_device_code_flow():
+    """Cancel any active device code flow."""
+    global _device_code_state
+    
+    if _device_code_state.get("process"):
+        try:
+            _device_code_state["process"].kill()
+        except Exception:
+            pass
+    
+    _device_code_state = {
+        "active": False,
+        "process": None,
+        "user_code": None,
+        "verification_uri": None,
+        "message": None,
+        "started_at": None,
+        "completed": False,
+        "success": False,
+        "error": None,
+    }
+    logger.info("Device code flow cancelled")
