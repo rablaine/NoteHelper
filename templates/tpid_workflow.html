@@ -62,6 +62,45 @@
     .skip-btn:focus {
         opacity: 1;
     }
+    .lookup-btn {
+        min-width: 42px;
+    }
+    .lookup-btn.loading {
+        pointer-events: none;
+    }
+    .lookup-result {
+        min-height: 0;
+    }
+    .lookup-result.error {
+        color: #dc3545;
+    }
+    .lookup-result.success {
+        color: #198754;
+    }
+    .lookup-result.warning {
+        color: #fd7e14;
+    }
+    .msx-status {
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+    }
+    .msx-status.connected {
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+    .msx-status.disconnected {
+        background-color: #f8d7da;
+        color: #842029;
+    }
+    [data-bs-theme="dark"] .msx-status.connected {
+        background-color: rgba(25, 135, 84, 0.2);
+        color: #75b798;
+    }
+    [data-bs-theme="dark"] .msx-status.disconnected {
+        background-color: rgba(220, 53, 69, 0.2);
+        color: #ea868f;
+    }
 </style>
 {% endblock %}
 
@@ -76,7 +115,10 @@
                         Fill in missing MSX Account URLs for {{ customers|length }} customer{{ 's' if customers|length != 1 else '' }}
                     </p>
                 </div>
-                <div class="d-flex gap-2">
+                <div class="d-flex gap-2 align-items-center">
+                    <div id="msxStatus" class="msx-status disconnected">
+                        <i class="bi bi-circle-fill"></i> <span>Checking MSX...</span>
+                    </div>
                     <a href="https://microsoftsales.crm.dynamics.com/main.aspx?appid=fe0c3504-3700-e911-a849-000d3a10b7cc&pagetype=entitylist&etn=account&viewid=3defa8ef-4147-e311-9405-00155db3ba1e&viewType=1039" 
                        target="_blank" 
                        class="btn btn-primary">
@@ -134,12 +176,21 @@
                         </div>
                         <div class="col-md-9">
                             <div class="input-group input-group-sm">
+                                <button 
+                                    class="btn btn-outline-primary lookup-btn" 
+                                    type="button" 
+                                    onclick="lookupTPID('{{ customer.tpid }}', {{ customer.id }})"
+                                    title="Lookup in MSX"
+                                    id="lookup_btn_{{ customer.id }}"
+                                >
+                                    <i class="bi bi-search"></i>
+                                </button>
                                 <input 
                                     type="url" 
                                     class="form-control url-input" 
                                     id="tpid_url_{{ customer.id }}"
                                     name="tpid_url_{{ customer.id }}"
-                                    placeholder="Paste MSX Account URL here..."
+                                    placeholder="Paste MSX Account URL here or click Lookup..."
                                     data-customer-id="{{ customer.id }}"
                                 >
                                 <button 
@@ -151,6 +202,7 @@
                                     <i class="bi bi-arrow-down"></i>
                                 </button>
                             </div>
+                            <div class="lookup-result small mt-1" id="lookup_result_{{ customer.id }}"></div>
                         </div>
                     </div>
                 </div>
@@ -311,6 +363,90 @@
             e.returnValue = '';
         }
     });
+
+    // MSX Status check
+    async function checkMSXStatus() {
+        const statusEl = document.getElementById('msxStatus');
+        try {
+            const response = await fetch('/api/msx/status');
+            const data = await response.json();
+            
+            if (data.authenticated) {
+                statusEl.className = 'msx-status connected';
+                statusEl.innerHTML = `<i class="bi bi-check-circle-fill"></i> <span>MSX Connected (${data.expires_in_minutes}m)</span>`;
+            } else {
+                statusEl.className = 'msx-status disconnected';
+                const errorMsg = data.error || 'Not authenticated';
+                statusEl.innerHTML = `<i class="bi bi-x-circle-fill"></i> <span>MSX: ${errorMsg.substring(0, 30)}</span>`;
+            }
+        } catch (err) {
+            statusEl.className = 'msx-status disconnected';
+            statusEl.innerHTML = `<i class="bi bi-x-circle-fill"></i> <span>MSX: Connection error</span>`;
+        }
+    }
+
+    // Lookup TPID via API
+    async function lookupTPID(tpid, customerId) {
+        const btn = document.getElementById(`lookup_btn_${customerId}`);
+        const resultEl = document.getElementById(`lookup_result_${customerId}`);
+        const urlInput = document.getElementById(`tpid_url_${customerId}`);
+        
+        // Show loading state
+        btn.classList.add('loading');
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        resultEl.className = 'lookup-result small mt-1';
+        resultEl.textContent = 'Looking up...';
+        
+        try {
+            const response = await fetch(`/api/msx/lookup-tpid/${tpid}`);
+            const data = await response.json();
+            
+            if (!data.success) {
+                resultEl.className = 'lookup-result small mt-1 error';
+                resultEl.textContent = data.error || 'Lookup failed';
+            } else if (data.count === 0) {
+                resultEl.className = 'lookup-result small mt-1 warning';
+                resultEl.textContent = 'No accounts found for this TPID';
+            } else if (data.count === 1) {
+                // Single match - auto-fill!
+                resultEl.className = 'lookup-result small mt-1 success';
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> Found: ${data.account_name}`;
+                urlInput.value = data.url;
+                updateFilledCount();
+                formChanged = true;
+            } else {
+                // Multiple matches - show options
+                resultEl.className = 'lookup-result small mt-1 warning';
+                let html = `<strong>${data.count} accounts found:</strong><br>`;
+                data.accounts.forEach((acct, i) => {
+                    html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}); return false;" class="me-2">${i+1}. ${acct.name}</a>`;
+                });
+                resultEl.innerHTML = html;
+            }
+        } catch (err) {
+            resultEl.className = 'lookup-result small mt-1 error';
+            resultEl.textContent = 'Network error: ' + err.message;
+        } finally {
+            btn.classList.remove('loading');
+            btn.innerHTML = '<i class="bi bi-search"></i>';
+        }
+    }
+
+    // Select account from multiple matches
+    function selectAccount(url, customerId) {
+        const urlInput = document.getElementById(`tpid_url_${customerId}`);
+        const resultEl = document.getElementById(`lookup_result_${customerId}`);
+        urlInput.value = url;
+        resultEl.className = 'lookup-result small mt-1 success';
+        resultEl.innerHTML = '<i class="bi bi-check-circle"></i> URL filled';
+        updateFilledCount();
+        formChanged = true;
+    }
+
+    // Check MSX status on page load
+    checkMSXStatus();
+    // Refresh status every 2 minutes
+    setInterval(checkMSXStatus, 120000);
 </script>
 {% endif %}
 {% endblock %}

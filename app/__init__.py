@@ -101,6 +101,7 @@ def create_app():
     from app.routes.revenue import revenue_bp
     from app.routes.partners import partners_bp
     from app.routes.milestones import bp as milestones_bp
+    from app.routes.msx import msx_bp
     
     app.register_blueprint(admin_bp)
     app.register_blueprint(ai_bp)
@@ -115,5 +116,11 @@ def create_app():
     app.register_blueprint(revenue_bp)
     app.register_blueprint(partners_bp)
     app.register_blueprint(milestones_bp)
+    app.register_blueprint(msx_bp)
+    
+    # Start MSX token refresh job (background thread)
+    # This keeps the az login token fresh for CRM API calls
+    from app.services.msx_auth import start_token_refresh_job
+    start_token_refresh_job(interval_seconds=300)  # Check every 5 minutes
     
     return app
