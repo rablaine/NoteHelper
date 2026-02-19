@@ -593,7 +593,7 @@ def create_task(
             "subject": subject,
             "msp_taskcategory": task_category,
             "scheduleddurationminutes": duration_minutes,
-            "prioritycode": 2,  # Normal priority
+            "prioritycode": 1,  # Normal priority (0=Low, 1=Normal, 2=High)
             "regardingobjectid_msp_engagementmilestone@odata.bind": f"/msp_engagementmilestones({milestone_id})",
             "ownerid@odata.bind": f"/systemusers({user_id})",
         }
