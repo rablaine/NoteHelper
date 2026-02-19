@@ -27,6 +27,10 @@ from app.services.msx_api import (
     extract_account_id_from_url,
     create_task,
     TASK_CATEGORIES,
+    query_entity,
+    get_current_user,
+    get_entity_metadata,
+    explore_user_territories,
 )
 from app.models import Customer, Milestone, db
 
@@ -284,4 +288,87 @@ def create_msx_task():
         description=description
     )
     
+    return jsonify(result)
+
+
+# -----------------------------------------------------------------------------
+# Exploration / Schema Discovery Routes
+# -----------------------------------------------------------------------------
+
+@msx_bp.route('/explore/me')
+def explore_me():
+    """
+    Get the current authenticated user's details.
+    
+    Returns user ID, name, email, title, and other profile info.
+    """
+    result = get_current_user()
+    return jsonify(result)
+
+
+@msx_bp.route('/explore/territories')
+def explore_territories():
+    """
+    Explore what territories and accounts the current user has access to.
+    
+    Tries multiple discovery approaches to find assignments.
+    """
+    result = explore_user_territories()
+    return jsonify(result)
+
+
+@msx_bp.route('/explore/entity/<entity_name>')
+def explore_entity(entity_name: str):
+    """
+    Query any MSX entity for data discovery.
+    
+    Query params:
+        select: Comma-separated field names (optional)
+        filter: OData $filter expression (optional)
+        expand: OData $expand expression (optional)
+        top: Max records (default 10, max 100)
+        orderby: OData $orderby expression (optional)
+    
+    Examples:
+        /api/msx/explore/entity/accounts?top=5&select=name,msp_mstopparentid
+        /api/msx/explore/entity/systemusers?filter=contains(fullname,'Alex')
+        /api/msx/explore/entity/territories?top=20
+    """
+    select = request.args.get('select')
+    filter_query = request.args.get('filter')
+    expand = request.args.get('expand')
+    order_by = request.args.get('orderby')
+    
+    try:
+        top = min(int(request.args.get('top', 10)), 100)
+    except ValueError:
+        top = 10
+    
+    select_list = select.split(',') if select else None
+    
+    result = query_entity(
+        entity_name=entity_name,
+        select=select_list,
+        filter_query=filter_query,
+        expand=expand,
+        top=top,
+        order_by=order_by
+    )
+    return jsonify(result)
+
+
+@msx_bp.route('/explore/metadata/<entity_name>')
+def explore_metadata(entity_name: str):
+    """
+    Get the schema/metadata for an entity to discover available fields.
+    
+    Examples:
+        /api/msx/explore/metadata/account
+        /api/msx/explore/metadata/systemuser
+        /api/msx/explore/metadata/territory
+        /api/msx/explore/metadata/msp_milestone
+    
+    Note: Use singular logical name (account, not accounts).
+    """
+    result = get_entity_metadata(entity_name)
     return jsonify(result)

@@ -644,3 +644,251 @@ def create_task(
     except Exception as e:
         logger.exception(f"Error creating task for milestone {milestone_id}")
         return {"success": False, "error": str(e)}
+
+
+# =============================================================================
+# MSX Exploration / Schema Discovery Functions
+# =============================================================================
+
+def query_entity(
+    entity_name: str,
+    select: Optional[List[str]] = None,
+    filter_query: Optional[str] = None,
+    expand: Optional[str] = None,
+    top: int = 10,
+    order_by: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Generic OData query for any MSX entity.
+    
+    Args:
+        entity_name: The entity set name (e.g., 'accounts', 'systemusers', 'territories')
+        select: List of fields to return (None = all fields)
+        filter_query: OData $filter expression
+        expand: OData $expand for related entities
+        top: Max records to return (default 10)
+        order_by: OData $orderby expression
+        
+    Returns:
+        Dict with success/error and records array
+    """
+    try:
+        # Build query params
+        params = [f"$top={top}"]
+        
+        if select:
+            params.append(f"$select={','.join(select)}")
+        if filter_query:
+            params.append(f"$filter={filter_query}")
+        if expand:
+            params.append(f"$expand={expand}")
+        if order_by:
+            params.append(f"$orderby={order_by}")
+        
+        query_string = "&".join(params)
+        url = f"{CRM_BASE_URL}/{entity_name}?{query_string}"
+        
+        logger.info(f"Querying MSX: {url}")
+        response = _msx_request('GET', url)
+        
+        if response.status_code == 200:
+            data = response.json()
+            records = data.get("value", [])
+            return {
+                "success": True,
+                "entity": entity_name,
+                "count": len(records),
+                "records": records,
+                "query_url": url
+            }
+        elif response.status_code == 401:
+            return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 404:
+            return {"success": False, "error": f"Entity '{entity_name}' not found."}
+        else:
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {response.text[:500]}"
+            }
+            
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error: {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error querying {entity_name}")
+        return {"success": False, "error": str(e)}
+
+
+def get_current_user() -> Dict[str, Any]:
+    """
+    Get the current authenticated user's details from MSX.
+    
+    Returns user ID, name, email, and other useful info.
+    """
+    try:
+        # First get user ID via WhoAmI
+        whoami_response = _msx_request('GET', f"{CRM_BASE_URL}/WhoAmI")
+        
+        if whoami_response.status_code != 200:
+            if whoami_response.status_code == 401:
+                return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+            return {"success": False, "error": f"WhoAmI failed: {whoami_response.status_code}"}
+        
+        whoami_data = whoami_response.json()
+        user_id = whoami_data.get("UserId")
+        
+        if not user_id:
+            return {"success": False, "error": "Could not get user ID from WhoAmI"}
+        
+        # Now get full user record
+        url = f"{CRM_BASE_URL}/systemusers({user_id})"
+        response = _msx_request('GET', url)
+        
+        if response.status_code == 200:
+            user_data = response.json()
+            return {
+                "success": True,
+                "user_id": user_id,
+                "user": user_data
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Failed to get user details: {response.status_code}"
+            }
+            
+    except Exception as e:
+        logger.exception("Error getting current user")
+        return {"success": False, "error": str(e)}
+
+
+def get_entity_metadata(entity_name: str) -> Dict[str, Any]:
+    """
+    Get metadata/schema for an entity to discover available fields.
+    
+    Args:
+        entity_name: Logical name of entity (e.g., 'account', 'systemuser')
+        
+    Returns:
+        Dict with entity attributes and their types
+    """
+    try:
+        # Query the metadata endpoint
+        url = f"{CRM_BASE_URL}/EntityDefinitions(LogicalName='{entity_name}')/Attributes"
+        response = _msx_request('GET', url)
+        
+        if response.status_code == 200:
+            data = response.json()
+            attributes = data.get("value", [])
+            
+            # Simplify the output - just key info
+            simplified = []
+            for attr in attributes:
+                simplified.append({
+                    "name": attr.get("LogicalName"),
+                    "display_name": attr.get("DisplayName", {}).get("UserLocalizedLabel", {}).get("Label") if isinstance(attr.get("DisplayName"), dict) else None,
+                    "type": attr.get("AttributeType"),
+                    "description": attr.get("Description", {}).get("UserLocalizedLabel", {}).get("Label") if isinstance(attr.get("Description"), dict) else None,
+                })
+            
+            # Sort by name
+            simplified.sort(key=lambda x: x.get("name", ""))
+            
+            return {
+                "success": True,
+                "entity": entity_name,
+                "attribute_count": len(simplified),
+                "attributes": simplified
+            }
+        elif response.status_code == 404:
+            return {"success": False, "error": f"Entity '{entity_name}' not found"}
+        else:
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {response.text[:300]}"
+            }
+            
+    except Exception as e:
+        logger.exception(f"Error getting metadata for {entity_name}")
+        return {"success": False, "error": str(e)}
+
+
+def explore_user_territories() -> Dict[str, Any]:
+    """
+    Explore what territories/accounts the current user has access to.
+    
+    Tries multiple approaches to find the user's assigned territories/customers.
+    """
+    results = {
+        "success": True,
+        "explorations": []
+    }
+    
+    # 1. Get current user
+    user_result = get_current_user()
+    if not user_result.get("success"):
+        return user_result
+    
+    user = user_result.get("user", {})
+    user_id = user_result.get("user_id")
+    
+    results["current_user"] = {
+        "id": user_id,
+        "name": user.get("fullname"),
+        "email": user.get("internalemailaddress"),
+        "title": user.get("title"),
+        "business_unit": user.get("_businessunitid_value"),
+        "territory": user.get("_territoryid_value"),  # Direct territory assignment
+    }
+    
+    # 2. Check if user has a direct territory assignment
+    if user.get("_territoryid_value"):
+        territory_id = user.get("_territoryid_value")
+        territory_result = query_entity(
+            "territories",
+            filter_query=f"territoryid eq {territory_id}",
+            top=1
+        )
+        if territory_result.get("success") and territory_result.get("records"):
+            results["direct_territory"] = territory_result["records"][0]
+    
+    # 3. Look for team memberships that might link to territories
+    team_result = query_entity(
+        "teammemberships",
+        filter_query=f"systemuserid eq {user_id}",
+        top=50
+    )
+    if team_result.get("success"):
+        results["explorations"].append({
+            "query": "User team memberships",
+            "result": team_result
+        })
+    
+    # 4. Look for accounts where user is owner
+    owned_accounts = query_entity(
+        "accounts",
+        select=["accountid", "name", "msp_mstopparentid", "msp_accountsegment"],
+        filter_query=f"_ownerid_value eq {user_id}",
+        top=20
+    )
+    if owned_accounts.get("success"):
+        results["owned_accounts"] = owned_accounts.get("records", [])
+    
+    # 5. Look for msp_accountteammember or similar
+    # Try to find account team member records for this user
+    try:
+        team_member_result = query_entity(
+            "msp_accountteammembers",
+            filter_query=f"_msp_user_value eq {user_id}",
+            top=50
+        )
+        if team_member_result.get("success"):
+            results["explorations"].append({
+                "query": "Account team memberships (msp_accountteammembers)",
+                "result": team_member_result
+            })
+    except Exception:
+        pass  # Entity might not exist
+    
+    return results
