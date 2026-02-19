@@ -31,6 +31,8 @@ from app.services.msx_api import (
     get_current_user,
     get_entity_metadata,
     explore_user_territories,
+    get_my_accounts,
+    get_accounts_for_territories,
 )
 from app.models import Customer, Milestone, db
 
@@ -303,6 +305,43 @@ def explore_me():
     Returns user ID, name, email, title, and other profile info.
     """
     result = get_current_user()
+    return jsonify(result)
+
+
+@msx_bp.route('/explore/my-accounts')
+def explore_my_accounts():
+    """
+    Get all accounts the current user has access to via team memberships.
+    
+    Uses the pattern: user → teammemberships → teams → accounts
+    
+    Returns list of accounts with name, TPID, owner, and ATU info.
+    """
+    result = get_my_accounts()
+    return jsonify(result)
+
+
+@msx_bp.route('/explore/accounts-by-territory', methods=['POST'])
+def explore_accounts_by_territory():
+    """
+    Get all accounts for specified territories.
+    
+    POST JSON body:
+        territories: List of territory names (e.g., ["East.SMECC.SDP.0603"])
+    
+    Returns accounts with name, TPID, seller, and territory info.
+    
+    This is the recommended approach for seeding the database - provide
+    your known territory names and get all accounts for those territories.
+    """
+    if not request.is_json:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+    
+    territories = request.json.get("territories", [])
+    if not territories:
+        return jsonify({"success": False, "error": "territories list required"}), 400
+    
+    result = get_accounts_for_territories(territories)
     return jsonify(result)
 
 

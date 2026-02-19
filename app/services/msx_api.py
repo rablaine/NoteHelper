@@ -892,3 +892,197 @@ def explore_user_territories() -> Dict[str, Any]:
         pass  # Entity might not exist
     
     return results
+
+
+def get_my_accounts() -> Dict[str, Any]:
+    """
+    Get all accounts the current user has access to via team memberships.
+    
+    Pattern:
+    1. Get current user ID via WhoAmI
+    2. Query teammemberships for my user ID (get team IDs)
+    3. Query teams for those IDs to get regardingobjectid (account IDs)
+    4. Query accounts to get names, TPIDs, sellers, territories
+    
+    Returns:
+        Dict with accounts array containing name, tpid, territory, seller info
+    """
+    try:
+        # 1. Get current user ID
+        user_result = get_current_user()
+        if not user_result.get("success"):
+            return user_result
+        
+        user_id = user_result.get("user_id")
+        user_name = user_result.get("user", {}).get("fullname", "Unknown")
+        
+        # 2. Get my team memberships (cap at 200 to be reasonable)
+        team_memberships = query_entity(
+            "teammemberships",
+            filter_query=f"systemuserid eq {user_id}",
+            top=200
+        )
+        
+        if not team_memberships.get("success"):
+            return team_memberships
+        
+        team_ids = [tm.get("teamid") for tm in team_memberships.get("records", []) if tm.get("teamid")]
+        
+        if not team_ids:
+            return {
+                "success": True,
+                "accounts": [],
+                "message": "No team memberships found"
+            }
+        
+        # 3. Get teams to find regardingobjectid (account IDs)
+        # Query in batches to avoid URL length limits
+        account_ids = set()
+        batch_size = 15
+        
+        for i in range(0, len(team_ids), batch_size):
+            batch = team_ids[i:i+batch_size]
+            filter_parts = [f"teamid eq {tid}" for tid in batch]
+            filter_query = " or ".join(filter_parts)
+            
+            teams_result = query_entity(
+                "teams",
+                select=["teamid", "name", "_regardingobjectid_value"],
+                filter_query=filter_query,
+                top=50
+            )
+            
+            if teams_result.get("success"):
+                for team in teams_result.get("records", []):
+                    # Check if this team is associated with an account
+                    regard_id = team.get("_regardingobjectid_value")
+                    if regard_id:
+                        account_ids.add(regard_id)
+        
+        if not account_ids:
+            return {
+                "success": True,
+                "accounts": [],
+                "message": "No accounts found via team memberships"
+            }
+        
+        # 4. Get account details
+        accounts = []
+        account_list = list(account_ids)
+        
+        for i in range(0, len(account_list), batch_size):
+            batch = account_list[i:i+batch_size]
+            filter_parts = [f"accountid eq {aid}" for aid in batch]
+            filter_query = " or ".join(filter_parts)
+            
+            accounts_result = query_entity(
+                "accounts",
+                select=[
+                    "accountid", "name", "msp_mstopparentid",
+                    "_ownerid_value", "_msp_atu_value"
+                ],
+                filter_query=filter_query,
+                top=50
+            )
+            
+            if accounts_result.get("success"):
+                for acct in accounts_result.get("records", []):
+                    accounts.append({
+                        "account_id": acct.get("accountid"),
+                        "name": acct.get("name"),
+                        "tpid": acct.get("msp_mstopparentid"),
+                        "owner_id": acct.get("_ownerid_value"),
+                        "owner_name": acct.get("_ownerid_value@OData.Community.Display.V1.FormattedValue"),
+                        "atu_id": acct.get("_msp_atu_value"),
+                        "atu_name": acct.get("_msp_atu_value@OData.Community.Display.V1.FormattedValue"),
+                    })
+        
+        # Sort by name
+        accounts.sort(key=lambda x: (x.get("name") or "").lower())
+        
+        return {
+            "success": True,
+            "user": user_name,
+            "user_id": user_id,
+            "team_count": len(team_ids),
+            "account_count": len(accounts),
+            "accounts": accounts
+        }
+        
+    except Exception as e:
+        logger.exception("Error getting my accounts")
+        return {"success": False, "error": str(e)}
+
+
+def get_accounts_for_territories(territory_names: List[str]) -> Dict[str, Any]:
+    """
+    Get all accounts for a list of territory names.
+    
+    Args:
+        territory_names: List of territory names (e.g., ["East.SMECC.SDP.0603", "East.SMECC.MAA.0601"])
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - accounts: list of account dicts with name, tpid, seller, territory
+        - territories: list of territory info that was found
+    """
+    try:
+        # 1. Look up territory IDs from names
+        territories = []
+        for name in territory_names:
+            result = query_entity(
+                "territories",
+                select=["territoryid", "name"],
+                filter_query=f"name eq '{name}'",
+                top=1
+            )
+            if result.get("success") and result.get("records"):
+                territories.append(result["records"][0])
+        
+        if not territories:
+            return {
+                "success": False,
+                "error": "No territories found matching the provided names"
+            }
+        
+        # 2. Query accounts for each territory
+        accounts = []
+        for territory in territories:
+            territory_id = territory.get("territoryid")
+            territory_name = territory.get("name")
+            
+            # Query accounts with this territory - cap at 200 per territory
+            accounts_result = query_entity(
+                "accounts",
+                select=["accountid", "name", "msp_mstopparentid", "_ownerid_value", "_territoryid_value"],
+                filter_query=f"_territoryid_value eq {territory_id}",
+                top=200
+            )
+            
+            if accounts_result.get("success"):
+                for acct in accounts_result.get("records", []):
+                    accounts.append({
+                        "account_id": acct.get("accountid"),
+                        "name": acct.get("name"),
+                        "tpid": acct.get("msp_mstopparentid"),
+                        "seller_id": acct.get("_ownerid_value"),
+                        "seller_name": acct.get("_ownerid_value@OData.Community.Display.V1.FormattedValue"),
+                        "territory_id": territory_id,
+                        "territory_name": territory_name,
+                    })
+        
+        # Sort by name
+        accounts.sort(key=lambda x: (x.get("name") or "").lower())
+        
+        return {
+            "success": True,
+            "territory_count": len(territories),
+            "territories": [{"id": t.get("territoryid"), "name": t.get("name")} for t in territories],
+            "account_count": len(accounts),
+            "accounts": accounts
+        }
+        
+    except Exception as e:
+        logger.exception("Error getting accounts for territories")
+        return {"success": False, "error": str(e)}
