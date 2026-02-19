@@ -86,6 +86,35 @@
             </div>
         </div>
         
+        {% set milestone_dict = {} %}
+        {% for call in call_logs %}
+            {% for milestone in call.milestones %}
+                {% if milestone.id not in milestone_dict %}
+                    {% set _ = milestone_dict.update({milestone.id: milestone}) %}
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+        {% if milestone_dict %}
+        <!-- Customer Milestones Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-flag"></i> Milestones</h5>
+            </div>
+            <div class="card-body">
+                {% for milestone_id, milestone in milestone_dict.items()|sort(attribute='1.created_at', reverse=true) %}
+                    <div class="{% if not loop.last %}mb-2{% endif %}">
+                        <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}">
+                            <i class="bi bi-flag"></i> {{ milestone.display_text[:35] }}{% if milestone.display_text|length > 35 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                        {% if milestone.msx_status %}
+                        <span class="badge {% if milestone.msx_status == 'On Track' %}bg-success{% elif milestone.msx_status == 'At Risk' %}bg-warning text-dark{% elif milestone.msx_status == 'Blocked' %}bg-danger{% elif milestone.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}">{{ milestone.msx_status }}</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
         <!-- Customer Notes Card -->
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
