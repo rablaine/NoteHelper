@@ -84,8 +84,8 @@
                 {% if call_log.milestones|length > 0 %}
                 <p><strong>Milestones:</strong><br>
                     {% for milestone in call_log.milestones %}
-                        <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none">
-                            <i class="bi bi-flag"></i> {{ milestone.display_text }} <i class="bi bi-box-arrow-up-right"></i>
+                        <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}">
+                            <i class="bi bi-flag"></i> {{ milestone.display_text[:40] }}{% if milestone.display_text|length > 40 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i>
                         </a>
                         <a href="{{ url_for('milestones.milestone_view', id=milestone.id) }}" class="btn btn-sm btn-link p-0 ms-1" title="Edit milestone">
                             <i class="bi bi-pencil-square"></i>
@@ -98,12 +98,12 @@
                 <p><strong>MSX Tasks:</strong><br>
                     {% for task in call_log.msx_tasks %}
                         {% if task.msx_task_url %}
-                        <a href="{{ task.msx_task_url }}" target="_blank" class="badge bg-primary text-decoration-none">
-                            <i class="bi bi-check2-circle"></i> {{ task.subject }} <i class="bi bi-box-arrow-up-right"></i>
+                        <a href="{{ task.msx_task_url }}" target="_blank" class="badge bg-primary text-decoration-none" title="{{ task.subject }}">
+                            <i class="bi bi-check2-circle"></i> {{ task.subject[:30] }}{% if task.subject|length > 30 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i>
                         </a>
                         {% else %}
-                        <span class="badge bg-primary">
-                            <i class="bi bi-check2-circle"></i> {{ task.subject }}
+                        <span class="badge bg-primary" title="{{ task.subject }}">
+                            <i class="bi bi-check2-circle"></i> {{ task.subject[:30] }}{% if task.subject|length > 30 %}...{% endif %}
                         </span>
                         {% endif %}
                         {% if task.is_hok %}
