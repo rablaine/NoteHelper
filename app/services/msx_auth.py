@@ -1,0 +1,510 @@
+"""
+MSX (Dynamics 365) Authentication Service using Azure CLI.
+
+This module handles authentication to Microsoft Sales Experience (MSX) CRM
+using az login tokens. It provides:
+- Token acquisition via `az account get-access-token`
+- Device code flow for browser-based authentication
+- Token caching to avoid repeated CLI calls
+- Background refresh to keep tokens fresh
+- Status checking for the admin panel
+
+Usage:
+    from app.services.msx_auth import get_msx_token, get_msx_auth_status, start_device_code_flow
+
+Prerequisites:
+    - Azure CLI installed and in PATH
+"""
+
+import subprocess
+import json
+import threading
+import time
+import logging
+import re
+import sys
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
+
+# CRM constants
+CRM_RESOURCE = "https://microsoftsales.crm.dynamics.com"
+CRM_BASE_URL = "https://microsoftsales.crm.dynamics.com/api/data/v9.2"
+TENANT_ID = "72f988bf-86f1-41af-91ab-2d7cd011db47"  # Microsoft corporate tenant
+
+# On Windows, we need shell=True for subprocess to find az in PATH
+IS_WINDOWS = sys.platform == "win32"
+
+# Token cache
+_token_cache: Dict[str, Any] = {
+    "access_token": None,
+    "expires_on": None,
+    "user": None,
+    "last_refresh": None,
+    "error": None,
+}
+
+# Device code flow state
+_device_code_state: Dict[str, Any] = {
+    "active": False,
+    "process": None,
+    "user_code": None,
+    "verification_uri": None,
+    "message": None,
+    "started_at": None,
+    "completed": False,
+    "success": False,
+    "error": None,
+}
+
+# Refresh job control
+_refresh_thread: Optional[threading.Thread] = None
+_refresh_running = False
+
+
+def _run_az_command() -> Dict[str, Any]:
+    """
+    Run az account get-access-token to get a fresh CRM token.
+    
+    Returns:
+        Dict with accessToken, expiresOn, and other az CLI output fields.
+        
+    Raises:
+        RuntimeError: If az CLI fails or is not installed.
+    """
+    # Build command - on Windows with shell=True, we need a string
+    if IS_WINDOWS:
+        cmd = f'az account get-access-token --resource "{CRM_RESOURCE}" --tenant "{TENANT_ID}" --output json'
+    else:
+        cmd = [
+            "az", "account", "get-access-token",
+            "--resource", CRM_RESOURCE,
+            "--tenant", TENANT_ID,
+            "--output", "json"
+        ]
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            shell=IS_WINDOWS  # Required on Windows to find az in PATH
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or "Unknown error from az CLI"
+            # Common errors
+            if "AADSTS" in error_msg:
+                raise RuntimeError(f"Azure AD error: {error_msg}")
+            if "az login" in error_msg.lower() or "please run" in error_msg.lower():
+                raise RuntimeError("Not logged in. Run 'az login' in a terminal first.")
+            if "not recognized" in error_msg.lower() or "not found" in error_msg.lower():
+                raise RuntimeError("Azure CLI not installed or not in PATH.")
+            raise RuntimeError(f"az CLI error: {error_msg}")
+        
+        return json.loads(result.stdout)
+        
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("az CLI timed out after 30 seconds")
+    except FileNotFoundError:
+        raise RuntimeError("Azure CLI not installed or not in PATH. Install from https://aka.ms/installazurecli")
+    except json.JSONDecodeError:
+        raise RuntimeError("Invalid JSON response from az CLI")
+
+
+def _parse_expiry(expires_on: str) -> datetime:
+    """Parse the expiresOn field from az CLI output."""
+    # az CLI returns ISO format like "2024-01-15 10:30:00.000000"
+    try:
+        # Try parsing with microseconds
+        return datetime.fromisoformat(expires_on.replace(" ", "T")).replace(tzinfo=timezone.utc)
+    except ValueError:
+        # Try without microseconds
+        try:
+            return datetime.strptime(expires_on, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            # Fallback: assume it expires in 1 hour
+            return datetime.now(timezone.utc).replace(second=0, microsecond=0)
+
+
+def refresh_token() -> bool:
+    """
+    Refresh the MSX token by calling az CLI.
+    
+    Returns:
+        True if refresh succeeded, False otherwise.
+    """
+    global _token_cache
+    
+    try:
+        result = _run_az_command()
+        
+        # Use expires_on (Unix timestamp) if available, otherwise parse expiresOn string
+        expires_on_unix = result.get("expires_on")
+        if expires_on_unix:
+            expires_on = datetime.fromtimestamp(expires_on_unix, tz=timezone.utc)
+        else:
+            expires_on = _parse_expiry(result.get("expiresOn", ""))
+        
+        _token_cache = {
+            "access_token": result.get("accessToken"),
+            "expires_on": expires_on,
+            "user": result.get("subscription", "Unknown"),
+            "last_refresh": datetime.now(timezone.utc),
+            "error": None,
+        }
+        
+        logger.info(f"MSX token refreshed, expires at {_token_cache['expires_on']}")
+        return True
+        
+    except RuntimeError as e:
+        _token_cache["error"] = str(e)
+        _token_cache["last_refresh"] = datetime.now(timezone.utc)
+        logger.warning(f"MSX token refresh failed: {e}")
+        return False
+
+
+def get_msx_token() -> Optional[str]:
+    """
+    Get a valid MSX access token.
+    
+    Returns:
+        The access token string, or None if not authenticated.
+        
+    Note:
+        This will attempt to refresh if the token is expired or missing.
+    """
+    global _token_cache
+    
+    # Check if we have a valid cached token
+    if _token_cache["access_token"]:
+        now = datetime.now(timezone.utc)
+        expires_on = _token_cache["expires_on"]
+        
+        # If token has > 5 minutes remaining, use it
+        if expires_on and (expires_on - now).total_seconds() > 300:
+            return _token_cache["access_token"]
+    
+    # Need to refresh
+    if refresh_token():
+        return _token_cache["access_token"]
+    
+    return None
+
+
+def get_msx_auth_status() -> Dict[str, Any]:
+    """
+    Get current MSX authentication status for displaying in the UI.
+    
+    Returns:
+        Dict with:
+        - authenticated: bool
+        - user: str or None
+        - expires_on: datetime or None
+        - expires_in_minutes: int or None
+        - last_refresh: datetime or None
+        - error: str or None
+        - refresh_job_running: bool
+    """
+    global _token_cache, _refresh_running
+    
+    now = datetime.now(timezone.utc)
+    expires_on = _token_cache.get("expires_on")
+    
+    status = {
+        "authenticated": False,
+        "user": _token_cache.get("user"),
+        "expires_on": expires_on,
+        "expires_in_minutes": None,
+        "last_refresh": _token_cache.get("last_refresh"),
+        "error": _token_cache.get("error"),
+        "refresh_job_running": _refresh_running,
+    }
+    
+    if _token_cache.get("access_token") and expires_on:
+        remaining = (expires_on - now).total_seconds()
+        if remaining > 0:
+            status["authenticated"] = True
+            status["expires_in_minutes"] = int(remaining / 60)
+    
+    return status
+
+
+def start_token_refresh_job(interval_seconds: int = 300):
+    """
+    Start a background thread that refreshes the MSX token periodically.
+    
+    Args:
+        interval_seconds: How often to check/refresh (default 5 minutes).
+                         Token will only be refreshed if < 10 minutes remaining.
+    """
+    global _refresh_thread, _refresh_running
+    
+    if _refresh_running:
+        logger.info("MSX token refresh job already running")
+        return
+    
+    def _refresh_loop():
+        global _refresh_running
+        _refresh_running = True
+        logger.info(f"MSX token refresh job started (interval: {interval_seconds}s)")
+        
+        while _refresh_running:
+            try:
+                # Check if token needs refresh (< 10 minutes remaining)
+                expires_on = _token_cache.get("expires_on")
+                if expires_on:
+                    now = datetime.now(timezone.utc)
+                    remaining = (expires_on - now).total_seconds()
+                    
+                    if remaining < 600:  # Less than 10 minutes
+                        logger.info("MSX token expiring soon, refreshing...")
+                        refresh_token()
+                else:
+                    # No token cached, try to get one
+                    refresh_token()
+                    
+            except Exception as e:
+                logger.error(f"Error in MSX token refresh job: {e}")
+            
+            # Sleep in small increments so we can stop quickly
+            for _ in range(interval_seconds):
+                if not _refresh_running:
+                    break
+                time.sleep(1)
+        
+        logger.info("MSX token refresh job stopped")
+    
+    _refresh_thread = threading.Thread(target=_refresh_loop, daemon=True)
+    _refresh_thread.start()
+
+
+def stop_token_refresh_job():
+    """Stop the background token refresh job."""
+    global _refresh_running
+    _refresh_running = False
+    logger.info("MSX token refresh job stop requested")
+
+
+def clear_token_cache():
+    """Clear the cached token (forces re-authentication on next request)."""
+    global _token_cache
+    _token_cache = {
+        "access_token": None,
+        "expires_on": None,
+        "user": None,
+        "last_refresh": None,
+        "error": None,
+    }
+    logger.info("MSX token cache cleared")
+
+
+def start_device_code_flow() -> Dict[str, Any]:
+    """
+    Start the Azure CLI device code login flow.
+    
+    This runs `az login --use-device-code` which outputs a message like:
+    "To sign in, use a web browser to open the page https://microsoft.com/devicelogin 
+    and enter the code ABCD1234 to authenticate."
+    
+    Returns:
+        Dict with:
+        - success: bool
+        - user_code: str (the code to enter)
+        - verification_uri: str (the URL to visit)
+        - message: str (full message from az login)
+        - error: str if failed
+    """
+    global _device_code_state
+    
+    # Check if already running
+    if _device_code_state.get("active") and _device_code_state.get("process"):
+        proc = _device_code_state["process"]
+        if proc.poll() is None:  # Still running
+            return {
+                "success": True,
+                "already_active": True,
+                "user_code": _device_code_state.get("user_code"),
+                "verification_uri": _device_code_state.get("verification_uri"),
+                "message": _device_code_state.get("message"),
+            }
+    
+    # Reset state
+    _device_code_state = {
+        "active": True,
+        "process": None,
+        "user_code": None,
+        "verification_uri": None,
+        "message": None,
+        "started_at": datetime.now(timezone.utc),
+        "completed": False,
+        "success": False,
+        "error": None,
+    }
+    
+    cmd = [
+        "az", "login",
+        "--use-device-code",
+        "--tenant", TENANT_ID,
+        "--allow-no-subscriptions",
+        "--output", "json"
+    ]
+    
+    try:
+        # Start the process
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            shell=IS_WINDOWS  # Required on Windows to find az in PATH
+        )
+        _device_code_state["process"] = process
+        
+        # Read stderr to get the device code message (az login outputs to stderr)
+        # We need to read until we get the device code, but not block forever
+        import select
+        import sys
+        
+        message_lines = []
+        start_time = time.time()
+        
+        # On Windows, select doesn't work with pipes, so we use a thread
+        def read_stderr():
+            for line in process.stderr:
+                message_lines.append(line)
+                # Stop once we've likely got the device code message
+                if "devicelogin" in line.lower() or "code" in line.lower():
+                    break
+        
+        reader_thread = threading.Thread(target=read_stderr, daemon=True)
+        reader_thread.start()
+        reader_thread.join(timeout=10)  # Wait up to 10s for device code
+        
+        full_message = "".join(message_lines).strip()
+        
+        if not full_message:
+            _device_code_state["active"] = False
+            _device_code_state["error"] = "No output from az login. Is Azure CLI installed?"
+            return {"success": False, "error": _device_code_state["error"]}
+        
+        # Parse the message to extract the code and URL
+        # Format: "To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code ABCD1234 to authenticate."
+        code_match = re.search(r'enter the code\s+([A-Z0-9]+)', full_message, re.IGNORECASE)
+        url_match = re.search(r'(https://[^\s]+devicelogin[^\s]*)', full_message, re.IGNORECASE)
+        
+        user_code = code_match.group(1) if code_match else None
+        verification_uri = url_match.group(1) if url_match else "https://microsoft.com/devicelogin"
+        
+        _device_code_state["user_code"] = user_code
+        _device_code_state["verification_uri"] = verification_uri
+        _device_code_state["message"] = full_message
+        
+        # Start a background thread to wait for completion
+        def wait_for_completion():
+            global _device_code_state, _token_cache
+            try:
+                stdout, stderr = process.communicate(timeout=300)  # 5 minute timeout
+                
+                if process.returncode == 0:
+                    _device_code_state["completed"] = True
+                    _device_code_state["success"] = True
+                    _device_code_state["active"] = False
+                    logger.info("Device code flow completed successfully")
+                    
+                    # Now get the CRM token
+                    refresh_token()
+                else:
+                    _device_code_state["completed"] = True
+                    _device_code_state["success"] = False
+                    _device_code_state["error"] = stderr or "Login failed"
+                    _device_code_state["active"] = False
+                    logger.warning(f"Device code flow failed: {stderr}")
+                    
+            except subprocess.TimeoutExpired:
+                process.kill()
+                _device_code_state["completed"] = True
+                _device_code_state["success"] = False
+                _device_code_state["error"] = "Login timed out (5 minutes)"
+                _device_code_state["active"] = False
+                logger.warning("Device code flow timed out")
+            except Exception as e:
+                _device_code_state["completed"] = True
+                _device_code_state["success"] = False
+                _device_code_state["error"] = str(e)
+                _device_code_state["active"] = False
+                logger.exception("Device code flow error")
+        
+        completion_thread = threading.Thread(target=wait_for_completion, daemon=True)
+        completion_thread.start()
+        
+        return {
+            "success": True,
+            "user_code": user_code,
+            "verification_uri": verification_uri,
+            "message": full_message,
+        }
+        
+    except FileNotFoundError:
+        _device_code_state["active"] = False
+        _device_code_state["error"] = "Azure CLI not installed"
+        return {"success": False, "error": "Azure CLI not installed. Install from https://aka.ms/installazurecli"}
+    except Exception as e:
+        _device_code_state["active"] = False
+        _device_code_state["error"] = str(e)
+        logger.exception("Failed to start device code flow")
+        return {"success": False, "error": str(e)}
+
+
+def get_device_code_status() -> Dict[str, Any]:
+    """
+    Check the status of an active device code flow.
+    
+    Returns:
+        Dict with:
+        - active: bool (is a flow in progress)
+        - completed: bool
+        - success: bool (if completed)
+        - user_code: str
+        - verification_uri: str
+        - error: str if failed
+    """
+    global _device_code_state
+    
+    return {
+        "active": _device_code_state.get("active", False),
+        "completed": _device_code_state.get("completed", False),
+        "success": _device_code_state.get("success", False),
+        "user_code": _device_code_state.get("user_code"),
+        "verification_uri": _device_code_state.get("verification_uri"),
+        "message": _device_code_state.get("message"),
+        "error": _device_code_state.get("error"),
+        "started_at": _device_code_state.get("started_at").isoformat() if _device_code_state.get("started_at") else None,
+    }
+
+
+def cancel_device_code_flow():
+    """Cancel any active device code flow."""
+    global _device_code_state
+    
+    if _device_code_state.get("process"):
+        try:
+            _device_code_state["process"].kill()
+        except Exception:
+            pass
+    
+    _device_code_state = {
+        "active": False,
+        "process": None,
+        "user_code": None,
+        "verification_uri": None,
+        "message": None,
+        "started_at": None,
+        "completed": False,
+        "success": False,
+        "error": None,
+    }
+    logger.info("Device code flow cancelled")
