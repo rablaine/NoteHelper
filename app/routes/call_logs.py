@@ -73,56 +73,96 @@ def _handle_milestone_and_task(call_log, user_id):
     # Associate milestone with call log
     call_log.milestones = [milestone]
     
-    # Check if task creation is requested
-    task_subject = request.form.get('task_subject', '').strip()
-    task_category = request.form.get('task_category', '').strip()
+    # Check if a task was already created (via the "Create Task in MSX" button)
+    created_task_id = request.form.get('created_task_id', '').strip()
     
-    if task_subject and task_category:
-        # Create task in MSX
+    if created_task_id:
+        # Task was pre-created - just store the local record
+        task_subject = request.form.get('task_subject', '').strip()
+        task_category = request.form.get('task_category', '').strip()
         task_duration = request.form.get('task_duration', '60')
         task_description = request.form.get('task_description', '').strip()
+        created_task_url = request.form.get('created_task_url', '').strip()
+        created_task_category_name = request.form.get('created_task_category_name', '').strip()
+        created_task_is_hok = request.form.get('created_task_is_hok', '').strip() == '1'
         
         try:
             duration_minutes = int(task_duration)
         except (ValueError, TypeError):
             duration_minutes = 60
         
-        logger.info(f"Creating MSX task on milestone {milestone_msx_id}: {task_subject}")
+        try:
+            task_category_int = int(task_category) if task_category else 0
+        except (ValueError, TypeError):
+            task_category_int = 0
         
-        result = create_task(
-            milestone_id=milestone_msx_id,
+        logger.info(f"Linking pre-created MSX task {created_task_id} to call log")
+        
+        msx_task = MsxTask(
+            msx_task_id=created_task_id,
+            msx_task_url=created_task_url,
             subject=task_subject,
-            task_category=int(task_category),
+            description=task_description if task_description else None,
+            task_category=task_category_int,
+            task_category_name=created_task_category_name or 'Unknown',
             duration_minutes=duration_minutes,
-            description=task_description if task_description else None
+            is_hok=created_task_is_hok,
+            call_log=call_log,
+            milestone=milestone
         )
+        db.session.add(msx_task)
+        logger.info(f"Pre-created MSX task linked successfully: {created_task_id}")
+    else:
+        # Check if task creation is requested (create on save - fallback behavior)
+        task_subject = request.form.get('task_subject', '').strip()
+        task_category = request.form.get('task_category', '').strip()
         
-        if result.get('success'):
-            # Store task locally
-            task_category_info = next(
-                (c for c in TASK_CATEGORIES if c['code'] == int(task_category)), 
-                {'name': 'Unknown', 'is_hok': False}
+        if task_subject and task_category:
+            # Create task in MSX
+            task_duration = request.form.get('task_duration', '60')
+            task_description = request.form.get('task_description', '').strip()
+            
+            try:
+                duration_minutes = int(task_duration)
+            except (ValueError, TypeError):
+                duration_minutes = 60
+            
+            logger.info(f"Creating MSX task on milestone {milestone_msx_id}: {task_subject}")
+            
+            result = create_task(
+                milestone_id=milestone_msx_id,
+                subject=task_subject,
+                task_category=int(task_category),
+                duration_minutes=duration_minutes,
+                description=task_description if task_description else None
             )
             
-            msx_task = MsxTask(
-                msx_task_id=result.get('task_id'),
-                msx_task_url=result.get('task_url'),
-                subject=task_subject,
-                description=task_description if task_description else None,
-                task_category=int(task_category),
-                task_category_name=task_category_info['name'],
-                duration_minutes=duration_minutes,
-                is_hok=task_category_info['is_hok'],
-                call_log=call_log,
-                milestone=milestone
-            )
-            db.session.add(msx_task)
-            logger.info(f"MSX task created successfully: {result.get('task_id')}")
-        else:
-            error_msg = result.get('error', 'Unknown error creating task')
-            logger.error(f"Failed to create MSX task: {error_msg}")
-            # Don't fail the whole save, just log the error and flash a warning
-            flash(f'Call log saved, but task creation failed: {error_msg}', 'warning')
+            if result.get('success'):
+                # Store task locally
+                task_category_info = next(
+                    (c for c in TASK_CATEGORIES if c['code'] == int(task_category)), 
+                    {'name': 'Unknown', 'is_hok': False}
+                )
+                
+                msx_task = MsxTask(
+                    msx_task_id=result.get('task_id'),
+                    msx_task_url=result.get('task_url'),
+                    subject=task_subject,
+                    description=task_description if task_description else None,
+                    task_category=int(task_category),
+                    task_category_name=task_category_info['name'],
+                    duration_minutes=duration_minutes,
+                    is_hok=task_category_info['is_hok'],
+                    call_log=call_log,
+                    milestone=milestone
+                )
+                db.session.add(msx_task)
+                logger.info(f"MSX task created successfully: {result.get('task_id')}")
+            else:
+                error_msg = result.get('error', 'Unknown error creating task')
+                logger.error(f"Failed to create MSX task: {error_msg}")
+                # Don't fail the whole save, just log the error and flash a warning
+                flash(f'Call log saved, but task creation failed: {error_msg}', 'warning')
     
     return True, None
 
