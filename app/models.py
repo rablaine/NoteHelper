@@ -505,27 +505,90 @@ class Milestone(db.Model):
     __tablename__ = 'milestones'
     
     id = db.Column(db.Integer, primary_key=True)
-    url = db.Column(db.String(2000), nullable=False, unique=True)
-    title = db.Column(db.String(500), nullable=True)  # Optional friendly title
+    
+    # MSX identifiers
+    msx_milestone_id = db.Column(db.String(50), nullable=True, unique=True)  # GUID from MSX
+    milestone_number = db.Column(db.String(50), nullable=True)  # e.g., "7-503412553"
+    url = db.Column(db.String(2000), nullable=False)
+    
+    # Milestone details from MSX
+    title = db.Column(db.String(500), nullable=True)  # msp_name from MSX
+    msx_status = db.Column(db.String(50), nullable=True)  # "On Track", "Cancelled", etc.
+    msx_status_code = db.Column(db.Integer, nullable=True)  # Numeric status code
+    opportunity_name = db.Column(db.String(500), nullable=True)  # Parent opportunity name
+    
+    # Relationships
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     # Relationships
+    customer = db.relationship('Customer', backref=db.backref('milestones', lazy='dynamic'))
     call_logs = db.relationship(
         'CallLog',
         secondary=call_logs_milestones,
         back_populates='milestones',
         lazy='select'
     )
+    tasks = db.relationship('MsxTask', back_populates='milestone', lazy='dynamic')
     
     @property
     def display_text(self):
-        """Return title if set, otherwise a default text."""
-        return self.title if self.title else 'View in MSX'
+        """Return title if set, otherwise milestone number or default."""
+        if self.title:
+            return self.title
+        if self.milestone_number:
+            return self.milestone_number
+        return 'View in MSX'
+    
+    @property
+    def status_sort_order(self):
+        """Return sort order for status (lower = more important)."""
+        status_order = {
+            'On Track': 1,
+            'At Risk': 2,
+            'Blocked': 3,
+            'Completed': 4,
+            'Cancelled': 5,
+            'Lost to Competitor': 6,
+            'Hygiene/Duplicate': 7,
+        }
+        return status_order.get(self.msx_status, 99)
     
     def __repr__(self) -> str:
-        return f'<Milestone {self.id}: {self.title or self.url[:50]}>'
+        return f'<Milestone {self.id}: {self.title or self.milestone_number or self.url[:50]}>'
+
+
+class MsxTask(db.Model):
+    """Task created in MSX linked to a milestone and call log."""
+    __tablename__ = 'msx_tasks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # MSX identifiers
+    msx_task_id = db.Column(db.String(50), nullable=False, unique=True)  # GUID from MSX
+    msx_task_url = db.Column(db.String(2000), nullable=True)
+    
+    # Task details
+    subject = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    task_category = db.Column(db.Integer, nullable=False)  # Numeric code
+    task_category_name = db.Column(db.String(100), nullable=True)  # Display name
+    duration_minutes = db.Column(db.Integer, default=60, nullable=False)
+    is_hok = db.Column(db.Boolean, default=False, nullable=False)  # Is this a HOK task?
+    
+    # Relationships
+    call_log_id = db.Column(db.Integer, db.ForeignKey('call_logs.id'), nullable=False)
+    milestone_id = db.Column(db.Integer, db.ForeignKey('milestones.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    
+    # Relationships
+    call_log = db.relationship('CallLog', backref=db.backref('msx_tasks', lazy='dynamic'))
+    milestone = db.relationship('Milestone', back_populates='tasks')
+    
+    def __repr__(self) -> str:
+        return f'<MsxTask {self.id}: {self.subject[:50]}>'
 
 
 # =============================================================================

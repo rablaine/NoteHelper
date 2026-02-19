@@ -38,13 +38,8 @@ def run_migrations(db):
     # Add new migrations below this line
     # =========================================================================
     
-    # Example migration (commented out - for reference):
-    # _add_column_if_not_exists(
-    #     db, inspector, 
-    #     table='customers', 
-    #     column='new_field', 
-    #     column_def='TEXT'
-    # )
+    # Migration: Upgrade milestones table for MSX integration
+    _migrate_milestones_for_msx(db, inspector)
     
     # =========================================================================
     # End migrations
@@ -111,3 +106,71 @@ def _column_exists(inspector, table: str, column: str) -> bool:
     """Check if a column exists in a table."""
     columns = [c['name'] for c in inspector.get_columns(table)]
     return column in columns
+
+
+def _migrate_milestones_for_msx(db, inspector):
+    """
+    Migrate milestones table for MSX integration.
+    
+    This migration:
+    1. Drops and recreates milestones table with new schema (SQLite limitation)
+    2. Creates msx_tasks table
+    
+    Note: SQLite can't ALTER TABLE to add UNIQUE columns, so we recreate the table.
+    Milestone data is cleared - will be re-created via MSX picker.
+    """
+    # Check if migration is needed by looking for new columns
+    if _table_exists(inspector, 'milestones'):
+        if not _column_exists(inspector, 'milestones', 'msx_milestone_id'):
+            print("  Migrating milestones table for MSX integration...")
+            
+            with db.engine.connect() as conn:
+                # Clear junction table first (foreign keys)
+                conn.execute(text("DELETE FROM call_logs_milestones"))
+                # SQLite can't add UNIQUE column via ALTER TABLE, so drop and recreate
+                conn.execute(text("DROP TABLE milestones"))
+                conn.execute(text("""
+                    CREATE TABLE milestones (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        msx_milestone_id VARCHAR(50) UNIQUE,
+                        milestone_number VARCHAR(50),
+                        url VARCHAR(2000) NOT NULL,
+                        title VARCHAR(500),
+                        msx_status VARCHAR(50),
+                        msx_status_code INTEGER,
+                        opportunity_name VARCHAR(500),
+                        customer_id INTEGER REFERENCES customers(id),
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    )
+                """))
+                conn.commit()
+            print("    Recreated milestones table with MSX schema")
+        else:
+            print("  Milestones already migrated for MSX - skipping")
+    
+    # Create msx_tasks table if it doesn't exist
+    if not _table_exists(inspector, 'msx_tasks'):
+        print("  Creating msx_tasks table...")
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE msx_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    msx_task_id VARCHAR(50) NOT NULL UNIQUE,
+                    msx_task_url VARCHAR(2000),
+                    subject VARCHAR(500) NOT NULL,
+                    description TEXT,
+                    task_category INTEGER NOT NULL,
+                    task_category_name VARCHAR(100),
+                    duration_minutes INTEGER DEFAULT 60 NOT NULL,
+                    is_hok BOOLEAN DEFAULT 0 NOT NULL,
+                    call_log_id INTEGER NOT NULL REFERENCES call_logs(id),
+                    milestone_id INTEGER NOT NULL REFERENCES milestones(id),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            conn.commit()
+        print("    Created msx_tasks table")
+    else:
+        print("  msx_tasks table already exists - skipping")

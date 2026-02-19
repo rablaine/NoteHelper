@@ -4,11 +4,127 @@ Handles call log listing, creation, viewing, and editing.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from datetime import datetime
+import logging
 
-from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone
+from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask
+from app.services.msx_api import create_task, TASK_CATEGORIES
+
+logger = logging.getLogger(__name__)
 
 # Create blueprint
 call_logs_bp = Blueprint('call_logs', __name__)
+
+
+def _handle_milestone_and_task(call_log, user_id):
+    """
+    Handle MSX milestone selection and optional task creation.
+    
+    Reads form data for milestone info and creates/links the milestone.
+    If task fields are provided, creates the task in MSX and stores it locally.
+    
+    Returns:
+        tuple: (success: bool, error_message: str or None)
+    """
+    # Get MSX milestone data from form
+    milestone_msx_id = request.form.get('milestone_msx_id', '').strip()
+    milestone_url = request.form.get('milestone_url', '').strip()
+    
+    if not milestone_msx_id:
+        # No milestone selected - clear any existing
+        call_log.milestones = []
+        return True, None
+    
+    # Get additional milestone metadata
+    milestone_name = request.form.get('milestone_name', '').strip()
+    milestone_number = request.form.get('milestone_number', '').strip()
+    milestone_status = request.form.get('milestone_status', '').strip()
+    milestone_status_code = request.form.get('milestone_status_code', '').strip()
+    milestone_opp_name = request.form.get('milestone_opportunity_name', '').strip()
+    
+    # Get customer for milestone association
+    customer_id = request.form.get('customer_id')
+    
+    # Find or create milestone by MSX ID
+    milestone = Milestone.query.filter_by(msx_milestone_id=milestone_msx_id).first()
+    if not milestone:
+        # Create new milestone
+        milestone = Milestone(
+            msx_milestone_id=milestone_msx_id,
+            url=milestone_url,
+            milestone_number=milestone_number,
+            msx_status=milestone_status,
+            msx_status_code=int(milestone_status_code) if milestone_status_code else None,
+            opportunity_name=milestone_opp_name,
+            customer_id=int(customer_id) if customer_id else None,
+            user_id=user_id
+        )
+        db.session.add(milestone)
+    else:
+        # Update existing milestone with latest data
+        if milestone_url:
+            milestone.url = milestone_url
+        if milestone_status:
+            milestone.msx_status = milestone_status
+        if milestone_status_code:
+            milestone.msx_status_code = int(milestone_status_code)
+        if milestone_opp_name:
+            milestone.opportunity_name = milestone_opp_name
+    
+    # Associate milestone with call log
+    call_log.milestones = [milestone]
+    
+    # Check if task creation is requested
+    task_subject = request.form.get('task_subject', '').strip()
+    task_category = request.form.get('task_category', '').strip()
+    
+    if task_subject and task_category:
+        # Create task in MSX
+        task_duration = request.form.get('task_duration', '60')
+        task_description = request.form.get('task_description', '').strip()
+        
+        try:
+            duration_minutes = int(task_duration)
+        except (ValueError, TypeError):
+            duration_minutes = 60
+        
+        logger.info(f"Creating MSX task on milestone {milestone_msx_id}: {task_subject}")
+        
+        result = create_task(
+            milestone_id=milestone_msx_id,
+            subject=task_subject,
+            task_category=int(task_category),
+            duration_minutes=duration_minutes,
+            description=task_description if task_description else None
+        )
+        
+        if result.get('success'):
+            # Store task locally
+            task_category_info = next(
+                (c for c in TASK_CATEGORIES if c['code'] == int(task_category)), 
+                {'name': 'Unknown', 'is_hok': False}
+            )
+            
+            msx_task = MsxTask(
+                msx_task_id=result.get('task_id'),
+                msx_task_url=result.get('task_url'),
+                subject=task_subject,
+                description=task_description if task_description else None,
+                task_category=int(task_category),
+                task_category_name=task_category_info['name'],
+                duration_minutes=duration_minutes,
+                is_hok=task_category_info['is_hok'],
+                call_log=call_log,
+                milestone=milestone
+            )
+            db.session.add(msx_task)
+            logger.info(f"MSX task created successfully: {result.get('task_id')}")
+        else:
+            error_msg = result.get('error', 'Unknown error creating task')
+            logger.error(f"Failed to create MSX task: {error_msg}")
+            # Don't fail the whole save, just log the error and flash a warning
+            flash(f'Call log saved, but task creation failed: {error_msg}', 'warning')
+    
+    return True, None
 
 
 @call_logs_bp.route('/call-logs')
@@ -33,7 +149,6 @@ def call_log_create():
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
         partner_ids = request.form.getlist('partner_ids')
-        milestone_url = request.form.get('milestone_url', '').strip()
         referrer = request.form.get('referrer', '')
         
         # Validation
@@ -86,16 +201,11 @@ def call_log_create():
             partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
             call_log.partners.extend(partners)
         
-        # Add milestone if URL provided
-        if milestone_url:
-            # Find or create milestone
-            milestone = Milestone.query.filter_by(url=milestone_url).first()
-            if not milestone:
-                milestone = Milestone(url=milestone_url, user_id=g.user.id)
-                db.session.add(milestone)
-            call_log.milestones.append(milestone)
-        
         db.session.add(call_log)
+        
+        # Handle milestone and optional task creation
+        _handle_milestone_and_task(call_log, g.user.id)
+        
         db.session.commit()
         
         flash('Call log created successfully!', 'success')
@@ -174,7 +284,6 @@ def call_log_edit(id):
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
         partner_ids = request.form.getlist('partner_ids')
-        milestone_url = request.form.get('milestone_url', '').strip()
         
         # Validation
         if not customer_id:
@@ -214,15 +323,8 @@ def call_log_edit(id):
             partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
             call_log.partners = partners
         
-        # Update milestones - handle URL-based milestone
-        call_log.milestones = []
-        if milestone_url:
-            # Find or create milestone
-            milestone = Milestone.query.filter_by(url=milestone_url).first()
-            if not milestone:
-                milestone = Milestone(url=milestone_url, user_id=g.user.id)
-                db.session.add(milestone)
-            call_log.milestones.append(milestone)
+        # Handle milestone and optional task creation
+        _handle_milestone_and_task(call_log, g.user.id)
         
         db.session.commit()
         
