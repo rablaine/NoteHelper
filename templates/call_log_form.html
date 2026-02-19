@@ -227,29 +227,55 @@
                                     <i class="bi bi-plus-circle me-1"></i> Create Task on Milestone
                                 </div>
                                 <div class="card-body">
-                                    <div class="mb-2">
-                                        <label for="task_subject" class="form-label small mb-1">Task Title *</label>
-                                        <input type="text" class="form-control form-control-sm" id="task_subject" name="task_subject" 
-                                               placeholder="Brief task description...">
+                                    <!-- Task Created Status (shown after successful creation) -->
+                                    <div id="task_created_status" class="alert alert-success mb-3" style="display: none;">
+                                        <i class="bi bi-check-circle-fill me-1"></i>
+                                        <strong>Task Created!</strong>
+                                        <a href="#" id="task_created_link" target="_blank" class="ms-2">View in MSX</a>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary float-end" onclick="clearCreatedTask()">
+                                            <i class="bi bi-x"></i> Clear
+                                        </button>
                                     </div>
-                                    <div class="row mb-2">
-                                        <div class="col-md-8">
-                                            <label for="task_category" class="form-label small mb-1">Category *</label>
-                                            <select class="form-select form-select-sm" id="task_category" name="task_category">
-                                                <option value="">-- Select task category --</option>
-                                            </select>
+                                    
+                                    <!-- Task Form (hidden after task created) -->
+                                    <div id="task_form_fields">
+                                        <div class="mb-2">
+                                            <label for="task_subject" class="form-label small mb-1">Task Title *</label>
+                                            <input type="text" class="form-control form-control-sm" id="task_subject" name="task_subject" 
+                                                   placeholder="Brief task description...">
                                         </div>
-                                        <div class="col-md-4">
-                                            <label for="task_duration" class="form-label small mb-1">Duration (min)</label>
-                                            <input type="number" class="form-control form-control-sm" id="task_duration" name="task_duration" 
-                                                   value="60" min="15" step="15">
+                                        <div class="row mb-2">
+                                            <div class="col-md-8">
+                                                <label for="task_category" class="form-label small mb-1">Category *</label>
+                                                <select class="form-select form-select-sm" id="task_category" name="task_category">
+                                                    <option value="">-- Select task category --</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="task_duration" class="form-label small mb-1">Duration (min)</label>
+                                                <input type="number" class="form-control form-control-sm" id="task_duration" name="task_duration" 
+                                                       value="60" min="15" step="15">
+                                            </div>
                                         </div>
+                                        <div class="mb-3">
+                                            <label for="task_description" class="form-label small mb-1">Description (optional)</label>
+                                            <textarea class="form-control form-control-sm" id="task_description" name="task_description" 
+                                                      rows="2" placeholder="Additional details..."></textarea>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <button type="button" class="btn btn-primary btn-sm" id="create_task_btn" onclick="createTaskInMSX()">
+                                                <i class="bi bi-cloud-upload me-1"></i> Create Task in MSX
+                                            </button>
+                                            <small class="text-muted">Task will be linked when you save the call log</small>
+                                        </div>
+                                        <div id="task_creation_error" class="alert alert-danger mt-2" style="display: none;"></div>
                                     </div>
-                                    <div class="mb-0">
-                                        <label for="task_description" class="form-label small mb-1">Description (optional)</label>
-                                        <textarea class="form-control form-control-sm" id="task_description" name="task_description" 
-                                                  rows="2" placeholder="Additional details..."></textarea>
-                                    </div>
+                                    
+                                    <!-- Hidden fields to store created task info -->
+                                    <input type="hidden" id="created_task_id" name="created_task_id" value="">
+                                    <input type="hidden" id="created_task_url" name="created_task_url" value="">
+                                    <input type="hidden" id="created_task_category_name" name="created_task_category_name" value="">
+                                    <input type="hidden" id="created_task_is_hok" name="created_task_is_hok" value="">
                                 </div>
                             </div>
                         </div>
@@ -1153,13 +1179,119 @@ function removeMilestone() {
     selectedMilestoneContainer.innerHTML = '';
     taskCreationSection.style.display = 'none';
     
-    // Clear task fields
+    // Clear task fields and created task
+    clearCreatedTask();
+    
+    debouncedAutoSave();
+}
+
+// ===== MSX TASK CREATION =====
+function createTaskInMSX() {
+    const milestoneId = document.querySelector('input[name="milestone_msx_id"]')?.value;
+    const subject = document.getElementById('task_subject').value.trim();
+    const category = document.getElementById('task_category').value;
+    const duration = document.getElementById('task_duration').value || 60;
+    const description = document.getElementById('task_description').value.trim();
+    
+    // Validation
+    if (!milestoneId) {
+        showTaskError('No milestone selected');
+        return;
+    }
+    if (!subject) {
+        showTaskError('Task title is required');
+        return;
+    }
+    if (!category) {
+        showTaskError('Task category is required');
+        return;
+    }
+    
+    // Show loading state
+    const btn = document.getElementById('create_task_btn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Creating...';
+    hideTaskError();
+    
+    // Get category info for storing
+    const categoryInfo = taskCategories.find(c => c.value == category) || {label: 'Unknown', is_hok: false};
+    
+    // Call API
+    fetch('/api/msx/tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            milestone_id: milestoneId,
+            subject: subject,
+            task_category: parseInt(category),
+            duration_minutes: parseInt(duration),
+            description: description || null
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        
+        if (result.success) {
+            // Store created task info
+            document.getElementById('created_task_id').value = result.task_id;
+            document.getElementById('created_task_url').value = result.task_url || '';
+            document.getElementById('created_task_category_name').value = categoryInfo.label;
+            document.getElementById('created_task_is_hok').value = categoryInfo.is_hok ? '1' : '0';
+            
+            // Show success state
+            document.getElementById('task_form_fields').style.display = 'none';
+            document.getElementById('task_created_status').style.display = 'block';
+            if (result.task_url) {
+                document.getElementById('task_created_link').href = result.task_url;
+                document.getElementById('task_created_link').style.display = 'inline';
+            } else {
+                document.getElementById('task_created_link').style.display = 'none';
+            }
+            
+            debouncedAutoSave();
+        } else {
+            showTaskError(result.error || 'Failed to create task');
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        showTaskError('Network error: ' + error.message);
+    });
+}
+
+function clearCreatedTask() {
+    // Clear hidden fields
+    document.getElementById('created_task_id').value = '';
+    document.getElementById('created_task_url').value = '';
+    document.getElementById('created_task_category_name').value = '';
+    document.getElementById('created_task_is_hok').value = '';
+    
+    // Clear form fields
     document.getElementById('task_subject').value = '';
     document.getElementById('task_category').value = '';
     document.getElementById('task_duration').value = '60';
     document.getElementById('task_description').value = '';
     
+    // Reset UI
+    document.getElementById('task_form_fields').style.display = 'block';
+    document.getElementById('task_created_status').style.display = 'none';
+    hideTaskError();
+    
     debouncedAutoSave();
+}
+
+function showTaskError(message) {
+    const errorDiv = document.getElementById('task_creation_error');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+}
+
+function hideTaskError() {
+    document.getElementById('task_creation_error').style.display = 'none';
 }
 
 // AI Topic Suggestion
@@ -1270,6 +1402,32 @@ function saveDraft() {
     const draftKey = getDraftKey();
     if (!draftKey) return; // Can't save without customer selected
     
+    // Get milestone data if selected
+    const milestoneData = selectedMilestoneData ? {
+        id: selectedMilestoneData.id,
+        name: selectedMilestoneData.name,
+        number: selectedMilestoneData.number,
+        status: selectedMilestoneData.status,
+        status_code: selectedMilestoneData.status_code,
+        opportunity_name: selectedMilestoneData.opportunity_name,
+        workload: selectedMilestoneData.workload,
+        monthly_usage: selectedMilestoneData.monthly_usage,
+        url: selectedMilestoneData.url
+    } : null;
+    
+    // Get task form data
+    const taskData = {
+        subject: document.getElementById('task_subject').value,
+        category: document.getElementById('task_category').value,
+        duration: document.getElementById('task_duration').value,
+        description: document.getElementById('task_description').value,
+        // Include created task info if task was already created
+        created_task_id: document.getElementById('created_task_id').value,
+        created_task_url: document.getElementById('created_task_url').value,
+        created_task_category_name: document.getElementById('created_task_category_name').value,
+        created_task_is_hok: document.getElementById('created_task_is_hok').value
+    };
+    
     const draftData = {
         customer_id: document.getElementById('customer_id').value,
         customer_name: getCustomerName(),
@@ -1283,6 +1441,8 @@ function saveDraft() {
             id: parseInt(input.value),
             name: input.closest('.badge').textContent.trim().replace('×', '').trim()
         })),
+        milestone: milestoneData,
+        task: taskData,
         call_log_id: {% if call_log %}{{ call_log.id }}{% else %}null{% endif %},
         timestamp: Date.now()
     };
@@ -1292,7 +1452,7 @@ function saveDraft() {
     tempDiv.innerHTML = draftData.content;
     const textContent = (tempDiv.textContent || tempDiv.innerText || '').trim();
     
-    if (textContent.length > 0 || draftData.topics.length > 0 || draftData.partners.length > 0) {
+    if (textContent.length > 0 || draftData.topics.length > 0 || draftData.partners.length > 0 || milestoneData) {
         try {
             localStorage.setItem(draftKey, JSON.stringify(draftData));
             console.log('Draft auto-saved');
@@ -1332,7 +1492,7 @@ function restoreDraft() {
         tempDiv.innerHTML = draft.content || '';
         const textContent = (tempDiv.textContent || tempDiv.innerText || '').trim();
         
-        if (textContent.length === 0 && (!draft.topics || draft.topics.length === 0) && (!draft.partners || draft.partners.length === 0)) {
+        if (textContent.length === 0 && (!draft.topics || draft.topics.length === 0) && (!draft.partners || draft.partners.length === 0) && !draft.milestone) {
             return false; // No content to restore
         }
         
@@ -1359,6 +1519,36 @@ function restoreDraft() {
                     addPartner(partner.id, partner.name);
                 }
             });
+        }
+        
+        // Restore milestone selection
+        if (draft.milestone) {
+            selectedMilestoneData = draft.milestone;
+            selectMilestone(draft.milestone);
+        }
+        
+        // Restore task form data
+        if (draft.task) {
+            document.getElementById('task_subject').value = draft.task.subject || '';
+            document.getElementById('task_category').value = draft.task.category || '';
+            document.getElementById('task_duration').value = draft.task.duration || '60';
+            document.getElementById('task_description').value = draft.task.description || '';
+            
+            // Restore created task info if it was already created
+            if (draft.task.created_task_id) {
+                document.getElementById('created_task_id').value = draft.task.created_task_id;
+                document.getElementById('created_task_url').value = draft.task.created_task_url || '';
+                document.getElementById('created_task_category_name').value = draft.task.created_task_category_name || '';
+                document.getElementById('created_task_is_hok').value = draft.task.created_task_is_hok || '';
+                
+                // Show the "task created" state
+                document.getElementById('task_form_fields').style.display = 'none';
+                document.getElementById('task_created_status').style.display = 'block';
+                if (draft.task.created_task_url) {
+                    document.getElementById('task_created_link').href = draft.task.created_task_url;
+                    document.getElementById('task_created_link').style.display = 'inline';
+                }
+            }
         }
         
         // If draft has a call_log_id, we need to update the form action to edit that log
