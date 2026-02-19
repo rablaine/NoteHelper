@@ -73,12 +73,16 @@ def _run_az_command() -> Dict[str, Any]:
     Raises:
         RuntimeError: If az CLI fails or is not installed.
     """
-    cmd = [
-        "az", "account", "get-access-token",
-        "--resource", CRM_RESOURCE,
-        "--tenant", TENANT_ID,
-        "--output", "json"
-    ]
+    # Build command - on Windows with shell=True, we need a string
+    if IS_WINDOWS:
+        cmd = f'az account get-access-token --resource "{CRM_RESOURCE}" --tenant "{TENANT_ID}" --output json'
+    else:
+        cmd = [
+            "az", "account", "get-access-token",
+            "--resource", CRM_RESOURCE,
+            "--tenant", TENANT_ID,
+            "--output", "json"
+        ]
     
     try:
         result = subprocess.run(
@@ -137,9 +141,16 @@ def refresh_token() -> bool:
     try:
         result = _run_az_command()
         
+        # Use expires_on (Unix timestamp) if available, otherwise parse expiresOn string
+        expires_on_unix = result.get("expires_on")
+        if expires_on_unix:
+            expires_on = datetime.fromtimestamp(expires_on_unix, tz=timezone.utc)
+        else:
+            expires_on = _parse_expiry(result.get("expiresOn", ""))
+        
         _token_cache = {
             "access_token": result.get("accessToken"),
-            "expires_on": _parse_expiry(result.get("expiresOn", "")),
+            "expires_on": expires_on,
             "user": result.get("subscription", "Unknown"),
             "last_refresh": datetime.now(timezone.utc),
             "error": None,

@@ -98,11 +98,11 @@ def lookup_account_by_tpid(tpid: str) -> Dict[str, Any]:
     tpid_clean = str(tpid).strip()
     
     try:
-        # Build OData query
+        # Build OData query - include parenting level to identify "Top" parent
         url = (
             f"{CRM_BASE_URL}/accounts"
             f"?$filter=msp_mstopparentid eq '{tpid_clean}'"
-            f"&$select=accountid,name,msp_mstopparentid"
+            f"&$select=accountid,name,msp_mstopparentid,msp_parentinglevelcode"
         )
         
         response = requests.get(
@@ -113,7 +113,28 @@ def lookup_account_by_tpid(tpid: str) -> Dict[str, Any]:
         
         if response.status_code == 200:
             data = response.json()
-            accounts = data.get("value", [])
+            raw_accounts = data.get("value", [])
+            
+            # Process accounts - extract parenting level from OData annotations
+            accounts = []
+            top_account = None
+            
+            for raw in raw_accounts:
+                account = {
+                    "accountid": raw.get("accountid"),
+                    "name": raw.get("name"),
+                    "msp_mstopparentid": raw.get("msp_mstopparentid"),
+                    "parenting_level": raw.get(
+                        "msp_parentinglevelcode@OData.Community.Display.V1.FormattedValue",
+                        raw.get("msp_parentinglevelcode", "Unknown")
+                    ),
+                    "url": build_account_url(raw.get("accountid")),
+                }
+                accounts.append(account)
+                
+                # Track the "Top" parent account
+                if account["parenting_level"] and "top" in str(account["parenting_level"]).lower():
+                    top_account = account
             
             result = {
                 "success": True,
@@ -121,15 +142,15 @@ def lookup_account_by_tpid(tpid: str) -> Dict[str, Any]:
                 "count": len(accounts),
             }
             
-            # Build MSX URL if exactly one match
+            # If exactly one match, or one "Top" among multiple, auto-select
             if len(accounts) == 1:
-                account_id = accounts[0].get("accountid")
-                result["url"] = build_account_url(account_id)
-                result["account_name"] = accounts[0].get("name")
-            elif len(accounts) > 1:
-                # Multiple matches - include URLs for each
-                for account in accounts:
-                    account["url"] = build_account_url(account.get("accountid"))
+                result["url"] = accounts[0]["url"]
+                result["account_name"] = accounts[0]["name"]
+            elif top_account:
+                # Found a Top parent - recommend it
+                result["url"] = top_account["url"]
+                result["account_name"] = top_account["name"]
+                result["top_parent"] = True
             
             return result
             

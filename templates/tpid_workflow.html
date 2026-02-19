@@ -414,12 +414,20 @@
                 urlInput.value = data.url;
                 updateFilledCount();
                 formChanged = true;
+            } else if (data.top_parent) {
+                // Multiple matches but found "Top" parent - auto-fill with note
+                resultEl.className = 'lookup-result small mt-1 success';
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${data.account_name} <span class="badge bg-primary">Top Parent</span> (${data.count} total)`;
+                urlInput.value = data.url;
+                updateFilledCount();
+                formChanged = true;
             } else {
-                // Multiple matches - show options
+                // Multiple matches - show options with parenting level
                 resultEl.className = 'lookup-result small mt-1 warning';
                 let html = `<strong>${data.count} accounts found:</strong><br>`;
                 data.accounts.forEach((acct, i) => {
-                    html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}); return false;" class="me-2">${i+1}. ${acct.name}</a>`;
+                    const level = acct.parenting_level ? ` <span class="text-muted">(${acct.parenting_level})</span>` : '';
+                    html += `<a href="#" onclick="selectAccount('${acct.url}', ${customerId}, '${acct.name}'); return false;" class="me-2">${i+1}. ${acct.name}${level}</a>`;
                 });
                 resultEl.innerHTML = html;
             }
@@ -433,12 +441,12 @@
     }
 
     // Select account from multiple matches
-    function selectAccount(url, customerId) {
+    function selectAccount(url, customerId, accountName) {
         const urlInput = document.getElementById(`tpid_url_${customerId}`);
         const resultEl = document.getElementById(`lookup_result_${customerId}`);
         urlInput.value = url;
         resultEl.className = 'lookup-result small mt-1 success';
-        resultEl.innerHTML = '<i class="bi bi-check-circle"></i> URL filled';
+        resultEl.innerHTML = `<i class="bi bi-check-circle"></i> ${accountName || 'URL filled'}`;
         updateFilledCount();
         formChanged = true;
     }
