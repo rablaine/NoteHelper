@@ -131,6 +131,16 @@
                             {% for partner in call.partners %}
                                 <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;" onclick="event.stopPropagation();"><i class="bi bi-building"></i> {{ partner.name }}</a>
                             {% endfor %}
+                            {% for milestone in call.milestones %}
+                                <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}" onclick="event.stopPropagation();"><i class="bi bi-flag"></i> {{ milestone.display_text[:25] }}{% if milestone.display_text|length > 25 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
+                            {% endfor %}
+                            {% for task in call.msx_tasks %}
+                                {% if task.msx_task_url %}
+                                <a href="{{ task.msx_task_url }}" target="_blank" class="badge bg-secondary text-decoration-none" title="{{ task.subject }}" onclick="event.stopPropagation();"><i class="bi bi-check2-circle"></i> {{ task.subject[:20] }}{% if task.subject|length > 20 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
+                                {% else %}
+                                <span class="badge bg-secondary" title="{{ task.subject }}"><i class="bi bi-check2-circle"></i> {{ task.subject[:20] }}{% if task.subject|length > 20 %}...{% endif %}</span>
+                                {% endif %}
+                            {% endfor %}
                         </div>
                         <div class="text-muted">{{ call.content|striptags|truncate(200, true) }}</div>
                     </div>
