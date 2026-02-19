@@ -52,6 +52,7 @@ def _handle_milestone_and_task(call_log, user_id):
             msx_milestone_id=milestone_msx_id,
             url=milestone_url,
             milestone_number=milestone_number,
+            title=milestone_name,
             msx_status=milestone_status,
             msx_status_code=int(milestone_status_code) if milestone_status_code else None,
             opportunity_name=milestone_opp_name,
@@ -61,6 +62,8 @@ def _handle_milestone_and_task(call_log, user_id):
         db.session.add(milestone)
     else:
         # Update existing milestone with latest data
+        if milestone_name:
+            milestone.title = milestone_name
         if milestone_url:
             milestone.url = milestone_url
         if milestone_status:
