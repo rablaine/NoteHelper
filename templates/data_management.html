@@ -64,7 +64,7 @@
                 <h5 class="mb-0"><i class="bi bi-download"></i> Export Call Logs</h5>
             </div>
             <div class="card-body">
-                <p class="text-muted">Export your call logs with enriched data for external analysis or LLM processing.</p>
+                <p class="text-muted">Export your call logs with enriched data for backup or analysis.</p>
                 
                 <div class="d-flex gap-2">
                     <button class="btn btn-success" id="exportCallLogsJsonBtn">
@@ -74,6 +74,44 @@
                         <i class="bi bi-file-earmark-spreadsheet"></i> CSV
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Import Call Logs Section -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-upload"></i> Import Call Logs</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Import call logs from a JSON file previously exported from NoteHelper.</p>
+                
+                <form id="importCallLogsForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="importCallLogsFile" class="form-label">Select JSON File</label>
+                        <input type="file" class="form-control" id="importCallLogsFile" name="file" accept=".json" required>
+                        <div class="form-text">Only JSON files exported from NoteHelper are supported.</div>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="skipDuplicates" name="skip_duplicates" checked>
+                        <label class="form-check-label" for="skipDuplicates">
+                            Skip duplicate entries (recommended)
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success" id="importCallLogsBtn">
+                        <i class="bi bi-upload"></i> Import Call Logs
+                    </button>
+                </form>
+
+                <div id="importCallLogsProgress" class="mt-3 d-none">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <p class="text-muted mt-2">Importing...</p>
+                </div>
+
+                <div id="importCallLogsResults" class="mt-3 d-none"></div>
             </div>
         </div>
     </div>
@@ -88,6 +126,81 @@
     // Export Call Logs CSV
     document.getElementById('exportCallLogsCsvBtn').addEventListener('click', function() {
         window.location.href = '/api/data-management/export/call-logs-csv';
+    });
+
+    // =========================================================================
+    // Import Call Logs from JSON
+    // =========================================================================
+    
+    document.getElementById('importCallLogsForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const importBtn = document.getElementById('importCallLogsBtn');
+        const importProgress = document.getElementById('importCallLogsProgress');
+        const importResults = document.getElementById('importCallLogsResults');
+        const fileInput = document.getElementById('importCallLogsFile');
+        const skipDuplicates = document.getElementById('skipDuplicates').checked;
+        
+        if (!fileInput.files[0]) {
+            alert('Please select a file');
+            return;
+        }
+        
+        // Show progress
+        importBtn.disabled = true;
+        importProgress.classList.remove('d-none');
+        importResults.classList.add('d-none');
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('skip_duplicates', skipDuplicates);
+        
+        try {
+            const response = await fetch('/api/my-data/import/json', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            // Hide progress
+            importProgress.classList.add('d-none');
+            
+            // Show results
+            importResults.classList.remove('d-none');
+            if (result.success) {
+                importResults.innerHTML = `
+                    <div class="alert alert-success">
+                        <h6><i class="bi bi-check-circle"></i> Import Successful!</h6>
+                        <ul class="mb-0">
+                            <li>Call Logs: ${result.imported.call_logs} imported, ${result.skipped.call_logs} skipped</li>
+                            <li>Customers: ${result.imported.customers} imported, ${result.skipped.customers} skipped</li>
+                            <li>Topics: ${result.imported.topics} imported, ${result.skipped.topics} skipped</li>
+                        </ul>
+                    </div>
+                `;
+            } else {
+                importResults.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="bi bi-x-circle"></i> Import Failed</h6>
+                        <p class="mb-0">${result.error}</p>
+                    </div>
+                `;
+            }
+            
+        } catch (error) {
+            importProgress.classList.add('d-none');
+            importResults.classList.remove('d-none');
+            importResults.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="bi bi-x-circle"></i> Import Failed</h6>
+                    <p class="mb-0">Error: ${error.message}</p>
+                </div>
+            `;
+        } finally {
+            importBtn.disabled = false;
+            fileInput.value = '';
+        }
     });
     
     // =========================================================================
