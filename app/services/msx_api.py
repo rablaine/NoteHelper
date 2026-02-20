@@ -661,6 +661,9 @@ def query_entity(
     """
     Generic OData query for any MSX entity.
     
+    Note: Dynamics 365 doesn't support $skip. For pagination, use query_entity_all()
+    which follows @odata.nextLink.
+    
     Args:
         entity_name: The entity set name (e.g., 'accounts', 'systemusers', 'territories')
         select: List of fields to return (None = all fields)
@@ -694,11 +697,13 @@ def query_entity(
         if response.status_code == 200:
             data = response.json()
             records = data.get("value", [])
+            next_link = data.get("@odata.nextLink")
             return {
                 "success": True,
                 "entity": entity_name,
                 "count": len(records),
                 "records": records,
+                "next_link": next_link,  # For pagination
                 "query_url": url
             }
         elif response.status_code == 401:
@@ -717,6 +722,363 @@ def query_entity(
         return {"success": False, "error": f"Connection error: {str(e)[:100]}"}
     except Exception as e:
         logger.exception(f"Error querying {entity_name}")
+        return {"success": False, "error": str(e)}
+
+
+def query_next_page(next_link: str) -> Dict[str, Any]:
+    """
+    Follow an @odata.nextLink to get the next page of results.
+    
+    Dynamics 365 uses continuation tokens instead of $skip for pagination.
+    """
+    try:
+        logger.info(f"Following nextLink: {next_link[:100]}...")
+        response = _msx_request('GET', next_link)
+        
+        if response.status_code == 200:
+            data = response.json()
+            records = data.get("value", [])
+            new_next_link = data.get("@odata.nextLink")
+            return {
+                "success": True,
+                "count": len(records),
+                "records": records,
+                "next_link": new_next_link
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {response.text[:500]}"
+            }
+    except Exception as e:
+        logger.exception("Error following nextLink")
+        return {"success": False, "error": str(e)}
+
+
+def batch_query_accounts(
+    account_ids: List[str],
+    batch_size: int = 15
+) -> Dict[str, Any]:
+    """
+    Query multiple accounts in batches using OData 'or' filter.
+    
+    Much more efficient than individual queries - reduces 299 calls to ~20.
+    
+    Args:
+        account_ids: List of account GUIDs to query
+        batch_size: How many accounts per query (default 15 to avoid URL length limits)
+        
+    Returns:
+        Dict with success/error and accounts dict keyed by account ID
+    """
+    all_accounts = {}  # accountid -> account record
+    
+    try:
+        for i in range(0, len(account_ids), batch_size):
+            batch = account_ids[i:i + batch_size]
+            
+            # Build OR filter: accountid eq 'X' or accountid eq 'Y' or ...
+            filter_parts = [f"accountid eq {aid}" for aid in batch]
+            filter_query = " or ".join(filter_parts)
+            
+            result = query_entity(
+                "accounts",
+                select=[
+                    "accountid", "name", "msp_mstopparentid", "_territoryid_value",
+                    "msp_verticalcode", "msp_verticalcategorycode"
+                ],
+                filter_query=filter_query,
+                top=batch_size + 5  # A little buffer just in case
+            )
+            
+            if not result.get("success"):
+                logger.warning(f"Batch query failed: {result.get('error')}")
+                continue
+            
+            for record in result.get("records", []):
+                acct_id = record.get("accountid")
+                if acct_id:
+                    all_accounts[acct_id] = record
+        
+        return {
+            "success": True,
+            "accounts": all_accounts,
+            "count": len(all_accounts)
+        }
+        
+    except Exception as e:
+        logger.exception("Error in batch account query")
+        return {"success": False, "error": str(e)}
+
+
+def batch_query_territories(
+    territory_ids: List[str],
+    batch_size: int = 15
+) -> Dict[str, Any]:
+    """
+    Query multiple territories in batches.
+    
+    Args:
+        territory_ids: List of territory GUIDs to query
+        batch_size: How many territories per query
+        
+    Returns:
+        Dict with territories dict keyed by territory ID
+    """
+    all_territories = {}  # territoryid -> territory record
+    
+    try:
+        # Deduplicate territory IDs
+        unique_ids = list(set(territory_ids))
+        
+        for i in range(0, len(unique_ids), batch_size):
+            batch = unique_ids[i:i + batch_size]
+            
+            filter_parts = [f"territoryid eq {tid}" for tid in batch]
+            filter_query = " or ".join(filter_parts)
+            
+            result = query_entity(
+                "territories",
+                select=["territoryid", "name", "msp_ownerid", "msp_salesunitname", "msp_accountteamunitname"],
+                filter_query=filter_query,
+                top=batch_size + 5
+            )
+            
+            if not result.get("success"):
+                logger.warning(f"Batch territory query failed: {result.get('error')}")
+                continue
+            
+            for record in result.get("records", []):
+                terr_id = record.get("territoryid")
+                if terr_id:
+                    all_territories[terr_id] = record
+        
+        return {
+            "success": True,
+            "territories": all_territories,
+            "count": len(all_territories)
+        }
+        
+    except Exception as e:
+        logger.exception("Error in batch territory query")
+        return {"success": False, "error": str(e)}
+
+
+def batch_query_account_teams(
+    account_ids: List[str],
+    batch_size: int = 5
+) -> Dict[str, Any]:
+    """
+    Query msp_accountteams for all accounts to get sellers and SEs.
+    
+    Uses server-side filtering for Corporate + Cloud & AI qualifiers,
+    reducing 300+ team members per account to ~20-30 (no pagination needed).
+    
+    Filters for qualifier1="Corporate" AND Cloud & AI roles:
+    - Sellers: "Cloud & AI" (Growth), "Cloud & AI-Acq" (Acquisition) with title "Specialists IC"
+    - SEs: "Cloud & AI Data", "Cloud & AI Infrastructure", "Cloud & AI Apps"
+    
+    Args:
+        account_ids: List of account GUIDs
+        batch_size: How many accounts per query (can be higher now with server-side filtering)
+        
+    Returns:
+        Dict with:
+        - account_sellers: {account_id: {name, type, user_id}}
+        - unique_sellers: {seller_name: {name, type, user_id}}
+        - se_by_pod_account: {account_id: {data_se, infra_se, apps_se}}
+    """
+    # Relevant qualifier2 values
+    seller_qualifiers = {"Cloud & AI": "Growth", "Cloud & AI-Acq": "Acquisition"}
+    se_qualifiers = {
+        "Cloud & AI Data": "data_se",
+        "Cloud & AI Infrastructure": "infra_se",
+        "Cloud & AI Apps": "apps_se"
+    }
+    
+    account_sellers = {}  # account_id -> {name, type, user_id}
+    unique_sellers = {}   # seller_name -> {name, type, user_id}
+    account_ses = {}      # account_id -> {data_se, infra_se, apps_se}
+    
+    def process_record(record):
+        """Process a single team member record."""
+        acct_id = record.get("_msp_accountid_value")
+        qualifier2 = record.get("msp_qualifier2", "")
+        standardtitle = record.get("msp_standardtitle", "")
+        name = record.get("msp_fullname", "")
+        user_id = record.get("_msp_systemuserid_value")
+        
+        if not acct_id or not name:
+            return
+        
+        # Seller assignment: qualifier2 is Cloud & AI or Cloud & AI-Acq
+        # AND standardtitle contains "Specialists IC" (filters out managers, CSAs, CSU, etc.)
+        if qualifier2 in seller_qualifiers and "Specialists IC" in standardtitle:
+            seller_type = seller_qualifiers[qualifier2]
+            account_sellers[acct_id] = {"name": name, "type": seller_type, "user_id": user_id}
+            if name not in unique_sellers:
+                unique_sellers[name] = {"name": name, "type": seller_type, "user_id": user_id}
+        
+        # SE assignment - collect ALL SEs per role (there can be multiple)
+        elif qualifier2 in se_qualifiers:
+            if acct_id not in account_ses:
+                account_ses[acct_id] = {"data_se": [], "infra_se": [], "apps_se": []}
+            
+            se_key = se_qualifiers[qualifier2]  # "data_se", "infra_se", or "apps_se"
+            # Add SE if not already in the list for this account
+            existing_names = [se["name"] for se in account_ses[acct_id][se_key]]
+            if name not in existing_names:
+                account_ses[acct_id][se_key].append({"name": name, "user_id": user_id})
+    
+    try:
+        # Query accounts in batches with server-side filtering
+        # Server-side filter for Corporate + Cloud & AI* reduces 300+ to ~20-30 per account
+        for i in range(0, len(account_ids), batch_size):
+            batch = account_ids[i:i + batch_size]
+            
+            # Build filter: account IDs + Corporate + Cloud & AI qualifiers (server-side)
+            account_filter = " or ".join([f"_msp_accountid_value eq {aid}" for aid in batch])
+            # Filter server-side for Corporate + Cloud & AI* (reduces 300+ records to ~20-30)
+            filter_query = f"({account_filter}) and msp_qualifier1 eq 'Corporate' and startswith(msp_qualifier2,'Cloud ')"
+            
+            result = query_entity(
+                "msp_accountteams",
+                select=["_msp_accountid_value", "msp_fullname", "msp_qualifier2", "msp_standardtitle", "_msp_systemuserid_value"],
+                filter_query=filter_query,
+                top=100  # With server-side filtering, 100 should be enough for 3 accounts
+            )
+            
+            if not result.get("success"):
+                logger.warning(f"Batch account teams query failed: {result.get('error')}")
+                continue
+            
+            records = result.get("records", [])
+            # Warn if we hit the 100 record limit (may have lost data)
+            if len(records) >= 100:
+                logger.warning(f"Hit 100 record limit for batch of {len(batch)} accounts - may be missing sellers/SEs")
+            
+            for record in records:
+                process_record(record)
+        
+        return {
+            "success": True,
+            "account_sellers": account_sellers,
+            "unique_sellers": unique_sellers,
+            "account_ses": account_ses,
+            "seller_count": len(unique_sellers),
+            "accounts_with_sellers": len(account_sellers),
+        }
+        
+    except Exception as e:
+        logger.exception("Error in batch account teams query")
+        return {"success": False, "error": str(e)}
+
+
+def query_pod_ses_from_account(account_id: str) -> Dict[str, Any]:
+    """
+    Query ONE account's team to get all SEs for the POD.
+    
+    Uses server-side filtering for Corporate + Cloud & AI* qualifiers,
+    reducing 300+ team members to ~20-30 records (no pagination needed).
+    
+    Args:
+        account_id: Single account GUID
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - ses: {data_se: [...], infra_se: [...], apps_se: [...]}
+    """
+    se_qualifiers = {
+        "Cloud & AI Data": "data_se",
+        "Cloud & AI Infrastructure": "infra_se",
+        "Cloud & AI Apps": "apps_se"
+    }
+    
+    ses = {"data_se": [], "infra_se": [], "apps_se": []}
+    
+    try:
+        # Filter server-side for Corporate + Cloud & AI qualifiers only
+        # This reduces 300+ records to ~20-30, avoiding pagination issues
+        filter_query = f"_msp_accountid_value eq {account_id} and msp_qualifier1 eq 'Corporate' and startswith(msp_qualifier2,'Cloud ')"
+        result = query_entity(
+            "msp_accountteams",
+            select=["msp_fullname", "msp_qualifier1", "msp_qualifier2", "_msp_systemuserid_value"],
+            filter_query=filter_query,
+            top=100
+        )
+        
+        if not result.get("success"):
+            logger.warning(f"Pod SE query failed: {result.get('error')}")
+            return {"success": False, "error": result.get("error")}
+        
+        for record in result.get("records", []):
+            qualifier2 = record.get("msp_qualifier2", "")
+            name = record.get("msp_fullname", "")
+            user_id = record.get("_msp_systemuserid_value")
+            
+            if qualifier2 in se_qualifiers:
+                se_key = se_qualifiers[qualifier2]
+                existing_names = [se["name"] for se in ses[se_key]]
+                if name not in existing_names:
+                    ses[se_key].append({"name": name, "user_id": user_id})
+        
+        return {"success": True, "ses": ses}
+        
+    except Exception as e:
+        logger.exception(f"Error querying POD SEs for account {account_id}")
+        return {"success": False, "error": str(e)}
+
+
+def find_account_seller(account_id: str) -> Dict[str, Any]:
+    """
+    Find the seller for ONE account.
+    
+    Uses server-side filtering for Corporate + Cloud & AI* qualifiers,
+    reducing 300+ team members to ~20-30 records (no pagination needed).
+    Then filters locally for "Specialists IC" in title.
+    
+    Args:
+        account_id: Single account GUID
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - seller: {name, type, user_id} or None if not found
+    """
+    seller_qualifiers = {"Cloud & AI": "Growth", "Cloud & AI-Acq": "Acquisition"}
+    
+    try:
+        # Filter server-side for Corporate + Cloud & AI qualifiers only
+        # This reduces 300+ records to ~20-30, avoiding pagination issues
+        filter_query = f"_msp_accountid_value eq {account_id} and msp_qualifier1 eq 'Corporate' and startswith(msp_qualifier2,'Cloud ')"
+        result = query_entity(
+            "msp_accountteams",
+            select=["msp_fullname", "msp_qualifier1", "msp_qualifier2", "msp_standardtitle", "_msp_systemuserid_value"],
+            filter_query=filter_query,
+            top=100
+        )
+        
+        if not result.get("success"):
+            logger.warning(f"Seller query failed: {result.get('error')}")
+            return {"success": False, "error": result.get("error")}
+        
+        # Find seller in filtered results
+        for record in result.get("records", []):
+            qualifier2 = record.get("msp_qualifier2", "")
+            standardtitle = record.get("msp_standardtitle", "")
+            name = record.get("msp_fullname", "")
+            user_id = record.get("_msp_systemuserid_value")
+            
+            # Seller: Cloud & AI or Cloud & AI-Acq + "Specialists IC" in title
+            if qualifier2 in seller_qualifiers and "Specialists IC" in standardtitle:
+                seller_type = seller_qualifiers[qualifier2]
+                return {"success": True, "seller": {"name": name, "type": seller_type, "user_id": user_id}}
+        
+        return {"success": True, "seller": None}
+        
+    except Exception as e:
+        logger.exception(f"Error finding seller for account {account_id}")
         return {"success": False, "error": str(e)}
 
 
@@ -1014,6 +1376,52 @@ def get_my_accounts() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def search_territories(query: str, top: int = 50) -> Dict[str, Any]:
+    """
+    Search for territories by partial name match.
+    
+    Args:
+        query: Partial territory name to search for (e.g., "0602" or "MAA")
+        top: Maximum number of results to return
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - territories: list of territory dicts with id and name
+    """
+    try:
+        # Use contains() for partial matching
+        result = query_entity(
+            "territories",
+            select=["territoryid", "name", "msp_ownerid"],
+            filter_query=f"contains(name, '{query}')",
+            top=top,
+            order_by="name asc"
+        )
+        
+        if not result.get("success"):
+            return result
+        
+        territories = []
+        for t in result.get("records", []):
+            territories.append({
+                "id": t.get("territoryid"),
+                "name": t.get("name"),
+                "seller_id": t.get("msp_ownerid"),
+                "seller_name": t.get("msp_ownerid@OData.Community.Display.V1.FormattedValue"),
+            })
+        
+        return {
+            "success": True,
+            "count": len(territories),
+            "territories": territories
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error searching territories for '{query}'")
+        return {"success": False, "error": str(e)}
+
+
 def get_accounts_for_territories(territory_names: List[str]) -> Dict[str, Any]:
     """
     Get all accounts for a list of territory names.
@@ -1086,3 +1494,563 @@ def get_accounts_for_territories(territory_names: List[str]) -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Error getting accounts for territories")
         return {"success": False, "error": str(e)}
+
+
+def find_my_territories(atu_filter: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Find territories where the current user is assigned as a Data SE, Infra SE, or Apps SE.
+    
+    Uses msp_accountteams to find account assignments where the user's qualifier2 is:
+    - "Cloud & AI Data" (Data SE)
+    - "Cloud & AI Infrastructure" (Infra SE) 
+    - "Cloud & AI Apps" (Apps SE)
+    - "Cloud & AI" (Growth Seller)
+    - "Cloud & AI-Acq" (Acquisition Seller)
+    
+    Args:
+        atu_filter: Optional ATU code to filter by (e.g., "MAA", "HLA"). If provided,
+                   only returns territories matching "East.SMECC.{atu_filter}.*"
+    
+    Returns:
+        Dict with:
+        - success: bool
+        - user: current user info
+        - role: detected role (Data SE, Infra SE, Apps SE, Growth Seller, Acq Seller)
+        - territories: list of territories the user is assigned to
+        - sample_accounts: one sample account per territory for verification
+    """
+    try:
+        # 1. Get current user
+        user_result = get_current_user()
+        if not user_result.get("success"):
+            return user_result
+        
+        user_id = user_result.get("user_id")
+        user = user_result.get("user", {})
+        user_name = user.get("fullname", "Unknown")
+        user_qualifier2 = user.get("msp_qualifier2", "")
+        
+        # Determine role from qualifier2
+        role_map = {
+            "Cloud & AI Data": "Data SE",
+            "Cloud & AI Infrastructure": "Infra SE",
+            "Cloud & AI Apps": "Apps SE",
+            "Cloud & AI": "Growth Seller",
+            "Cloud & AI-Acq": "Acquisition Seller",
+        }
+        detected_role = role_map.get(user_qualifier2, f"Unknown ({user_qualifier2})")
+        
+        # 2. Query msp_accountteams where this user is a member
+        # Filter by relevant qualifier2 values (SE or Seller roles)
+        relevant_qualifiers = ["Cloud & AI Data", "Cloud & AI Infrastructure", "Cloud & AI Apps", 
+                               "Cloud & AI", "Cloud & AI-Acq"]
+        
+        team_result = query_entity(
+            "msp_accountteams",
+            select=["msp_accountteamid", "_msp_accountid_value", "msp_qualifier2", "msp_fullname"],
+            filter_query=f"_msp_systemuserid_value eq {user_id}",
+            top=500  # Get up to 500 assignments
+        )
+        
+        if not team_result.get("success"):
+            return team_result
+        
+        # 3. Filter to only SE/Seller roles and collect unique account IDs
+        account_ids = set()
+        my_qualifier2 = None
+        for entry in team_result.get("records", []):
+            qualifier2 = entry.get("msp_qualifier2", "")
+            if qualifier2 in relevant_qualifiers:
+                account_id = entry.get("_msp_accountid_value")
+                if account_id:
+                    account_ids.add(account_id)
+                if not my_qualifier2:
+                    my_qualifier2 = qualifier2
+        
+        if not account_ids:
+            return {
+                "success": True,
+                "user": {"id": user_id, "name": user_name, "qualifier2": user_qualifier2},
+                "role": detected_role,
+                "territories": [],
+                "message": "No account team assignments found for SE/Seller roles"
+            }
+        
+        # 4. Get territories for these accounts
+        # We'll query a sample of accounts to get territory info
+        territory_map = {}  # territory_id -> territory info
+        sample_accounts = {}  # territory_id -> sample account
+        
+        # Query accounts in batches to get their territories
+        account_list = list(account_ids)[:100]  # Limit to first 100 for performance
+        
+        for account_id in account_list:
+            acct_result = query_entity(
+                "accounts",
+                select=["accountid", "name", "msp_mstopparentid", "_territoryid_value"],
+                filter_query=f"accountid eq {account_id}",
+                top=1
+            )
+            
+            if acct_result.get("success") and acct_result.get("records"):
+                acct = acct_result["records"][0]
+                territory_id = acct.get("_territoryid_value")
+                territory_name = acct.get("_territoryid_value@OData.Community.Display.V1.FormattedValue", "")
+                
+                if territory_id and territory_id not in territory_map:
+                    territory_map[territory_id] = {
+                        "id": territory_id,
+                        "name": territory_name,
+                    }
+                    sample_accounts[territory_id] = {
+                        "account_id": acct.get("accountid"),
+                        "name": acct.get("name"),
+                        "tpid": acct.get("msp_mstopparentid"),
+                    }
+        
+        # 5. Get additional territory details (POD info, seller)
+        # Build ATU prefix for filtering if specified
+        atu_prefix = f"East.SMECC.{atu_filter}." if atu_filter else None
+        
+        territories = []
+        for territory_id, territory_info in territory_map.items():
+            # Early filter by ATU if specified
+            territory_name = territory_info.get("name", "")
+            if atu_prefix and not territory_name.startswith(atu_prefix):
+                continue
+            
+            # Query territory for more details
+            terr_result = query_entity(
+                "territories",
+                select=["territoryid", "name", "msp_ownerid", "msp_salesunitname", "msp_accountteamunitname"],
+                filter_query=f"territoryid eq {territory_id}",
+                top=1
+            )
+            
+            if terr_result.get("success") and terr_result.get("records"):
+                terr = terr_result["records"][0]
+                
+                # Try to derive POD from territory name
+                # e.g., "East.SMECC.MAA.0601" -> "East POD 06"
+                name_parts = terr.get("name", "").split(".")
+                pod_name = None
+                if len(name_parts) >= 4:
+                    region = name_parts[0]  # "East"
+                    suffix = name_parts[-1]  # "0601"
+                    if len(suffix) >= 2:
+                        pod_num = suffix[:2]  # "06"
+                        pod_name = f"{region} POD {pod_num}"
+                
+                territories.append({
+                    "id": territory_id,
+                    "name": terr.get("name"),
+                    "seller_id": terr.get("msp_ownerid"),
+                    "seller_name": terr.get("msp_ownerid@OData.Community.Display.V1.FormattedValue"),
+                    "sales_unit": terr.get("msp_salesunitname"),
+                    "atu": terr.get("msp_accountteamunitname"),
+                    "pod": pod_name,
+                    "sample_account": sample_accounts.get(territory_id),
+                })
+        
+        # Sort by name
+        territories.sort(key=lambda x: x.get("name", ""))
+        
+        return {
+            "success": True,
+            "user": {"id": user_id, "name": user_name, "qualifier2": user_qualifier2},
+            "role": detected_role,
+            "atu_filter": atu_filter,
+            "account_assignments_found": len(account_ids),
+            "accounts_sampled": len(account_list),
+            "territory_count": len(territories),
+            "territories": territories,
+        }
+        
+    except Exception as e:
+        logger.exception("Error finding user's territories")
+        return {"success": False, "error": str(e)}
+
+
+def scan_init() -> Dict[str, Any]:
+    """
+    Initialize territory scanning by getting user info and list of accounts to scan.
+    
+    This is the first step of the scanning process. Returns account IDs that
+    can then be scanned individually with scan_account() for progress updates.
+    
+    Returns:
+        Dict with:
+        - success: bool
+        - user: current user info (id, name, qualifier2)
+        - role: detected role
+        - account_ids: list of account IDs to scan
+    """
+    try:
+        # 1. Get current user
+        user_result = get_current_user()
+        if not user_result.get("success"):
+            return user_result
+        
+        user_id = user_result.get("user_id")
+        user = user_result.get("user", {})
+        user_name = user.get("fullname", "Unknown")
+        user_qualifier2 = user.get("msp_qualifier2", "")
+        
+        # Determine role from qualifier2
+        role_map = {
+            "Cloud & AI Data": "Data SE",
+            "Cloud & AI Infrastructure": "Infra SE",
+            "Cloud & AI Apps": "Apps SE",
+            "Cloud & AI": "Growth Seller",
+            "Cloud & AI-Acq": "Acquisition Seller",
+        }
+        detected_role = role_map.get(user_qualifier2, f"Unknown ({user_qualifier2})")
+        
+        # 2. Query msp_accountteams where this user is a member
+        relevant_qualifiers = ["Cloud & AI Data", "Cloud & AI Infrastructure", "Cloud & AI Apps", 
+                               "Cloud & AI", "Cloud & AI-Acq"]
+        
+        team_result = query_entity(
+            "msp_accountteams",
+            select=["msp_accountteamid", "_msp_accountid_value", "msp_qualifier2"],
+            filter_query=f"_msp_systemuserid_value eq {user_id}",
+            top=500
+        )
+        
+        if not team_result.get("success"):
+            return team_result
+        
+        # 3. Filter to only SE/Seller roles and collect unique account IDs
+        account_ids = set()
+        for entry in team_result.get("records", []):
+            qualifier2 = entry.get("msp_qualifier2", "")
+            if qualifier2 in relevant_qualifiers:
+                account_id = entry.get("_msp_accountid_value")
+                if account_id:
+                    account_ids.add(account_id)
+        
+        return {
+            "success": True,
+            "user": {"id": user_id, "name": user_name, "qualifier2": user_qualifier2},
+            "role": detected_role,
+            "total_accounts": len(account_ids),
+            "account_ids": list(account_ids),
+        }
+        
+    except Exception as e:
+        logger.exception("Error initializing territory scan")
+        return {"success": False, "error": str(e)}
+
+
+def scan_account(account_id: str) -> Dict[str, Any]:
+    """
+    Scan a single account to get its territory information.
+    
+    Args:
+        account_id: The account GUID to look up
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - account: account info (id, name, tpid)
+        - territory: territory info (id, name, atu, pod, seller) or None
+    """
+    try:
+        # 1. Get account with territory info
+        acct_result = query_entity(
+            "accounts",
+            select=["accountid", "name", "msp_mstopparentid", "_territoryid_value"],
+            filter_query=f"accountid eq {account_id}",
+            top=1
+        )
+        
+        if not acct_result.get("success"):
+            return acct_result
+        
+        if not acct_result.get("records"):
+            return {"success": True, "account": None, "territory": None}
+        
+        acct = acct_result["records"][0]
+        account_info = {
+            "id": acct.get("accountid"),
+            "name": acct.get("name"),
+            "tpid": acct.get("msp_mstopparentid"),
+        }
+        
+        territory_id = acct.get("_territoryid_value")
+        territory_name = acct.get("_territoryid_value@OData.Community.Display.V1.FormattedValue", "")
+        
+        if not territory_id:
+            return {"success": True, "account": account_info, "territory": None}
+        
+        # 2. Get territory details
+        terr_result = query_entity(
+            "territories",
+            select=["territoryid", "name", "msp_ownerid", "msp_salesunitname", "msp_accountteamunitname"],
+            filter_query=f"territoryid eq {territory_id}",
+            top=1
+        )
+        
+        territory_info = {
+            "id": territory_id,
+            "name": territory_name,
+        }
+        
+        if terr_result.get("success") and terr_result.get("records"):
+            terr = terr_result["records"][0]
+            territory_info["name"] = terr.get("name", territory_name)
+            territory_info["seller_id"] = terr.get("msp_ownerid")
+            territory_info["seller_name"] = terr.get("msp_ownerid@OData.Community.Display.V1.FormattedValue")
+            territory_info["sales_unit"] = terr.get("msp_salesunitname")
+            territory_info["atu"] = terr.get("msp_accountteamunitname")
+            
+            # Derive POD from territory name (e.g., "East.SMECC.MAA.0601" -> "East POD 06")
+            name_parts = terr.get("name", "").split(".")
+            if len(name_parts) >= 4:
+                region = name_parts[0]
+                suffix = name_parts[-1]
+                if len(suffix) >= 2:
+                    pod_num = suffix[:2]
+                    territory_info["pod"] = f"{region} POD {pod_num}"
+                    # Extract ATU code from name (e.g., "MAA" from "East.SMECC.MAA.0601")
+                    territory_info["atu_code"] = name_parts[2] if len(name_parts) >= 3 else None
+        
+        return {
+            "success": True,
+            "account": account_info,
+            "territory": territory_info,
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error scanning account {account_id}")
+        return {"success": False, "error": str(e)}
+
+
+def get_account_details(account_id: str, territory_cache: Optional[Dict] = None) -> Dict[str, Any]:
+    """
+    Get full account details for import, including territory, seller, and verticals.
+    
+    Optimized approach with territory caching - many accounts share the same territory,
+    so we cache territory lookups to avoid redundant API calls.
+    
+    Args:
+        account_id: The account GUID
+        territory_cache: Optional dict to cache territory lookups (territory_id -> result)
+        
+    Returns:
+        Dict with account info, territory info, seller info, and verticals
+    """
+    try:
+        # Get account with territory and verticals in one query
+        acct_result = query_entity(
+            "accounts",
+            select=[
+                "accountid", "name", "msp_mstopparentid", "_territoryid_value",
+                "msp_verticalcode", "msp_verticalcategorycode"
+            ],
+            filter_query=f"accountid eq {account_id}",
+            top=1
+        )
+        
+        if not acct_result.get("success"):
+            return acct_result
+        
+        if not acct_result.get("records"):
+            return {"success": True, "account": None}
+        
+        acct = acct_result["records"][0]
+        
+        # Build account info
+        account_info = {
+            "id": acct.get("accountid"),
+            "name": acct.get("name"),
+            "tpid": acct.get("msp_mstopparentid"),
+            "url": build_account_url(acct.get("accountid")),
+            "vertical": acct.get("msp_verticalcode@OData.Community.Display.V1.FormattedValue"),
+            "vertical_category": acct.get("msp_verticalcategorycode@OData.Community.Display.V1.FormattedValue"),
+        }
+        
+        territory_id = acct.get("_territoryid_value")
+        territory_name_hint = acct.get("_territoryid_value@OData.Community.Display.V1.FormattedValue", "")
+        
+        if not territory_id:
+            return {
+                "success": True,
+                "account": account_info,
+                "territory": None,
+                "seller": None,
+                "pod": None,
+            }
+        
+        # Check territory cache first
+        if territory_cache is not None and territory_id in territory_cache:
+            cached = territory_cache[territory_id]
+            return {
+                "success": True,
+                "account": account_info,
+                "territory": cached.get("territory"),
+                "seller": cached.get("seller"),
+                "pod": cached.get("pod"),
+            }
+        
+        # Get territory details (cache miss)
+        terr_result = query_entity(
+            "territories",
+            select=["territoryid", "name", "msp_ownerid", "msp_salesunitname", "msp_accountteamunitname"],
+            filter_query=f"territoryid eq {territory_id}",
+            top=1
+        )
+        
+        territory_info = None
+        seller_info = None
+        pod_name = None
+        
+        if terr_result.get("success") and terr_result.get("records"):
+            terr = terr_result["records"][0]
+            terr_name = terr.get("name", "")
+            
+            # Derive POD from territory name (e.g., "East.SMECC.MAA.0601" -> "East POD 06")
+            name_parts = terr_name.split(".")
+            if len(name_parts) >= 4:
+                region = name_parts[0]
+                suffix = name_parts[-1]
+                if len(suffix) >= 2:
+                    pod_num = suffix[:2]
+                    pod_name = f"{region} POD {pod_num}"
+            
+            territory_info = {
+                "id": territory_id,
+                "name": terr_name,
+                "atu": terr.get("msp_accountteamunitname"),
+            }
+            
+            seller_id = terr.get("msp_ownerid")
+            if seller_id:
+                seller_info = {
+                    "id": seller_id,
+                    "name": terr.get("msp_ownerid@OData.Community.Display.V1.FormattedValue"),
+                }
+        
+        # Cache the territory result for reuse
+        if territory_cache is not None and territory_id:
+            territory_cache[territory_id] = {
+                "territory": territory_info,
+                "seller": seller_info,
+                "pod": pod_name,
+            }
+        
+        return {
+            "success": True,
+            "account": account_info,
+            "territory": territory_info,
+            "seller": seller_info,
+            "pod": pod_name,
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error getting account details for {account_id}")
+        return {"success": False, "error": str(e)}
+
+
+def get_pod_team_members(sample_account_id: str) -> Dict[str, Any]:
+    """
+    Get all team members (SEs and sellers) for a POD by querying any account in that POD.
+    
+    This should only be called ONCE per POD since all accounts in a POD share SEs.
+    
+    Args:
+        sample_account_id: Any account ID from the POD
+        
+    Returns:
+        Dict with data_se, infra_se, apps_se, growth_seller, acq_seller
+    """
+    try:
+        # Query all team members for this account
+        team_result = query_entity(
+            "msp_accountteams",
+            select=["msp_accountteamid", "msp_fullname", "msp_qualifier2", "_msp_systemuserid_value"],
+            filter_query=f"_msp_accountid_value eq {sample_account_id}",
+            top=50
+        )
+        
+        if not team_result.get("success"):
+            return team_result
+        
+        # Parse team members by role
+        team = {
+            "data_se": None,
+            "infra_se": None,
+            "apps_se": None,
+            "growth_seller": None,
+            "acq_seller": None,
+        }
+        
+        role_map = {
+            "Cloud & AI Data": "data_se",
+            "Cloud & AI Infrastructure": "infra_se",
+            "Cloud & AI Apps": "apps_se",
+            "Cloud & AI": "growth_seller",
+            "Cloud & AI-Acq": "acq_seller",
+        }
+        
+        for member in team_result.get("records", []):
+            qualifier2 = member.get("msp_qualifier2", "")
+            role_key = role_map.get(qualifier2)
+            if role_key:
+                # Extract alias from systemuser ID if available
+                system_user_id = member.get("_msp_systemuserid_value")
+                full_name = member.get("msp_fullname", "")
+                
+                # Try to get alias from the formatted value or user lookup
+                alias = None
+                if system_user_id:
+                    # The alias is often the email prefix - we'll get it from user lookup later
+                    alias_value = member.get("_msp_systemuserid_value@OData.Community.Display.V1.FormattedValue", "")
+                    if "@" in alias_value:
+                        alias = alias_value.split("@")[0].lower()
+                
+                team[role_key] = {
+                    "name": full_name,
+                    "user_id": system_user_id,
+                    "alias": alias,
+                }
+        
+        return {
+            "success": True,
+            "team": team,
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error getting POD team for account {sample_account_id}")
+        return {"success": False, "error": str(e)}
+
+
+def get_seller_type_for_account(account_id: str, user_id: str) -> str:
+    """
+    Determine if an account's seller is Growth or Acquisition by checking the user's qualifier2.
+    
+    Args:
+        account_id: The account GUID
+        user_id: The seller's user GUID
+        
+    Returns:
+        "Growth" or "Acquisition"
+    """
+    try:
+        # Query msp_accountteams for this specific user on this account
+        team_result = query_entity(
+            "msp_accountteams",
+            select=["msp_qualifier2"],
+            filter_query=f"_msp_accountid_value eq {account_id} and _msp_systemuserid_value eq {user_id}",
+            top=1
+        )
+        
+        if team_result.get("success") and team_result.get("records"):
+            qualifier2 = team_result["records"][0].get("msp_qualifier2", "")
+            if qualifier2 == "Cloud & AI-Acq":
+                return "Acquisition"
+        
+        return "Growth"  # Default to Growth
+        
+    except Exception:
+        return "Growth"
