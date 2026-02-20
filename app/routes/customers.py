@@ -248,57 +248,6 @@ def customer_edit(id):
                          referrer='')
 
 
-@customers_bp.route('/tpid-workflow')
-def tpid_workflow():
-    """MSX Account URL workflow page - helps fill in missing MSX Account URLs efficiently."""
-    # Get all customers without MSX Account URLs, ordered by seller/territory for grouping
-    customers = Customer.query.filter(
-        or_(Customer.tpid_url == None, Customer.tpid_url == '')
-    ).options(
-        db.joinedload(Customer.seller),
-        db.joinedload(Customer.territory)
-    ).order_by(
-        Customer.seller_id.asc(),
-        Customer.territory_id.asc(),
-        Customer.name.asc()
-    ).all()
-    
-    return render_template('tpid_workflow.html', customers=customers)
-
-
-@customers_bp.route('/tpid-workflow/update', methods=['POST'])
-def tpid_workflow_update():
-    """Update MSX Account URLs from the workflow page."""
-    try:
-        # Get all form fields that start with 'tpid_url_'
-        updates = {}
-        for key, value in request.form.items():
-            if key.startswith('tpid_url_') and value.strip():
-                customer_id = int(key.replace('tpid_url_', ''))
-                updates[customer_id] = value.strip()
-        
-        if not updates:
-            flash('No MSX Account URLs to update.', 'warning')
-            return redirect(url_for('customers.tpid_workflow'))
-        
-        # Update customers
-        updated_count = 0
-        for customer_id, tpid_url in updates.items():
-            customer = db.session.get(Customer, customer_id)
-            if customer:
-                customer.tpid_url = tpid_url
-                updated_count += 1
-        
-        db.session.commit()
-        flash(f'Successfully updated {updated_count} MSX Account URL{"s" if updated_count != 1 else ""}.', 'success')
-        
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error updating MSX Account URLs: {str(e)}', 'danger')
-    
-    return redirect(url_for('customers.tpid_workflow'))
-
-
 @customers_bp.route('/api/customer/<int:customer_id>/tpid-url', methods=['POST'])
 def api_save_tpid_url(customer_id):
     """
