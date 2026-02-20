@@ -46,6 +46,7 @@ from app.services.msx_api import (
     batch_query_territories,
     batch_query_account_teams,
     build_account_url,
+    get_user_alias,
 )
 from app.models import Customer, Milestone, Territory, Seller, POD, SolutionEngineer, Vertical, db
 
@@ -924,7 +925,11 @@ def import_stream():
                     sellers_map[seller_name] = existing
                 else:
                     seller_type = seller_info.get("type", "Growth")
-                    seller = Seller(name=seller_name, seller_type=seller_type, user_id=user_id)
+                    # Look up alias for new sellers using their systemuser ID
+                    systemuser_id = seller_info.get("user_id")
+                    alias = get_user_alias(systemuser_id) if systemuser_id else None
+                    
+                    seller = Seller(name=seller_name, seller_type=seller_type, alias=alias, user_id=user_id)
                     db.session.add(seller)
                     sellers_map[seller_name] = seller
                     sellers_created += 1
@@ -983,9 +988,13 @@ def import_stream():
                             if existing:
                                 solution_engineers_map[se_key] = existing
                             else:
+                                # Look up alias for new SEs using their systemuser ID
+                                systemuser_id = se_info.get("user_id")
+                                alias = get_user_alias(systemuser_id) if systemuser_id else None
+                                
                                 se = SolutionEngineer(
                                     name=se_info["name"],
-                                    alias=se_info.get("alias"),
+                                    alias=alias,
                                     specialty=specialty,
                                     user_id=user_id
                                 )
