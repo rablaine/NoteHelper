@@ -974,6 +974,45 @@ def batch_query_account_teams(
         return {"success": False, "error": str(e)}
 
 
+def get_user_alias(systemuser_id: str) -> Optional[str]:
+    """
+    Look up a systemuser by ID and return their email alias.
+    
+    The alias is extracted from the email address (part before @microsoft.com).
+    Used when creating new sellers/SEs to populate their alias field.
+    
+    Args:
+        systemuser_id: The MSX systemuser GUID
+        
+    Returns:
+        Email alias (e.g., 'alexbla') or None if lookup fails
+    """
+    if not systemuser_id:
+        return None
+    
+    try:
+        url = f"{CRM_BASE_URL}/systemusers({systemuser_id})?$select=domainname,internalemailaddress"
+        response = _msx_request('GET', url)
+        
+        if response.status_code != 200:
+            logger.warning(f"Failed to look up systemuser {systemuser_id}: {response.status_code}")
+            return None
+        
+        data = response.json()
+        # Get email from domainname or internalemailaddress
+        email = data.get("domainname") or data.get("internalemailaddress") or ""
+        
+        # Extract alias (part before @)
+        if "@" in email:
+            return email.split("@")[0]
+        
+        return None
+        
+    except Exception as e:
+        logger.warning(f"Error looking up user alias for {systemuser_id}: {e}")
+        return None
+
+
 def query_pod_ses_from_account(account_id: str) -> Dict[str, Any]:
     """
     Query ONE account's team to get all SEs for the POD.

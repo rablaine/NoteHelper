@@ -225,21 +225,24 @@ def load_csv(file_content: bytes | str, filename: str = "upload.csv") -> Any:
         return pd.read_csv(StringIO(file_content), header=None)
 
 
-def process_csv(df: Any) -> tuple[Any, list[str]]:
+def process_csv(df: Any) -> tuple[Any, list[str], dict[str, int]]:
     """Process raw DataFrame to extract structured data.
     
     New format (ACR Details by Quarter Month SL4):
-    Row 0: FiscalMonth, , , FY26-Jul, FY26-Aug, ..., Total
-    Row 1: TPAccountName, ServiceCompGrouping, ServiceLevel4, $ ACR, ...
+    Row 0: FiscalMonth, , , FY26-Jul, FY26-Jul, FY26-Jul, FY26-Jul, FY26-Jul, FY26-Aug, ..., Total
+    Row 1: TPAccountName, ServiceCompGrouping, ServiceLevel4, $ ACR, $ ACR MoM, $ Average Daily ACR, ...
+    
+    Each month has 5 columns of metrics. We only want the first ($ ACR).
     
     Args:
         df: Raw DataFrame (pandas) from CSV
         
     Returns:
-        Tuple of (processed DataFrame, list of month column names)
+        Tuple of (processed DataFrame, list of unique month names, dict mapping month -> column index)
     """
-    # Get month columns from row 0 (starts at column 3 in new format)
+    # Get month and metric rows
     month_row = df.iloc[0].tolist()
+    metric_row = df.iloc[1].tolist() if len(df) > 1 else []
     
     # Find where month columns start (look for FY pattern)
     month_start_idx = None
@@ -251,27 +254,36 @@ def process_csv(df: Any) -> tuple[Any, list[str]]:
     if month_start_idx is None:
         raise RevenueImportError("No fiscal month columns found (expecting FYxx-Mon format)")
     
-    # Extract month columns (everything from first FY column to "Total" or end)
-    month_cols = []
-    for val in month_row[month_start_idx:]:
+    # Build a mapping of unique months to their $ ACR column index
+    # Each month appears 5 times (5 metrics), we want the first occurrence ($ ACR)
+    month_to_col_idx = {}  # month name -> column index
+    unique_months = []  # ordered list of unique months
+    
+    for i, val in enumerate(month_row[month_start_idx:], start=month_start_idx):
         if pd.notna(val):
             val_str = str(val).strip()
-            if 'FY' in val_str:
-                month_cols.append(val_str)
-            elif val_str.lower() == 'total':
+            if val_str.lower() == 'total':
                 break  # Stop at Total column
+            if 'FY' in val_str:
+                # Check if this is the first occurrence ($ ACR column)
+                # The metric row should say "$ ACR" for the first column of each month group
+                metric_label = str(metric_row[i]).strip() if i < len(metric_row) else ''
+                
+                if val_str not in month_to_col_idx:
+                    # First occurrence of this month - this is the $ ACR column
+                    month_to_col_idx[val_str] = i
+                    unique_months.append(val_str)
     
-    if not month_cols:
+    if not unique_months:
         raise RevenueImportError("No fiscal month columns found")
     
-    # Build column names based on new format
-    # Columns: TPAccountName, ServiceCompGrouping, ServiceLevel4, [months...], Total
-    col_names = ['TPAccountName', 'ServiceCompGrouping', 'ServiceLevel4'] + month_cols + ['Total']
-    
-    # Pad if needed
-    while len(col_names) < len(df.columns):
-        col_names.append(f'Extra_{len(col_names)}')
-    col_names = col_names[:len(df.columns)]
+    # Build new column names - use positional indexing instead of named columns
+    # to avoid ambiguous column name issues
+    num_cols = len(df.columns)
+    col_names = [f'col_{i}' for i in range(num_cols)]
+    col_names[0] = 'TPAccountName'
+    col_names[1] = 'ServiceCompGrouping'
+    col_names[2] = 'ServiceLevel4'
     
     df.columns = col_names
     
@@ -283,7 +295,7 @@ def process_csv(df: Any) -> tuple[Any, list[str]]:
     df = df[df['TPAccountName'] != '']
     df = df.reset_index(drop=True)
     
-    return df, month_cols
+    return df, unique_months, month_to_col_idx
 
 
 def import_revenue_csv(
@@ -313,7 +325,7 @@ def import_revenue_csv(
     """
     # Load and process CSV
     df = load_csv(file_content, filename)
-    df, month_cols = process_csv(df)
+    df, month_cols, month_to_col_idx = process_csv(df)
     
     if df.empty:
         raise RevenueImportError("No data rows found in CSV")
@@ -377,9 +389,14 @@ def import_revenue_csv(
         if territory_alignments:
             seller_name = territory_alignments.get((customer_name, bucket))
         
-        # Process each month column
+        # Process each month column using column index
         for month_col, month_date in month_dates.items():
-            revenue = parse_currency(row.get(month_col, 0))
+            col_idx = month_to_col_idx.get(month_col)
+            if col_idx is None:
+                continue
+            # Access by column index (col_N format)
+            col_name = f'col_{col_idx}'
+            revenue = parse_currency(row.get(col_name, 0))
             fiscal_month = month_col
             
             # Determine if this is a bucket total or product detail
@@ -489,7 +506,7 @@ def import_revenue_csv_streaming(
     
     # Load and process CSV
     df = load_csv(file_content, filename)
-    df, month_cols = process_csv(df)
+    df, month_cols, month_to_col_idx = process_csv(df)
     
     if df.empty:
         yield {"error": "No data rows found in CSV"}
@@ -571,9 +588,14 @@ def import_revenue_csv_streaming(
         if territory_alignments:
             seller_name = territory_alignments.get((customer_name, bucket))
         
-        # Process each month column
+        # Process each month column using column index
         for month_col, month_date in month_dates.items():
-            revenue = parse_currency(row.get(month_col, 0))
+            col_idx = month_to_col_idx.get(month_col)
+            if col_idx is None:
+                continue
+            # Access by column index (col_N format)
+            col_name = f'col_{col_idx}'
+            revenue = parse_currency(row.get(col_name, 0))
             fiscal_month = month_col
             
             is_bucket_total = (product.lower() == 'total' or product == '')

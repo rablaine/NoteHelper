@@ -278,6 +278,52 @@ se_map = {
 }
 ```
 
+### Looking Up User Aliases (Email)
+
+Account team records include a `_msp_systemuserid_value` field - a GUID linking to the `systemusers` entity. Use this to look up the user's email/alias:
+
+```
+GET /api/data/v9.2/systemusers({systemuser_id})
+    ?$select=domainname,internalemailaddress
+```
+
+**Response:**
+```json
+{
+    "domainname": "alexbla@microsoft.com",
+    "internalemailaddress": "alexbla@microsoft.com"
+}
+```
+
+Extract the alias from the email:
+```python
+def get_user_alias(systemuser_id):
+    """Look up user and extract alias from email."""
+    url = f"{CRM_BASE_URL}/systemusers({systemuser_id})?$select=domainname,internalemailaddress"
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code != 200:
+        return None
+    
+    data = response.json()
+    email = data.get("domainname") or data.get("internalemailaddress") or ""
+    
+    if "@" in email:
+        return email.split("@")[0]  # "alexbla"
+    return None
+```
+
+**When to look up aliases:**
+
+We use an **on-demand** approach - only look up aliases when creating a **new** seller or SE:
+
+1. Process account teams, collecting seller info including `_msp_systemuserid_value`
+2. When creating a seller, check if they already exist in the database
+3. If new: call `get_user_alias(systemuser_id)` and set the alias
+4. If existing: skip the lookup (we already have their info)
+
+This minimizes API calls - after initial import, most sellers already exist.
+
 ---
 
 ## Milestones
