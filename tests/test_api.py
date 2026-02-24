@@ -98,6 +98,20 @@ def test_topic_autocomplete_empty_query(client):
     pass
 
 
+def test_api_customers_endpoint(client, sample_customer):
+    """Test the /api/customers endpoint returns customer list."""
+    response = client.get('/api/customers')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    # Check structure
+    customer = next((c for c in data if c['id'] == sample_customer.id), None)
+    assert customer is not None
+    assert customer['name'] == sample_customer.name
+    assert 'territory' in customer
+
+
 def test_invalid_api_endpoint(client):
     """Test that invalid API endpoints return 404."""
     response = client.get('/api/nonexistent')

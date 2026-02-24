@@ -1767,14 +1767,18 @@ function discardDraft() {
     }
 }
 
-// Set current date as default if creating new call log
+// Set current date as default if creating new call log (only if not already set by server)
 {% if not call_log %}
 document.addEventListener('DOMContentLoaded', function() {
-    var now = new Date();
-    var year = now.getFullYear();
-    var month = String(now.getMonth() + 1).padStart(2, '0');
-    var day = String(now.getDate()).padStart(2, '0');
-    document.getElementById('call_date').value = year + '-' + month + '-' + day;
+    var dateInput = document.getElementById('call_date');
+    // Only set to today if the server didn't provide a date
+    if (!dateInput.value) {
+        var now = new Date();
+        var year = now.getFullYear();
+        var month = String(now.getMonth() + 1).padStart(2, '0');
+        var day = String(now.getDate()).padStart(2, '0');
+        dateInput.value = year + '-' + month + '-' + day;
+    }
     
     // Initialize auto-save if customer is preselected
     startAutoSave();
