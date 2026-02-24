@@ -253,13 +253,11 @@
                         <table class="table table-bordered mb-0" id="calendarTable">
                             <thead>
                                 <tr class="text-center">
-                                    <th>Sun</th>
                                     <th>Mon</th>
                                     <th>Tue</th>
                                     <th>Wed</th>
                                     <th>Thu</th>
                                     <th>Fri</th>
-                                    <th>Sat</th>
                                 </tr>
                             </thead>
                                 <tbody id="calendarBody">
@@ -653,7 +651,7 @@
         const calendarTitle = document.getElementById('calendarTitle');
         
         // Show loading state
-        calendarBody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border spinner-border-sm" role="status"></div> Loading...</td></tr>';
+        calendarBody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="spinner-border spinner-border-sm" role="status"></div> Loading...</td></tr>';
         
         fetch(`/api/call-logs/calendar?year=${year}&month=${month}`)
             .then(response => response.json())
@@ -663,7 +661,7 @@
             })
             .catch(error => {
                 console.error('Error loading calendar:', error);
-                calendarBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error loading calendar</td></tr>';
+                calendarBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error loading calendar</td></tr>';
             });
     }
     
@@ -672,7 +670,6 @@
         calendarBody.innerHTML = '';
         
         const days = data.days || {};
-        const firstWeekday = data.first_weekday; // 0 = Sunday
         const daysInMonth = data.days_in_month;
         const todayDay = data.today_day;
         
@@ -687,29 +684,34 @@
             customerColorMap[id] = (index % 15) + 1;
         });
         
-        let currentDay = 1;
-        let rowCount = Math.ceil((firstWeekday + daysInMonth) / 7);
+        // Build array of weekday info for the month
+        // firstWeekday: 0=Sun, 1=Mon, ..., 6=Sat
+        // We want Mon-Fri only (columns 0-4 = Mon-Fri)
+        const weekdayDays = []; // Array of {dayNum, column} for weekdays only
+        for (let d = 1; d <= daysInMonth; d++) {
+            // Calculate day of week for this date
+            const dateObj = new Date(data.year, data.month - 1, d);
+            const dow = dateObj.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+            if (dow >= 1 && dow <= 5) { // Mon-Fri
+                weekdayDays.push({ dayNum: d, column: dow - 1 }); // column 0-4
+            }
+        }
         
-        for (let week = 0; week < rowCount; week++) {
+        // Build calendar rows (each row = Mon-Fri)
+        let dayIndex = 0;
+        while (dayIndex < weekdayDays.length) {
             const row = document.createElement('tr');
             
-            for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+            for (let col = 0; col < 5; col++) {
                 const cell = document.createElement('td');
                 cell.className = 'p-1';
                 cell.style.verticalAlign = 'top';
                 cell.style.height = '100px';
                 
-                const cellIndex = week * 7 + dayOfWeek;
-                
-                if (cellIndex < firstWeekday || currentDay > daysInMonth) {
-                    // Empty cell
-                    cell.classList.add('bg-light');
-                    if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
-                        cell.style.backgroundColor = 'rgba(255,255,255,0.03)';
-                    }
-                } else {
-                    // Day cell
-                    const dayNum = currentDay;
+                // Check if we have a day for this column in this week
+                if (dayIndex < weekdayDays.length && weekdayDays[dayIndex].column === col) {
+                    // This cell has content
+                    const dayNum = weekdayDays[dayIndex].dayNum;
                     
                     // Day number header
                     const dayHeader = document.createElement('div');
@@ -778,7 +780,13 @@
                         cell.appendChild(entriesContainer);
                     }
                     
-                    currentDay++;
+                    dayIndex++;
+                } else {
+                    // Empty cell (day not in this week's column)
+                    cell.classList.add('bg-light');
+                    if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
+                        cell.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                    }
                 }
                 
                 row.appendChild(cell);
