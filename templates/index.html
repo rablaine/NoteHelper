@@ -610,7 +610,7 @@
                         
                         callLogs.forEach(log => {
                             const entry = document.createElement('a');
-                            entry.href = `/call-logs/${log.id}`;
+                            entry.href = `/call-log/${log.id}`;
                             const colorIndex = customerColorMap[log.customer_id];
                             entry.className = `d-block text-decoration-none text-truncate mb-1 px-1 rounded cal-customer-${colorIndex}`;
                             entry.style.color = 'inherit';
