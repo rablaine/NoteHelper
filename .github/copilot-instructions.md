@@ -164,6 +164,12 @@ python app.py
 flask run
 ```
 
+**IMPORTANT - Virtual Environment:**
+- **ALWAYS activate venv before running Flask or any Python commands**
+- Use `& C:\dev\NoteHelper\venv\Scripts\Activate.ps1` before Flask commands
+- Never run `flask run` or `python` without activating venv first
+- When running Flask in background, combine: `& C:\dev\NoteHelper\venv\Scripts\Activate.ps1 ; flask run`
+
 **Testing:**
 ```powershell
 pytest

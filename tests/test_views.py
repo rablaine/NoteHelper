@@ -20,6 +20,52 @@ def test_home_page_with_data(client, sample_data):
     assert b'Acme Corp' in response.data
 
 
+def test_calendar_api_returns_json(client, sample_data):
+    """Test calendar API returns proper JSON with call log data."""
+    response = client.get('/api/call-logs/calendar')
+    assert response.status_code == 200
+    
+    data = response.get_json()
+    assert 'year' in data
+    assert 'month' in data
+    assert 'month_name' in data
+    assert 'days' in data
+    assert 'first_weekday' in data
+    assert 'days_in_month' in data
+    assert 'prev_year' in data
+    assert 'prev_month' in data
+    assert 'next_year' in data
+    assert 'next_month' in data
+
+
+def test_calendar_api_with_params(client, sample_data):
+    """Test calendar API accepts year and month parameters."""
+    response = client.get('/api/call-logs/calendar?year=2025&month=6')
+    assert response.status_code == 200
+    
+    data = response.get_json()
+    assert data['year'] == 2025
+    assert data['month'] == 6
+    assert data['month_name'] == 'June'
+    assert data['prev_month'] == 5
+    assert data['next_month'] == 7
+
+
+def test_calendar_api_month_boundaries(client, sample_data):
+    """Test calendar API handles month boundary navigation."""
+    # Test December -> January
+    response = client.get('/api/call-logs/calendar?year=2025&month=12')
+    data = response.get_json()
+    assert data['next_year'] == 2026
+    assert data['next_month'] == 1
+    
+    # Test January -> December
+    response = client.get('/api/call-logs/calendar?year=2025&month=1')
+    data = response.get_json()
+    assert data['prev_year'] == 2024
+    assert data['prev_month'] == 12
+
+
 def test_customers_list_alphabetical(client, sample_data):
     """Test customers list in alphabetical view."""
     response = client.get('/customers')
