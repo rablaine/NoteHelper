@@ -298,7 +298,23 @@ def customer_update_notes(id):
     return redirect(url_for('customers.customer_view', id=id))
 
 
-# API route
+# API routes
+@customers_bp.route('/api/customers', methods=['GET'])
+def api_customers_list():
+    """API endpoint for listing all customers (for quick create modal)."""
+    customers = Customer.query.options(
+        db.joinedload(Customer.territory)
+    ).order_by(Customer.name).all()
+    
+    results = [{
+        'id': c.id,
+        'name': c.name,
+        'territory': c.territory.name if c.territory else None
+    } for c in customers]
+    
+    return jsonify(results), 200
+
+
 @customers_bp.route('/api/customers/autocomplete', methods=['GET'])
 def api_customers_autocomplete():
     """API endpoint for customer name autocomplete."""

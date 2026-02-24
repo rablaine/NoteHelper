@@ -149,6 +149,9 @@
     .cal-customer-15.cal-highlight { background-color: rgba(184, 134, 11, 0.75) !important; box-shadow: 0 0 0 2px rgba(184, 134, 11, 0.9); }
     
     [data-customer-id] { cursor: pointer; transition: all 0.15s ease; }
+    .cal-add-btn { opacity: 0.3; transition: opacity 0.15s; font-size: 0.85rem; }
+    .cal-add-btn:hover { opacity: 1; color: var(--bs-primary) !important; }
+    #calendarTable td:hover .cal-add-btn { opacity: 0.7; }
 </style>
 
 <div class="row mt-4" id="draftsSection" style="display: none;">
@@ -334,7 +337,111 @@
 </div>
 {% endif %}
 
+<!-- Quick Create Customer Picker Modal -->
+<div class="modal fade" id="quickCreateModal" tabindex="-1" aria-labelledby="quickCreateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quickCreateModalLabel">
+                    <i class="bi bi-plus-circle"></i> New Call Log for <span id="quickCreateDate"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Select a customer to create a call log:</p>
+                <input type="text" class="form-control mb-3" id="quickCreateSearch" placeholder="Search customers...">
+                <div class="list-group" id="quickCreateCustomerList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Customer list will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    // ===== QUICK CREATE FROM CALENDAR =====
+    let quickCreateDate = null;
+    let quickCreateModal = null;
+    
+    function openQuickCreateModal(dateStr) {
+        // Lazily initialize modal
+        if (!quickCreateModal) {
+            quickCreateModal = new bootstrap.Modal(document.getElementById('quickCreateModal'));
+        }
+        quickCreateDate = dateStr;
+        // Format date for display
+        const dateObj = new Date(dateStr + 'T00:00:00');
+        const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+        document.getElementById('quickCreateDate').textContent = dateObj.toLocaleDateString('en-US', options);
+        
+        // Load customers
+        loadQuickCreateCustomers();
+        quickCreateModal.show();
+        
+        // Focus search after modal opens
+        document.getElementById('quickCreateModal').addEventListener('shown.bs.modal', function() {
+            document.getElementById('quickCreateSearch').focus();
+        }, { once: true });
+    }
+    
+    function loadQuickCreateCustomers() {
+        const listEl = document.getElementById('quickCreateCustomerList');
+        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        
+        fetch('/api/customers')
+            .then(r => r.json())
+            .then(customers => {
+                renderQuickCreateCustomers(customers);
+            })
+            .catch(err => {
+                listEl.innerHTML = '<div class="alert alert-danger">Error loading customers</div>';
+            });
+    }
+    
+    function renderQuickCreateCustomers(customers, filter = '') {
+        const listEl = document.getElementById('quickCreateCustomerList');
+        listEl.innerHTML = '';
+        
+        const filtered = filter 
+            ? customers.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()))
+            : customers;
+        
+        if (filtered.length === 0) {
+            listEl.innerHTML = '<div class="text-muted text-center py-3">No customers found</div>';
+            return;
+        }
+        
+        filtered.forEach(customer => {
+            const item = document.createElement('a');
+            item.href = `/call-log/new?customer_id=${customer.id}&date=${quickCreateDate}`;
+            item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+            item.innerHTML = `
+                <div>
+                    <strong>${customer.name}</strong>
+                    ${customer.territory ? `<small class="text-muted ms-2"><i class="bi bi-geo-alt"></i> ${customer.territory}</small>` : ''}
+                </div>
+                <i class="bi bi-chevron-right text-muted"></i>
+            `;
+            listEl.appendChild(item);
+        });
+        
+        // Store for filtering
+        listEl._allCustomers = customers;
+    }
+    
+    // Search filter
+    document.getElementById('quickCreateSearch').addEventListener('input', function(e) {
+        const listEl = document.getElementById('quickCreateCustomerList');
+        if (listEl._allCustomers) {
+            renderQuickCreateCustomers(listEl._allCustomers, e.target.value);
+        }
+    });
+    
+    // Clear search when modal closes
+    document.getElementById('quickCreateModal').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('quickCreateSearch').value = '';
+    });
+    
     // ===== DRAFT MANAGEMENT =====
     const DRAFT_KEY_PREFIX = 'notehelper_draft_';
     
@@ -486,8 +593,27 @@
     let calendarMonth = new Date().getMonth() + 1; // 1-indexed
     let calendarLoaded = false;
     
+    // Tab persistence with localStorage
+    const TAB_STORAGE_KEY = 'notehelper_home_tab';
+    
+    // Apply saved tab after Bootstrap is loaded
+    window.addEventListener('DOMContentLoaded', function() {
+        const savedTab = localStorage.getItem(TAB_STORAGE_KEY);
+        if (savedTab === 'calendar') {
+            const calendarTabEl = document.getElementById('calendar-tab');
+            const calendarTab = new bootstrap.Tab(calendarTabEl);
+            calendarTab.show();
+        }
+    });
+    
+    // Save tab selection when changed
+    document.getElementById('list-tab').addEventListener('shown.bs.tab', function() {
+        localStorage.setItem(TAB_STORAGE_KEY, 'list');
+    });
+    
     // Load calendar when tab is shown
     document.getElementById('calendar-tab').addEventListener('shown.bs.tab', function() {
+        localStorage.setItem(TAB_STORAGE_KEY, 'calendar');
         if (!calendarLoaded) {
             loadCalendar(calendarYear, calendarMonth);
             calendarLoaded = true;
@@ -597,6 +723,22 @@
                         dayNumber.textContent = dayNum;
                     }
                     dayHeader.appendChild(dayNumber);
+                    
+                    // Add "+" button for quick create
+                    const addBtn = document.createElement('a');
+                    addBtn.href = '#';
+                    addBtn.className = 'text-muted text-decoration-none cal-add-btn';
+                    addBtn.innerHTML = '<i class="bi bi-plus-circle"></i>';
+                    addBtn.title = 'New call log';
+                    // Build date string for this day
+                    const dateStr = `${data.year}-${String(data.month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                    addBtn.setAttribute('data-date', dateStr);
+                    addBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        openQuickCreateModal(dateStr);
+                    });
+                    dayHeader.appendChild(addBtn);
+                    
                     cell.appendChild(dayHeader);
                     
                     // Call log entries for this day

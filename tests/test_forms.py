@@ -116,6 +116,24 @@ def test_call_log_create_with_customer_preselect(client, sample_data):
     # Territory may or may not be auto-selected depending on logic
 
 
+def test_call_log_create_with_date_param(client, sample_data):
+    """Test call log form with date pre-filled from URL parameter."""
+    customer_id = sample_data['customer1_id']
+    response = client.get(f'/call-log/new?customer_id={customer_id}&date=2026-02-03')
+    assert response.status_code == 200
+    # The date should be pre-filled in the form
+    assert b'2026-02-03' in response.data
+
+
+def test_call_log_create_with_invalid_date_param(client, sample_data):
+    """Test call log form falls back to today with invalid date."""
+    customer_id = sample_data['customer1_id']
+    response = client.get(f'/call-log/new?customer_id={customer_id}&date=invalid-date')
+    assert response.status_code == 200
+    # Should still load successfully (falls back to today)
+    assert b'New Call Log' in response.data
+
+
 def test_call_log_edit_form_loads(client, sample_data):
     """Test call log edit form loads."""
     call_id = sample_data['call1_id']
