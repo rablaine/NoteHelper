@@ -66,13 +66,18 @@
                         {% endif %}
                     </div>
                     
-                    <!-- Call Date and Partners side-by-side -->
+                    <!-- Call Date/Time and Partners side-by-side -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="call_date" class="form-label">Call Date *</label>
-                            <input type="date" class="form-control" id="call_date" name="call_date" 
-                                   value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
-                                   required>
+                            <label for="call_date" class="form-label">Call Date & Time *</label>
+                            <div class="d-flex gap-2">
+                                <input type="date" class="form-control" id="call_date" name="call_date" 
+                                       value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
+                                       required style="flex: 1;">
+                                <input type="time" class="form-control" id="call_time" name="call_time" 
+                                       value="{% if call_log and (call_log.call_date.hour != 0 or call_log.call_date.minute != 0) %}{{ call_log.call_date.strftime('%H:%M') }}{% else %}{{ now_time }}{% endif %}" 
+                                       style="width: 130px;">
+                            </div>
                         </div>
                         
                         <div class="col-md-6">
@@ -153,8 +158,15 @@
                             <label for="milestone_search" class="form-label mb-0">
                                 <i class="bi bi-flag"></i> Milestone (optional)
                             </label>
-                            <div id="milestone_loading" class="text-muted small" style="display: none;">
-                                <span class="spinner-border spinner-border-sm me-1"></span> Loading milestones...
+                            <div class="d-flex align-items-center gap-2">
+                                <div id="milestone_loading" class="text-muted small" style="display: none;">
+                                    <span class="spinner-border spinner-border-sm me-1"></span> Loading milestones...
+                                </div>
+                                {% if ai_config and ai_config.enabled %}
+                                <button type="button" class="btn btn-sm btn-outline-success" id="aiMatchMilestoneBtn" style="display: none;" onclick="aiMatchMilestone()">
+                                    <i class="bi bi-stars"></i> <span id="aiMatchMilestoneBtnText">Match Milestone</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                         <input type="text" class="form-control" id="milestone_search" 
@@ -914,6 +926,7 @@ function loadMilestonesForCustomer(customerId) {
         .then(response => response.json())
         .then(data => {
             milestoneLoading.style.display = 'none';
+            const matchBtn = document.getElementById('aiMatchMilestoneBtn');
             
             if (data.success && data.milestones) {
                 allMilestones = data.milestones;
@@ -921,9 +934,14 @@ function loadMilestonesForCustomer(customerId) {
                 milestoneSearch.placeholder = `Search ${allMilestones.length} milestone${allMilestones.length !== 1 ? 's' : ''}...`;
                 milestoneHelpText.textContent = `Found ${allMilestones.length} milestone${allMilestones.length !== 1 ? 's' : ''} for this customer`;
                 inlineTpidSection.style.display = 'none';
+                // Show AI match button if milestones loaded
+                if (matchBtn && allMilestones.length > 0) {
+                    matchBtn.style.display = 'inline-block';
+                }
             } else if (data.needs_tpid) {
                 milestoneSearch.placeholder = 'Link customer to MSX first';
                 milestoneHelpText.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Customer has no MSX account linked</span>';
+                if (matchBtn) matchBtn.style.display = 'none';
                 
                 // Show inline TPID link section
                 const customer = customerData[customerId];
@@ -1439,6 +1457,81 @@ document.getElementById('aiSuggestBtn').addEventListener('click', function() {
     });
 });
 
+// AI Milestone Matching
+function aiMatchMilestone() {
+    const btn = document.getElementById('aiMatchMilestoneBtn');
+    const btnText = document.getElementById('aiMatchMilestoneBtnText');
+    const originalText = btnText.textContent;
+    
+    // Get call notes
+    const callNotes = quill.getText().trim();
+    if (callNotes.length < 20) {
+        alert('Please add more call notes before matching milestones.');
+        return;
+    }
+    
+    // Need milestones to match against
+    if (!allMilestones || allMilestones.length === 0) {
+        alert('No milestones loaded. Please select a customer first.');
+        return;
+    }
+    
+    // Show loading state
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Matching...';
+    
+    // Build milestone context for AI
+    const milestoneContext = allMilestones.map(m => ({
+        id: m.id,
+        name: m.name,
+        status: m.status,
+        opportunity: m.opportunity_name || '',
+        workload: m.workload || ''
+    }));
+    
+    fetch('/api/ai/match-milestone', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            call_notes: callNotes,
+            milestones: milestoneContext
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btnText.textContent = originalText;
+        
+        if (data.success && data.matched_milestone_id) {
+            // Find the matched milestone in our list
+            const matched = allMilestones.find(m => m.id === data.matched_milestone_id);
+            if (matched) {
+                // Show confirmation
+                const confirmMsg = `AI suggests milestone:\n\n"${matched.name}"\n${matched.opportunity_name ? 'Opportunity: ' + matched.opportunity_name : ''}\n\nReason: ${data.reason || 'Best match based on call notes'}\n\nAdd this milestone to the call log?`;
+                
+                if (confirm(confirmMsg)) {
+                    // Add the milestone
+                    selectMilestone(matched);
+                    btnText.textContent = 'Milestone added!';
+                    setTimeout(() => { btnText.textContent = originalText; }, 2000);
+                }
+            } else {
+                alert('Could not find the matched milestone. Try selecting it manually.');
+            }
+        } else if (data.error) {
+            alert('AI Error: ' + data.error);
+        } else {
+            alert('AI could not find a matching milestone. Please select one manually.');
+        }
+    })
+    .catch(error => {
+        console.error('AI milestone match failed:', error);
+        btn.disabled = false;
+        btnText.textContent = originalText;
+        alert('Failed to match milestone. Please try again.');
+    });
+}
+
 // ===== AUTO-SAVE FUNCTIONALITY =====
 const DRAFT_KEY_PREFIX = 'notehelper_draft_';
 const MAX_DRAFTS = 5;
@@ -1494,6 +1587,7 @@ function saveDraft() {
         customer_id: document.getElementById('customer_id').value,
         customer_name: getCustomerName(),
         call_date: document.getElementById('call_date').value,
+        call_time: document.getElementById('call_time').value,
         content: quill.root.innerHTML,
         topics: Array.from(selectedTopicsContainer.querySelectorAll('input[name="topic_ids"]')).map(input => ({
             id: parseInt(input.value),
@@ -1561,6 +1655,10 @@ function restoreDraft() {
         // Restore form data
         if (draft.call_date) {
             document.getElementById('call_date').value = draft.call_date;
+        }
+        
+        if (draft.call_time) {
+            document.getElementById('call_time').value = draft.call_time;
         }
         
         if (draft.content) {
@@ -1739,8 +1837,9 @@ function startAutoSave() {
         // Listen to Quill text changes
         quill.on('text-change', debouncedAutoSave);
         
-        // Listen to date field changes
+        // Listen to date and time field changes
         document.getElementById('call_date').addEventListener('input', debouncedAutoSave);
+        document.getElementById('call_time').addEventListener('input', debouncedAutoSave);
         
         console.log('Debounced auto-save enabled for customer', customerId);
     }
@@ -1821,6 +1920,7 @@ function discardDraft() {
         // Clear the form
         quill.setContents([]);
         document.getElementById('call_date').value = '';
+        document.getElementById('call_time').value = '';
         document.querySelectorAll('.badge[data-topic-id]').forEach(badge => badge.remove());
         document.querySelectorAll('.badge[data-partner-id]').forEach(badge => badge.remove());
         
@@ -2079,10 +2179,19 @@ function importSelectedMeeting() {
             // Set Quill content
             quill.root.innerHTML = content;
             
-            // Update the call time if meeting has a start time
+            // Update the call date and time from meeting
             if (meeting.start_time) {
-                // For now, just set the date - time will be stored when saved via API
-                // The form could be enhanced to include a hidden time field
+                var meetingDate = new Date(meeting.start_time);
+                // Set date field (YYYY-MM-DD)
+                var dateStr = meetingDate.getFullYear() + '-' + 
+                    String(meetingDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(meetingDate.getDate()).padStart(2, '0');
+                document.getElementById('call_date').value = dateStr;
+                
+                // Set time field (HH:MM)
+                var timeStr = String(meetingDate.getHours()).padStart(2, '0') + ':' + 
+                    String(meetingDate.getMinutes()).padStart(2, '0');
+                document.getElementById('call_time').value = timeStr;
             }
             
             // Auto-suggest topics if any technologies were identified

@@ -50,16 +50,14 @@ class TestFuzzyMatching:
 
 
 class TestMeetingsResponseParsing:
-    """Test parsing of WorkIQ meeting list responses."""
+    """Test parsing of WorkIQ meeting list responses (markdown table format)."""
     
     def test_parse_single_meeting(self):
-        """Test parsing a single meeting response."""
+        """Test parsing a single meeting from table format."""
         response = """
-        MEETING: Weekly Sync with Customer A
-        TIME: 10:00
-        COMPANY: Customer A Inc
-        ATTENDEES: John Smith, Jane Doe
-        ---
+| Time | Meeting Title | External Company |
+|------|---------------|------------------|
+| 10:00 AM | **Weekly Sync with Customer A** | Customer A Inc |
         """
         meetings = _parse_meetings_response(response, "2026-02-24")
         
@@ -68,21 +66,14 @@ class TestMeetingsResponseParsing:
         assert meetings[0]['customer'] == "Customer A Inc"
         assert meetings[0]['start_time'].hour == 10
         assert meetings[0]['start_time'].minute == 0
-        assert "John Smith" in meetings[0]['attendees']
         
     def test_parse_multiple_meetings(self):
-        """Test parsing multiple meetings."""
+        """Test parsing multiple meetings from table format."""
         response = """
-        MEETING: Morning Standup
-        TIME: 09:00
-        COMPANY: Acme Corp
-        ATTENDEES: Alice, Bob
-        ---
-        MEETING: Afternoon Review
-        TIME: 14:30
-        COMPANY: Beta LLC
-        ATTENDEES: Charlie
-        ---
+| Time | Meeting Title | External Company |
+|------|---------------|------------------|
+| 9:00 AM | **Morning Standup** | Acme Corp |
+| 2:30 PM | **Afternoon Review** | Beta LLC |
         """
         meetings = _parse_meetings_response(response, "2026-02-24")
         
@@ -94,7 +85,7 @@ class TestMeetingsResponseParsing:
         
     def test_parse_no_meetings(self):
         """Test parsing response with no meetings."""
-        response = "NO_MEETINGS"
+        response = "There are no meetings scheduled for this date."
         meetings = _parse_meetings_response(response, "2026-02-24")
         
         assert len(meetings) == 0
@@ -102,11 +93,9 @@ class TestMeetingsResponseParsing:
     def test_parse_12_hour_time(self):
         """Test parsing 12-hour time format."""
         response = """
-        MEETING: Afternoon Call
-        TIME: 02:30 PM
-        COMPANY: Test Corp
-        ATTENDEES: Test User
-        ---
+| Time | Meeting Title | External Company |
+|------|---------------|------------------|
+| 2:30 PM | **Afternoon Call** | Test Corp |
         """
         meetings = _parse_meetings_response(response, "2026-02-24")
         

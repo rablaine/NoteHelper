@@ -207,11 +207,15 @@ def call_log_create():
             flash('Call log content is required.', 'danger')
             return redirect(url_for('call_logs.call_log_create'))
         
-        # Parse call date (datetime with midnight for manual entries)
+        # Parse call date and time
+        call_time_str = request.form.get('call_time', '')
         try:
-            call_date = datetime.strptime(call_date_str, '%Y-%m-%d')
+            if call_time_str:
+                call_date = datetime.strptime(f'{call_date_str} {call_time_str}', '%Y-%m-%d %H:%M')
+            else:
+                call_date = datetime.strptime(call_date_str, '%Y-%m-%d')
         except ValueError:
-            flash('Invalid date format.', 'danger')
+            flash('Invalid date/time format.', 'danger')
             return redirect(url_for('call_logs.call_log_create'))
         
         # Get customer and auto-fill territory
@@ -285,7 +289,7 @@ def call_log_create():
     # Capture referrer for redirect after creation
     referrer = request.referrer or ''
     
-    # Pass date (from query param or today)
+    # Pass date and time (from query param or now)
     from datetime import date
     from app.models import AIConfig
     date_param = request.args.get('date', '')
@@ -298,6 +302,9 @@ def call_log_create():
             today = date.today().strftime('%Y-%m-%d')
     else:
         today = date.today().strftime('%Y-%m-%d')
+    
+    # Current time for new call logs (default to now)
+    now_time = datetime.now().strftime('%H:%M')
     
     # Load AI config for AI button visibility
     ai_config = AIConfig.query.first()
@@ -314,6 +321,7 @@ def call_log_create():
                          previous_calls=previous_calls,
                          referrer=referrer,
                          today=today,
+                         now_time=now_time,
                          ai_config=ai_config)
 
 
@@ -350,12 +358,15 @@ def call_log_edit(id):
             flash('Call log content is required.', 'danger')
             return redirect(url_for('call_logs.call_log_edit', id=id))
         
-        # Parse call date (datetime with midnight for manual entries)
-        # Note: If editing a call log that had a meeting time, it will reset to midnight
+        # Parse call date and time
+        call_time_str = request.form.get('call_time', '')
         try:
-            call_date = datetime.strptime(call_date_str, '%Y-%m-%d')
+            if call_time_str:
+                call_date = datetime.strptime(f'{call_date_str} {call_time_str}', '%Y-%m-%d %H:%M')
+            else:
+                call_date = datetime.strptime(call_date_str, '%Y-%m-%d')
         except ValueError:
-            flash('Invalid date format.', 'danger')
+            flash('Invalid date/time format.', 'danger')
             return redirect(url_for('call_logs.call_log_edit', id=id))
         
         # Update call log

@@ -205,4 +205,113 @@ def api_ai_suggest_topics():
         return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
 
 
+@ai_bp.route('/api/ai/match-milestone', methods=['POST'])
+def api_ai_match_milestone():
+    """Match call notes to the most relevant milestone using AI."""
+    
+    # Check if AI features are enabled
+    ai_config = AIConfig.query.first()
+    if not ai_config or not ai_config.enabled:
+        return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
+    
+    if not ai_config.endpoint_url or not ai_config.deployment_name:
+        return jsonify({'success': False, 'error': 'AI configuration is incomplete'}), 400
+    
+    # Get data from request
+    data = request.get_json()
+    call_notes = data.get('call_notes', '').strip()
+    milestones = data.get('milestones', [])
+    
+    if not call_notes or len(call_notes) < 20:
+        return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
+    
+    if not milestones or len(milestones) == 0:
+        return jsonify({'success': False, 'error': 'No milestones provided'}), 400
+    
+    # Format milestones for the AI
+    milestone_list = "\n".join([
+        f"- ID: {m.get('id')}, Name: {m.get('name')}, Status: {m.get('status')}, Opportunity: {m.get('opportunity', '')}, Workload: {m.get('workload', '')}"
+        for m in milestones
+    ])
+    
+    system_prompt = """You are an expert at matching customer call notes to sales milestones.
+Your task is to identify which milestone best matches the topics discussed in the call notes.
+
+Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
+{"milestone_id": "THE_MATCHED_ID", "reason": "Brief explanation of why this milestone matches"}
+
+If no milestone is a good match, respond with:
+{"milestone_id": null, "reason": "No milestone matches the call discussion"}"""
+    
+    user_prompt = f"""Call Notes:
+{call_notes[:2000]}
+
+Available Milestones:
+{milestone_list}
+
+Which milestone best matches what was discussed in the call?"""
+    
+    try:
+        client = get_azure_openai_client(ai_config)
+        
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=150,
+            model=ai_config.deployment_name
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+        
+        # Log the query
+        log_entry = AIQueryLog(
+            user_id=g.user.id,
+            request_text=f"Match milestone: {call_notes[:500]}...",
+            response_text=response_text[:500],
+            success=True
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        # Parse JSON response
+        import re
+        # Remove markdown code blocks if present
+        clean_text = response_text
+        if '```' in clean_text:
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', clean_text, re.DOTALL)
+            if match:
+                clean_text = match.group(1).strip()
+        
+        result = json.loads(clean_text)
+        
+        return jsonify({
+            'success': True,
+            'matched_milestone_id': result.get('milestone_id'),
+            'reason': result.get('reason', '')
+        })
+        
+    except json.JSONDecodeError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Could not parse AI response: {response_text[:100]}'
+        }), 500
+        
+    except Exception as e:
+        error_msg = str(e)
+        
+        log_entry = AIQueryLog(
+            user_id=g.user.id,
+            request_text=f"Match milestone: {call_notes[:500]}...",
+            response_text=None,
+            success=False,
+            error_message=error_msg[:500]
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
+
+
 
