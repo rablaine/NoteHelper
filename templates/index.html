@@ -200,7 +200,7 @@
                                             {{ call.customer.name }}
                                         </a>
                                     </h5>
-                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
+                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</small>
                                 </div>
                                 <div class="mb-2">
                                     {% if call.seller %}
@@ -673,6 +673,14 @@
         const daysInMonth = data.days_in_month;
         const todayDay = data.today_day;
         
+        // Helper to escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
         // Build a map of customer_id -> color index for THIS month only
         const customerColorMap = {};
         const allCustomerIds = new Set();
@@ -758,8 +766,18 @@
                             const colorIndex = customerColorMap[log.customer_id];
                             entry.className = `d-block text-decoration-none text-truncate mb-1 px-1 rounded cal-customer-${colorIndex}`;
                             entry.style.color = 'inherit';
-                            entry.textContent = log.customer_name;
-                            entry.title = log.customer_name;
+                            
+                            // Build entry content with indicators
+                            let indicators = '';
+                            if (log.has_milestone) {
+                                indicators += '<i class="bi bi-flag-fill text-success" title="Has milestone"></i> ';
+                            }
+                            if (log.has_task) {
+                                indicators += '<i class="bi bi-check2-square text-info" title="Has task"></i> ';
+                            }
+                            let timePrefix = log.time ? `<small class="text-muted">${escapeHtml(log.time)}</small> ` : '';
+                            entry.innerHTML = indicators + timePrefix + escapeHtml(log.customer_name);
+                            entry.title = (log.time ? log.time + ' - ' : '') + log.customer_name + (log.has_milestone ? ' (Milestone)' : '') + (log.has_task ? ' (Task)' : '');
                             entry.setAttribute('data-customer-id', log.customer_id);
                             
                             // Hover: highlight all entries for this customer

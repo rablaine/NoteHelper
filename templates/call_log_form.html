@@ -132,7 +132,16 @@
                         </div>
                     </div>
                     
+                    <!-- Content Editor with Import Button -->
                     <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">Call Notes *</label>
+                            {% if not call_log %}
+                            <button type="button" class="btn btn-sm btn-outline-info" id="importMeetingBtn" onclick="openMeetingImport()">
+                                <i class="bi bi-calendar-event"></i> Import from Meeting
+                            </button>
+                            {% endif %}
+                        </div>
                         <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
                         <textarea name="content" id="content" style="display:none;"></textarea>
                         <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
@@ -311,7 +320,7 @@
                 {% for call in previous_calls %}
                     <div class="mb-4 pb-3 {% if not loop.last %}border-bottom{% endif %}">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="mb-0">{{ call.call_date.strftime('%b %d, %Y') }}</h6>
+                            <h6 class="mb-0">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</h6>
                             <a href="{{ url_for('call_logs.call_log_view', id=call.id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
                                 <i class="bi bi-box-arrow-up-right"></i> View
                             </a>
@@ -331,6 +340,59 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Meeting Import Modal -->
+{% if not call_log %}
+<div class="modal fade" id="meetingImportModal" tabindex="-1" aria-labelledby="meetingImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="meetingImportModalLabel">
+                    <i class="bi bi-calendar-event"></i> Import from Meeting
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="meetingImportLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Loading meetings for this date...</p>
+                </div>
+                
+                <div id="meetingImportError" class="alert alert-danger" style="display: none;">
+                    <i class="bi bi-exclamation-triangle"></i> <span id="meetingImportErrorText"></span>
+                </div>
+                
+                <div id="meetingImportContent" style="display: none;">
+                    <div id="meetingAutoSelectNote" class="alert alert-info mb-3" style="display: none;">
+                        <i class="bi bi-magic"></i> <span id="meetingAutoSelectReason"></span>
+                    </div>
+                    
+                    <div id="meetingNoResults" class="alert alert-warning" style="display: none;">
+                        <i class="bi bi-calendar-x"></i> No meetings found for this date.
+                    </div>
+                    
+                    <div class="list-group" id="meetingList">
+                        <!-- Meetings will be populated here -->
+                    </div>
+                </div>
+                
+                <div id="meetingSummaryLoading" class="text-center py-4" style="display: none;">
+                    <div class="spinner-border text-success" role="status"></div>
+                    <p class="mt-2">Generating 250-word summary...</p>
+                    <small class="text-muted">This may take up to 2 minutes for long transcripts</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="importSelectedMeetingBtn" onclick="importSelectedMeeting()" disabled>
+                    <i class="bi bi-download"></i> Import Summary
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -1808,6 +1870,268 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('resize', matchCardHeights);
     {% endif %}
 });
+{% endif %}
+
+// =============================================================================
+// Meeting Import Functions
+// =============================================================================
+{% if not call_log %}
+var meetingImportModal = null;
+var selectedMeetingIndex = null;
+var loadedMeetings = [];
+
+function openMeetingImport() {
+    // Initialize modal if needed
+    if (!meetingImportModal) {
+        meetingImportModal = new bootstrap.Modal(document.getElementById('meetingImportModal'));
+    }
+    
+    // Reset state
+    selectedMeetingIndex = null;
+    loadedMeetings = [];
+    document.getElementById('meetingImportLoading').style.display = 'block';
+    document.getElementById('meetingImportError').style.display = 'none';
+    document.getElementById('meetingImportContent').style.display = 'none';
+    document.getElementById('meetingSummaryLoading').style.display = 'none';
+    document.getElementById('meetingAutoSelectNote').style.display = 'none';
+    document.getElementById('meetingNoResults').style.display = 'none';
+    document.getElementById('importSelectedMeetingBtn').disabled = true;
+    
+    // Show modal
+    meetingImportModal.show();
+    
+    // Get date and customer name
+    var dateStr = document.getElementById('call_date').value;
+    var customerName = '';
+    var customerSelect = document.getElementById('customer_id');
+    if (customerSelect.selectedIndex > 0) {
+        customerName = customerSelect.options[customerSelect.selectedIndex].text;
+        // Remove the TPID part: "Customer Name (12345)" -> "Customer Name"
+        customerName = customerName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    }
+    
+    if (!dateStr) {
+        showMeetingError('Please select a date first.');
+        return;
+    }
+    
+    // Fetch meetings
+    var url = '/api/meetings?date=' + encodeURIComponent(dateStr);
+    if (customerName) {
+        url += '&customer_name=' + encodeURIComponent(customerName);
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('meetingImportLoading').style.display = 'none';
+            
+            if (data.error) {
+                showMeetingError(data.error);
+                return;
+            }
+            
+            loadedMeetings = data.meetings || [];
+            
+            if (loadedMeetings.length === 0) {
+                document.getElementById('meetingImportContent').style.display = 'block';
+                document.getElementById('meetingNoResults').style.display = 'block';
+                return;
+            }
+            
+            // Render meetings
+            renderMeetingList(loadedMeetings, data.auto_selected_index, data.auto_selected_reason);
+        })
+        .catch(error => {
+            console.error('Error fetching meetings:', error);
+            showMeetingError('Failed to fetch meetings. Make sure WorkIQ is configured correctly.');
+        });
+}
+
+function showMeetingError(message) {
+    document.getElementById('meetingImportLoading').style.display = 'none';
+    document.getElementById('meetingImportError').style.display = 'block';
+    document.getElementById('meetingImportErrorText').textContent = message;
+}
+
+function renderMeetingList(meetings, autoSelectedIndex, autoSelectedReason) {
+    var listEl = document.getElementById('meetingList');
+    listEl.innerHTML = '';
+    
+    // Show auto-select note if applicable
+    if (autoSelectedIndex !== null && autoSelectedReason) {
+        document.getElementById('meetingAutoSelectNote').style.display = 'block';
+        document.getElementById('meetingAutoSelectReason').textContent = autoSelectedReason;
+        selectedMeetingIndex = autoSelectedIndex;
+        document.getElementById('importSelectedMeetingBtn').disabled = false;
+    }
+    
+    meetings.forEach(function(meeting, index) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start';
+        if (index === autoSelectedIndex) {
+            item.classList.add('active');
+        }
+        item.onclick = function() { selectMeeting(index); };
+        
+        item.innerHTML = `
+            <div class="ms-2 me-auto">
+                <div class="fw-bold">${escapeHtml(meeting.title)}</div>
+                <small class="text-${index === autoSelectedIndex ? 'light' : 'muted'}">
+                    <i class="bi bi-clock"></i> ${meeting.start_time_display || 'Time unknown'}
+                    ${meeting.customer ? ' &bull; <i class="bi bi-building"></i> ' + escapeHtml(meeting.customer) : ''}
+                </small>
+                ${meeting.attendees && meeting.attendees.length > 0 ? 
+                    '<br><small class="text-' + (index === autoSelectedIndex ? 'light' : 'muted') + '"><i class="bi bi-people"></i> ' + 
+                    meeting.attendees.slice(0, 3).map(escapeHtml).join(', ') + 
+                    (meeting.attendees.length > 3 ? ' +' + (meeting.attendees.length - 3) + ' more' : '') + '</small>' 
+                    : ''}
+            </div>
+            <span class="badge bg-${index === autoSelectedIndex ? 'light text-dark' : 'primary'} rounded-pill">
+                ${index === autoSelectedIndex ? '<i class="bi bi-check"></i> Selected' : 'Select'}
+            </span>
+        `;
+        
+        listEl.appendChild(item);
+    });
+    
+    document.getElementById('meetingImportContent').style.display = 'block';
+}
+
+function selectMeeting(index) {
+    selectedMeetingIndex = index;
+    document.getElementById('importSelectedMeetingBtn').disabled = false;
+    
+    // Update visual selection
+    var items = document.querySelectorAll('#meetingList .list-group-item');
+    items.forEach(function(item, i) {
+        if (i === index) {
+            item.classList.add('active');
+            // Update badge
+            item.querySelector('.badge').className = 'badge bg-light text-dark rounded-pill';
+            item.querySelector('.badge').innerHTML = '<i class="bi bi-check"></i> Selected';
+            // Update text colors
+            item.querySelectorAll('small').forEach(function(el) {
+                el.classList.remove('text-muted');
+                el.classList.add('text-light');
+            });
+        } else {
+            item.classList.remove('active');
+            item.querySelector('.badge').className = 'badge bg-primary rounded-pill';
+            item.querySelector('.badge').textContent = 'Select';
+            item.querySelectorAll('small').forEach(function(el) {
+                el.classList.remove('text-light');
+                el.classList.add('text-muted');
+            });
+        }
+    });
+}
+
+function importSelectedMeeting() {
+    if (selectedMeetingIndex === null || !loadedMeetings[selectedMeetingIndex]) {
+        return;
+    }
+    
+    var meeting = loadedMeetings[selectedMeetingIndex];
+    var dateStr = document.getElementById('call_date').value;
+    
+    // Show loading state
+    document.getElementById('meetingImportContent').style.display = 'none';
+    document.getElementById('meetingSummaryLoading').style.display = 'block';
+    document.getElementById('importSelectedMeetingBtn').disabled = true;
+    
+    // Fetch summary with timeout
+    var url = '/api/meetings/summary?title=' + encodeURIComponent(meeting.title);
+    if (dateStr) {
+        url += '&date=' + encodeURIComponent(dateStr);
+    }
+    
+    // Create abort controller for timeout
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 150000); // 2.5 min timeout
+    
+    fetch(url, { signal: controller.signal })
+        .then(response => response.json())
+        .then(data => {
+            clearTimeout(timeoutId);
+            if (!data.success) {
+                showMeetingError(data.error || 'Failed to generate summary');
+                document.getElementById('meetingSummaryLoading').style.display = 'none';
+                document.getElementById('meetingImportContent').style.display = 'block';
+                document.getElementById('importSelectedMeetingBtn').disabled = false;
+                return;
+            }
+            
+            // Build rich content for Quill
+            var content = '<h2>' + escapeHtml(meeting.title) + '</h2>';
+            content += '<p><strong>Summary:</strong></p>';
+            content += '<p>' + escapeHtml(data.summary) + '</p>';
+            
+            if (data.action_items && data.action_items.length > 0) {
+                content += '<p><strong>Action Items:</strong></p><ul>';
+                data.action_items.forEach(function(item) {
+                    content += '<li>' + escapeHtml(item) + '</li>';
+                });
+                content += '</ul>';
+            }
+            
+            // Set Quill content
+            quill.root.innerHTML = content;
+            
+            // Update the call time if meeting has a start time
+            if (meeting.start_time) {
+                // For now, just set the date - time will be stored when saved via API
+                // The form could be enhanced to include a hidden time field
+            }
+            
+            // Auto-suggest topics if any technologies were identified
+            if (data.topics && data.topics.length > 0) {
+                autoSuggestTopics(data.topics);
+            }
+            
+            // Close modal
+            meetingImportModal.hide();
+            
+            // Trigger autosave
+            if (typeof debouncedAutoSave === 'function') {
+                debouncedAutoSave();
+            }
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            console.error('Error fetching summary:', error);
+            var errorMsg = error.name === 'AbortError' 
+                ? 'Request timed out. The meeting may not have a transcript, or try again later.'
+                : 'Failed to generate summary: ' + error.message;
+            showMeetingError(errorMsg);
+            document.getElementById('meetingSummaryLoading').style.display = 'none';
+            document.getElementById('meetingImportContent').style.display = 'block';
+            document.getElementById('importSelectedMeetingBtn').disabled = false;
+        });
+}
+
+function autoSuggestTopics(suggestedTopics) {
+    // Try to match suggested topic names to existing topics
+    suggestedTopics.forEach(function(topicName) {
+        var matchedTopic = allTopics.find(function(t) {
+            return t.name.toLowerCase() === topicName.toLowerCase() ||
+                   t.name.toLowerCase().includes(topicName.toLowerCase()) ||
+                   topicName.toLowerCase().includes(t.name.toLowerCase());
+        });
+        
+        if (matchedTopic && !isTopicSelected(matchedTopic.id)) {
+            addTopic(matchedTopic);
+        }
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 {% endif %}
 </script>
 {% endblock %}

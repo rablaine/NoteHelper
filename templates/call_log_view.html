@@ -23,7 +23,7 @@
             </div>
             <div class="card-body">
                 <p><strong>Date:</strong><br>
-                    {{ call_log.call_date.strftime('%B %d, %Y') }}
+                    {{ call_log.call_date.strftime('%B %d, %Y') }}{% if call_log.call_date.hour != 0 or call_log.call_date.minute != 0 %} at {{ call_log.call_date.strftime('%I:%M %p') }}{% endif %}
                 </p>
                 
                 <p><strong>Customer:</strong><br>

@@ -207,9 +207,9 @@ def call_log_create():
             flash('Call log content is required.', 'danger')
             return redirect(url_for('call_logs.call_log_create'))
         
-        # Parse call date
+        # Parse call date (datetime with midnight for manual entries)
         try:
-            call_date = datetime.strptime(call_date_str, '%Y-%m-%d').date()
+            call_date = datetime.strptime(call_date_str, '%Y-%m-%d')
         except ValueError:
             flash('Invalid date format.', 'danger')
             return redirect(url_for('call_logs.call_log_create'))
@@ -350,9 +350,10 @@ def call_log_edit(id):
             flash('Call log content is required.', 'danger')
             return redirect(url_for('call_logs.call_log_edit', id=id))
         
-        # Parse call date
+        # Parse call date (datetime with midnight for manual entries)
+        # Note: If editing a call log that had a meeting time, it will reset to midnight
         try:
-            call_date = datetime.strptime(call_date_str, '%Y-%m-%d').date()
+            call_date = datetime.strptime(call_date_str, '%Y-%m-%d')
         except ValueError:
             flash('Invalid date format.', 'danger')
             return redirect(url_for('call_logs.call_log_edit', id=id))
@@ -427,3 +428,114 @@ def call_log_delete(id):
         return redirect(url_for('customers.customer_view', id=customer_id))
     else:
         return redirect(url_for('call_logs.call_logs_list'))
+
+
+# =============================================================================
+# Meeting Import API (WorkIQ Integration)
+# =============================================================================
+
+@call_logs_bp.route('/api/meetings')
+def api_get_meetings():
+    """
+    Get meetings for a specific date with optional fuzzy matching.
+    
+    Query params:
+        date: Date in YYYY-MM-DD format (required)
+        customer_name: Customer name to fuzzy match against (optional)
+        
+    Returns JSON:
+        - meetings: List of meeting objects
+        - auto_selected_index: Index of fuzzy-matched meeting (or null)
+        - auto_selected_reason: Explanation of why meeting was selected
+    """
+    from flask import jsonify
+    from app.services.workiq_service import get_meetings_for_date, find_best_customer_match
+    
+    date_str = request.args.get('date')
+    customer_name = request.args.get('customer_name', '')
+    
+    if not date_str:
+        return jsonify({'error': 'date parameter is required'}), 400
+    
+    # Validate date format
+    try:
+        datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    
+    # Get meetings from WorkIQ
+    try:
+        meetings = get_meetings_for_date(date_str)
+    except Exception as e:
+        logger.error(f"WorkIQ error: {e}")
+        return jsonify({'error': f'Failed to fetch meetings: {str(e)}'}), 500
+    
+    # Format for API response
+    formatted_meetings = []
+    for m in meetings:
+        formatted_meetings.append({
+            'id': m.get('id', ''),
+            'title': m.get('title', ''),
+            'start_time': m['start_time'].isoformat() if m.get('start_time') else None,
+            'start_time_display': m['start_time'].strftime('%I:%M %p') if m.get('start_time') else m.get('start_time_str', ''),
+            'customer': m.get('customer', ''),
+            'attendees': m.get('attendees', [])
+        })
+    
+    # Find best match if customer name provided
+    auto_selected = None
+    auto_selected_reason = None
+    
+    if customer_name and meetings:
+        match_idx = find_best_customer_match(meetings, customer_name)
+        if match_idx is not None:
+            auto_selected = match_idx
+            matched = meetings[match_idx]
+            auto_selected_reason = f"Auto-selected: '{matched.get('customer') or matched.get('title')}' matches '{customer_name}'"
+    
+    return jsonify({
+        'meetings': formatted_meetings,
+        'auto_selected_index': auto_selected,
+        'auto_selected_reason': auto_selected_reason,
+        'date': date_str,
+        'customer_name': customer_name
+    })
+
+
+@call_logs_bp.route('/api/meetings/summary')
+def api_get_meeting_summary():
+    """
+    Get a 250-word summary for a specific meeting.
+    
+    Query params:
+        title: Meeting title (required)
+        date: Date in YYYY-MM-DD format (optional, helps narrow down)
+        
+    Returns JSON:
+        - summary: The 250-word meeting summary
+        - topics: List of technologies/topics discussed
+        - action_items: List of follow-up items
+    """
+    from flask import jsonify
+    from app.services.workiq_service import get_meeting_summary
+    
+    title = request.args.get('title')
+    date_str = request.args.get('date')
+    
+    if not title:
+        return jsonify({'error': 'title parameter is required'}), 400
+    
+    try:
+        result = get_meeting_summary(title, date_str)
+        return jsonify({
+            'summary': result.get('summary', ''),
+            'topics': result.get('topics', []),
+            'action_items': result.get('action_items', []),
+            'success': True
+        })
+    except Exception as e:
+        logger.error(f"Failed to get meeting summary: {e}")
+        return jsonify({
+            'error': f'Failed to fetch summary: {str(e)}',
+            'success': False
+        }), 500

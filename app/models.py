@@ -459,7 +459,8 @@ class CallLog(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
-    call_date = db.Column(db.Date, nullable=False, default=lambda: date.today())
+    # DateTime for full timestamp - date portion for display, time for meeting imports
+    call_date = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now())
     content = db.Column(db.Text, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
