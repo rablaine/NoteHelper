@@ -3,8 +3,9 @@ Main routes for NoteHelper.
 Handles index, search, preferences, data management, and API endpoints.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, Response, stream_with_context, make_response, session, g
-from datetime import datetime, timezone
-from sqlalchemy import func
+from datetime import datetime, timezone, date
+from sqlalchemy import func, extract
+import calendar as cal
 import json
 import csv
 import io
@@ -105,6 +106,84 @@ def index():
         'topics': Topic.query.count()
     }
     return render_template('index.html', recent_calls=recent_calls, stats=stats, show_first_time_modal=show_first_time_modal)
+
+
+@main_bp.route('/api/call-logs/calendar')
+def call_logs_calendar_api():
+    """API endpoint returning call logs for calendar view.
+    
+    Query params:
+        year: int (default: current year)
+        month: int, 1-12 (default: current month)
+    
+    Returns JSON with:
+        - year, month: the requested period
+        - days: dict mapping day number -> list of {id, customer_name, customer_id}
+        - month_name: human-readable month name
+        - prev/next month info for navigation
+    """
+    today = date.today()
+    year = request.args.get('year', today.year, type=int)
+    month = request.args.get('month', today.month, type=int)
+    
+    # Validate month range
+    if month < 1 or month > 12:
+        month = today.month
+    
+    # Get first and last day of the month
+    first_day = date(year, month, 1)
+    last_day = date(year, month, cal.monthrange(year, month)[1])
+    
+    # Query call logs for this month with customer data
+    call_logs = CallLog.query.options(
+        db.joinedload(CallLog.customer)
+    ).filter(
+        CallLog.call_date >= first_day,
+        CallLog.call_date <= last_day
+    ).order_by(CallLog.call_date).all()
+    
+    # Group by day
+    days = {}
+    for log in call_logs:
+        day = log.call_date.day
+        if day not in days:
+            days[day] = []
+        days[day].append({
+            'id': log.id,
+            'customer_name': log.customer.name if log.customer else 'Unknown',
+            'customer_id': log.customer.id if log.customer else None
+        })
+    
+    # Calculate prev/next month
+    if month == 1:
+        prev_year, prev_month = year - 1, 12
+    else:
+        prev_year, prev_month = year, month - 1
+    
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+    
+    # Calendar info for rendering
+    first_weekday = first_day.weekday()  # Monday = 0, Sunday = 6
+    # Shift to Sunday-start week: Sunday = 0
+    first_weekday = (first_weekday + 1) % 7
+    days_in_month = cal.monthrange(year, month)[1]
+    
+    return jsonify({
+        'year': year,
+        'month': month,
+        'month_name': cal.month_name[month],
+        'days': days,
+        'first_weekday': first_weekday,
+        'days_in_month': days_in_month,
+        'prev_year': prev_year,
+        'prev_month': prev_month,
+        'next_year': next_year,
+        'next_month': next_month,
+        'today_day': today.day if today.year == year and today.month == month else None
+    })
 
 
 @main_bp.route('/search')

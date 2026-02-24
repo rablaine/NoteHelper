@@ -86,6 +86,69 @@
     html[data-bs-theme="dark"] .card:hover {
         box-shadow: 0 4px 12px rgba(0,0,0,0.6);
     }
+    /* Calendar styles */
+    #calendarTable {
+        table-layout: fixed;
+        width: 100%;
+    }
+    #calendarTable th,
+    #calendarTable td {
+        width: 14.28%;
+        overflow: hidden;
+    }
+    #calendarTable td {
+        transition: background-color 0.15s;
+    }
+    #calendarTable td:hover:not(.bg-light) {
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+    html[data-bs-theme="dark"] #calendarTable td.bg-light {
+        background-color: rgba(255,255,255,0.03) !important;
+    }
+    .calendar-entries::-webkit-scrollbar {
+        width: 4px;
+    }
+    .calendar-entries::-webkit-scrollbar-thumb {
+        background-color: rgba(0,0,0,0.2);
+        border-radius: 2px;
+    }
+    html[data-bs-theme="dark"] .calendar-entries::-webkit-scrollbar-thumb {
+        background-color: rgba(255,255,255,0.2);
+    }
+    /* Customer color palette for calendar - 15 distinct colors */
+    .cal-customer-1 { background-color: rgba(220, 53, 69, 0.3) !important; } /* Red */
+    .cal-customer-2 { background-color: rgba(25, 135, 84, 0.35) !important; } /* Green */
+    .cal-customer-3 { background-color: rgba(13, 110, 253, 0.3) !important; } /* Blue */
+    .cal-customer-4 { background-color: rgba(255, 193, 7, 0.4) !important; } /* Yellow */
+    .cal-customer-5 { background-color: rgba(111, 66, 193, 0.35) !important; } /* Purple */
+    .cal-customer-6 { background-color: rgba(253, 126, 20, 0.35) !important; } /* Orange */
+    .cal-customer-7 { background-color: rgba(214, 51, 132, 0.3) !important; } /* Pink */
+    .cal-customer-8 { background-color: rgba(13, 202, 240, 0.3) !important; } /* Cyan */
+    .cal-customer-9 { background-color: rgba(102, 16, 242, 0.3) !important; } /* Indigo */
+    .cal-customer-10 { background-color: rgba(32, 201, 151, 0.35) !important; } /* Teal */
+    .cal-customer-11 { background-color: rgba(165, 42, 42, 0.35) !important; } /* Brown */
+    .cal-customer-12 { background-color: rgba(0, 128, 128, 0.35) !important; } /* Dark Teal */
+    .cal-customer-13 { background-color: rgba(255, 99, 71, 0.35) !important; } /* Tomato */
+    .cal-customer-14 { background-color: rgba(75, 0, 130, 0.3) !important; } /* Dark Indigo */
+    .cal-customer-15 { background-color: rgba(184, 134, 11, 0.4) !important; } /* Dark Gold */
+    /* Highlight state for same-customer entries */
+    .cal-customer-1.cal-highlight { background-color: rgba(220, 53, 69, 0.7) !important; box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.8); }
+    .cal-customer-2.cal-highlight { background-color: rgba(25, 135, 84, 0.7) !important; box-shadow: 0 0 0 2px rgba(25, 135, 84, 0.8); }
+    .cal-customer-3.cal-highlight { background-color: rgba(13, 110, 253, 0.7) !important; box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.8); }
+    .cal-customer-4.cal-highlight { background-color: rgba(255, 193, 7, 0.75) !important; box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.9); }
+    .cal-customer-5.cal-highlight { background-color: rgba(111, 66, 193, 0.7) !important; box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.8); }
+    .cal-customer-6.cal-highlight { background-color: rgba(253, 126, 20, 0.7) !important; box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.8); }
+    .cal-customer-7.cal-highlight { background-color: rgba(214, 51, 132, 0.7) !important; box-shadow: 0 0 0 2px rgba(214, 51, 132, 0.8); }
+    .cal-customer-8.cal-highlight { background-color: rgba(13, 202, 240, 0.7) !important; box-shadow: 0 0 0 2px rgba(13, 202, 240, 0.8); }
+    .cal-customer-9.cal-highlight { background-color: rgba(102, 16, 242, 0.7) !important; box-shadow: 0 0 0 2px rgba(102, 16, 242, 0.8); }
+    .cal-customer-10.cal-highlight { background-color: rgba(32, 201, 151, 0.7) !important; box-shadow: 0 0 0 2px rgba(32, 201, 151, 0.8); }
+    .cal-customer-11.cal-highlight { background-color: rgba(165, 42, 42, 0.7) !important; box-shadow: 0 0 0 2px rgba(165, 42, 42, 0.8); }
+    .cal-customer-12.cal-highlight { background-color: rgba(0, 128, 128, 0.7) !important; box-shadow: 0 0 0 2px rgba(0, 128, 128, 0.8); }
+    .cal-customer-13.cal-highlight { background-color: rgba(255, 99, 71, 0.7) !important; box-shadow: 0 0 0 2px rgba(255, 99, 71, 0.8); }
+    .cal-customer-14.cal-highlight { background-color: rgba(75, 0, 130, 0.7) !important; box-shadow: 0 0 0 2px rgba(75, 0, 130, 0.8); }
+    .cal-customer-15.cal-highlight { background-color: rgba(184, 134, 11, 0.75) !important; box-shadow: 0 0 0 2px rgba(184, 134, 11, 0.9); }
+    
+    [data-customer-id] { cursor: pointer; transition: all 0.15s ease; }
 </style>
 
 <div class="row mt-4" id="draftsSection" style="display: none;">
@@ -105,52 +168,110 @@
 
 <div class="row mt-5">
     <div class="col-md-12">
-        <h3 class="mb-3">Recent Call Logs</h3>
-        {% if recent_calls %}
-            <div class="list-group">
-                {% for call in recent_calls %}
-                    <div class="list-group-item list-group-item-action" style="cursor: pointer;" onclick="window.location.href='{{ url_for('call_logs.call_log_view', id=call.id) }}';">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h5 class="mb-1">
-                                <a href="{{ url_for('customers.customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">
-                                    {{ call.customer.name }}
-                                </a>
-                            </h5>
-                            <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
-                        </div>
-                        <div class="mb-2">
-                            {% if call.seller %}
-                                <a href="{{ url_for('sellers.seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
-                            {% endif %}
-                            {% if call.territory %}
-                                <a href="{{ url_for('territories.territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
-                            {% endif %}
-                            {% for topic in call.topics %}
-                                <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
-                            {% endfor %}
-                            {% for partner in call.partners %}
-                                <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;" onclick="event.stopPropagation();"><i class="bi bi-building"></i> {{ partner.name }}</a>
-                            {% endfor %}
-                            {% for milestone in call.milestones %}
-                                <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}" onclick="event.stopPropagation();"><i class="bi bi-flag"></i> {{ milestone.display_text[:25] }}{% if milestone.display_text|length > 25 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
-                            {% endfor %}
-                            {% for task in call.msx_tasks %}
-                                {% if task.msx_task_url %}
-                                <a href="{{ task.msx_task_url }}" target="_blank" class="badge bg-secondary text-decoration-none" title="{{ task.subject }}" onclick="event.stopPropagation();"><i class="bi bi-check2-circle"></i> {{ task.subject[:20] }}{% if task.subject|length > 20 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
-                                {% else %}
-                                <span class="badge bg-secondary" title="{{ task.subject }}"><i class="bi bi-check2-circle"></i> {{ task.subject[:20] }}{% if task.subject|length > 20 %}...{% endif %}</span>
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-                        <div class="text-muted">{{ call.content|striptags|truncate(200, true) }}</div>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0">Recent Call Logs</h3>
+            <ul class="nav nav-pills" id="callLogViewTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="list-tab" data-bs-toggle="pill" data-bs-target="#list-view" type="button" role="tab" aria-controls="list-view" aria-selected="true">
+                        <i class="bi bi-list-ul"></i> List
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="calendar-tab" data-bs-toggle="pill" data-bs-target="#calendar-view" type="button" role="tab" aria-controls="calendar-view" aria-selected="false">
+                        <i class="bi bi-calendar3"></i> Calendar
+                    </button>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="tab-content" id="callLogViewTabContent">
+            <!-- List View Tab -->
+            <div class="tab-pane fade show active" id="list-view" role="tabpanel" aria-labelledby="list-tab">
+                {% if recent_calls %}
+                    <div class="list-group">
+                        {% for call in recent_calls %}
+                            <div class="list-group-item list-group-item-action" style="cursor: pointer;" onclick="window.location.href='{{ url_for('call_logs.call_log_view', id=call.id) }}';">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h5 class="mb-1">
+                                        <a href="{{ url_for('customers.customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">
+                                            {{ call.customer.name }}
+                                        </a>
+                                    </h5>
+                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
+                                </div>
+                                <div class="mb-2">
+                                    {% if call.seller %}
+                                        <a href="{{ url_for('sellers.seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
+                                    {% endif %}
+                                    {% if call.territory %}
+                                        <a href="{{ url_for('territories.territory_view', id=call.territory.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ call.territory.name }}</a>
+                                    {% endif %}
+                                    {% for topic in call.topics %}
+                                        <a href="{{ url_for('topics.topic_view', id=topic.id) }}" class="badge bg-warning text-dark text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-tag"></i> {{ topic.name }}</a>
+                                    {% endfor %}
+                                    {% for partner in call.partners %}
+                                        <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;" onclick="event.stopPropagation();"><i class="bi bi-building"></i> {{ partner.name }}</a>
+                                    {% endfor %}
+                                    {% for milestone in call.milestones %}
+                                        <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}" onclick="event.stopPropagation();"><i class="bi bi-flag"></i> {{ milestone.display_text[:25] }}{% if milestone.display_text|length > 25 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
+                                    {% endfor %}
+                                    {% for task in call.msx_tasks %}
+                                        {% if task.msx_task_url %}
+                                        <a href="{{ task.msx_task_url }}" target="_blank" class="badge bg-secondary text-decoration-none" title="{{ task.subject }}" onclick="event.stopPropagation();"><i class="bi bi-check2-circle"></i> {{ task.subject[:20] }}{% if task.subject|length > 20 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
+                                        {% else %}
+                                        <span class="badge bg-secondary" title="{{ task.subject }}"><i class="bi bi-check2-circle"></i> {{ task.subject[:20] }}{% if task.subject|length > 20 %}...{% endif %}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="text-muted">{{ call.content|striptags|truncate(200, true) }}</div>
+                            </div>
+                        {% endfor %}
                     </div>
-                {% endfor %}
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> No call logs yet. Use the <strong>New Call Log</strong> button in the navigation bar to get started!
+                    </div>
+                {% endif %}
             </div>
-        {% else %}
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> No call logs yet. Use the <strong>New Call Log</strong> button in the navigation bar to get started!
+            
+            <!-- Calendar View Tab -->
+            <div class="tab-pane fade" id="calendar-view" role="tabpanel" aria-labelledby="calendar-tab">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <button class="btn btn-outline-secondary btn-sm" id="prevMonthBtn">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <h5 class="mb-0" id="calendarTitle">Loading...</h5>
+                        <button class="btn btn-outline-secondary btn-sm" id="nextMonthBtn">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-bordered mb-0" id="calendarTable">
+                            <thead>
+                                <tr class="text-center">
+                                    <th>Sun</th>
+                                    <th>Mon</th>
+                                    <th>Tue</th>
+                                    <th>Wed</th>
+                                    <th>Thu</th>
+                                    <th>Fri</th>
+                                    <th>Sat</th>
+                                </tr>
+                            </thead>
+                                <tbody id="calendarBody">
+                                    <!-- Calendar cells will be rendered here -->
+                                </tbody>
+                            </table>
+                    </div>
+                    <div class="card-footer text-center">
+                        <button class="btn btn-outline-primary btn-sm" id="todayBtn">
+                            <i class="bi bi-calendar-day"></i> Today
+                        </button>
+                    </div>
+                </div>
             </div>
-        {% endif %}
+        </div>
     </div>
 </div>
 
@@ -359,6 +480,171 @@
             loadDrafts();
         }
     });
+    
+    // ===== CALENDAR VIEW =====
+    let calendarYear = new Date().getFullYear();
+    let calendarMonth = new Date().getMonth() + 1; // 1-indexed
+    let calendarLoaded = false;
+    
+    // Load calendar when tab is shown
+    document.getElementById('calendar-tab').addEventListener('shown.bs.tab', function() {
+        if (!calendarLoaded) {
+            loadCalendar(calendarYear, calendarMonth);
+            calendarLoaded = true;
+        }
+    });
+    
+    // Month navigation
+    document.getElementById('prevMonthBtn').addEventListener('click', function() {
+        if (calendarMonth === 1) {
+            calendarMonth = 12;
+            calendarYear--;
+        } else {
+            calendarMonth--;
+        }
+        loadCalendar(calendarYear, calendarMonth);
+    });
+    
+    document.getElementById('nextMonthBtn').addEventListener('click', function() {
+        if (calendarMonth === 12) {
+            calendarMonth = 1;
+            calendarYear++;
+        } else {
+            calendarMonth++;
+        }
+        loadCalendar(calendarYear, calendarMonth);
+    });
+    
+    document.getElementById('todayBtn').addEventListener('click', function() {
+        const now = new Date();
+        calendarYear = now.getFullYear();
+        calendarMonth = now.getMonth() + 1;
+        loadCalendar(calendarYear, calendarMonth);
+    });
+    
+    function loadCalendar(year, month) {
+        const calendarBody = document.getElementById('calendarBody');
+        const calendarTitle = document.getElementById('calendarTitle');
+        
+        // Show loading state
+        calendarBody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border spinner-border-sm" role="status"></div> Loading...</td></tr>';
+        
+        fetch(`/api/call-logs/calendar?year=${year}&month=${month}`)
+            .then(response => response.json())
+            .then(data => {
+                calendarTitle.textContent = `${data.month_name} ${data.year}`;
+                renderCalendar(data);
+            })
+            .catch(error => {
+                console.error('Error loading calendar:', error);
+                calendarBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error loading calendar</td></tr>';
+            });
+    }
+    
+    function renderCalendar(data) {
+        const calendarBody = document.getElementById('calendarBody');
+        calendarBody.innerHTML = '';
+        
+        const days = data.days || {};
+        const firstWeekday = data.first_weekday; // 0 = Sunday
+        const daysInMonth = data.days_in_month;
+        const todayDay = data.today_day;
+        
+        // Build a map of customer_id -> color index for THIS month only
+        const customerColorMap = {};
+        const allCustomerIds = new Set();
+        Object.values(days).forEach(logs => {
+            logs.forEach(log => allCustomerIds.add(log.customer_id));
+        });
+        const customerList = Array.from(allCustomerIds);
+        customerList.forEach((id, index) => {
+            customerColorMap[id] = (index % 15) + 1;
+        });
+        
+        let currentDay = 1;
+        let rowCount = Math.ceil((firstWeekday + daysInMonth) / 7);
+        
+        for (let week = 0; week < rowCount; week++) {
+            const row = document.createElement('tr');
+            
+            for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+                const cell = document.createElement('td');
+                cell.className = 'p-1';
+                cell.style.verticalAlign = 'top';
+                cell.style.height = '100px';
+                
+                const cellIndex = week * 7 + dayOfWeek;
+                
+                if (cellIndex < firstWeekday || currentDay > daysInMonth) {
+                    // Empty cell
+                    cell.classList.add('bg-light');
+                    if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
+                        cell.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                    }
+                } else {
+                    // Day cell
+                    const dayNum = currentDay;
+                    
+                    // Day number header
+                    const dayHeader = document.createElement('div');
+                    dayHeader.className = 'd-flex justify-content-between align-items-center mb-1';
+                    
+                    const dayNumber = document.createElement('span');
+                    dayNumber.className = 'fw-bold';
+                    if (dayNum === todayDay) {
+                        dayNumber.innerHTML = `<span class="badge bg-primary rounded-circle">${dayNum}</span>`;
+                    } else {
+                        dayNumber.textContent = dayNum;
+                    }
+                    dayHeader.appendChild(dayNumber);
+                    cell.appendChild(dayHeader);
+                    
+                    // Call log entries for this day
+                    const callLogs = days[dayNum] || [];
+                    if (callLogs.length > 0) {
+                        const entriesContainer = document.createElement('div');
+                        entriesContainer.className = 'calendar-entries';
+                        entriesContainer.style.fontSize = '0.75rem';
+                        entriesContainer.style.maxHeight = '70px';
+                        entriesContainer.style.overflowY = 'auto';
+                        
+                        callLogs.forEach(log => {
+                            const entry = document.createElement('a');
+                            entry.href = `/call-logs/${log.id}`;
+                            const colorIndex = customerColorMap[log.customer_id];
+                            entry.className = `d-block text-decoration-none text-truncate mb-1 px-1 rounded cal-customer-${colorIndex}`;
+                            entry.style.color = 'inherit';
+                            entry.textContent = log.customer_name;
+                            entry.title = log.customer_name;
+                            entry.setAttribute('data-customer-id', log.customer_id);
+                            
+                            // Hover: highlight all entries for this customer
+                            entry.addEventListener('mouseenter', function() {
+                                document.querySelectorAll(`[data-customer-id="${log.customer_id}"]`).forEach(el => {
+                                    el.classList.add('cal-highlight');
+                                });
+                            });
+                            entry.addEventListener('mouseleave', function() {
+                                document.querySelectorAll(`[data-customer-id="${log.customer_id}"]`).forEach(el => {
+                                    el.classList.remove('cal-highlight');
+                                });
+                            });
+                            
+                            entriesContainer.appendChild(entry);
+                        });
+                        
+                        cell.appendChild(entriesContainer);
+                    }
+                    
+                    currentDay++;
+                }
+                
+                row.appendChild(cell);
+            }
+            
+            calendarBody.appendChild(row);
+        }
+    }
 </script>
 
 {% endblock %}
