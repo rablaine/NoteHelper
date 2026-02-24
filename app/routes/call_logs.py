@@ -285,10 +285,19 @@ def call_log_create():
     # Capture referrer for redirect after creation
     referrer = request.referrer or ''
     
-    # Pass today's date as default
+    # Pass date (from query param or today)
     from datetime import date
     from app.models import AIConfig
-    today = date.today().strftime('%Y-%m-%d')
+    date_param = request.args.get('date', '')
+    if date_param:
+        # Validate date format
+        try:
+            datetime.strptime(date_param, '%Y-%m-%d')
+            today = date_param
+        except ValueError:
+            today = date.today().strftime('%Y-%m-%d')
+    else:
+        today = date.today().strftime('%Y-%m-%d')
     
     # Load AI config for AI button visibility
     ai_config = AIConfig.query.first()
