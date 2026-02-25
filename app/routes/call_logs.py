@@ -1,8 +1,8 @@
 """
 Call log routes for NoteHelper.
-Handles call log listing, creation, viewing, and editing.
+Handles call log listing, creation, viewing, editing, and Fill My Day bulk import.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify
 from datetime import datetime
 import logging
 
@@ -550,3 +550,331 @@ def api_get_meeting_summary():
             'error': f'Failed to fetch summary: {str(e)}',
             'success': False
         }), 500
+
+
+# =============================================================================
+# Fill My Day (Bulk Meeting Import)
+# =============================================================================
+
+@call_logs_bp.route('/fill-my-day')
+def fill_my_day():
+    """Fill My Day page - bulk import meetings for a date into call logs."""
+    from datetime import date as date_type
+    date_param = request.args.get('date', '')
+    
+    # Validate date if provided
+    if date_param:
+        try:
+            datetime.strptime(date_param, '%Y-%m-%d')
+        except ValueError:
+            date_param = ''
+    
+    return render_template('fill_my_day.html', prefill_date=date_param)
+
+
+@call_logs_bp.route('/api/fill-my-day/process', methods=['POST'])
+def api_fill_my_day_process():
+    """
+    Process a single meeting for Fill My Day.
+    
+    Fetches the summary from WorkIQ and runs AI analysis.
+    Called per-meeting to show progress in the UI.
+    
+    Request JSON:
+        - meeting: Meeting object {title, start_time, customer, ...}
+        - date: Date string YYYY-MM-DD
+        - customer_id: Matched customer ID
+        
+    Returns JSON:
+        - summary: Meeting summary text
+        - content_html: Formatted HTML for call notes
+        - topics: List of {id, name} suggested topics
+        - task_subject: Suggested task subject
+        - task_description: Suggested task description
+        - success: bool
+    """
+    from app.services.workiq_service import get_meeting_summary
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    meeting = data.get('meeting', {})
+    date_str = data.get('date', '')
+    title = meeting.get('title', '')
+    
+    if not title:
+        return jsonify({'success': False, 'error': 'Meeting title is required'}), 400
+    
+    customer_id = data.get('customer_id')
+
+    result = {'success': True, 'summary': '', 'content_html': '', 'topics': [],
+              'task_subject': '', 'task_description': '', 'summary_ok': False,
+              'milestone': None}
+    
+    # Step 1: Get meeting summary
+    try:
+        summary_data = get_meeting_summary(title, date_str)
+        summary = summary_data.get('summary', '')
+        action_items = summary_data.get('action_items', [])
+        
+        # Build HTML content
+        content_html = f'<h2>{title}</h2>'
+        content_html += '<p><strong>Summary:</strong></p>'
+        content_html += f'<p>{summary}</p>'
+        if action_items:
+            content_html += '<p><strong>Action Items:</strong></p><ul>'
+            for item in action_items:
+                content_html += f'<li>{item}</li>'
+            content_html += '</ul>'
+        
+        result['summary'] = summary
+        result['content_html'] = content_html
+        result['summary_ok'] = bool(summary and not summary.startswith('Error'))
+    except Exception as e:
+        logger.error(f"Fill My Day - summary error for '{title}': {e}")
+        result['summary'] = f'[Could not fetch summary: {str(e)}]'
+        result['content_html'] = f'<h2>{title}</h2><p><em>Summary unavailable</em></p>'
+    
+    # Step 2: AI analysis (topics + task suggestion) - only if we got a real summary
+    ai_client = None
+    ai_config = None
+    if result['summary_ok']:
+        try:
+            from app.routes.ai import get_azure_openai_client
+            from app.models import AIConfig
+            
+            ai_config = AIConfig.query.first()
+            if ai_config and ai_config.api_key:
+                ai_client = get_azure_openai_client(ai_config)
+                if ai_client:
+                    # Analyze call for topics
+                    all_topics = Topic.query.order_by(Topic.name).all()
+                    topic_names = [t.name for t in all_topics]
+                    
+                    prompt = f"""Analyze this meeting summary and identify relevant technology topics.
+
+Available topics: {', '.join(topic_names)}
+
+Meeting summary:
+{result['summary']}
+
+Also suggest a brief task subject (1 line) and task description (2-3 lines) for follow-up work.
+
+Return JSON format:
+{{"topics": ["topic1", "topic2"], "task_subject": "...", "task_description": "..."}}"""
+                    
+                    response = ai_client.chat.completions.create(
+                        model=ai_config.deployment_name or 'gpt-4o-mini',
+                        messages=[{'role': 'user', 'content': prompt}],
+                        temperature=0.3,
+                        max_tokens=500,
+                        response_format={"type": "json_object"}
+                    )
+                    
+                    import json
+                    ai_result = json.loads(response.choices[0].message.content)
+                    
+                    # Match topic names to IDs
+                    matched_topics = []
+                    for topic_name in ai_result.get('topics', []):
+                        for t in all_topics:
+                            if t.name.lower() == topic_name.lower():
+                                matched_topics.append({'id': t.id, 'name': t.name})
+                                break
+                    
+                    result['topics'] = matched_topics
+                    result['task_subject'] = ai_result.get('task_subject', '')
+                    result['task_description'] = ai_result.get('task_description', '')
+        except Exception as e:
+            logger.warning(f"Fill My Day - AI analysis error for '{title}': {e}")
+            # Non-fatal - continue without AI enrichment
+    
+    # Step 3: Milestone matching - fetch from MSX and AI-match
+    if result['summary_ok'] and customer_id:
+        try:
+            from app.services.msx_api import extract_account_id_from_url, get_milestones_by_account
+            
+            customer = Customer.query.get(int(customer_id))
+            if customer and customer.tpid_url:
+                account_id = extract_account_id_from_url(customer.tpid_url)
+                if account_id:
+                    msx_result = get_milestones_by_account(account_id)
+                    if msx_result.get('success') and msx_result.get('milestones'):
+                        milestones = msx_result['milestones']
+                        
+                        # AI match if we have a client and milestones
+                        if ai_client and ai_config and len(milestones) > 0:
+                            milestone_list = "\n".join([
+                                f"- ID: {m['id']}, Name: {m['name']}, Status: {m['status']}, "
+                                f"Opportunity: {m.get('opportunity_name', '')}, "
+                                f"Workload: {m.get('workload', '')}"
+                                for m in milestones
+                            ])
+                            
+                            ms_prompt = f"""Match these call notes to the most relevant milestone.
+
+Call Notes:
+{result['summary'][:2000]}
+
+Available Milestones:
+{milestone_list}
+
+Which milestone best matches what was discussed? Also suggest a task subject and description
+specifically for this milestone.
+
+Return JSON:
+{{"milestone_id": "THE_ID_OR_NULL", "reason": "why", "task_subject": "...", "task_description": "..."}}"""
+                            
+                            ms_response = ai_client.chat.completions.create(
+                                model=ai_config.deployment_name or 'gpt-4o-mini',
+                                messages=[{'role': 'user', 'content': ms_prompt}],
+                                temperature=0.3,
+                                max_tokens=300,
+                                response_format={"type": "json_object"}
+                            )
+                            
+                            ms_ai = json.loads(ms_response.choices[0].message.content)
+                            matched_id = ms_ai.get('milestone_id')
+                            
+                            if matched_id:
+                                # Find the matched milestone data
+                                matched = next(
+                                    (m for m in milestones if m['id'] == matched_id),
+                                    None
+                                )
+                                if matched:
+                                    result['milestone'] = {
+                                        'msx_milestone_id': matched['id'],
+                                        'name': matched['name'],
+                                        'number': matched.get('number', ''),
+                                        'status': matched['status'],
+                                        'status_code': matched.get('status_code'),
+                                        'opportunity_name': matched.get('opportunity_name', ''),
+                                        'url': matched.get('url', ''),
+                                        'workload': matched.get('workload', ''),
+                                        'reason': ms_ai.get('reason', '')
+                                    }
+                                    # Use milestone-specific task if provided
+                                    if ms_ai.get('task_subject'):
+                                        result['task_subject'] = ms_ai['task_subject']
+                                    if ms_ai.get('task_description'):
+                                        result['task_description'] = ms_ai['task_description']
+        except Exception as e:
+            logger.warning(f"Fill My Day - milestone matching error for '{title}': {e}")
+            # Non-fatal - continue without milestone
+    
+    return jsonify(result)
+
+
+@call_logs_bp.route('/api/fill-my-day/save', methods=['POST'])
+def api_fill_my_day_save():
+    """
+    Save a single call log from Fill My Day.
+    
+    Request JSON:
+        - customer_id: int
+        - call_date: YYYY-MM-DD
+        - call_time: HH:MM (optional)
+        - content: HTML content
+        - topic_ids: list of int
+        - milestone: dict with MSX milestone data (optional)
+        - task_subject: str (optional)
+        - task_description: str (optional)
+        
+    Returns JSON:
+        - success: bool
+        - call_log_id: int
+        - view_url: str
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    customer_id = data.get('customer_id')
+    call_date_str = data.get('call_date', '')
+    call_time_str = data.get('call_time', '')
+    content = data.get('content', '').strip()
+    topic_ids = data.get('topic_ids', [])
+    milestone_data = data.get('milestone')
+    task_subject = data.get('task_subject', '').strip()
+    task_description = data.get('task_description', '').strip()
+    
+    # Validation
+    if not customer_id:
+        return jsonify({'success': False, 'error': 'Customer is required'}), 400
+    if not call_date_str:
+        return jsonify({'success': False, 'error': 'Date is required'}), 400
+    if not content:
+        return jsonify({'success': False, 'error': 'Content is required'}), 400
+    
+    # Parse date/time
+    try:
+        if call_time_str:
+            call_date = datetime.strptime(f'{call_date_str} {call_time_str}', '%Y-%m-%d %H:%M')
+        else:
+            call_date = datetime.strptime(call_date_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid date/time format'}), 400
+    
+    # Verify customer exists
+    customer = Customer.query.get(int(customer_id))
+    if not customer:
+        return jsonify({'success': False, 'error': 'Customer not found'}), 404
+    
+    try:
+        # Create call log
+        call_log = CallLog(
+            customer_id=int(customer_id),
+            call_date=call_date,
+            content=content,
+            user_id=g.user.id
+        )
+        
+        # Add topics
+        if topic_ids:
+            topics = Topic.query.filter(
+                Topic.id.in_([int(tid) for tid in topic_ids])
+            ).all()
+            call_log.topics.extend(topics)
+        
+        # Link milestone if provided
+        if milestone_data and milestone_data.get('msx_milestone_id'):
+            msx_id = milestone_data['msx_milestone_id']
+            milestone = Milestone.query.filter_by(msx_milestone_id=msx_id).first()
+            if not milestone:
+                milestone = Milestone(
+                    msx_milestone_id=msx_id,
+                    url=milestone_data.get('url', ''),
+                    milestone_number=milestone_data.get('number', ''),
+                    title=milestone_data.get('name', ''),
+                    msx_status=milestone_data.get('status', ''),
+                    msx_status_code=milestone_data.get('status_code'),
+                    opportunity_name=milestone_data.get('opportunity_name', ''),
+                    customer_id=int(customer_id),
+                    user_id=g.user.id
+                )
+                db.session.add(milestone)
+            else:
+                # Update with latest data
+                if milestone_data.get('name'):
+                    milestone.title = milestone_data['name']
+                if milestone_data.get('status'):
+                    milestone.msx_status = milestone_data['status']
+                if milestone_data.get('opportunity_name'):
+                    milestone.opportunity_name = milestone_data['opportunity_name']
+            
+            call_log.milestones = [milestone]
+        
+        db.session.add(call_log)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'call_log_id': call_log.id,
+            'view_url': url_for('call_logs.call_log_view', id=call_log.id)
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Fill My Day - save error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

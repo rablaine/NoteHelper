@@ -151,7 +151,10 @@
     [data-customer-id] { cursor: pointer; transition: all 0.15s ease; }
     .cal-add-btn { opacity: 0.3; transition: opacity 0.15s; font-size: 0.85rem; }
     .cal-add-btn:hover { opacity: 1; color: var(--bs-primary) !important; }
+    .cal-fill-btn { opacity: 0.3; transition: opacity 0.15s; font-size: 0.85rem; }
+    .cal-fill-btn:hover { opacity: 1; color: var(--bs-warning) !important; }
     #calendarTable td:hover .cal-add-btn { opacity: 0.7; }
+    #calendarTable td:hover .cal-fill-btn { opacity: 0.7; }
 </style>
 
 <div class="row mt-4" id="draftsSection" style="display: none;">
@@ -734,20 +737,35 @@
                     }
                     dayHeader.appendChild(dayNumber);
                     
+                    // Build date string for this day
+                    const dateStr = `${data.year}-${String(data.month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                    
+                    // Add icons container (right side)
+                    const iconsContainer = document.createElement('span');
+                    iconsContainer.className = 'd-flex gap-1';
+                    
+                    // Add "Fill My Day" button (lightning bolt)
+                    const fillBtn = document.createElement('a');
+                    fillBtn.href = `/fill-my-day?date=${dateStr}`;
+                    fillBtn.className = 'text-muted text-decoration-none cal-fill-btn';
+                    fillBtn.innerHTML = '<i class="bi bi-lightning-charge"></i>';
+                    fillBtn.title = 'Fill My Day - bulk import meetings';
+                    iconsContainer.appendChild(fillBtn);
+                    
                     // Add "+" button for quick create
                     const addBtn = document.createElement('a');
                     addBtn.href = '#';
                     addBtn.className = 'text-muted text-decoration-none cal-add-btn';
                     addBtn.innerHTML = '<i class="bi bi-plus-circle"></i>';
                     addBtn.title = 'New call log';
-                    // Build date string for this day
-                    const dateStr = `${data.year}-${String(data.month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                     addBtn.setAttribute('data-date', dateStr);
                     addBtn.addEventListener('click', function(e) {
                         e.preventDefault();
                         openQuickCreateModal(dateStr);
                     });
-                    dayHeader.appendChild(addBtn);
+                    iconsContainer.appendChild(addBtn);
+                    
+                    dayHeader.appendChild(iconsContainer);
                     
                     cell.appendChild(dayHeader);
                     
