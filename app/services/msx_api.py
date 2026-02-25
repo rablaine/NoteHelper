@@ -10,6 +10,7 @@ Uses msx_auth for token management.
 
 import requests
 import logging
+from datetime import datetime as dt
 from typing import Optional, Dict, Any, List
 
 from app.services.msx_auth import get_msx_token, refresh_token, CRM_BASE_URL
@@ -457,26 +458,68 @@ def extract_account_id_from_url(tpid_url: str) -> Optional[str]:
     return None
 
 
-def get_milestones_by_account(account_id: str) -> Dict[str, Any]:
+def get_milestones_by_account(
+    account_id: str,
+    active_only: bool = False,
+    open_opportunities_only: bool = False,
+    current_fy_only: bool = False,
+) -> Dict[str, Any]:
     """
     Get all milestones for an account.
     
     Args:
         account_id: The account GUID.
+        active_only: If True, only return active (uncommitted) milestones
+                     (On Track, At Risk, Blocked).
+        open_opportunities_only: If True, only return milestones whose parent
+                                 opportunity is still Open (statecode=0).
+                                 Filters out milestones on Won/Lost/Cancelled opps.
+        current_fy_only: If True, only return milestones with a due date in the
+                         current Microsoft fiscal year (July 1 - June 30).
         
     Returns:
         Dict with:
         - success: bool
-        - milestones: List of milestone dicts with id, name, status, number, url, opportunity
+        - milestones: List of milestone dicts with id, name, status, number, url,
+          opportunity, due_date, dollar_value, workload, monthly_usage
         - error: str if failed
     """
     try:
-        # Query milestones by parent account
+        # Build filter - always filter by account, optionally by active status
+        filters = [f"_msp_parentaccount_value eq '{account_id}'"]
+        if active_only:
+            # Active statuses: On Track (861980000), At Risk (861980001), Blocked (861980002)
+            filters.append(
+                "(msp_milestonestatus eq 861980000"
+                " or msp_milestonestatus eq 861980001"
+                " or msp_milestonestatus eq 861980002)"
+            )
+        if open_opportunities_only:
+            # Only milestones on Open opportunities (statecode: 0=Open, 1=Won, 2=Lost)
+            filters.append("msp_OpportunityId/statecode eq 0")
+        if current_fy_only:
+            # Microsoft fiscal year starts July 1. FY2026 = July 2025 - June 2026.
+            now = dt.utcnow()
+            fy_start_year = now.year if now.month >= 7 else now.year - 1
+            fy_start = f"{fy_start_year}-07-01"
+            fy_end = f"{fy_start_year + 1}-06-30"
+            filters.append(
+                f"msp_milestonedate ge {fy_start}"
+                f" and msp_milestonedate le {fy_end}"
+            )
+        filter_str = " and ".join(filters)
+        
+        # Query milestones by parent account — include due date and dollar value fields
+        # Field names discovered via EntityDefinitions metadata:
+        #   msp_milestonedate = "Milestone Est. Date" (DateTime)
+        #   msp_bacvrate = "BACV" - Business Annualized Customer Value (Decimal)
+        #   msp_monthlyuse = "Est. Change in Monthly Usage" (Money)
         url = (
             f"{CRM_BASE_URL}/msp_engagementmilestones"
-            f"?$filter=_msp_parentaccount_value eq '{account_id}'"
+            f"?$filter={filter_str}"
             f"&$select=msp_engagementmilestoneid,msp_name,msp_milestonestatus,"
-            f"msp_milestonenumber,_msp_opportunityid_value,msp_monthlyuse,_msp_workloadlkid_value"
+            f"msp_milestonenumber,_msp_opportunityid_value,msp_monthlyuse,"
+            f"_msp_workloadlkid_value,msp_milestonedate,msp_bacvrate"
             f"&$orderby=msp_name"
         )
         
@@ -504,6 +547,10 @@ def get_milestones_by_account(account_id: str) -> Dict[str, Any]:
                 )
                 monthly_usage = raw.get("msp_monthlyuse")
                 
+                # Tracker fields (actual MSX field names from metadata)
+                due_date_str = raw.get("msp_milestonedate")
+                dollar_value = raw.get("msp_bacvrate")  # BACV
+                
                 milestones.append({
                     "id": milestone_id,
                     "name": raw.get("msp_name", ""),
@@ -514,6 +561,8 @@ def get_milestones_by_account(account_id: str) -> Dict[str, Any]:
                     "opportunity_name": opp_name,
                     "workload": workload,
                     "monthly_usage": monthly_usage,
+                    "due_date": due_date_str,
+                    "dollar_value": dollar_value,
                     "url": build_milestone_url(milestone_id),
                 })
             

@@ -518,6 +518,13 @@ class Milestone(db.Model):
     msx_status_code = db.Column(db.Integer, nullable=True)  # Numeric status code
     opportunity_name = db.Column(db.String(500), nullable=True)  # Parent opportunity name
     
+    # Milestone tracker fields (populated from MSX sync)
+    due_date = db.Column(db.DateTime, nullable=True)  # Target completion date from MSX
+    dollar_value = db.Column(db.Float, nullable=True)  # Estimated revenue/value from MSX
+    workload = db.Column(db.String(200), nullable=True)  # Workload name from MSX
+    monthly_usage = db.Column(db.Float, nullable=True)  # Monthly usage amount from MSX
+    last_synced_at = db.Column(db.DateTime, nullable=True)  # Last time synced from MSX
+    
     # Relationships
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -556,6 +563,29 @@ class Milestone(db.Model):
             'Hygiene/Duplicate': 7,
         }
         return status_order.get(self.msx_status, 99)
+    
+    @property
+    def is_active(self) -> bool:
+        """Return True if milestone is in an active (uncommitted) status."""
+        active_statuses = {'On Track', 'At Risk', 'Blocked'}
+        return self.msx_status in active_statuses
+    
+    @property
+    def due_date_urgency(self) -> str:
+        """Return urgency level based on due date: 'past_due', 'this_week', 'this_month', 'future', 'no_date'."""
+        if not self.due_date:
+            return 'no_date'
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        days_until = (self.due_date - now).days
+        if days_until < 0:
+            return 'past_due'
+        elif days_until <= 7:
+            return 'this_week'
+        elif days_until <= 30:
+            return 'this_month'
+        else:
+            return 'future'
     
     def __repr__(self) -> str:
         return f'<Milestone {self.id}: {self.title or self.milestone_number or self.url[:50]}>'

@@ -1,9 +1,17 @@
 """
-Routes for milestone management.
+Routes for milestone management and milestone tracker.
 Milestones are URLs from the MSX sales platform that can be linked to call logs.
+The Milestone Tracker provides visibility into all active (uncommitted) milestones
+across customers, sorted by dollar value and due date urgency.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify
+import logging
+from flask import (
+    Blueprint, render_template, request, redirect, url_for,
+    flash, g, jsonify, Response, stream_with_context,
+)
 from app.models import db, Milestone, CallLog
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('milestones', __name__)
 
@@ -131,3 +139,101 @@ def api_find_or_create_milestone():
         'display_text': milestone.display_text,
         'created': milestone is not None
     })
+
+
+# =============================================================================
+# Milestone Tracker
+# =============================================================================
+
+@bp.route('/milestone-tracker')
+def milestone_tracker():
+    """
+    Milestone Tracker page.
+    
+    Shows all active (uncommitted) milestones across customers, sorted by
+    dollar value and grouped by due date urgency. Provides a sync button
+    to pull fresh data from MSX.
+    """
+    from app.services.milestone_sync import get_milestone_tracker_data
+    
+    tracker_data = get_milestone_tracker_data()
+    return render_template(
+        'milestone_tracker.html',
+        milestones=tracker_data["milestones"],
+        summary=tracker_data["summary"],
+        last_sync=tracker_data["last_sync"],
+        sellers=tracker_data["sellers"],
+        areas=tracker_data["areas"],
+    )
+
+
+@bp.route('/api/milestone-tracker/sync', methods=['POST'])
+def api_sync_milestones():
+    """
+    Trigger a milestone sync from MSX with Server-Sent Events progress.
+
+    Streams real-time progress events as each customer is synced.
+    Falls back to JSON response if Accept header doesn't include event-stream.
+    """
+    from app.services.milestone_sync import (
+        sync_all_customer_milestones,
+        sync_all_customer_milestones_stream,
+    )
+
+    user_id = g.user.id
+
+    # SSE streaming path
+    if 'text/event-stream' in request.headers.get('Accept', ''):
+        def generate():
+            yield from sync_all_customer_milestones_stream(user_id)
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+            },
+        )
+
+    # JSON fallback for non-SSE clients
+    try:
+        results = sync_all_customer_milestones(user_id=user_id)
+        status_code = 200 if results["success"] else 207
+        return jsonify(results), status_code
+    except Exception as e:
+        logger.exception("Milestone sync failed")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route('/api/milestone-tracker/sync-customer/<int:customer_id>', methods=['POST'])
+def api_sync_customer_milestones(customer_id):
+    """
+    Sync milestones from MSX for a single customer.
+    
+    Args:
+        customer_id: The customer ID to sync.
+        
+    Returns:
+        JSON with sync results for the single customer.
+    """
+    from app.models import Customer
+    from app.services.milestone_sync import sync_customer_milestones
+    
+    customer = Customer.query.get_or_404(customer_id)
+    
+    if not customer.tpid_url:
+        return jsonify({
+            "success": False,
+            "error": "Customer has no MSX account link (tpid_url).",
+        }), 400
+    
+    try:
+        result = sync_customer_milestones(customer, user_id=g.user.id)
+        return jsonify(result)
+    except Exception as e:
+        logger.exception(f"Milestone sync failed for customer {customer_id}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+        }), 500
