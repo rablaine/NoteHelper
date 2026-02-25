@@ -2,8 +2,6 @@
 
 **Version 1.3** - A single-user note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
 
-> 📖 **[Read the Development Story](docs/DEVELOPMENT_STORY.md)** - Learn how this 14,000+ line application was built in 42+ hours using AI-assisted "vibe coding" with GitHub Copilot.
-
 ## Features
 
 ### Core Functionality
