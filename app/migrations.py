@@ -44,6 +44,9 @@ def run_migrations(db):
     # Migration: Upgrade call_date from Date to DateTime for meeting timestamps
     _migrate_call_date_to_datetime(db, inspector)
     
+    # Migration: Add milestone tracker fields (due_date, dollar_value, workload, etc.)
+    _migrate_milestone_tracker_fields(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -266,3 +269,34 @@ def _migrate_call_date_to_datetime(db, inspector):
         conn.commit()
     
     print("    Upgraded call_date to DateTime successfully")
+
+
+def _migrate_milestone_tracker_fields(db, inspector):
+    """
+    Add milestone tracker fields to the milestones table.
+    
+    New columns: due_date, dollar_value, workload, monthly_usage, last_synced_at
+    """
+    if not _table_exists(inspector, 'milestones'):
+        print("  Milestones table does not exist - skipping tracker fields")
+        return
+    
+    tracker_columns = [
+        ('due_date', 'DATETIME'),
+        ('dollar_value', 'FLOAT'),
+        ('workload', 'VARCHAR(200)'),
+        ('monthly_usage', 'FLOAT'),
+        ('last_synced_at', 'DATETIME'),
+        ('on_my_team', 'BOOLEAN DEFAULT 0'),
+    ]
+    
+    for col_name, col_def in tracker_columns:
+        _add_column_if_not_exists(db, inspector, 'milestones', col_name, col_def)
+    
+    # Add index on due_date for efficient tracker queries
+    _add_index_if_not_exists(
+        db, inspector, 'milestones', 'ix_milestones_due_date', ['due_date']
+    )
+    _add_index_if_not_exists(
+        db, inspector, 'milestones', 'ix_milestones_msx_status', ['msx_status']
+    )

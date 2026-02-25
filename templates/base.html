@@ -217,6 +217,11 @@
                             <i class="bi bi-telephone"></i> Call Logs
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('milestones.milestone_tracker') }}">
+                            <i class="bi bi-flag-fill"></i> Milestones
+                        </a>
+                    </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="moreMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-three-dots"></i> More
@@ -233,7 +238,7 @@
                             <li><a class="dropdown-item" href="{{ url_for('territories.territories_list') }}"><i class="bi bi-geo-alt"></i> Territories</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('pods.pods_list') }}"><i class="bi bi-diagram-3"></i> PODs</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('solution_engineers.solution_engineers_list') }}"><i class="bi bi-tools"></i> Solution Engineers</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('milestones.milestones_list') }}"><i class="bi bi-flag"></i> Milestones</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('milestones.milestones_list') }}"><i class="bi bi-flag"></i> Milestone List</a></li>
                         </ul>
                     </li>
                 </ul>
