@@ -57,28 +57,57 @@ def query_workiq(question: str, timeout: int = 120) -> str:
         TimeoutError: If query takes longer than timeout
         RuntimeError: If WorkIQ query fails
     """
-    use_shell = platform.system() == 'Windows'
+    import shutil
+    import os
     
-    if use_shell:
-        # On Windows, we need shell=True to run npx.cmd
-        # Escape special shell characters in the question
-        # Replace | with escaped version, and use proper quoting
-        safe_question = question.replace('"', '\\"').replace('|', '^|')
-        cmd = f'npx -y @microsoft/workiq ask -q "{safe_question}"'
-    else:
-        # On Unix, we can use list format which handles escaping automatically
-        cmd = ["npx", "-y", "@microsoft/workiq", "ask", "-q", question]
+    is_windows = platform.system() == 'Windows'
+    
+    # Find npx executable
+    npx_path = shutil.which('npx')
+    if not npx_path and is_windows:
+        for path in [
+            os.path.expandvars(r'%APPDATA%\npm\npx.cmd'),
+            os.path.expandvars(r'%ProgramFiles%\nodejs\npx.cmd'),
+        ]:
+            if os.path.exists(path):
+                npx_path = path
+                break
+    
+    if not npx_path:
+        raise RuntimeError("npx not found. Please install Node.js.")
     
     logger.info(f"Querying WorkIQ: {question[:100]}...")
     
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            shell=use_shell
-        )
+        if is_windows:
+            # On Windows, use PowerShell to avoid cmd.exe escaping issues
+            # PowerShell handles special characters in strings properly
+            # Escape single quotes by doubling them (PowerShell string escape)
+            escaped_q = question.replace("'", "''")
+            
+            # Build PowerShell command
+            ps_cmd = f"& '{npx_path}' -y @microsoft/workiq ask -q '{escaped_q}'"
+            
+            cmd = ["powershell", "-NoProfile", "-Command", ps_cmd]
+            logger.info(f"Running PowerShell command for WorkIQ...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                shell=False
+            )
+        else:
+            # On Unix, list format works perfectly
+            cmd = [npx_path, "-y", "@microsoft/workiq", "ask", "-q", question]
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                shell=False
+            )
         
         if result.returncode != 0:
             logger.error(f"WorkIQ error: {result.stderr}")
