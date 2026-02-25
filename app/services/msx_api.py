@@ -77,6 +77,8 @@ def _msx_request(
         response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
     elif method.upper() == 'POST':
         response = requests.post(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
+    elif method.upper() == 'PATCH':
+        response = requests.patch(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
     else:
         raise ValueError(f"Unsupported HTTP method: {method}")
     
@@ -104,6 +106,8 @@ def _msx_request(
             response = requests.get(url, headers=fresh_headers, timeout=REQUEST_TIMEOUT)
         elif method.upper() == 'POST':
             response = requests.post(url, headers=fresh_headers, json=json_data, timeout=REQUEST_TIMEOUT)
+        elif method.upper() == 'PATCH':
+            response = requests.patch(url, headers=fresh_headers, json=json_data, timeout=REQUEST_TIMEOUT)
         
         if response.status_code in (401, 403):
             logger.warning(f"Still got {response.status_code} after token refresh - likely a real permission issue")
@@ -707,6 +711,7 @@ def create_task(
     task_category: int,
     duration_minutes: int = 60,
     description: str = None,
+    due_date: str = None,
 ) -> Dict[str, Any]:
     """
     Create a task in MSX linked to a milestone.
@@ -743,6 +748,9 @@ def create_task(
         
         if description:
             task_data["description"] = description
+        
+        if due_date:
+            task_data["scheduledend"] = due_date
         
         response = _msx_request('POST', f"{CRM_BASE_URL}/tasks", json_data=task_data)
         

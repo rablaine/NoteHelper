@@ -47,6 +47,9 @@ def run_migrations(db):
     # Migration: Add milestone tracker fields (due_date, dollar_value, workload, etc.)
     _migrate_milestone_tracker_fields(db, inspector)
     
+    # Migration: Add due_date column to msx_tasks table
+    _migrate_msx_tasks_due_date(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -300,3 +303,16 @@ def _migrate_milestone_tracker_fields(db, inspector):
     _add_index_if_not_exists(
         db, inspector, 'milestones', 'ix_milestones_msx_status', ['msx_status']
     )
+
+
+def _migrate_msx_tasks_due_date(db, inspector):
+    """
+    Add due_date column to msx_tasks table.
+    
+    Stores the scheduledend value from MSX (Dynamics 365 task due date).
+    """
+    if not _table_exists(inspector, 'msx_tasks'):
+        print("  msx_tasks table does not exist - skipping due_date migration")
+        return
+    
+    _add_column_if_not_exists(db, inspector, 'msx_tasks', 'due_date', 'DATETIME')

@@ -85,6 +85,7 @@ def _handle_milestone_and_task(call_log, user_id):
         task_category = request.form.get('task_category', '').strip()
         task_duration = request.form.get('task_duration', '60')
         task_description = request.form.get('task_description', '').strip()
+        task_due_date_str = request.form.get('task_due_date', '').strip()
         created_task_url = request.form.get('created_task_url', '').strip()
         created_task_category_name = request.form.get('created_task_category_name', '').strip()
         created_task_is_hok = request.form.get('created_task_is_hok', '').strip() == '1'
@@ -101,6 +102,14 @@ def _handle_milestone_and_task(call_log, user_id):
         
         logger.info(f"Linking pre-created MSX task {created_task_id} to call log")
         
+        # Parse due date
+        task_due_date = None
+        if task_due_date_str:
+            try:
+                task_due_date = datetime.strptime(task_due_date_str, '%Y-%m-%d')
+            except ValueError:
+                pass
+        
         msx_task = MsxTask(
             msx_task_id=created_task_id,
             msx_task_url=created_task_url,
@@ -110,6 +119,7 @@ def _handle_milestone_and_task(call_log, user_id):
             task_category_name=created_task_category_name or 'Unknown',
             duration_minutes=duration_minutes,
             is_hok=created_task_is_hok,
+            due_date=task_due_date,
             call_log=call_log,
             milestone=milestone
         )
@@ -124,11 +134,22 @@ def _handle_milestone_and_task(call_log, user_id):
             # Create task in MSX
             task_duration = request.form.get('task_duration', '60')
             task_description = request.form.get('task_description', '').strip()
+            task_due_date_str = request.form.get('task_due_date', '').strip()
             
             try:
                 duration_minutes = int(task_duration)
             except (ValueError, TypeError):
                 duration_minutes = 60
+            
+            # Build due date for MSX (ISO 8601)
+            msx_due_date = None
+            task_due_date = None
+            if task_due_date_str:
+                try:
+                    task_due_date = datetime.strptime(task_due_date_str, '%Y-%m-%d')
+                    msx_due_date = task_due_date.strftime('%Y-%m-%dT23:59:59Z')
+                except ValueError:
+                    pass
             
             logger.info(f"Creating MSX task on milestone {milestone_msx_id}: {task_subject}")
             
@@ -137,7 +158,8 @@ def _handle_milestone_and_task(call_log, user_id):
                 subject=task_subject,
                 task_category=int(task_category),
                 duration_minutes=duration_minutes,
-                description=task_description if task_description else None
+                description=task_description if task_description else None,
+                due_date=msx_due_date
             )
             
             if result.get('success'):
@@ -156,6 +178,7 @@ def _handle_milestone_and_task(call_log, user_id):
                     task_category_name=task_category_info['name'],
                     duration_minutes=duration_minutes,
                     is_hok=task_category_info['is_hok'],
+                    due_date=task_due_date,
                     call_log=call_log,
                     milestone=milestone
                 )
@@ -799,6 +822,11 @@ def api_fill_my_day_save():
     milestone_data = data.get('milestone')
     task_subject = data.get('task_subject', '').strip()
     task_description = data.get('task_description', '').strip()
+    created_task_id = data.get('created_task_id', '').strip()
+    created_task_url = data.get('created_task_url', '').strip()
+    created_task_category_name = data.get('created_task_category_name', '').strip()
+    created_task_is_hok = data.get('created_task_is_hok', '').strip() == '1'
+    task_due_date_str = data.get('task_due_date', '').strip()
     
     # Validation
     if not customer_id:
@@ -867,6 +895,35 @@ def api_fill_my_day_save():
             call_log.milestones = [milestone]
         
         db.session.add(call_log)
+        
+        # Link pre-created MSX task if provided
+        if created_task_id and milestone_data and milestone_data.get('msx_milestone_id'):
+            msx_id = milestone_data['msx_milestone_id']
+            milestone = Milestone.query.filter_by(msx_milestone_id=msx_id).first()
+            if milestone:
+                task_due_date = None
+                if task_due_date_str:
+                    try:
+                        task_due_date = datetime.strptime(task_due_date_str, '%Y-%m-%d')
+                    except ValueError:
+                        pass
+                
+                msx_task = MsxTask(
+                    msx_task_id=created_task_id,
+                    msx_task_url=created_task_url,
+                    subject=task_subject,
+                    description=task_description if task_description else None,
+                    task_category=0,  # Category code not passed from fill-my-day
+                    task_category_name=created_task_category_name or 'Unknown',
+                    duration_minutes=60,
+                    is_hok=created_task_is_hok,
+                    due_date=task_due_date,
+                    call_log=call_log,
+                    milestone=milestone
+                )
+                db.session.add(msx_task)
+                logger.info(f"Fill My Day - linked task {created_task_id} to call log")
+        
         db.session.commit()
         
         return jsonify({
