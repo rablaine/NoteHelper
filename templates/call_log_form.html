@@ -327,6 +327,12 @@
                                                        value="60" min="15" step="15">
                                             </div>
                                         </div>
+                                        <div class="row mb-2">
+                                            <div class="col-md-6">
+                                                <label for="task_due_date" class="form-label small mb-1"><i class="bi bi-calendar-event me-1"></i>Due Date</label>
+                                                <input type="date" class="form-control form-control-sm" id="task_due_date" name="task_due_date">
+                                            </div>
+                                        </div>
                                         <div class="mb-3">
                                             <label for="task_description" class="form-label small mb-1">Description (optional)</label>
                                             <textarea class="form-control form-control-sm" id="task_description" name="task_description" 
@@ -1294,6 +1300,12 @@ function selectMilestone(milestone) {
     // Show task creation section
     taskCreationSection.style.display = 'block';
     
+    // Default due date to today if not already set
+    const dueDateInput = document.getElementById('task_due_date');
+    if (dueDateInput && !dueDateInput.value) {
+        dueDateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
     // Clear search
     milestoneSearch.value = '';
     milestoneDropdown.style.display = 'none';
@@ -1321,6 +1333,7 @@ function createTaskInMSX() {
     const category = document.getElementById('task_category').value;
     const duration = document.getElementById('task_duration').value || 60;
     const description = document.getElementById('task_description').value.trim();
+    const dueDate = document.getElementById('task_due_date').value;
     
     // Validation
     if (!milestoneId) {
@@ -1355,7 +1368,8 @@ function createTaskInMSX() {
             subject: subject,
             task_category: parseInt(category),
             duration_minutes: parseInt(duration),
-            description: description || null
+            description: description || null,
+            due_date: dueDate ? dueDate + 'T23:59:59Z' : null
         })
     })
     .then(response => response.json())

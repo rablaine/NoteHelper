@@ -609,6 +609,7 @@ class MsxTask(db.Model):
     task_category_name = db.Column(db.String(100), nullable=True)  # Display name
     duration_minutes = db.Column(db.Integer, default=60, nullable=False)
     is_hok = db.Column(db.Boolean, default=False, nullable=False)  # Is this a HOK task?
+    due_date = db.Column(db.DateTime, nullable=True)  # scheduledend from MSX
     
     # Relationships
     call_log_id = db.Column(db.Integer, db.ForeignKey('call_logs.id'), nullable=False)

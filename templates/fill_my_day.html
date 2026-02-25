@@ -528,6 +528,13 @@ function createMeetingCard(idx, meeting, customer, data, dateStr, cardNum) {
                                            value="60" min="15" step="15">
                                 </div>
                             </div>
+                            <div class="row mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1"><i class="bi bi-calendar-event me-1"></i>Due Date</label>
+                                    <input type="date" class="form-control form-control-sm" id="taskDueDate-${idx}"
+                                           value="${new Date().toISOString().split('T')[0]}">
+                                </div>
+                            </div>
                             <div class="mb-3">
                                 <label class="form-label small mb-1">Description (optional)</label>
                                 <textarea class="form-control form-control-sm" id="taskDesc-${idx}" rows="2"
@@ -672,6 +679,7 @@ async function createCardTask(idx) {
     const category = document.getElementById(`taskCategory-${idx}`).value;
     const duration = parseInt(document.getElementById(`taskDuration-${idx}`).value) || 60;
     const description = document.getElementById(`taskDesc-${idx}`).value.trim();
+    const dueDate = document.getElementById(`taskDueDate-${idx}`).value;
 
     if (!subject) {
         showCardTaskError(idx, 'Task title is required.');
@@ -696,7 +704,8 @@ async function createCardTask(idx) {
                 subject: subject,
                 category: category,
                 duration: duration,
-                description: description
+                description: description,
+                due_date: dueDate ? dueDate + 'T23:59:59Z' : null
             })
         });
 
@@ -814,7 +823,12 @@ async function saveCallLog(idx, dateStr, callTime) {
                 topic_ids: topicIds,
                 milestone: milestone,
                 task_subject: taskSubject,
-                task_description: taskDescription
+                task_description: taskDescription,
+                created_task_id: card.dataset.createdTaskId || '',
+                created_task_url: card.dataset.createdTaskUrl || '',
+                created_task_category_name: card.dataset.createdTaskCategoryName || '',
+                created_task_is_hok: card.dataset.createdTaskIsHok || '',
+                task_due_date: document.getElementById(`taskDueDate-${idx}`)?.value || ''
             })
         });
 

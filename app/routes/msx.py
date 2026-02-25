@@ -288,6 +288,7 @@ def create_msx_task():
     task_category = data.get("task_category")
     duration_minutes = data.get("duration_minutes", 60)
     description = data.get("description")
+    due_date = data.get("due_date")
     
     if not milestone_id:
         return jsonify({"success": False, "error": "milestone_id required"}), 400
@@ -301,7 +302,8 @@ def create_msx_task():
         subject=subject,
         task_category=task_category,
         duration_minutes=duration_minutes,
-        description=description
+        description=description,
+        due_date=due_date
     )
     
     return jsonify(result)
