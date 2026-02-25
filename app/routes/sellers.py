@@ -3,7 +3,7 @@ Seller routes for NoteHelper.
 Handles seller listing, creation, viewing, and editing.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
-from datetime import date
+from datetime import date, datetime
 
 from app.models import db, Seller, Territory, Customer
 
@@ -79,7 +79,7 @@ def seller_view(id):
         })
     
     # Sort by most recent call date (nulls last)
-    min_date = date.min
+    min_date = datetime.min
     def get_sort_key(x):
         if not x['last_call']:
             return min_date

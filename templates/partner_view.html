@@ -120,7 +120,7 @@
                                         {{ call.customer.name }}
                                     </a>
                                     <br>
-                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
+                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</small>
                                 </div>
                             </div>
                             <p class="mb-0 mt-1 text-muted small">{{ call.content|striptags|truncate(150, true) }}</p>

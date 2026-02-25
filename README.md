@@ -29,6 +29,7 @@
 - Flexible customer list views (alphabetical, grouped by seller, sorted by call count)
 - Filter customers by call log activity
 - AI-powered topic suggestion using Azure OpenAI
+- **WorkIQ meeting import** - Import meeting transcripts and auto-generate call log summaries (requires Node.js)
 - Data import/export (JSON and CSV) for backup and migration
 
 ### Admin Features
@@ -163,6 +164,7 @@ This checks for updates every 5 minutes (300 seconds) and automatically removes 
 **Prerequisites:**
 - Python 3.13 or higher
 - pip and venv
+- Node.js 18+ with npm/npx (required for WorkIQ meeting import feature)
 
 **Setup:**
 

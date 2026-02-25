@@ -134,15 +134,16 @@ def call_logs_calendar_api():
     first_day = date(year, month, 1)
     last_day = date(year, month, cal.monthrange(year, month)[1])
     
-    # Query call logs for this month with customer data
+    # Query call logs for this month with customer data and relationships
     call_logs = CallLog.query.options(
-        db.joinedload(CallLog.customer)
+        db.joinedload(CallLog.customer),
+        db.joinedload(CallLog.milestones)
     ).filter(
         CallLog.call_date >= first_day,
         CallLog.call_date <= last_day
     ).order_by(CallLog.call_date).all()
     
-    # Group by day
+    # Group by day (call_logs already sorted by call_date from query)
     days = {}
     for log in call_logs:
         day = log.call_date.day
@@ -151,7 +152,10 @@ def call_logs_calendar_api():
         days[day].append({
             'id': log.id,
             'customer_name': log.customer.name if log.customer else 'Unknown',
-            'customer_id': log.customer.id if log.customer else None
+            'customer_id': log.customer.id if log.customer else None,
+            'has_milestone': len(log.milestones) > 0,
+            'has_task': log.msx_tasks.count() > 0,
+            'time': log.call_date.strftime('%I:%M %p').lstrip('0') if log.call_date.hour != 0 or log.call_date.minute != 0 else None
         })
     
     # Calculate prev/next month
@@ -545,7 +549,12 @@ def my_data_import_json():
                 skipped['call_logs'] += 1
                 continue
             
-            call_date = datetime.fromisoformat(call_date_str).date() if call_date_str else None
+            # Parse call_date - handle both date-only and datetime formats
+            try:
+                call_date = datetime.fromisoformat(call_date_str)
+            except (ValueError, TypeError):
+                skipped['call_logs'] += 1
+                continue
             
             # Get or create customer
             customer_key = f"{customer_name}_{call_data.get('customer_tpid', '')}"
@@ -1279,10 +1288,10 @@ def import_full_json():
             
             call_log = CallLog(
                 customer_id=customer_id,
-                call_date=datetime.fromisoformat(cl_data['call_date']).date(),
+                call_date=datetime.fromisoformat(cl_data['call_date']) if isinstance(cl_data['call_date'], str) else cl_data['call_date'],
                 content=cl_data['content'],
                 user_id=new_user_id,
-                created_at=datetime.fromisoformat(cl_data['created_at'])
+                created_at=datetime.fromisoformat(cl_data['created_at']) if isinstance(cl_data.get('created_at'), str) else datetime.utcnow()
             )
             # Add topic associations
             for topic_id in cl_data.get('topic_ids', []):

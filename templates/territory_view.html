@@ -100,7 +100,7 @@
                                 <li class="list-group-item">
                                     <a href="{{ url_for('call_logs.call_log_view', id=call.id) }}">{{ call.customer.name }}</a>
                                     <br>
-                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}</small>
+                                    <small class="text-muted">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</small>
                                 </li>
                             {% endfor %}
                         </ul>

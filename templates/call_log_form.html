@@ -30,15 +30,64 @@
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">{{ 'Edit' if call_log else 'New' }} Call Log{% if not call_log and preselect_customer %} - {{ preselect_customer.name }}{% endif %}</h1>
-    <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
-        <i class="bi bi-check-circle text-success"></i> Draft saved
-    </div>
-</div>
-
 <div class="row">
     <div class="col-md-{% if not call_log and previous_calls %}6{% else %}10{% endif %}">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0">{{ 'Edit' if call_log else 'New' }} Call Log{% if not call_log and preselect_customer %} - {{ preselect_customer.name }}{% endif %}</h1>
+            <div class="d-flex align-items-center gap-3">
+                <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
+                    <i class="bi bi-check-circle text-success"></i> Draft saved
+                </div>
+                {% if not call_log %}
+                <button type="button" class="btn btn-success" id="autoFillBtn" onclick="startAutoFill()" title="Auto-fill from meeting transcript">
+                    <i class="bi bi-magic"></i> Auto-fill
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Auto-fill Progress Panel -->
+        {% if not call_log %}
+        <div id="autoFillProgress" class="alert alert-info mb-4" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0"><i class="bi bi-magic"></i> Auto-fill in Progress</h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelAutoFill()">
+                    <i class="bi bi-x"></i> Cancel
+                </button>
+            </div>
+            <div id="autoFillSteps">
+                <div id="afStep1" class="d-flex align-items-center mb-1">
+                    <span class="spinner-border spinner-border-sm me-2" style="display: none;"></span>
+                    <i class="bi bi-check-circle-fill text-success me-2" style="display: none;"></i>
+                    <i class="bi bi-circle text-muted me-2"></i>
+                    <span>Finding meetings...</span>
+                </div>
+                <div id="afStep2" class="d-flex align-items-center mb-1 text-muted">
+                    <span class="spinner-border spinner-border-sm me-2" style="display: none;"></span>
+                    <i class="bi bi-check-circle-fill text-success me-2" style="display: none;"></i>
+                    <i class="bi bi-circle me-2"></i>
+                    <span>Getting meeting summary...</span>
+                </div>
+                <div id="afStep3" class="d-flex align-items-center mb-1 text-muted">
+                    <span class="spinner-border spinner-border-sm me-2" style="display: none;"></span>
+                    <i class="bi bi-check-circle-fill text-success me-2" style="display: none;"></i>
+                    <i class="bi bi-circle me-2"></i>
+                    <span>Analyzing topics & generating task...</span>
+                </div>
+                <div id="afStep4" class="d-flex align-items-center mb-1 text-muted">
+                    <span class="spinner-border spinner-border-sm me-2" style="display: none;"></span>
+                    <i class="bi bi-check-circle-fill text-success me-2" style="display: none;"></i>
+                    <i class="bi bi-circle me-2"></i>
+                    <span>Matching milestone...</span>
+                </div>
+            </div>
+            <div id="autoFillMeetingInfo" class="mt-2 small" style="display: none;">
+                <strong>Selected meeting:</strong> <span id="afSelectedMeetingTitle"></span>
+            </div>
+            <div id="autoFillError" class="text-danger mt-2" style="display: none;"></div>
+        </div>
+        {% endif %}
+
         <div class="card">
             <div class="card-body">
                 <form method="POST" id="callLogForm">
@@ -66,13 +115,18 @@
                         {% endif %}
                     </div>
                     
-                    <!-- Call Date and Partners side-by-side -->
+                    <!-- Call Date/Time and Partners side-by-side -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="call_date" class="form-label">Call Date *</label>
-                            <input type="date" class="form-control" id="call_date" name="call_date" 
-                                   value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
-                                   required>
+                            <label for="call_date" class="form-label">Call Date & Time *</label>
+                            <div class="d-flex gap-2">
+                                <input type="date" class="form-control" id="call_date" name="call_date" 
+                                       value="{% if call_log %}{{ call_log.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
+                                       required style="flex: 1;">
+                                <input type="time" class="form-control" id="call_time" name="call_time" 
+                                       value="{% if call_log and (call_log.call_date.hour != 0 or call_log.call_date.minute != 0) %}{{ call_log.call_date.strftime('%H:%M') }}{% else %}{{ now_time }}{% endif %}" 
+                                       style="width: 130px;">
+                            </div>
                         </div>
                         
                         <div class="col-md-6">
@@ -132,7 +186,16 @@
                         </div>
                     </div>
                     
+                    <!-- Content Editor with Import Button -->
                     <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">Call Notes *</label>
+                            {% if not call_log %}
+                            <button type="button" class="btn btn-sm btn-outline-info" id="importMeetingBtn" onclick="openMeetingImport()">
+                                <i class="bi bi-calendar-event"></i> Import from Meeting
+                            </button>
+                            {% endif %}
+                        </div>
                         <div id="editor" style="height: 400px;">{{ call_log.content|safe if call_log else '' }}</div>
                         <textarea name="content" id="content" style="display:none;"></textarea>
                         <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
@@ -144,8 +207,15 @@
                             <label for="milestone_search" class="form-label mb-0">
                                 <i class="bi bi-flag"></i> Milestone (optional)
                             </label>
-                            <div id="milestone_loading" class="text-muted small" style="display: none;">
-                                <span class="spinner-border spinner-border-sm me-1"></span> Loading milestones...
+                            <div class="d-flex align-items-center gap-2">
+                                <div id="milestone_loading" class="text-muted small" style="display: none;">
+                                    <span class="spinner-border spinner-border-sm me-1"></span> Loading milestones...
+                                </div>
+                                {% if ai_config and ai_config.enabled %}
+                                <button type="button" class="btn btn-sm btn-outline-success" id="aiMatchMilestoneBtn" style="display: none;" onclick="aiMatchMilestone()">
+                                    <i class="bi bi-stars"></i> <span id="aiMatchMilestoneBtnText">Match Milestone</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                         <input type="text" class="form-control" id="milestone_search" 
@@ -311,7 +381,7 @@
                 {% for call in previous_calls %}
                     <div class="mb-4 pb-3 {% if not loop.last %}border-bottom{% endif %}">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="mb-0">{{ call.call_date.strftime('%b %d, %Y') }}</h6>
+                            <h6 class="mb-0">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</h6>
                             <a href="{{ url_for('call_logs.call_log_view', id=call.id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
                                 <i class="bi bi-box-arrow-up-right"></i> View
                             </a>
@@ -331,6 +401,59 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Meeting Import Modal -->
+{% if not call_log %}
+<div class="modal fade" id="meetingImportModal" tabindex="-1" aria-labelledby="meetingImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="meetingImportModalLabel">
+                    <i class="bi bi-calendar-event"></i> Import from Meeting
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="meetingImportLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Loading meetings for this date...</p>
+                </div>
+                
+                <div id="meetingImportError" class="alert alert-danger" style="display: none;">
+                    <i class="bi bi-exclamation-triangle"></i> <span id="meetingImportErrorText"></span>
+                </div>
+                
+                <div id="meetingImportContent" style="display: none;">
+                    <div id="meetingAutoSelectNote" class="alert alert-info mb-3" style="display: none;">
+                        <i class="bi bi-magic"></i> <span id="meetingAutoSelectReason"></span>
+                    </div>
+                    
+                    <div id="meetingNoResults" class="alert alert-warning" style="display: none;">
+                        <i class="bi bi-calendar-x"></i> No meetings found for this date.
+                    </div>
+                    
+                    <div class="list-group" id="meetingList">
+                        <!-- Meetings will be populated here -->
+                    </div>
+                </div>
+                
+                <div id="meetingSummaryLoading" class="text-center py-4" style="display: none;">
+                    <div class="spinner-border text-success" role="status"></div>
+                    <p class="mt-2">Generating 250-word summary...</p>
+                    <small class="text-muted">This may take up to 2 minutes for long transcripts</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="importSelectedMeetingBtn" onclick="importSelectedMeeting()" disabled>
+                    <i class="bi bi-download"></i> Import Summary
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -852,6 +975,7 @@ function loadMilestonesForCustomer(customerId) {
         .then(response => response.json())
         .then(data => {
             milestoneLoading.style.display = 'none';
+            const matchBtn = document.getElementById('aiMatchMilestoneBtn');
             
             if (data.success && data.milestones) {
                 allMilestones = data.milestones;
@@ -859,9 +983,14 @@ function loadMilestonesForCustomer(customerId) {
                 milestoneSearch.placeholder = `Search ${allMilestones.length} milestone${allMilestones.length !== 1 ? 's' : ''}...`;
                 milestoneHelpText.textContent = `Found ${allMilestones.length} milestone${allMilestones.length !== 1 ? 's' : ''} for this customer`;
                 inlineTpidSection.style.display = 'none';
+                // Show AI match button if milestones loaded
+                if (matchBtn && allMilestones.length > 0) {
+                    matchBtn.style.display = 'inline-block';
+                }
             } else if (data.needs_tpid) {
                 milestoneSearch.placeholder = 'Link customer to MSX first';
                 milestoneHelpText.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Customer has no MSX account linked</span>';
+                if (matchBtn) matchBtn.style.display = 'none';
                 
                 // Show inline TPID link section
                 const customer = customerData[customerId];
@@ -1377,6 +1506,81 @@ document.getElementById('aiSuggestBtn').addEventListener('click', function() {
     });
 });
 
+// AI Milestone Matching
+function aiMatchMilestone() {
+    const btn = document.getElementById('aiMatchMilestoneBtn');
+    const btnText = document.getElementById('aiMatchMilestoneBtnText');
+    const originalText = btnText.textContent;
+    
+    // Get call notes
+    const callNotes = quill.getText().trim();
+    if (callNotes.length < 20) {
+        alert('Please add more call notes before matching milestones.');
+        return;
+    }
+    
+    // Need milestones to match against
+    if (!allMilestones || allMilestones.length === 0) {
+        alert('No milestones loaded. Please select a customer first.');
+        return;
+    }
+    
+    // Show loading state
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Matching...';
+    
+    // Build milestone context for AI
+    const milestoneContext = allMilestones.map(m => ({
+        id: m.id,
+        name: m.name,
+        status: m.status,
+        opportunity: m.opportunity_name || '',
+        workload: m.workload || ''
+    }));
+    
+    fetch('/api/ai/match-milestone', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            call_notes: callNotes,
+            milestones: milestoneContext
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btnText.textContent = originalText;
+        
+        if (data.success && data.matched_milestone_id) {
+            // Find the matched milestone in our list
+            const matched = allMilestones.find(m => m.id === data.matched_milestone_id);
+            if (matched) {
+                // Show confirmation
+                const confirmMsg = `AI suggests milestone:\n\n"${matched.name}"\n${matched.opportunity_name ? 'Opportunity: ' + matched.opportunity_name : ''}\n\nReason: ${data.reason || 'Best match based on call notes'}\n\nAdd this milestone to the call log?`;
+                
+                if (confirm(confirmMsg)) {
+                    // Add the milestone
+                    selectMilestone(matched);
+                    btnText.textContent = 'Milestone added!';
+                    setTimeout(() => { btnText.textContent = originalText; }, 2000);
+                }
+            } else {
+                alert('Could not find the matched milestone. Try selecting it manually.');
+            }
+        } else if (data.error) {
+            alert('AI Error: ' + data.error);
+        } else {
+            alert('AI could not find a matching milestone. Please select one manually.');
+        }
+    })
+    .catch(error => {
+        console.error('AI milestone match failed:', error);
+        btn.disabled = false;
+        btnText.textContent = originalText;
+        alert('Failed to match milestone. Please try again.');
+    });
+}
+
 // ===== AUTO-SAVE FUNCTIONALITY =====
 const DRAFT_KEY_PREFIX = 'notehelper_draft_';
 const MAX_DRAFTS = 5;
@@ -1432,6 +1636,7 @@ function saveDraft() {
         customer_id: document.getElementById('customer_id').value,
         customer_name: getCustomerName(),
         call_date: document.getElementById('call_date').value,
+        call_time: document.getElementById('call_time').value,
         content: quill.root.innerHTML,
         topics: Array.from(selectedTopicsContainer.querySelectorAll('input[name="topic_ids"]')).map(input => ({
             id: parseInt(input.value),
@@ -1499,6 +1704,10 @@ function restoreDraft() {
         // Restore form data
         if (draft.call_date) {
             document.getElementById('call_date').value = draft.call_date;
+        }
+        
+        if (draft.call_time) {
+            document.getElementById('call_time').value = draft.call_time;
         }
         
         if (draft.content) {
@@ -1630,6 +1839,9 @@ window.addEventListener('storage', function(e) {
 
 // Debounced auto-save - saves after user stops typing for DEBOUNCE_DELAY ms
 function debouncedAutoSave() {
+    // Don't save if draft was discarded
+    if (draftDiscarded) return;
+    
     // Clear any existing timeout
     if (autoSaveTimeout) {
         clearTimeout(autoSaveTimeout);
@@ -1639,7 +1851,9 @@ function debouncedAutoSave() {
     const customerId = document.getElementById('customer_id').value;
     if (customerId) {
         autoSaveTimeout = setTimeout(() => {
-            saveDraft();
+            if (!draftDiscarded) {
+                saveDraft();
+            }
         }, DEBOUNCE_DELAY);
     }
 }
@@ -1677,8 +1891,9 @@ function startAutoSave() {
         // Listen to Quill text changes
         quill.on('text-change', debouncedAutoSave);
         
-        // Listen to date field changes
+        // Listen to date and time field changes
         document.getElementById('call_date').addEventListener('input', debouncedAutoSave);
+        document.getElementById('call_time').addEventListener('input', debouncedAutoSave);
         
         console.log('Debounced auto-save enabled for customer', customerId);
     }
@@ -1687,13 +1902,14 @@ function startAutoSave() {
 // Start auto-save when customer is selected
 document.getElementById('customer_id').addEventListener('change', startAutoSave);
 
-// Flag to prevent saving after successful submission
+// Flags to prevent saving after form submission or draft discard
 let formSubmittedSuccessfully = false;
+let draftDiscarded = false;
 
-// Save draft before page unload (unless form was successfully submitted)
+// Save draft before page unload (unless form was successfully submitted or draft discarded)
 window.addEventListener('beforeunload', function(e) {
     const customerId = document.getElementById('customer_id').value;
-    if (customerId && !formSubmittedSuccessfully) {
+    if (customerId && !formSubmittedSuccessfully && !draftDiscarded) {
         saveDraft();
     }
 });
@@ -1751,16 +1967,53 @@ document.getElementById('callLogForm').addEventListener('submit', function(e) {
 // Discard draft function
 function discardDraft() {
     if (confirm('Discard this draft? This will clear all unsaved changes and cannot be undone.')) {
-        clearDraft();
+        // Set flag FIRST to prevent beforeunload from re-saving
+        draftDiscarded = true;
+        
+        // Clear any pending auto-save
         if (autoSaveTimeout) {
             clearTimeout(autoSaveTimeout);
         }
         
-        // Clear the form
+        // Clear milestone data from memory
+        selectedMilestoneData = null;
+        
+        // Now clear from localStorage
+        clearDraft();
+        
+        // Clear the form (for visual feedback before redirect)
         quill.setContents([]);
-        document.getElementById('call_date').value = '';
+        var callDate = document.getElementById('call_date');
+        var callTime = document.getElementById('call_time');
+        if (callDate) callDate.value = '';
+        if (callTime) callTime.value = '';
         document.querySelectorAll('.badge[data-topic-id]').forEach(badge => badge.remove());
         document.querySelectorAll('.badge[data-partner-id]').forEach(badge => badge.remove());
+        
+        // Clear milestone display
+        var selectedMilestoneEl = document.getElementById('selected_milestone');
+        if (selectedMilestoneEl) selectedMilestoneEl.innerHTML = '';
+        var taskSection = document.getElementById('task_creation_section');
+        if (taskSection) taskSection.style.display = 'none';
+        
+        // Clear task fields (with null checks)
+        var taskSubject = document.getElementById('task_subject');
+        var taskCategory = document.getElementById('task_category');
+        var taskDuration = document.getElementById('task_duration');
+        var taskDescription = document.getElementById('task_description');
+        var createdTaskId = document.getElementById('created_task_id');
+        var createdTaskUrl = document.getElementById('created_task_url');
+        var createdTaskCatName = document.getElementById('created_task_category_name');
+        var createdTaskIsHok = document.getElementById('created_task_is_hok');
+        
+        if (taskSubject) taskSubject.value = '';
+        if (taskCategory) taskCategory.value = '';
+        if (taskDuration) taskDuration.value = '60';
+        if (taskDescription) taskDescription.value = '';
+        if (createdTaskId) createdTaskId.value = '';
+        if (createdTaskUrl) createdTaskUrl.value = '';
+        if (createdTaskCatName) createdTaskCatName.value = '';
+        if (createdTaskIsHok) createdTaskIsHok.value = '';
         
         // Redirect back to call logs list
         window.location.href = '{{ url_for("call_logs.call_logs_list") }}';
@@ -1808,6 +2061,643 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('resize', matchCardHeights);
     {% endif %}
 });
+{% endif %}
+
+// =============================================================================
+// Meeting Import Functions
+// =============================================================================
+{% if not call_log %}
+var meetingImportModal = null;
+var selectedMeetingIndex = null;
+var loadedMeetings = [];
+var autoFillAborted = false;
+
+// =============================================================================
+// AUTO-FILL ORCHESTRATION
+// =============================================================================
+
+function startAutoFill() {
+    // Validate prerequisites
+    var dateStr = document.getElementById('call_date').value;
+    var customerSelect = document.getElementById('customer_id');
+    
+    if (!dateStr) {
+        alert('Please select a date first.');
+        return;
+    }
+    
+    if (customerSelect.selectedIndex <= 0) {
+        alert('Please select a customer first.');
+        return;
+    }
+    
+    // Get customer name (remove TPID part)
+    var customerName = customerSelect.options[customerSelect.selectedIndex].text;
+    customerName = customerName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    
+    // Reset state
+    autoFillAborted = false;
+    
+    // Show progress panel
+    document.getElementById('autoFillProgress').style.display = 'block';
+    document.getElementById('autoFillBtn').disabled = true;
+    document.getElementById('autoFillError').style.display = 'none';
+    document.getElementById('autoFillMeetingInfo').style.display = 'none';
+    
+    // Reset step indicators
+    resetAutoFillSteps();
+    setAutoFillStep(1, 'loading');
+    
+    // Step 1: Fetch meetings
+    var url = '/api/meetings?date=' + encodeURIComponent(dateStr) + '&customer_name=' + encodeURIComponent(customerName);
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (autoFillAborted) return;
+            
+            if (data.error) {
+                showAutoFillError('Failed to fetch meetings: ' + data.error);
+                return;
+            }
+            
+            loadedMeetings = data.meetings || [];
+            
+            if (loadedMeetings.length === 0) {
+                showAutoFillError('No meetings found for this date. Try the manual "Import from Meeting" button.');
+                return;
+            }
+            
+            // Check if we have a good auto-match
+            if (data.auto_selected_index !== null) {
+                // Auto-match found - use it
+                setAutoFillStep(1, 'done');
+                var meeting = loadedMeetings[data.auto_selected_index];
+                document.getElementById('afSelectedMeetingTitle').textContent = meeting.title;
+                document.getElementById('autoFillMeetingInfo').style.display = 'block';
+                
+                // Proceed with this meeting
+                proceedWithMeeting(meeting, dateStr);
+            } else {
+                // No good match - show modal for user to pick
+                setAutoFillStep(1, 'done');
+                showAutoFillError('Multiple meetings found. Please select one:');
+                
+                // Open the meeting import modal
+                openMeetingImportForAutoFill(loadedMeetings);
+            }
+        })
+        .catch(error => {
+            if (autoFillAborted) return;
+            console.error('Error:', error);
+            showAutoFillError('Failed to fetch meetings: ' + error.message);
+        });
+}
+
+function openMeetingImportForAutoFill(meetings) {
+    // Initialize modal if needed
+    if (!meetingImportModal) {
+        meetingImportModal = new bootstrap.Modal(document.getElementById('meetingImportModal'));
+        
+        // Add handler to reset auto-fill mode when modal is dismissed
+        document.getElementById('meetingImportModal').addEventListener('hidden.bs.modal', function() {
+            if (window.autoFillModeActive) {
+                window.autoFillModeActive = false;
+                // Hide progress panel since user cancelled
+                document.getElementById('autoFillProgress').style.display = 'none';
+                document.getElementById('autoFillBtn').disabled = false;
+            }
+        });
+    }
+    
+    // Set meetings and render
+    loadedMeetings = meetings;
+    selectedMeetingIndex = null;
+    
+    document.getElementById('meetingImportLoading').style.display = 'none';
+    document.getElementById('meetingImportError').style.display = 'none';
+    document.getElementById('meetingSummaryLoading').style.display = 'none';
+    document.getElementById('meetingAutoSelectNote').style.display = 'none';
+    document.getElementById('meetingNoResults').style.display = 'none';
+    
+    // Store that we're in auto-fill mode
+    window.autoFillModeActive = true;
+    
+    renderMeetingList(meetings, null, null);
+    
+    meetingImportModal.show();
+}
+
+function proceedWithMeeting(meeting, dateStr) {
+    // Update date/time from meeting
+    if (meeting.start_time) {
+        var meetingDate = new Date(meeting.start_time);
+        var dateStrFmt = meetingDate.getFullYear() + '-' + 
+            String(meetingDate.getMonth() + 1).padStart(2, '0') + '-' + 
+            String(meetingDate.getDate()).padStart(2, '0');
+        document.getElementById('call_date').value = dateStrFmt;
+        
+        var timeStr = String(meetingDate.getHours()).padStart(2, '0') + ':' + 
+            String(meetingDate.getMinutes()).padStart(2, '0');
+        document.getElementById('call_time').value = timeStr;
+    }
+    
+    // Step 2: Get meeting summary from WorkIQ
+    setAutoFillStep(2, 'loading');
+    
+    var summaryUrl = '/api/meetings/summary?title=' + encodeURIComponent(meeting.title);
+    if (dateStr) {
+        summaryUrl += '&date=' + encodeURIComponent(dateStr);
+    }
+    
+    fetch(summaryUrl)
+        .then(response => response.json())
+        .then(data => {
+            if (autoFillAborted) return;
+            
+            if (!data.success) {
+                showAutoFillError('Failed to get meeting summary: ' + (data.error || 'Unknown error'));
+                return;
+            }
+            
+            setAutoFillStep(2, 'done');
+            
+            // Populate call notes
+            var content = '<h2>' + escapeHtml(meeting.title) + '</h2>';
+            content += '<p><strong>Summary:</strong></p>';
+            content += '<p>' + escapeHtml(data.summary) + '</p>';
+            
+            if (data.action_items && data.action_items.length > 0) {
+                content += '<p><strong>Action Items:</strong></p><ul>';
+                data.action_items.forEach(function(item) {
+                    content += '<li>' + escapeHtml(item) + '</li>';
+                });
+                content += '</ul>';
+            }
+            
+            quill.root.innerHTML = content;
+            
+            // Step 3: AI analysis (topics + task)
+            setAutoFillStep(3, 'loading');
+            analyzeCallWithAI(data.summary, meeting.title);
+        })
+        .catch(error => {
+            if (autoFillAborted) return;
+            console.error('Error getting summary:', error);
+            showAutoFillError('Failed to get meeting summary. Try again or use manual import.');
+        });
+}
+
+function analyzeCallWithAI(summary, meetingTitle) {
+    var callNotes = summary;
+    
+    fetch('/api/ai/analyze-call', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({call_notes: callNotes})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (autoFillAborted) return;
+        
+        if (!data.success) {
+            console.warn('AI analysis failed:', data.error);
+            // Continue anyway - not a blocker
+        } else {
+            // Add topics
+            if (data.topics && data.topics.length > 0) {
+                data.topics.forEach(function(topic) {
+                    if (!isTopicSelected(topic.id)) {
+                        addTopic(topic.id, topic.name);
+                    }
+                });
+            }
+            
+            // Fill task fields
+            if (data.task_title) {
+                document.getElementById('task_subject').value = data.task_title;
+            }
+            if (data.task_description) {
+                document.getElementById('task_description').value = data.task_description;
+            }
+        }
+        
+        setAutoFillStep(3, 'done');
+        
+        // Step 4: Match milestone
+        setAutoFillStep(4, 'loading');
+        matchMilestoneWithAI(callNotes);
+    })
+    .catch(error => {
+        if (autoFillAborted) return;
+        console.warn('AI analysis error:', error);
+        // Continue anyway
+        setAutoFillStep(3, 'done');
+        setAutoFillStep(4, 'loading');
+        matchMilestoneWithAI(summary);
+    });
+}
+
+function matchMilestoneWithAI(callNotes) {
+    // First check if milestones are loaded
+    if (!allMilestones || allMilestones.length === 0) {
+        console.log('No milestones loaded yet, skipping AI match');
+        setAutoFillStep(4, 'done');
+        finishAutoFill();
+        return;
+    }
+    
+    // Prepare milestones for AI
+    var milestonesForAI = allMilestones.map(function(m) {
+        return {
+            id: m.id,
+            name: m.name,
+            status: m.status,
+            opportunity: m.opportunity_name || '',
+            workload: m.workload || ''
+        };
+    });
+    
+    fetch('/api/ai/match-milestone', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            call_notes: callNotes,
+            milestones: milestonesForAI
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (autoFillAborted) return;
+        
+        setAutoFillStep(4, 'done');
+        
+        if (data.success && data.matched_milestone_id) {
+            // Find the matching milestone and select it
+            var matched = allMilestones.find(m => m.id === data.matched_milestone_id);
+            if (matched) {
+                selectMilestone(matched);
+                console.log('AI matched milestone:', matched.name, '- Reason:', data.reason);
+            }
+        }
+        
+        finishAutoFill();
+    })
+    .catch(error => {
+        if (autoFillAborted) return;
+        console.warn('Milestone matching error:', error);
+        setAutoFillStep(4, 'done');
+        finishAutoFill();
+    });
+}
+
+function finishAutoFill() {
+    // Hide progress panel after a brief delay
+    setTimeout(function() {
+        document.getElementById('autoFillProgress').style.display = 'none';
+        document.getElementById('autoFillBtn').disabled = false;
+    }, 1500);
+    
+    // Trigger autosave
+    if (typeof debouncedAutoSave === 'function') {
+        debouncedAutoSave();
+    }
+}
+
+function cancelAutoFill() {
+    autoFillAborted = true;
+    document.getElementById('autoFillProgress').style.display = 'none';
+    document.getElementById('autoFillBtn').disabled = false;
+}
+
+function showAutoFillError(message) {
+    document.getElementById('autoFillError').textContent = message;
+    document.getElementById('autoFillError').style.display = 'block';
+    document.getElementById('autoFillBtn').disabled = false;
+    
+    // Reset any loading steps
+    for (var i = 1; i <= 4; i++) {
+        var step = document.getElementById('afStep' + i);
+        var spinner = step.querySelector('.spinner-border');
+        if (spinner.style.display !== 'none') {
+            spinner.style.display = 'none';
+            step.querySelector('.bi-circle').style.display = 'inline-block';
+        }
+    }
+}
+
+function resetAutoFillSteps() {
+    for (var i = 1; i <= 4; i++) {
+        var step = document.getElementById('afStep' + i);
+        step.classList.remove('text-muted');
+        step.classList.add('text-muted');
+        step.querySelector('.spinner-border').style.display = 'none';
+        step.querySelector('.bi-check-circle-fill').style.display = 'none';
+        step.querySelector('.bi-circle').style.display = 'inline-block';
+    }
+}
+
+function setAutoFillStep(stepNum, state) {
+    var step = document.getElementById('afStep' + stepNum);
+    var spinner = step.querySelector('.spinner-border');
+    var check = step.querySelector('.bi-check-circle-fill');
+    var circle = step.querySelector('.bi-circle');
+    
+    step.classList.remove('text-muted');
+    
+    if (state === 'loading') {
+        spinner.style.display = 'inline-block';
+        check.style.display = 'none';
+        circle.style.display = 'none';
+    } else if (state === 'done') {
+        spinner.style.display = 'none';
+        check.style.display = 'inline-block';
+        circle.style.display = 'none';
+    }
+}
+
+// =============================================================================
+// MANUAL MEETING IMPORT
+// =============================================================================
+
+function openMeetingImport() {
+    // Initialize modal if needed
+    if (!meetingImportModal) {
+        meetingImportModal = new bootstrap.Modal(document.getElementById('meetingImportModal'));
+    }
+    
+    // Reset state
+    selectedMeetingIndex = null;
+    loadedMeetings = [];
+    document.getElementById('meetingImportLoading').style.display = 'block';
+    document.getElementById('meetingImportError').style.display = 'none';
+    document.getElementById('meetingImportContent').style.display = 'none';
+    document.getElementById('meetingSummaryLoading').style.display = 'none';
+    document.getElementById('meetingAutoSelectNote').style.display = 'none';
+    document.getElementById('meetingNoResults').style.display = 'none';
+    document.getElementById('importSelectedMeetingBtn').disabled = true;
+    
+    // Show modal
+    meetingImportModal.show();
+    
+    // Get date and customer name
+    var dateStr = document.getElementById('call_date').value;
+    var customerName = '';
+    var customerSelect = document.getElementById('customer_id');
+    if (customerSelect.selectedIndex > 0) {
+        customerName = customerSelect.options[customerSelect.selectedIndex].text;
+        // Remove the TPID part: "Customer Name (12345)" -> "Customer Name"
+        customerName = customerName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    }
+    
+    if (!dateStr) {
+        showMeetingError('Please select a date first.');
+        return;
+    }
+    
+    // Fetch meetings
+    var url = '/api/meetings?date=' + encodeURIComponent(dateStr);
+    if (customerName) {
+        url += '&customer_name=' + encodeURIComponent(customerName);
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('meetingImportLoading').style.display = 'none';
+            
+            if (data.error) {
+                showMeetingError(data.error);
+                return;
+            }
+            
+            loadedMeetings = data.meetings || [];
+            
+            if (loadedMeetings.length === 0) {
+                document.getElementById('meetingImportContent').style.display = 'block';
+                document.getElementById('meetingNoResults').style.display = 'block';
+                return;
+            }
+            
+            // Render meetings
+            renderMeetingList(loadedMeetings, data.auto_selected_index, data.auto_selected_reason);
+        })
+        .catch(error => {
+            console.error('Error fetching meetings:', error);
+            showMeetingError('Failed to fetch meetings. Make sure WorkIQ is configured correctly.');
+        });
+}
+
+function showMeetingError(message) {
+    document.getElementById('meetingImportLoading').style.display = 'none';
+    document.getElementById('meetingImportError').style.display = 'block';
+    document.getElementById('meetingImportErrorText').textContent = message;
+}
+
+function renderMeetingList(meetings, autoSelectedIndex, autoSelectedReason) {
+    var listEl = document.getElementById('meetingList');
+    listEl.innerHTML = '';
+    
+    // Show auto-select note if applicable
+    if (autoSelectedIndex !== null && autoSelectedReason) {
+        document.getElementById('meetingAutoSelectNote').style.display = 'block';
+        document.getElementById('meetingAutoSelectReason').textContent = autoSelectedReason;
+        selectedMeetingIndex = autoSelectedIndex;
+        document.getElementById('importSelectedMeetingBtn').disabled = false;
+    }
+    
+    meetings.forEach(function(meeting, index) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start';
+        if (index === autoSelectedIndex) {
+            item.classList.add('active');
+        }
+        item.onclick = function() { selectMeeting(index); };
+        
+        item.innerHTML = `
+            <div class="ms-2 me-auto">
+                <div class="fw-bold">${escapeHtml(meeting.title)}</div>
+                <small class="text-${index === autoSelectedIndex ? 'light' : 'muted'}">
+                    <i class="bi bi-clock"></i> ${meeting.start_time_display || 'Time unknown'}
+                    ${meeting.customer ? ' &bull; <i class="bi bi-building"></i> ' + escapeHtml(meeting.customer) : ''}
+                </small>
+                ${meeting.attendees && meeting.attendees.length > 0 ? 
+                    '<br><small class="text-' + (index === autoSelectedIndex ? 'light' : 'muted') + '"><i class="bi bi-people"></i> ' + 
+                    meeting.attendees.slice(0, 3).map(escapeHtml).join(', ') + 
+                    (meeting.attendees.length > 3 ? ' +' + (meeting.attendees.length - 3) + ' more' : '') + '</small>' 
+                    : ''}
+            </div>
+            <span class="badge bg-${index === autoSelectedIndex ? 'light text-dark' : 'primary'} rounded-pill">
+                ${index === autoSelectedIndex ? '<i class="bi bi-check"></i> Selected' : 'Select'}
+            </span>
+        `;
+        
+        listEl.appendChild(item);
+    });
+    
+    document.getElementById('meetingImportContent').style.display = 'block';
+}
+
+function selectMeeting(index) {
+    selectedMeetingIndex = index;
+    document.getElementById('importSelectedMeetingBtn').disabled = false;
+    
+    // Update visual selection
+    var items = document.querySelectorAll('#meetingList .list-group-item');
+    items.forEach(function(item, i) {
+        if (i === index) {
+            item.classList.add('active');
+            // Update badge
+            item.querySelector('.badge').className = 'badge bg-light text-dark rounded-pill';
+            item.querySelector('.badge').innerHTML = '<i class="bi bi-check"></i> Selected';
+            // Update text colors
+            item.querySelectorAll('small').forEach(function(el) {
+                el.classList.remove('text-muted');
+                el.classList.add('text-light');
+            });
+        } else {
+            item.classList.remove('active');
+            item.querySelector('.badge').className = 'badge bg-primary rounded-pill';
+            item.querySelector('.badge').textContent = 'Select';
+            item.querySelectorAll('small').forEach(function(el) {
+                el.classList.remove('text-light');
+                el.classList.add('text-muted');
+            });
+        }
+    });
+}
+
+function importSelectedMeeting() {
+    if (selectedMeetingIndex === null || !loadedMeetings[selectedMeetingIndex]) {
+        return;
+    }
+    
+    var meeting = loadedMeetings[selectedMeetingIndex];
+    var dateStr = document.getElementById('call_date').value;
+    
+    // Check if we're in auto-fill mode
+    if (window.autoFillModeActive) {
+        // Close modal and continue auto-fill flow
+        meetingImportModal.hide();
+        window.autoFillModeActive = false;
+        
+        // Update progress panel
+        document.getElementById('autoFillError').style.display = 'none';
+        document.getElementById('afSelectedMeetingTitle').textContent = meeting.title;
+        document.getElementById('autoFillMeetingInfo').style.display = 'block';
+        
+        // Continue with the auto-fill flow
+        proceedWithMeeting(meeting, dateStr);
+        return;
+    }
+    
+    // Normal manual import flow
+    // Show loading state
+    document.getElementById('meetingImportContent').style.display = 'none';
+    document.getElementById('meetingSummaryLoading').style.display = 'block';
+    document.getElementById('importSelectedMeetingBtn').disabled = true;
+    
+    // Fetch summary with timeout
+    var url = '/api/meetings/summary?title=' + encodeURIComponent(meeting.title);
+    if (dateStr) {
+        url += '&date=' + encodeURIComponent(dateStr);
+    }
+    
+    // Create abort controller for timeout
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 150000); // 2.5 min timeout
+    
+    fetch(url, { signal: controller.signal })
+        .then(response => response.json())
+        .then(data => {
+            clearTimeout(timeoutId);
+            if (!data.success) {
+                showMeetingError(data.error || 'Failed to generate summary');
+                document.getElementById('meetingSummaryLoading').style.display = 'none';
+                document.getElementById('meetingImportContent').style.display = 'block';
+                document.getElementById('importSelectedMeetingBtn').disabled = false;
+                return;
+            }
+            
+            // Build rich content for Quill
+            var content = '<h2>' + escapeHtml(meeting.title) + '</h2>';
+            content += '<p><strong>Summary:</strong></p>';
+            content += '<p>' + escapeHtml(data.summary) + '</p>';
+            
+            if (data.action_items && data.action_items.length > 0) {
+                content += '<p><strong>Action Items:</strong></p><ul>';
+                data.action_items.forEach(function(item) {
+                    content += '<li>' + escapeHtml(item) + '</li>';
+                });
+                content += '</ul>';
+            }
+            
+            // Set Quill content
+            quill.root.innerHTML = content;
+            
+            // Update the call date and time from meeting
+            if (meeting.start_time) {
+                var meetingDate = new Date(meeting.start_time);
+                // Set date field (YYYY-MM-DD)
+                var dateStr = meetingDate.getFullYear() + '-' + 
+                    String(meetingDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(meetingDate.getDate()).padStart(2, '0');
+                document.getElementById('call_date').value = dateStr;
+                
+                // Set time field (HH:MM)
+                var timeStr = String(meetingDate.getHours()).padStart(2, '0') + ':' + 
+                    String(meetingDate.getMinutes()).padStart(2, '0');
+                document.getElementById('call_time').value = timeStr;
+            }
+            
+            // Auto-suggest topics if any technologies were identified
+            if (data.topics && data.topics.length > 0) {
+                autoSuggestTopics(data.topics);
+            }
+            
+            // Close modal
+            meetingImportModal.hide();
+            
+            // Trigger autosave
+            if (typeof debouncedAutoSave === 'function') {
+                debouncedAutoSave();
+            }
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            console.error('Error fetching summary:', error);
+            var errorMsg = error.name === 'AbortError' 
+                ? 'Request timed out. The meeting may not have a transcript, or try again later.'
+                : 'Failed to generate summary: ' + error.message;
+            showMeetingError(errorMsg);
+            document.getElementById('meetingSummaryLoading').style.display = 'none';
+            document.getElementById('meetingImportContent').style.display = 'block';
+            document.getElementById('importSelectedMeetingBtn').disabled = false;
+        });
+}
+
+function autoSuggestTopics(suggestedTopics) {
+    // Try to match suggested topic names to existing topics
+    suggestedTopics.forEach(function(topicName) {
+        var matchedTopic = allTopics.find(function(t) {
+            return t.name.toLowerCase() === topicName.toLowerCase() ||
+                   t.name.toLowerCase().includes(topicName.toLowerCase()) ||
+                   topicName.toLowerCase().includes(t.name.toLowerCase());
+        });
+        
+        if (matchedTopic && !isTopicSelected(matchedTopic.id)) {
+            addTopic(matchedTopic);
+        }
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 {% endif %}
 </script>
 {% endblock %}

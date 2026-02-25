@@ -55,7 +55,7 @@
                             <div class="fw-bold">
                                 <i class="bi bi-building"></i> {{ call_log.customer.name }}
                             </div>
-                            <small class="text-muted">{{ call_log.call_date.strftime('%b %d, %Y') }}</small>
+                            <small class="text-muted">{{ call_log.call_date.strftime('%b %d, %Y') }}{% if call_log.call_date.hour != 0 or call_log.call_date.minute != 0 %} {{ call_log.call_date.strftime('%I:%M %p') }}{% endif %}</small>
                         </div>
                         <div>
                             {% for topic in call_log.topics[:3] %}

@@ -205,4 +205,264 @@ def api_ai_suggest_topics():
         return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
 
 
+@ai_bp.route('/api/ai/match-milestone', methods=['POST'])
+def api_ai_match_milestone():
+    """Match call notes to the most relevant milestone using AI."""
+    
+    # Check if AI features are enabled
+    ai_config = AIConfig.query.first()
+    if not ai_config or not ai_config.enabled:
+        return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
+    
+    if not ai_config.endpoint_url or not ai_config.deployment_name:
+        return jsonify({'success': False, 'error': 'AI configuration is incomplete'}), 400
+    
+    # Get data from request
+    data = request.get_json()
+    call_notes = data.get('call_notes', '').strip()
+    milestones = data.get('milestones', [])
+    
+    if not call_notes or len(call_notes) < 20:
+        return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
+    
+    if not milestones or len(milestones) == 0:
+        return jsonify({'success': False, 'error': 'No milestones provided'}), 400
+    
+    # Format milestones for the AI
+    milestone_list = "\n".join([
+        f"- ID: {m.get('id')}, Name: {m.get('name')}, Status: {m.get('status')}, Opportunity: {m.get('opportunity', '')}, Workload: {m.get('workload', '')}"
+        for m in milestones
+    ])
+    
+    system_prompt = """You are an expert at matching customer call notes to sales milestones.
+Your task is to identify which milestone best matches the topics discussed in the call notes.
+
+Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
+{"milestone_id": "THE_MATCHED_ID", "reason": "Brief explanation of why this milestone matches"}
+
+If no milestone is a good match, respond with:
+{"milestone_id": null, "reason": "No milestone matches the call discussion"}"""
+    
+    user_prompt = f"""Call Notes:
+{call_notes[:2000]}
+
+Available Milestones:
+{milestone_list}
+
+Which milestone best matches what was discussed in the call?"""
+    
+    try:
+        client = get_azure_openai_client(ai_config)
+        
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=150,
+            model=ai_config.deployment_name
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+        
+        # Log the query
+        log_entry = AIQueryLog(
+            user_id=g.user.id,
+            request_text=f"Match milestone: {call_notes[:500]}...",
+            response_text=response_text[:500],
+            success=True
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        # Parse JSON response
+        import re
+        # Remove markdown code blocks if present
+        clean_text = response_text
+        if '```' in clean_text:
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', clean_text, re.DOTALL)
+            if match:
+                clean_text = match.group(1).strip()
+        
+        result = json.loads(clean_text)
+        
+        return jsonify({
+            'success': True,
+            'matched_milestone_id': result.get('milestone_id'),
+            'reason': result.get('reason', '')
+        })
+        
+    except json.JSONDecodeError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Could not parse AI response: {response_text[:100]}'
+        }), 500
+        
+    except Exception as e:
+        error_msg = str(e)
+        
+        log_entry = AIQueryLog(
+            user_id=g.user.id,
+            request_text=f"Match milestone: {call_notes[:500]}...",
+            response_text=None,
+            success=False,
+            error_message=error_msg[:500]
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
+
+
+@ai_bp.route('/api/ai/analyze-call', methods=['POST'])
+def api_ai_analyze_call():
+    """
+    Analyze call notes to extract topics and generate task title/description.
+    This is the first AI call in the auto-fill flow.
+    
+    Takes: call_notes (str)
+    Returns: topics (list), task_title (str ~5 words), task_description (str ~30 words)
+    """
+    
+    # Check if AI features are enabled
+    ai_config = AIConfig.query.first()
+    if not ai_config or not ai_config.enabled:
+        return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
+    
+    if not ai_config.endpoint_url or not ai_config.deployment_name:
+        return jsonify({'success': False, 'error': 'AI configuration is incomplete'}), 400
+    
+    # Get data from request
+    data = request.get_json()
+    call_notes = data.get('call_notes', '').strip()
+    
+    if not call_notes or len(call_notes) < 20:
+        return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
+    
+    system_prompt = """You are an expert at analyzing Azure customer call notes.
+Extract key technologies discussed and generate a concise task summary.
+
+Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
+{
+  "topics": ["Topic 1", "Topic 2", "Topic 3"],
+  "task_title": "5-word task title here",
+  "task_description": "About 30 words describing the customer discussion and next steps. Include key technologies and action items mentioned."
+}
+
+Guidelines:
+- topics: List 2-5 Azure/Microsoft technologies or concepts discussed (e.g., "Azure Kubernetes Service", "Cost Optimization", "Data Migration")
+- task_title: 5ish words, action-oriented (e.g., "AKS POC follow-up with Contoso")
+- task_description: ~30 words summarizing the call and next steps"""
+    
+    user_prompt = f"""Analyze these call notes and extract topics and task info:
+
+{call_notes[:3000]}"""
+    
+    try:
+        client = get_azure_openai_client(ai_config)
+        
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=300,
+            model=ai_config.deployment_name
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+        
+        # Extract token usage
+        model_used = response.model or ai_config.deployment_name
+        prompt_tokens = response.usage.prompt_tokens if response.usage else None
+        completion_tokens = response.usage.completion_tokens if response.usage else None
+        total_tokens = response.usage.total_tokens if response.usage else None
+        
+        # Parse JSON response
+        import re
+        clean_text = response_text
+        if '```' in clean_text:
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', clean_text, re.DOTALL)
+            if match:
+                clean_text = match.group(1).strip()
+        
+        result = json.loads(clean_text)
+        
+        # Log successful query
+        log_entry = AIQueryLog(
+            user_id=g.user.id,
+            request_text=f"Analyze call: {call_notes[:500]}...",
+            response_text=response_text[:500],
+            success=True,
+            model=model_used,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens
+        )
+        db.session.add(log_entry)
+        
+        # Process topics: check if they exist, create if not
+        topics = result.get('topics', [])
+        topic_ids = []
+        for topic_name in topics:
+            if not topic_name or not str(topic_name).strip():
+                continue
+            topic_name = str(topic_name).strip()
+            
+            # Check if topic exists (case-insensitive)
+            existing_topic = Topic.query.filter(
+                Topic.user_id == g.user.id,
+                db.func.lower(Topic.name) == topic_name.lower()
+            ).first()
+            
+            if existing_topic:
+                topic_ids.append({'id': existing_topic.id, 'name': existing_topic.name})
+            else:
+                # Create new topic
+                new_topic = Topic(name=topic_name, user_id=g.user.id)
+                db.session.add(new_topic)
+                db.session.flush()
+                topic_ids.append({'id': new_topic.id, 'name': new_topic.name})
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'topics': topic_ids,
+            'task_title': result.get('task_title', ''),
+            'task_description': result.get('task_description', '')
+        })
+        
+    except json.JSONDecodeError as e:
+        log_entry = AIQueryLog(
+            user_id=g.user.id,
+            request_text=f"Analyze call: {call_notes[:500]}...",
+            response_text=response_text[:500] if 'response_text' in dir() else None,
+            success=False,
+            error_message=f"JSON parse error: {str(e)}"
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        return jsonify({
+            'success': False,
+            'error': f'Could not parse AI response'
+        }), 500
+        
+    except Exception as e:
+        error_msg = str(e)
+        
+        log_entry = AIQueryLog(
+            user_id=g.user.id,
+            request_text=f"Analyze call: {call_notes[:500]}...",
+            response_text=None,
+            success=False,
+            error_message=error_msg[:500]
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        
+        return jsonify({'success': False, 'error': f'AI request failed: {error_msg}'}), 500
+
+
 

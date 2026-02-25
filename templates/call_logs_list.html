@@ -42,7 +42,7 @@
                             Unknown Customer
                         {% endif %}
                     </h5>
-                    <small class="text-muted text-nowrap ms-3">{{ call.call_date.strftime('%b %d, %Y') }}</small>
+                    <small class="text-muted text-nowrap ms-3">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</small>
                 </div>
                 <p class="mb-2 call-body-text">
                     {{ call.content|striptags|truncate(200, true) }}
