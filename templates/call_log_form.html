@@ -2235,7 +2235,13 @@ function proceedWithMeeting(meeting, dateStr) {
                 content += '</ul>';
             }
             
-            quill.root.innerHTML = content;
+            // Append after existing content with separator
+            var existing = quill.root.innerHTML.trim();
+            if (existing && existing !== '<p><br></p>' && existing !== '<p></p>') {
+                quill.root.innerHTML = existing + '<p><br></p><p><br></p><hr>' + content;
+            } else {
+                quill.root.innerHTML = content;
+            }
             
             // Step 3: AI analysis (topics + task)
             setAutoFillStep(3, 'loading');
@@ -2633,8 +2639,13 @@ function importSelectedMeeting() {
                 content += '</ul>';
             }
             
-            // Set Quill content
-            quill.root.innerHTML = content;
+            // Append after existing content with separator
+            var existing = quill.root.innerHTML.trim();
+            if (existing && existing !== '<p><br></p>' && existing !== '<p></p>') {
+                quill.root.innerHTML = existing + '<p><br></p><p><br></p><hr>' + content;
+            } else {
+                quill.root.innerHTML = content;
+            }
             
             // Update the call date and time from meeting
             if (meeting.start_time) {
