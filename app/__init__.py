@@ -4,7 +4,6 @@ Single-user local deployment mode.
 """
 import os
 from flask import Flask, g
-from flask_migrate import Migrate
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -12,9 +11,6 @@ load_dotenv()
 
 # Import db from models module
 from app.models import db
-
-# Initialize extensions
-migrate = Migrate()
 
 
 def create_app():
@@ -42,7 +38,6 @@ def create_app():
     
     # Initialize extensions with app
     db.init_app(app)
-    migrate.init_app(app, db)
     
     # Import models to register them with SQLAlchemy
     from app import models
@@ -50,9 +45,13 @@ def create_app():
     # Create default user and preferences on app startup
     with app.app_context():
         from app.models import User, UserPreference
+        from app.migrations import run_migrations
         
         # Ensure database tables exist
         db.create_all()
+        
+        # Run idempotent migrations (safe to run every startup)
+        run_migrations(db)
         
         # Create default user if none exists
         user = User.query.first()

@@ -41,6 +41,9 @@ def run_migrations(db):
     # Migration: Upgrade milestones table for MSX integration
     _migrate_milestones_for_msx(db, inspector)
     
+    # Migration: Upgrade call_date from Date to DateTime for meeting timestamps
+    _migrate_call_date_to_datetime(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -174,3 +177,91 @@ def _migrate_milestones_for_msx(db, inspector):
         print("    Created msx_tasks table")
     else:
         print("  msx_tasks table already exists - skipping")
+
+
+def _migrate_call_date_to_datetime(db, inspector):
+    """
+    Upgrade call_date column from Date to DateTime for meeting timestamps.
+    
+    SQLite stores DATE as TEXT 'YYYY-MM-DD' and DATETIME as 'YYYY-MM-DD HH:MM:SS'.
+    This migration:
+    1. Adds a temporary call_datetime column
+    2. Copies data with time conversion
+    3. Drops old column and renames new one via table rebuild (SQLite limitation)
+    
+    Idempotent: Checks column type before running. Safe if already DateTime.
+    """
+    if not _table_exists(inspector, 'call_logs'):
+        return
+    
+    # Check if call_date is already DateTime by inspecting column type
+    columns = {c['name']: c for c in inspector.get_columns('call_logs')}
+    if 'call_date' not in columns:
+        return
+    
+    col_type = str(columns['call_date']['type']).upper()
+    
+    # If it's already DATETIME, skip
+    if 'DATETIME' in col_type:
+        print("  call_date is already DateTime - skipping")
+        return
+    
+    print("  Upgrading call_date from Date to DateTime...")
+    
+    with db.engine.connect() as conn:
+        # Step 1: Add temporary datetime column
+        conn.execute(text("ALTER TABLE call_logs ADD COLUMN call_datetime DATETIME"))
+        
+        # Step 2: Copy and convert data
+        # Handles various date formats safely
+        conn.execute(text("""
+            UPDATE call_logs 
+            SET call_datetime = CASE
+                WHEN call_date LIKE '____-__-__ %' THEN call_date
+                WHEN call_date LIKE '____-__-__T%' THEN REPLACE(call_date, 'T', ' ')
+                WHEN call_date LIKE '____-__-__' THEN call_date || ' 00:00:00'
+                ELSE call_date || '-01-01 00:00:00'
+            END
+        """))
+        
+        # Step 3: Rebuild table with new column type (SQLite can't ALTER COLUMN)
+        # Get all current columns except call_date and call_datetime
+        all_cols = [c['name'] for c in inspector.get_columns('call_logs') 
+                    if c['name'] not in ('call_date', 'call_datetime')]
+        
+        # Build column list for copy
+        cols_csv = ', '.join(all_cols)
+        
+        conn.execute(text("ALTER TABLE call_logs RENAME TO call_logs_backup"))
+        
+        # Get the CREATE TABLE statement and modify it
+        result = conn.execute(text(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='call_logs_backup'"
+        ))
+        create_sql = result.scalar()
+        
+        # Replace table name and fix the column type
+        create_sql = create_sql.replace('call_logs_backup', 'call_logs', 1)
+        # Replace DATE with DATETIME for call_date column
+        create_sql = create_sql.replace(
+            'call_date DATE NOT NULL', 
+            'call_date DATETIME NOT NULL'
+        )
+        # Also handle if it was defined without explicit type keyword
+        create_sql = create_sql.replace(
+            'call_date DATE', 
+            'call_date DATETIME'
+        )
+        
+        conn.execute(text(create_sql))
+        
+        # Copy data back, using call_datetime for the call_date column
+        conn.execute(text(f"""
+            INSERT INTO call_logs ({cols_csv}, call_date)
+            SELECT {cols_csv}, call_datetime FROM call_logs_backup
+        """))
+        
+        conn.execute(text("DROP TABLE call_logs_backup"))
+        conn.commit()
+    
+    print("    Upgraded call_date to DateTime successfully")
