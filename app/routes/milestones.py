@@ -5,11 +5,13 @@ The Milestone Tracker provides visibility into all active (uncommitted) mileston
 across customers, sorted by dollar value and due date urgency.
 """
 import logging
+import calendar as cal
+from datetime import date
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, g, jsonify, Response, stream_with_context,
 )
-from app.models import db, Milestone, CallLog
+from app.models import db, Milestone, CallLog, Customer
 
 logger = logging.getLogger(__name__)
 
@@ -237,3 +239,76 @@ def api_sync_customer_milestones(customer_id):
             "success": False,
             "error": str(e),
         }), 500
+
+
+# =============================================================================
+# Milestone Calendar API
+# =============================================================================
+
+ACTIVE_STATUSES = ['On Track', 'At Risk', 'Blocked']
+
+
+@bp.route('/api/milestones/calendar')
+def milestones_calendar_api():
+    """API endpoint returning milestone due dates for a calendar view.
+
+    Query params:
+        year:  int (default: current year)
+        month: int, 1-12 (default: current month)
+
+    Returns JSON with:
+        - year, month, month_name
+        - days: dict mapping day number -> list of milestone dicts
+        - days_in_month, today_day
+    """
+    today = date.today()
+    year = request.args.get('year', today.year, type=int)
+    month = request.args.get('month', today.month, type=int)
+
+    if month < 1 or month > 12:
+        month = today.month
+
+    first_day = date(year, month, 1)
+    last_day = date(year, month, cal.monthrange(year, month)[1])
+
+    milestones = (
+        Milestone.query
+        .filter(
+            Milestone.msx_status.in_(ACTIVE_STATUSES),
+            Milestone.due_date >= first_day,
+            Milestone.due_date <= last_day,
+        )
+        .options(
+            db.joinedload(Milestone.customer).joinedload(Customer.seller),
+        )
+        .order_by(Milestone.due_date)
+        .all()
+    )
+
+    days: dict = {}
+    for ms in milestones:
+        day = ms.due_date.day
+        if day not in days:
+            days[day] = []
+        days[day].append({
+            'id': ms.id,
+            'title': ms.display_text,
+            'milestone_number': ms.milestone_number,
+            'status': ms.msx_status,
+            'monthly_usage': ms.monthly_usage,
+            'workload': ms.workload,
+            'customer_name': ms.customer.get_display_name() if ms.customer else 'Unknown',
+            'customer_id': ms.customer.id if ms.customer else None,
+            'seller_name': ms.customer.seller.name if ms.customer and ms.customer.seller else None,
+            'url': ms.url,
+        })
+
+    return jsonify({
+        'year': year,
+        'month': month,
+        'month_name': cal.month_name[month],
+        'days': days,
+        'days_in_month': cal.monthrange(year, month)[1],
+        'today_day': today.day if today.year == year and today.month == month else None,
+    })
+

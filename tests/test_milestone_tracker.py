@@ -1012,3 +1012,151 @@ class TestFiscalYearFilter:
         url = mock_request.call_args[0][1]
         assert '2025-07-01' in url
         assert '2026-06-30' in url
+
+
+class TestMilestoneCalendarAPI:
+    """Tests for the milestone calendar API endpoint."""
+
+    def test_calendar_returns_json(self, client, app, sample_data):
+        """GET /api/milestones/calendar should return JSON with expected keys."""
+        response = client.get('/api/milestones/calendar?year=2026&month=3')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['year'] == 2026
+        assert data['month'] == 3
+        assert data['month_name'] == 'March'
+        assert 'days' in data
+        assert 'days_in_month' in data
+
+    def test_calendar_defaults_to_current_month(self, client, app, sample_data):
+        """Without params, should default to current month."""
+        response = client.get('/api/milestones/calendar')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'year' in data
+        assert 'month' in data
+
+    def test_calendar_includes_active_milestones(self, client, app, sample_data):
+        """Calendar should include active milestones with due dates in range."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            user = User.query.first()
+            ms = Milestone(
+                msx_milestone_id="cal-test-ms",
+                url="https://cal-test.com",
+                title="Calendar Test Milestone",
+                msx_status="On Track",
+                monthly_usage=5000.0,
+                due_date=datetime(2026, 3, 15),
+                customer_id=sample_data['customer1_id'],
+                user_id=user.id,
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+        response = client.get('/api/milestones/calendar?year=2026&month=3')
+        data = response.get_json()
+        assert '15' in data['days'] or 15 in data['days']
+        day_entries = data['days'].get('15', data['days'].get(15, []))
+        assert len(day_entries) >= 1
+        titles = [e['title'] for e in day_entries]
+        assert 'Calendar Test Milestone' in titles
+
+        with app.app_context():
+            from app.models import db, Milestone
+            ms = Milestone.query.filter_by(msx_milestone_id="cal-test-ms").first()
+            if ms:
+                db.session.delete(ms)
+                db.session.commit()
+
+    def test_calendar_excludes_completed_milestones(self, client, app, sample_data):
+        """Completed milestones should not appear on the calendar."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            user = User.query.first()
+            ms = Milestone(
+                msx_milestone_id="cal-done-ms",
+                url="https://cal-done.com",
+                title="Completed Milestone",
+                msx_status="Completed",
+                due_date=datetime(2026, 3, 20),
+                customer_id=sample_data['customer1_id'],
+                user_id=user.id,
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+        response = client.get('/api/milestones/calendar?year=2026&month=3')
+        data = response.get_json()
+        day_entries = data['days'].get('20', data['days'].get(20, []))
+        titles = [e['title'] for e in day_entries]
+        assert 'Completed Milestone' not in titles
+
+        with app.app_context():
+            from app.models import db, Milestone
+            ms = Milestone.query.filter_by(msx_milestone_id="cal-done-ms").first()
+            if ms:
+                db.session.delete(ms)
+                db.session.commit()
+
+    def test_calendar_entry_has_expected_fields(self, client, app, sample_data):
+        """Each calendar entry should have title, status, customer_name, url."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            user = User.query.first()
+            ms = Milestone(
+                msx_milestone_id="cal-fields-ms",
+                url="https://cal-fields.com",
+                title="Fields Test",
+                msx_status="At Risk",
+                monthly_usage=8000.0,
+                workload="Data: SQL",
+                due_date=datetime(2026, 4, 10),
+                customer_id=sample_data['customer1_id'],
+                user_id=user.id,
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+        response = client.get('/api/milestones/calendar?year=2026&month=4')
+        data = response.get_json()
+        day_entries = data['days'].get('10', data['days'].get(10, []))
+        assert len(day_entries) >= 1
+        entry = [e for e in day_entries if e['title'] == 'Fields Test'][0]
+        assert entry['status'] == 'At Risk'
+        assert entry['monthly_usage'] == 8000.0
+        assert entry['workload'] == 'Data: SQL'
+        assert entry['url'] == 'https://cal-fields.com'
+        assert entry['customer_name'] is not None
+
+        with app.app_context():
+            from app.models import db, Milestone
+            ms = Milestone.query.filter_by(msx_milestone_id="cal-fields-ms").first()
+            if ms:
+                db.session.delete(ms)
+                db.session.commit()
+
+
+class TestMilestoneCalendarTab:
+    """Tests for the milestone calendar tab on the front page."""
+
+    def test_index_has_milestones_tab(self, client, app, sample_data):
+        """Front page should have the milestones tab button."""
+        response = client.get('/')
+        assert response.status_code == 200
+        assert b'milestones-tab' in response.data
+        assert b'milestones-view' in response.data
+
+    def test_milestones_tab_has_full_week(self, client, app, sample_data):
+        """Milestone calendar should have 7-day week headers (Sun-Sat)."""
+        response = client.get('/')
+        assert response.status_code == 200
+        assert b'msCalendarTable' in response.data
+        assert b'<th>Sun</th>' in response.data
+        assert b'<th>Sat</th>' in response.data
+
+    def test_milestones_tab_has_tracker_link(self, client, app, sample_data):
+        """Milestone calendar footer should link to full tracker."""
+        response = client.get('/')
+        assert response.status_code == 200
+        assert b'Full Tracker' in response.data
