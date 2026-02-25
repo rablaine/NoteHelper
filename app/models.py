@@ -524,6 +524,7 @@ class Milestone(db.Model):
     workload = db.Column(db.String(200), nullable=True)  # Workload name from MSX
     monthly_usage = db.Column(db.Float, nullable=True)  # Monthly usage amount from MSX
     last_synced_at = db.Column(db.DateTime, nullable=True)  # Last time synced from MSX
+    on_my_team = db.Column(db.Boolean, default=False, nullable=False, server_default='0')  # Am I on the milestone access team?
     
     # Relationships
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)

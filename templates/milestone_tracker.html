@@ -110,7 +110,13 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3 text-end">
+            <div class="col-md-1">
+                <div class="form-check form-switch mt-1">
+                    <input class="form-check-input" type="checkbox" id="myTeamFilter">
+                    <label class="form-check-label small" for="myTeamFilter">My Team</label>
+                </div>
+            </div>
+            <div class="col-md-2 text-end">
                 <span id="filteredCount" class="text-muted small">{{ milestones|length }} milestones</span>
             </div>
         </div>
@@ -139,6 +145,7 @@
                 data-seller-id="{{ ms.seller.id if ms.seller else '' }}"
                 data-status="{{ ms.status }}"
                 data-area="{{ ms.workload_area }}"
+                data-on-my-team="{{ 'true' if ms.on_my_team else 'false' }}"
                 data-customer="{{ ms.customer.name|lower if ms.customer else '' }}"
                 data-seller-name="{{ ms.seller.name|lower if ms.seller else 'zzz' }}"
                 data-status-sort="{{ ms.status_sort }}"
@@ -148,7 +155,9 @@
                 
                 <!-- Milestone Info -->
                 <td>
-                    <div class="fw-semibold">{{ ms.title }}</div>
+                    <div class="fw-semibold">
+                        {% if ms.on_my_team %}<i class="bi bi-people-fill text-primary me-1" title="On my team"></i>{% endif %}{{ ms.title }}
+                    </div>
                     {% if ms.opportunity_name %}
                         <div class="text-muted small">
                             <i class="bi bi-briefcase"></i> {{ ms.opportunity_name }}
@@ -394,6 +403,7 @@ function applyFilters() {
     const sellerFilter = document.getElementById('sellerFilter').value;
     const statusFilter = document.getElementById('statusFilter').value;
     const areaFilter = document.getElementById('areaFilter').value;
+    const myTeamOnly = document.getElementById('myTeamFilter').checked;
     
     const rows = document.querySelectorAll('.milestone-row');
     let visibleCount = 0;
@@ -421,6 +431,11 @@ function applyFilters() {
             visible = false;
         }
         
+        // My Team filter
+        if (myTeamOnly && row.dataset.onMyTeam !== 'true') {
+            visible = false;
+        }
+        
         row.style.display = visible ? '' : 'none';
         if (visible) visibleCount++;
     });
@@ -434,6 +449,7 @@ document.getElementById('searchInput').addEventListener('input', applyFilters);
 document.getElementById('sellerFilter').addEventListener('change', applyFilters);
 document.getElementById('statusFilter').addEventListener('change', applyFilters);
 document.getElementById('areaFilter').addEventListener('change', applyFilters);
+document.getElementById('myTeamFilter').addEventListener('change', applyFilters);
 
 // Apply default filter on page load (Area defaults to "Data")
 applyFilters();

@@ -297,6 +297,7 @@ def milestones_calendar_api():
             'status': ms.msx_status,
             'monthly_usage': ms.monthly_usage,
             'workload': ms.workload,
+            'on_my_team': ms.on_my_team,
             'customer_name': ms.customer.get_display_name() if ms.customer else 'Unknown',
             'customer_id': ms.customer.id if ms.customer else None,
             'seller_name': ms.customer.seller.name if ms.customer and ms.customer.seller else None,

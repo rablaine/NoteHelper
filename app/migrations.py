@@ -287,6 +287,7 @@ def _migrate_milestone_tracker_fields(db, inspector):
         ('workload', 'VARCHAR(200)'),
         ('monthly_usage', 'FLOAT'),
         ('last_synced_at', 'DATETIME'),
+        ('on_my_team', 'BOOLEAN DEFAULT 0'),
     ]
     
     for col_name, col_def in tracker_columns:

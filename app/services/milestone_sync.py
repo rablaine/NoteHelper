@@ -14,6 +14,7 @@ from app.models import db, Customer, Milestone, User
 from app.services.msx_api import (
     extract_account_id_from_url,
     get_milestones_by_account,
+    get_my_milestone_team_ids,
     build_milestone_url,
 )
 
@@ -99,6 +100,9 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
     # If all customers failed, mark as failure
     if results["customers_synced"] == 0 and results["customers_failed"] > 0:
         results["success"] = False
+    
+    # Update team membership flags
+    _update_team_memberships()
     
     logger.info(
         f"Milestone sync complete: {results['customers_synced']} synced, "
@@ -194,6 +198,10 @@ def sync_all_customer_milestones_stream(
             })
 
     duration = (datetime.utcnow() - start_time).total_seconds()
+
+    # Update team membership flags (one extra API call)
+    _update_team_memberships()
+
     yield _sse_event('complete', {
         'success': synced > 0 or failed == 0,
         'total': total,
@@ -381,6 +389,39 @@ def _parse_msx_date(date_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _update_team_memberships() -> None:
+    """
+    Update the on_my_team flag for all milestones based on MSX access teams.
+
+    Makes one API call to get all milestone team memberships, then bulk-updates
+    the on_my_team column. Milestones the user is on get True, all others get
+    False. Failures are logged but don't block the sync.
+    """
+    try:
+        result = get_my_milestone_team_ids()
+        if not result.get("success"):
+            logger.warning(
+                f"Could not fetch team memberships: {result.get('error')}"
+            )
+            return
+
+        my_ids = result["milestone_ids"]
+        logger.info(f"Updating on_my_team for {len(my_ids)} milestones")
+
+        # Bulk update: set all to False first, then True for matches
+        Milestone.query.update({Milestone.on_my_team: False})
+
+        if my_ids:
+            Milestone.query.filter(
+                db.func.lower(Milestone.msx_milestone_id).in_(my_ids)
+            ).update({Milestone.on_my_team: True}, synchronize_session='fetch')
+
+        db.session.commit()
+    except Exception as e:
+        logger.exception("Error updating team memberships")
+        db.session.rollback()
+
+
 def get_milestone_tracker_data() -> Dict[str, Any]:
     """
     Get milestone data formatted for the tracker page.
@@ -451,6 +492,7 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
             "urgency": urgency,
             "url": ms.url,
             "last_synced_at": ms.last_synced_at,
+            "on_my_team": ms.on_my_team,
             "customer": {
                 "id": ms.customer.id if ms.customer else None,
                 "name": ms.customer.get_display_name() if ms.customer else "Unknown",

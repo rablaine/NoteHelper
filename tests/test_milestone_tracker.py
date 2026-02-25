@@ -1160,3 +1160,226 @@ class TestMilestoneCalendarTab:
         response = client.get('/')
         assert response.status_code == 200
         assert b'Full Tracker' in response.data
+
+
+class TestOnMyTeamModel:
+    """Test the on_my_team field on the Milestone model."""
+
+    def test_on_my_team_defaults_false(self, app, sample_data):
+        """New milestones should default to on_my_team=False."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            user = User.query.first()
+            ms = Milestone(
+                url='https://example.com/team-test',
+                msx_status='On Track',
+                user_id=user.id,
+            )
+            db.session.add(ms)
+            db.session.commit()
+            assert ms.on_my_team is False
+
+    def test_on_my_team_can_be_set_true(self, app, sample_data):
+        """on_my_team can be set to True."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            user = User.query.first()
+            ms = Milestone(
+                url='https://example.com/team-test2',
+                msx_status='On Track',
+                user_id=user.id,
+                on_my_team=True,
+            )
+            db.session.add(ms)
+            db.session.commit()
+            assert ms.on_my_team is True
+
+
+class TestUpdateTeamMemberships:
+    """Test the _update_team_memberships sync helper."""
+
+    @patch('app.services.milestone_sync.get_my_milestone_team_ids')
+    def test_updates_matching_milestones(self, mock_get_teams, app, sample_data):
+        """Should set on_my_team=True for matching milestone IDs."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            from app.services.milestone_sync import _update_team_memberships
+
+            user = User.query.first()
+            ms1 = Milestone(
+                url='https://example.com/t1',
+                msx_milestone_id='aaa-111',
+                msx_status='On Track',
+                user_id=user.id,
+            )
+            ms2 = Milestone(
+                url='https://example.com/t2',
+                msx_milestone_id='bbb-222',
+                msx_status='On Track',
+                user_id=user.id,
+            )
+            db.session.add_all([ms1, ms2])
+            db.session.commit()
+
+            mock_get_teams.return_value = {
+                'success': True,
+                'milestone_ids': {'aaa-111'},
+                'team_count': 5,
+            }
+
+            _update_team_memberships()
+
+            db.session.refresh(ms1)
+            db.session.refresh(ms2)
+            assert ms1.on_my_team is True
+            assert ms2.on_my_team is False
+
+    @patch('app.services.milestone_sync.get_my_milestone_team_ids')
+    def test_clears_old_memberships(self, mock_get_teams, app, sample_data):
+        """Should set on_my_team=False for milestones no longer on team."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            from app.services.milestone_sync import _update_team_memberships
+
+            user = User.query.first()
+            ms = Milestone(
+                url='https://example.com/t3',
+                msx_milestone_id='ccc-333',
+                msx_status='On Track',
+                user_id=user.id,
+                on_my_team=True,
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+            mock_get_teams.return_value = {
+                'success': True,
+                'milestone_ids': set(),
+                'team_count': 5,
+            }
+
+            _update_team_memberships()
+
+            db.session.refresh(ms)
+            assert ms.on_my_team is False
+
+    @patch('app.services.milestone_sync.get_my_milestone_team_ids')
+    def test_handles_api_failure_gracefully(self, mock_get_teams, app, sample_data):
+        """Should not crash if team API fails."""
+        with app.app_context():
+            from app.models import db, Milestone, User
+            from app.services.milestone_sync import _update_team_memberships
+
+            user = User.query.first()
+            ms = Milestone(
+                url='https://example.com/t4',
+                msx_milestone_id='ddd-444',
+                msx_status='On Track',
+                user_id=user.id,
+                on_my_team=True,
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+            mock_get_teams.return_value = {
+                'success': False,
+                'error': 'API down',
+                'milestone_ids': set(),
+            }
+
+            # Should not raise and should preserve existing values
+            _update_team_memberships()
+
+            db.session.refresh(ms)
+            assert ms.on_my_team is True  # Unchanged because API failed
+
+
+class TestOnMyTeamInTracker:
+    """Test on_my_team display in the tracker page."""
+
+    def test_tracker_has_my_team_filter(self, client, app, sample_data):
+        """Tracker page should have the My Team filter toggle."""
+        response = client.get('/milestone-tracker')
+        assert response.status_code == 200
+        assert b'myTeamFilter' in response.data
+        assert b'My Team' in response.data
+
+    def test_tracker_shows_team_icon(self, client, app, sample_data):
+        """Milestones on my team should show the people icon."""
+        with app.app_context():
+            from app.models import db, Milestone, User, Customer
+            user = User.query.first()
+            customer = Customer.query.first()
+            ms = Milestone(
+                url='https://example.com/team-icon-test',
+                title='Team Icon Test MS',
+                msx_milestone_id='team-icon-test-id',
+                msx_status='On Track',
+                user_id=user.id,
+                customer_id=customer.id,
+                on_my_team=True,
+                monthly_usage=1000.0,
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+        response = client.get('/milestone-tracker')
+        assert response.status_code == 200
+        assert b'bi-people-fill' in response.data
+        assert b'data-on-my-team="true"' in response.data
+
+    def test_tracker_data_includes_on_my_team(self, app, sample_data):
+        """get_milestone_tracker_data should include on_my_team field."""
+        with app.app_context():
+            from app.models import db, Milestone, User, Customer
+            from app.services.milestone_sync import get_milestone_tracker_data
+
+            user = User.query.first()
+            customer = Customer.query.first()
+            ms = Milestone(
+                url='https://example.com/tracker-data-test',
+                title='Tracker Data Test',
+                msx_milestone_id='tracker-data-test-id',
+                msx_status='On Track',
+                user_id=user.id,
+                customer_id=customer.id,
+                on_my_team=True,
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+            data = get_milestone_tracker_data()
+            my_ms = [m for m in data['milestones'] if m['title'] == 'Tracker Data Test']
+            assert len(my_ms) == 1
+            assert my_ms[0]['on_my_team'] is True
+
+
+class TestOnMyTeamInCalendar:
+    """Test on_my_team in the milestone calendar API."""
+
+    def test_calendar_api_includes_on_my_team(self, client, app, sample_data):
+        """Calendar API should include on_my_team field in entries."""
+        with app.app_context():
+            from app.models import db, Milestone, User, Customer
+
+            user = User.query.first()
+            customer = Customer.query.first()
+            ms = Milestone(
+                url='https://example.com/cal-team-test',
+                title='Calendar Team Test',
+                msx_milestone_id='cal-team-test-id',
+                msx_status='On Track',
+                user_id=user.id,
+                customer_id=customer.id,
+                on_my_team=True,
+                due_date=datetime(2026, 2, 15),
+            )
+            db.session.add(ms)
+            db.session.commit()
+
+        response = client.get('/api/milestones/calendar?year=2026&month=2')
+        assert response.status_code == 200
+        data = response.get_json()
+        day_entries = data['days'].get('15', [])
+        team_entries = [e for e in day_entries if e.get('on_my_team')]
+        assert len(team_entries) >= 1

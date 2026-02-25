@@ -1041,7 +1041,11 @@
                             entry.className = `d-block text-decoration-none text-truncate mb-1 px-1 rounded ms-cal-entry ${statusClass} cal-customer-${colorIdx}`;
                             entry.style.color = 'inherit';
 
-                            let label = escapeHtml(ms.customer_name);
+                            let label = '';
+                            if (ms.on_my_team) {
+                                label += '<i class="bi bi-people-fill text-primary" style="font-size:.7em"></i> ';
+                            }
+                            label += escapeHtml(ms.customer_name);
                             if (ms.monthly_usage) {
                                 label += ` <span class="text-muted">$${Number(ms.monthly_usage).toLocaleString()}</span>`;
                             }
