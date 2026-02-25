@@ -302,6 +302,10 @@ def sync_customer_milestones(
     
     for existing in existing_milestones:
         if existing.msx_milestone_id not in seen_msx_ids:
+            # Skip milestones linked to call logs — keep them visible
+            if existing.call_logs:
+                existing.last_synced_at = now
+                continue
             # This milestone wasn't returned by MSX — mark as potentially completed
             existing.msx_status = "Completed"
             existing.last_synced_at = now

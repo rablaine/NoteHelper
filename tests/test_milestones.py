@@ -2,6 +2,7 @@
 Tests for milestone functionality.
 """
 import pytest
+from datetime import datetime
 from app.models import Milestone, CallLog
 
 
@@ -183,6 +184,36 @@ class TestMilestoneCRUD:
         # Verify deletion
         deleted = Milestone.query.get(milestone_id)
         assert deleted is None
+
+    def test_milestone_delete_blocked_when_linked_to_call_log(self, client, app, db_session, sample_user, sample_customer):
+        """Test that deleting a milestone linked to a call log is blocked."""
+        milestone = Milestone(
+            url='https://example.com/linked/test',
+            title='Linked Milestone',
+            user_id=sample_user.id
+        )
+        db_session.add(milestone)
+        db_session.flush()
+
+        call_log = CallLog(
+            customer_id=sample_customer.id,
+            call_date=datetime(2026, 2, 25),
+            content='<p>Test call</p>',
+            user_id=sample_user.id
+        )
+        call_log.milestones = [milestone]
+        db_session.add(call_log)
+        db_session.commit()
+        milestone_id = milestone.id
+
+        response = client.post(f'/milestone/{milestone_id}/delete', follow_redirects=True)
+
+        assert response.status_code == 200
+        assert b'Cannot delete this milestone' in response.data
+
+        # Verify milestone still exists
+        still_exists = Milestone.query.get(milestone_id)
+        assert still_exists is not None
 
 
 class TestCallLogMilestoneIntegration:

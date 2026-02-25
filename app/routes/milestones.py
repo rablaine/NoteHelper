@@ -97,8 +97,14 @@ def milestone_edit(id):
 
 @bp.route('/milestone/<int:id>/delete', methods=['POST'])
 def milestone_delete(id):
-    """Delete a milestone."""
+    """Delete a milestone (only if not linked to any call logs)."""
     milestone = Milestone.query.get_or_404(id)
+    
+    # Protect milestones that are linked to call logs
+    if milestone.call_logs:
+        flash('Cannot delete this milestone — it is linked to call logs. '
+              'Remove the milestone from those call logs first.', 'danger')
+        return redirect(url_for('milestones.milestone_view', id=milestone.id))
     
     db.session.delete(milestone)
     db.session.commit()
