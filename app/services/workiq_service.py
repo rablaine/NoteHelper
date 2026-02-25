@@ -154,7 +154,11 @@ def query_workiq(question: str, timeout: int = 120) -> str:
 
 def get_meetings_for_date(date_str: str) -> List[Dict[str, Any]]:
     """
-    Get all external customer meetings for a specific date.
+    Get all meetings for a specific date.
+    
+    Fetches ALL meetings (not just external) because WorkIQ's external-attendee
+    detection is unreliable. The client-side customer matching step will
+    filter out meetings that don't correspond to any known customer.
     
     Args:
         date_str: Date in YYYY-MM-DD format
@@ -167,7 +171,11 @@ def get_meetings_for_date(date_str: str) -> List[Dict[str, Any]]:
         - customer: Extracted customer/company name
         - attendees: List of attendee names
     """
-    question = f"List all my meetings on {date_str} with external attendees. Include meeting title, time, and company name."
+    question = (
+        f"List all my meetings on {date_str} in a markdown table with columns: "
+        f"Time, Meeting Title, and External Company (if any external attendees, "
+        f"otherwise leave blank). Include ALL meetings, even internal ones."
+    )
     
     try:
         response = query_workiq(question)
@@ -193,7 +201,13 @@ def _parse_meetings_response(response: str, date_str: str) -> List[Dict[str, Any
     """
     meetings = []
     
-    if not response or 'no meetings' in response.lower():
+    if not response:
+        return meetings
+    
+    # Only bail on "no meetings" if the response is short and clearly empty
+    # (don't bail if WorkIQ says "no external meetings" but still provides a table)
+    lower_resp = response.lower()
+    if 'no meetings' in lower_resp and '|' not in response and '1.' not in response:
         return meetings
     
     # Normalize non-standard whitespace characters (WorkIQ sometimes uses
@@ -299,12 +313,14 @@ def _parse_meetings_response(response: str, date_str: str) -> List[Dict[str, Any
         logger.info(f"Parsed {len(meetings)} meetings from WorkIQ table format")
         return meetings
     
-    # Fallback: try numbered list format
-    # Pattern to match: "1. **Meeting Title**"
+    # Fallback: try numbered/bulleted list format
+    # Pattern to match: "1. **Meeting Title**" or "- **Meeting Title**"
+    # Time may be in parentheses: "- **Title** (8:00-9:00 AM)"
     title_pattern = re.compile(r'(?:^|\n)\s*(?:\d+\.|-)\s*\*\*([^*]+)\*\*', re.MULTILINE)
-    time_pattern = re.compile(r'\*?\*?(\d{1,2}:\d{2})\s*(?:-\s*\d{1,2}:\d{2})?\s*(AM|PM)?\*?\*?', re.IGNORECASE)
+    time_pattern_list = re.compile(r'\(?\s*(\d{1,2}:\d{2})\s*(?:-\s*\d{1,2}:\d{2})?\s*(AM|PM)\s*\)?', re.IGNORECASE)
     
-    sections = re.split(r'\n(?=\s*\d+\.)', response)
+    # Split on both numbered items and bullet points
+    sections = re.split(r'\n(?=\s*(?:\d+\.|-)\s*\*\*)', response)
     
     for section in sections:
         if not section.strip():
@@ -325,7 +341,7 @@ def _parse_meetings_response(response: str, date_str: str) -> List[Dict[str, Any
             'attendees': []
         }
         
-        time_match = time_pattern.search(section)
+        time_match = time_pattern_list.search(section)
         if time_match:
             time_str = time_match.group(1)
             am_pm = time_match.group(2) or ''

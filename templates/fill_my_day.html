@@ -41,6 +41,7 @@
         border-radius: 4px;
         padding: 0.75rem;
         background: #fafafa;
+        color: #000;
     }
     .customer-match-badge {
         font-size: 0.75rem;
@@ -485,29 +486,65 @@ function createMeetingCard(idx, meeting, customer, data, dateStr, cardNum) {
                     <button class="btn btn-sm btn-outline-secondary" onclick="cancelCardEdit(${idx})">Cancel</button>
                 </div>
             </div>
-            <!-- Topics & Task -->
+            <!-- Topics -->
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <small class="text-muted">Topics:</small>
                 <span id="topicContainer-${idx}">${topicBadges || '<small class="text-muted">None suggested</small>'}</span>
             </div>
-            ${data.milestone ? `
-            <div class="d-flex align-items-center gap-2 mb-2">
-                <small class="text-muted">Milestone:</small>
-                <a href="${data.milestone.url}" target="_blank" class="badge bg-success text-decoration-none">
-                    <i class="bi bi-flag"></i> ${escapeHtml(data.milestone.name)}
-                </a>
-                ${data.milestone.status ? `<span class="badge ${
-                    data.milestone.status === 'On Track' ? 'bg-success' :
-                    data.milestone.status === 'At Risk' ? 'bg-warning text-dark' :
-                    data.milestone.status === 'Blocked' ? 'bg-danger' :
-                    data.milestone.status === 'Completed' ? 'bg-secondary' : 'bg-light text-dark'
-                }">${escapeHtml(data.milestone.status)}</span>` : ''}
-                ${data.milestone.opportunity_name ? `<small class="text-muted">${escapeHtml(data.milestone.opportunity_name)}</small>` : ''}
-            </div>` : ''}
-            ${data.task_subject ? `
-            <div class="text-muted small">
-                <i class="bi bi-pencil-square"></i> Suggested task: ${escapeHtml(data.task_subject)}
-            </div>` : ''}
+            <!-- Milestone (matching call log form style) -->
+            <div id="milestoneSection-${idx}" class="mb-2">
+                ${data.milestone ? buildMilestoneCard(idx, data.milestone) : ''}
+            </div>
+            <!-- Task Creation (matching call log form style) -->
+            <div id="taskSection-${idx}" style="${data.milestone ? '' : 'display:none;'}">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white py-2">
+                        <i class="bi bi-plus-circle me-1"></i> Create Task on Milestone
+                    </div>
+                    <div class="card-body">
+                        <!-- Task Created Status -->
+                        <div id="taskCreated-${idx}" class="alert alert-success mb-0" style="display: none;">
+                            <i class="bi bi-check-circle-fill me-1"></i>
+                            <strong>Task Created!</strong>
+                            <a href="#" id="taskCreatedLink-${idx}" target="_blank" class="ms-2">View in MSX</a>
+                        </div>
+                        <!-- Task Form -->
+                        <div id="taskForm-${idx}">
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Task Title *</label>
+                                <input type="text" class="form-control form-control-sm" id="taskSubject-${idx}"
+                                       value="${escapeHtml(data.task_subject || '')}" placeholder="Brief task description...">
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-8">
+                                    <label class="form-label small mb-1">Category *</label>
+                                    <select class="form-select form-select-sm task-category-select" id="taskCategory-${idx}">
+                                        <option value="">-- Select task category --</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Duration (min)</label>
+                                    <input type="number" class="form-control form-control-sm" id="taskDuration-${idx}"
+                                           value="60" min="15" step="15">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small mb-1">Description (optional)</label>
+                                <textarea class="form-control form-control-sm" id="taskDesc-${idx}" rows="2"
+                                          placeholder="Additional details...">${escapeHtml(data.task_description || '')}</textarea>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <button type="button" class="btn btn-primary btn-sm" id="createTaskBtn-${idx}"
+                                        onclick="createCardTask(${idx})">
+                                    <i class="bi bi-cloud-upload me-1"></i> Create Task in MSX
+                                </button>
+                                <small class="text-muted">Task will be linked when you save</small>
+                            </div>
+                            <div id="taskError-${idx}" class="alert alert-danger mt-2" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="card-footer d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
@@ -528,6 +565,9 @@ function createMeetingCard(idx, meeting, customer, data, dateStr, cardNum) {
         </div>
     `;
 
+    // Populate task category dropdown for this card
+    populateCardTaskCategories(idx);
+
     // Store data on the element for saving
     card.dataset.customerId = customer.customer_id;
     card.dataset.contentHtml = data.content_html || '';
@@ -535,9 +575,174 @@ function createMeetingCard(idx, meeting, customer, data, dateStr, cardNum) {
     card.dataset.milestone = JSON.stringify(data.milestone || null);
     card.dataset.taskSubject = data.task_subject || '';
     card.dataset.taskDescription = data.task_description || '';
+    card.dataset.createdTaskId = '';
+    card.dataset.createdTaskUrl = '';
+    card.dataset.createdTaskCategoryName = '';
+    card.dataset.createdTaskIsHok = '';
 
     return card;
 }
+
+// ---- Milestone / Task helpers (matching call log form) ----
+
+let taskCategoriesCache = null;
+
+async function loadTaskCategories() {
+    if (taskCategoriesCache) return taskCategoriesCache;
+    try {
+        const resp = await fetch('/api/msx/task-categories');
+        if (resp.ok) {
+            taskCategoriesCache = await resp.json();
+        } else {
+            taskCategoriesCache = [];
+        }
+    } catch {
+        taskCategoriesCache = [];
+    }
+    return taskCategoriesCache;
+}
+
+function populateCardTaskCategories(idx) {
+    const select = document.getElementById(`taskCategory-${idx}`);
+    if (!select) return;
+    loadTaskCategories().then(categories => {
+        categories.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat.name;
+            opt.textContent = cat.name;
+            if (cat.is_hok) opt.dataset.isHok = 'true';
+            select.appendChild(opt);
+        });
+    });
+}
+
+function getStatusBadgeClass(status) {
+    if (!status) return 'bg-secondary';
+    const s = status.toLowerCase();
+    if (s.includes('on track')) return 'bg-success';
+    if (s.includes('at risk')) return 'bg-warning text-dark';
+    if (s.includes('behind') || s.includes('blocked')) return 'bg-danger';
+    if (s.includes('complete')) return 'bg-secondary';
+    if (s.includes('not started')) return 'bg-info text-dark';
+    return 'bg-secondary';
+}
+
+function buildMilestoneCard(idx, milestone) {
+    if (!milestone) return '';
+    return `
+        <div class="card border-success" id="milestoneCard-${idx}">
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <i class="bi bi-flag-fill text-success me-1"></i>
+                        ${milestone.url 
+                            ? `<a href="${milestone.url}" target="_blank" class="fw-bold text-decoration-none">${escapeHtml(milestone.name)}</a>`
+                            : `<span class="fw-bold">${escapeHtml(milestone.name)}</span>`
+                        }
+                        <span class="badge ${getStatusBadgeClass(milestone.status)} ms-2">${escapeHtml(milestone.status || 'Unknown')}</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeCardMilestone(${idx})" title="Remove milestone">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                ${milestone.number ? `<small class="text-muted d-block">Milestone #${escapeHtml(String(milestone.number))}</small>` : ''}
+                ${milestone.opportunity_name ? `<small class="text-muted d-block"><i class="bi bi-briefcase me-1"></i>${escapeHtml(milestone.opportunity_name)}</small>` : ''}
+                ${milestone.workload ? `<small class="text-muted d-block"><i class="bi bi-gear me-1"></i>${escapeHtml(milestone.workload)}</small>` : ''}
+                ${milestone.monthly_usage ? `<small class="text-muted d-block"><i class="bi bi-graph-up me-1"></i>${escapeHtml(milestone.monthly_usage)}</small>` : ''}
+            </div>
+        </div>`;
+}
+
+function removeCardMilestone(idx) {
+    const card = document.getElementById(`meetingCard-${idx}`);
+    card.dataset.milestone = 'null';
+    document.getElementById(`milestoneSection-${idx}`).innerHTML = '';
+    document.getElementById(`taskSection-${idx}`).style.display = 'none';
+}
+
+async function createCardTask(idx) {
+    const card = document.getElementById(`meetingCard-${idx}`);
+    const milestone = JSON.parse(card.dataset.milestone || 'null');
+    if (!milestone || !milestone.msx_milestone_id) {
+        alert('No milestone linked — cannot create task.');
+        return;
+    }
+
+    const subject = document.getElementById(`taskSubject-${idx}`).value.trim();
+    const category = document.getElementById(`taskCategory-${idx}`).value;
+    const duration = parseInt(document.getElementById(`taskDuration-${idx}`).value) || 60;
+    const description = document.getElementById(`taskDesc-${idx}`).value.trim();
+
+    if (!subject) {
+        showCardTaskError(idx, 'Task title is required.');
+        return;
+    }
+    if (!category) {
+        showCardTaskError(idx, 'Please select a task category.');
+        return;
+    }
+
+    const btn = document.getElementById(`createTaskBtn-${idx}`);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    hideCardTaskError(idx);
+
+    try {
+        const resp = await fetch('/api/msx/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                milestone_id: milestone.msx_milestone_id,
+                subject: subject,
+                category: category,
+                duration: duration,
+                description: description
+            })
+        });
+
+        const result = await resp.json();
+
+        if (result.success) {
+            // Show success state
+            document.getElementById(`taskForm-${idx}`).style.display = 'none';
+            const createdDiv = document.getElementById(`taskCreated-${idx}`);
+            createdDiv.style.display = 'block';
+            if (result.task_url) {
+                document.getElementById(`taskCreatedLink-${idx}`).href = result.task_url;
+            } else {
+                document.getElementById(`taskCreatedLink-${idx}`).style.display = 'none';
+            }
+            // Store task info on card for the save request
+            card.dataset.createdTaskId = result.task_id || '';
+            card.dataset.createdTaskUrl = result.task_url || '';
+            // Also update the subject/description in dataset
+            card.dataset.taskSubject = subject;
+            card.dataset.taskDescription = description;
+            const categorySelect = document.getElementById(`taskCategory-${idx}`);
+            const selectedOpt = categorySelect.options[categorySelect.selectedIndex];
+            card.dataset.createdTaskCategoryName = category;
+            card.dataset.createdTaskIsHok = selectedOpt?.dataset?.isHok || '';
+        } else {
+            throw new Error(result.error || 'Failed to create task');
+        }
+    } catch (err) {
+        showCardTaskError(idx, err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i> Create Task in MSX';
+    }
+}
+
+function showCardTaskError(idx, message) {
+    const el = document.getElementById(`taskError-${idx}`);
+    el.textContent = message;
+    el.style.display = 'block';
+}
+
+function hideCardTaskError(idx) {
+    document.getElementById(`taskError-${idx}`).style.display = 'none';
+}
+
+// ---- End Milestone / Task helpers ----
 
 function toggleTopic(el) {
     el.classList.toggle('deselected');
@@ -580,8 +785,12 @@ async function saveCallLog(idx, dateStr, callTime) {
     const topicIds = JSON.parse(card.dataset.topicIds || '[]');
     const customerId = card.dataset.customerId;
     const milestone = JSON.parse(card.dataset.milestone || 'null');
-    const taskSubject = card.dataset.taskSubject || '';
-    const taskDescription = card.dataset.taskDescription || '';
+
+    // Read task values from the form inputs (user may have edited them)
+    const taskSubjectEl = document.getElementById(`taskSubject-${idx}`);
+    const taskDescEl = document.getElementById(`taskDesc-${idx}`);
+    const taskSubject = taskSubjectEl ? taskSubjectEl.value : (card.dataset.taskSubject || '');
+    const taskDescription = taskDescEl ? taskDescEl.value : (card.dataset.taskDescription || '');
 
     if (!content || content.trim() === '') {
         alert('Cannot save empty call log. Please add some notes.');
