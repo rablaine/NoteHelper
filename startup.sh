@@ -27,31 +27,11 @@ export FLASK_APP=run.py
 # Add current directory to Python path to ensure proper imports
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
-# Test database connection
-echo "Testing database connection..."
-python -c "from app import create_app, db; app = create_app(); app.app_context().push(); print('Database connection successful!')" || {
-    echo "ERROR: Database connection failed!"
-    echo "Check DATABASE_URL environment variable"
-    exit 1
-}
-
-# Create any missing tables and run idempotent migrations
-echo "Ensuring database tables exist and running migrations..."
-python -c "
-from app import create_app
-from app.models import db
-from app.migrations import run_migrations
-
-app = create_app()
-with app.app_context():
-    # Create any new tables (safe - only creates tables that don't exist)
-    db.create_all()
-    print('Database tables verified!')
-    
-    # Run idempotent migrations (safe - checks before making changes)
-    run_migrations(db)
-" || {
+# Verify app can start (creates tables + runs migrations automatically)
+echo "Verifying database and running migrations..."
+python -c "from app import create_app; app = create_app(); print('Database ready!')" || {
     echo "ERROR: Database setup failed!"
+    echo "Check DATABASE_URL environment variable"
     exit 1
 }
 
