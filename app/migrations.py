@@ -209,8 +209,9 @@ def _migrate_call_date_to_datetime(db, inspector):
     print("  Upgrading call_date from Date to DateTime...")
     
     with db.engine.connect() as conn:
-        # Step 1: Add temporary datetime column
-        conn.execute(text("ALTER TABLE call_logs ADD COLUMN call_datetime DATETIME"))
+        # Step 1: Add temporary datetime column (check first - may exist from partial migration)
+        if 'call_datetime' not in columns:
+            conn.execute(text("ALTER TABLE call_logs ADD COLUMN call_datetime DATETIME"))
         
         # Step 2: Copy and convert data
         # Handles various date formats safely
