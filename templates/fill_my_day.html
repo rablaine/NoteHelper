@@ -1,0 +1,669 @@
+{% extends "base.html" %}
+
+{% block title %}Fill My Day - NoteHelper{% endblock %}
+
+{% block content %}
+<style>
+    .meeting-card {
+        transition: all 0.4s ease;
+    }
+    .meeting-card.saving {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+    .meeting-card.saved {
+        opacity: 0;
+        max-height: 0;
+        overflow: hidden;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+    .step-badge {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+    .step-badge.pending { background-color: #e9ecef; color: #6c757d; }
+    .step-badge.active { background-color: #0d6efd; color: white; }
+    .step-badge.done { background-color: #198754; color: white; }
+    .step-badge.error { background-color: #dc3545; color: white; }
+    .notes-preview {
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 0.9rem;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 0.75rem;
+        background: #fafafa;
+    }
+    .customer-match-badge {
+        font-size: 0.75rem;
+    }
+    .topic-tag {
+        font-size: 0.75rem;
+        cursor: pointer;
+    }
+    .topic-tag.deselected {
+        opacity: 0.4;
+        text-decoration: line-through;
+    }
+</style>
+
+<div class="container-fluid px-4 py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-lightning-charge text-warning"></i> Fill My Day</h2>
+            <p class="text-muted mb-0">Import all your meetings for a day into call logs in one shot.</p>
+        </div>
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <!-- Date Selection & Start -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-auto">
+                    <label for="fillDate" class="form-label fw-bold">Date</label>
+                    <input type="date" class="form-control" id="fillDate" 
+                           value="{{ prefill_date }}" style="width: 200px;">
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-warning btn-lg" id="startBtn" onclick="startFillMyDay()">
+                        <i class="bi bi-lightning-charge"></i> Fetch Meetings
+                    </button>
+                </div>
+                <div class="col-auto" id="statusArea" style="display: none;">
+                    <span id="statusText" class="text-muted"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Steps -->
+    <div id="progressPanel" style="display: none;" class="mb-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2" id="stepFetch">
+                        <span class="step-badge pending" id="stepFetchBadge">1</span>
+                        <span class="text-muted" id="stepFetchLabel">Fetching meetings...</span>
+                    </div>
+                    <i class="bi bi-arrow-right text-muted"></i>
+                    <div class="d-flex align-items-center gap-2" id="stepMatch">
+                        <span class="step-badge pending" id="stepMatchBadge">2</span>
+                        <span class="text-muted" id="stepMatchLabel">Matching customers</span>
+                    </div>
+                    <i class="bi bi-arrow-right text-muted"></i>
+                    <div class="d-flex align-items-center gap-2" id="stepEnrich">
+                        <span class="step-badge pending" id="stepEnrichBadge">3</span>
+                        <span class="text-muted" id="stepEnrichLabel">AI enrichment</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Area -->
+    <div id="errorArea" class="alert alert-danger" style="display: none;">
+        <i class="bi bi-exclamation-triangle"></i> <span id="errorText"></span>
+    </div>
+
+    <!-- Meeting Cards Container -->
+    <div id="meetingCards"></div>
+
+    <!-- Completion Summary -->
+    <div id="completionSummary" style="display: none;" class="mb-4">
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle"></i>
+            <strong>All done!</strong> <span id="completionText"></span>
+        </div>
+    </div>
+
+    <!-- No Meetings Message -->
+    <div id="noMeetingsMsg" style="display: none;" class="mb-4">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No external meetings found for this date.
+        </div>
+    </div>
+</div>
+
+<script>
+// State
+let meetings = [];
+let customerMap = {};  // meeting index -> {customer_id, customer_name, score}
+let enrichedData = {};  // meeting index -> {content_html, topics, task_subject, task_description}
+let savedCount = 0;
+let totalCards = 0;
+
+async function startFillMyDay() {
+    const dateStr = document.getElementById('fillDate').value;
+    if (!dateStr) {
+        alert('Please select a date first.');
+        return;
+    }
+
+    // Reset state
+    meetings = [];
+    customerMap = {};
+    enrichedData = {};
+    savedCount = 0;
+    totalCards = 0;
+    document.getElementById('meetingCards').innerHTML = '';
+    document.getElementById('completionSummary').style.display = 'none';
+    document.getElementById('noMeetingsMsg').style.display = 'none';
+    document.getElementById('errorArea').style.display = 'none';
+
+    // Disable start button, show progress
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('startBtn').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Working...';
+    document.getElementById('progressPanel').style.display = 'block';
+
+    try {
+        // Step 1: Fetch meetings from WorkIQ
+        setStep('Fetch', 'active');
+        const meetingsResp = await fetch(`/api/meetings?date=${encodeURIComponent(dateStr)}`);
+        const meetingsData = await meetingsResp.json();
+
+        if (meetingsData.error) {
+            throw new Error(meetingsData.error);
+        }
+
+        meetings = meetingsData.meetings || [];
+
+        if (meetings.length === 0) {
+            setStep('Fetch', 'done');
+            document.getElementById('noMeetingsMsg').style.display = 'block';
+            resetStartBtn();
+            return;
+        }
+
+        setStep('Fetch', 'done', `Found ${meetings.length} meeting${meetings.length > 1 ? 's' : ''}`);
+
+        // Step 2: Match meetings to customers
+        setStep('Match', 'active');
+        await matchCustomers(meetings);
+        const matchCount = Object.keys(customerMap).length;
+        setStep('Match', 'done', `Matched ${matchCount}/${meetings.length}`);
+
+        // Step 3: Enrich each matched meeting with AI
+        setStep('Enrich', 'active');
+        await enrichMeetings(dateStr);
+        setStep('Enrich', 'done', 'Complete');
+
+        // Render cards
+        renderMeetingCards(dateStr);
+
+    } catch (err) {
+        console.error('Fill My Day error:', err);
+        showError(err.message || 'An unexpected error occurred');
+    }
+
+    resetStartBtn();
+}
+
+function setStep(stepName, state, label) {
+    const badge = document.getElementById(`step${stepName}Badge`);
+    const labelEl = document.getElementById(`step${stepName}Label`);
+
+    badge.className = `step-badge ${state}`;
+
+    if (state === 'active') {
+        badge.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:14px;height:14px;"></span>';
+        labelEl.classList.remove('text-muted');
+        labelEl.classList.add('text-primary', 'fw-bold');
+    } else if (state === 'done') {
+        badge.innerHTML = '<i class="bi bi-check"></i>';
+        labelEl.classList.remove('text-primary', 'fw-bold', 'text-muted');
+        labelEl.classList.add('text-success');
+    } else if (state === 'error') {
+        badge.innerHTML = '<i class="bi bi-x"></i>';
+        labelEl.classList.remove('text-primary', 'fw-bold', 'text-muted');
+        labelEl.classList.add('text-danger');
+    }
+
+    if (label) {
+        labelEl.textContent = label;
+    }
+}
+
+async function matchCustomers(meetings) {
+    // Fetch all customers for client-side matching
+    const resp = await fetch('/api/customers');
+    const customers = await resp.json();
+
+    for (let i = 0; i < meetings.length; i++) {
+        const meeting = meetings[i];
+        const meetingCompany = meeting.customer || '';
+        const meetingTitle = meeting.title || '';
+
+        let bestScore = 0;
+        let bestCustomer = null;
+
+        for (const cust of customers) {
+            // Check against company field and title
+            const nameScore = fuzzyScore(cust.name, meetingCompany);
+            const titleScore = fuzzyScore(cust.name, meetingTitle);
+            const nickScore = cust.nickname ? Math.max(
+                fuzzyScore(cust.nickname, meetingCompany),
+                fuzzyScore(cust.nickname, meetingTitle)
+            ) : 0;
+
+            const score = Math.max(nameScore, titleScore, nickScore);
+            if (score > bestScore) {
+                bestScore = score;
+                bestCustomer = cust;
+            }
+        }
+
+        if (bestScore >= 0.5 && bestCustomer) {
+            customerMap[i] = {
+                customer_id: bestCustomer.id,
+                customer_name: bestCustomer.name,
+                nickname: bestCustomer.nickname || '',
+                tpid_url: bestCustomer.tpid_url || '',
+                score: bestScore
+            };
+        }
+    }
+}
+
+function fuzzyScore(str1, str2) {
+    if (!str1 || !str2) return 0;
+
+    // Normalize: lowercase, strip common suffixes
+    const normalize = s => s.toLowerCase().replace(/\b(inc|llc|corp|corporation|ltd|company|co)\.?\b/g, '').trim();
+    const a = normalize(str1);
+    const b = normalize(str2);
+
+    if (!a || !b) return 0;
+
+    // Direct substring match (high confidence)
+    if (a.includes(b) || b.includes(a)) return 0.9;
+
+    // Require at least one meaningful word (2+ chars) from one string
+    // to appear as a substring in the other — prevents false positives
+    // from single-character LCS on short strings (e.g. "CDP EHS" vs "McLeod Health")
+    const wordsA = a.split(/\s+/).filter(w => w.length >= 2);
+    const wordsB = b.split(/\s+/).filter(w => w.length >= 2);
+    let hasWordOverlap = false;
+    for (const w of wordsA) {
+        if (b.includes(w)) { hasWordOverlap = true; break; }
+    }
+    if (!hasWordOverlap) {
+        for (const w of wordsB) {
+            if (a.includes(w)) { hasWordOverlap = true; break; }
+        }
+    }
+    if (!hasWordOverlap) return 0;
+
+    // SequenceMatcher-style (simple LCS ratio) for ranking
+    const longer = a.length > b.length ? a : b;
+    const shorter = a.length > b.length ? b : a;
+    if (longer.length === 0) return 1.0;
+
+    // Count matching characters in order
+    let matches = 0;
+    let bIdx = 0;
+    for (let i = 0; i < shorter.length && bIdx < longer.length; i++) {
+        const pos = longer.indexOf(shorter[i], bIdx);
+        if (pos >= 0) {
+            matches++;
+            bIdx = pos + 1;
+        }
+    }
+
+    return (2.0 * matches) / (a.length + b.length);
+}
+
+async function enrichMeetings(dateStr) {
+    // Process each matched meeting sequentially (WorkIQ is a CLI tool, no parallel)
+    const matchedIndices = Object.keys(customerMap).map(Number);
+
+    for (let i = 0; i < matchedIndices.length; i++) {
+        const idx = matchedIndices[i];
+        const meeting = meetings[idx];
+
+        setStep('Enrich', 'active', `Processing ${i + 1}/${matchedIndices.length}...`);
+
+        try {
+            const resp = await fetch('/api/fill-my-day/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    meeting: meeting,
+                    date: dateStr,
+                    customer_id: customerMap[idx].customer_id
+                })
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                enrichedData[idx] = data;
+            } else {
+                enrichedData[idx] = {
+                    content_html: `<h2>${escapeHtml(meeting.title)}</h2><p><em>Could not enrich: ${data.error || 'unknown error'}</em></p>`,
+                    topics: [],
+                    task_subject: '',
+                    task_description: ''
+                };
+            }
+        } catch (err) {
+            console.error(`Enrich error for meeting ${idx}:`, err);
+            enrichedData[idx] = {
+                content_html: `<h2>${escapeHtml(meeting.title)}</h2><p><em>Enrichment failed</em></p>`,
+                topics: [],
+                task_subject: '',
+                task_description: ''
+            };
+        }
+    }
+}
+
+function renderMeetingCards(dateStr) {
+    const container = document.getElementById('meetingCards');
+    container.innerHTML = '';
+
+    // Render matched meetings as editable cards
+    const matchedIndices = Object.keys(customerMap).map(Number);
+    // Unmatched meetings
+    const unmatchedIndices = meetings.map((_, i) => i).filter(i => !customerMap[i]);
+
+    if (matchedIndices.length === 0 && unmatchedIndices.length > 0) {
+        container.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i> 
+                Found ${meetings.length} meeting(s) but couldn't match any to customers in your database.
+            </div>`;
+    }
+
+    totalCards = matchedIndices.length;
+
+    // Render matched cards
+    matchedIndices.forEach((idx, cardNum) => {
+        const meeting = meetings[idx];
+        const customer = customerMap[idx];
+        const data = enrichedData[idx] || {};
+
+        const card = createMeetingCard(idx, meeting, customer, data, dateStr, cardNum);
+        container.appendChild(card);
+    });
+
+    // Show unmatched meetings as a collapsed section
+    if (unmatchedIndices.length > 0) {
+        const section = document.createElement('div');
+        section.className = 'mt-4';
+        section.innerHTML = `
+            <div class="card border-secondary">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center" 
+                     style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#unmatchedMeetings">
+                    <span><i class="bi bi-question-circle text-secondary"></i> 
+                        <strong>${unmatchedIndices.length} Unmatched Meeting${unmatchedIndices.length > 1 ? 's' : ''}</strong>
+                        <small class="text-muted ms-2">(no customer match found)</small>
+                    </span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="collapse" id="unmatchedMeetings">
+                    <div class="card-body p-0">
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                                ${unmatchedIndices.map(i => {
+                                    const m = meetings[i];
+                                    return `<tr>
+                                        <td class="px-3 py-2"><small class="text-muted">${m.start_time_display || ''}</small></td>
+                                        <td class="px-3 py-2">${escapeHtml(m.title)}</td>
+                                        <td class="px-3 py-2 text-muted">${escapeHtml(m.customer || 'Unknown')}</td>
+                                    </tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>`;
+        container.appendChild(section);
+    }
+
+    updateCompletionStatus();
+}
+
+function createMeetingCard(idx, meeting, customer, data, dateStr, cardNum) {
+    const card = document.createElement('div');
+    card.className = 'card mb-3 meeting-card';
+    card.id = `meetingCard-${idx}`;
+
+    const timeStr = meeting.start_time_display || '';
+    const callTime = meeting.start_time ? new Date(meeting.start_time).toTimeString().slice(0, 5) : '';
+
+    // Build topic badges
+    const topicBadges = (data.topics || []).map(t =>
+        `<span class="badge bg-warning text-dark topic-tag me-1" 
+              data-topic-id="${t.id}" data-card="${idx}"
+              onclick="toggleTopic(this)">
+            <i class="bi bi-tag"></i> ${escapeHtml(t.name)}
+        </span>`
+    ).join('');
+
+    const matchQuality = customer.score >= 0.8 ? 'text-bg-success' : 
+                          customer.score >= 0.6 ? 'text-bg-primary' : 'text-bg-warning';
+
+    card.innerHTML = `
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <strong>${escapeHtml(meeting.title)}</strong>
+                <span class="text-muted ms-2">${timeStr}</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge ${matchQuality} customer-match-badge">
+                    <i class="bi bi-building"></i> ${escapeHtml(customer.nickname || customer.customer_name)}
+                </span>
+                <button class="btn btn-sm btn-outline-primary" onclick="editCardNotes(${idx})" title="Edit notes">
+                    <i class="bi bi-pencil"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Notes Preview -->
+            <div class="notes-preview mb-3" id="notesPreview-${idx}">
+                ${data.content_html || '<em>No content</em>'}
+            </div>
+            <!-- Edit Area (hidden by default) -->
+            <div id="notesEdit-${idx}" style="display:none;" class="mb-3">
+                <textarea class="form-control" id="notesTextarea-${idx}" rows="8"
+                    style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(data.content_html || '')}</textarea>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-primary" onclick="saveCardEdit(${idx})">
+                        <i class="bi bi-check"></i> Done Editing
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="cancelCardEdit(${idx})">Cancel</button>
+                </div>
+            </div>
+            <!-- Topics & Task -->
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <small class="text-muted">Topics:</small>
+                <span id="topicContainer-${idx}">${topicBadges || '<small class="text-muted">None suggested</small>'}</span>
+            </div>
+            ${data.milestone ? `
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <small class="text-muted">Milestone:</small>
+                <a href="${data.milestone.url}" target="_blank" class="badge bg-success text-decoration-none">
+                    <i class="bi bi-flag"></i> ${escapeHtml(data.milestone.name)}
+                </a>
+                ${data.milestone.status ? `<span class="badge ${
+                    data.milestone.status === 'On Track' ? 'bg-success' :
+                    data.milestone.status === 'At Risk' ? 'bg-warning text-dark' :
+                    data.milestone.status === 'Blocked' ? 'bg-danger' :
+                    data.milestone.status === 'Completed' ? 'bg-secondary' : 'bg-light text-dark'
+                }">${escapeHtml(data.milestone.status)}</span>` : ''}
+                ${data.milestone.opportunity_name ? `<small class="text-muted">${escapeHtml(data.milestone.opportunity_name)}</small>` : ''}
+            </div>` : ''}
+            ${data.task_subject ? `
+            <div class="text-muted small">
+                <i class="bi bi-pencil-square"></i> Suggested task: ${escapeHtml(data.task_subject)}
+            </div>` : ''}
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <small class="text-muted">
+                    <i class="bi bi-calendar"></i> ${dateStr}
+                    ${callTime ? ` &middot; <i class="bi bi-clock"></i> ${callTime}` : ''}
+                </small>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/call-log/new?customer_id=${customer.customer_id}&date=${dateStr}" 
+                   class="btn btn-sm btn-outline-secondary" target="_blank" title="Open in full editor">
+                    <i class="bi bi-box-arrow-up-right"></i> Full Editor
+                </a>
+                <button class="btn btn-sm btn-success" onclick="saveCallLog(${idx}, '${dateStr}', '${callTime}')" id="saveBtn-${idx}">
+                    <i class="bi bi-check-circle"></i> Save Call Log
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Store data on the element for saving
+    card.dataset.customerId = customer.customer_id;
+    card.dataset.contentHtml = data.content_html || '';
+    card.dataset.topicIds = JSON.stringify((data.topics || []).map(t => t.id));
+    card.dataset.milestone = JSON.stringify(data.milestone || null);
+    card.dataset.taskSubject = data.task_subject || '';
+    card.dataset.taskDescription = data.task_description || '';
+
+    return card;
+}
+
+function toggleTopic(el) {
+    el.classList.toggle('deselected');
+    // Update stored topic IDs on the card
+    const cardIdx = el.dataset.card;
+    const card = document.getElementById(`meetingCard-${cardIdx}`);
+    const activeTags = card.querySelectorAll(`.topic-tag:not(.deselected)`);
+    const topicIds = Array.from(activeTags).map(t => parseInt(t.dataset.topicId));
+    card.dataset.topicIds = JSON.stringify(topicIds);
+}
+
+function editCardNotes(idx) {
+    document.getElementById(`notesPreview-${idx}`).style.display = 'none';
+    document.getElementById(`notesEdit-${idx}`).style.display = 'block';
+}
+
+function saveCardEdit(idx) {
+    const textarea = document.getElementById(`notesTextarea-${idx}`);
+    const html = textarea.value;
+    const card = document.getElementById(`meetingCard-${idx}`);
+    card.dataset.contentHtml = html;
+    document.getElementById(`notesPreview-${idx}`).innerHTML = html;
+    document.getElementById(`notesPreview-${idx}`).style.display = 'block';
+    document.getElementById(`notesEdit-${idx}`).style.display = 'none';
+}
+
+function cancelCardEdit(idx) {
+    const card = document.getElementById(`meetingCard-${idx}`);
+    document.getElementById(`notesTextarea-${idx}`).value = card.dataset.contentHtml;
+    document.getElementById(`notesPreview-${idx}`).style.display = 'block';
+    document.getElementById(`notesEdit-${idx}`).style.display = 'none';
+}
+
+async function saveCallLog(idx, dateStr, callTime) {
+    const card = document.getElementById(`meetingCard-${idx}`);
+    const btn = document.getElementById(`saveBtn-${idx}`);
+
+    // Get current content (may have been edited)
+    const content = card.dataset.contentHtml;
+    const topicIds = JSON.parse(card.dataset.topicIds || '[]');
+    const customerId = card.dataset.customerId;
+    const milestone = JSON.parse(card.dataset.milestone || 'null');
+    const taskSubject = card.dataset.taskSubject || '';
+    const taskDescription = card.dataset.taskDescription || '';
+
+    if (!content || content.trim() === '') {
+        alert('Cannot save empty call log. Please add some notes.');
+        return;
+    }
+
+    // Disable button, show saving state
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+    card.classList.add('saving');
+
+    try {
+        const resp = await fetch('/api/fill-my-day/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                customer_id: parseInt(customerId),
+                call_date: dateStr,
+                call_time: callTime,
+                content: content,
+                topic_ids: topicIds,
+                milestone: milestone,
+                task_subject: taskSubject,
+                task_description: taskDescription
+            })
+        });
+
+        const result = await resp.json();
+
+        if (result.success) {
+            // Show success briefly then animate away
+            btn.innerHTML = '<i class="bi bi-check"></i> Saved!';
+            btn.className = 'btn btn-sm btn-success';
+            card.classList.remove('saving');
+
+            // Replace save button with view link
+            btn.outerHTML = `<a href="${result.view_url}" class="btn btn-sm btn-outline-success" target="_blank">
+                <i class="bi bi-eye"></i> View
+            </a>`;
+
+            setTimeout(() => {
+                card.classList.add('saved');
+                savedCount++;
+                updateCompletionStatus();
+            }, 1200);
+        } else {
+            throw new Error(result.error || 'Save failed');
+        }
+    } catch (err) {
+        console.error('Save error:', err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Retry';
+        btn.className = 'btn btn-sm btn-danger';
+        card.classList.remove('saving');
+        alert('Failed to save: ' + err.message);
+    }
+}
+
+function updateCompletionStatus() {
+    if (totalCards > 0 && savedCount >= totalCards) {
+        document.getElementById('completionSummary').style.display = 'block';
+        document.getElementById('completionText').textContent = 
+            `Saved ${savedCount} call log${savedCount > 1 ? 's' : ''} for this day.`;
+    }
+}
+
+function showError(message) {
+    document.getElementById('errorArea').style.display = 'block';
+    document.getElementById('errorText').textContent = message;
+}
+
+function resetStartBtn() {
+    const btn = document.getElementById('startBtn');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-lightning-charge"></i> Fetch Meetings';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

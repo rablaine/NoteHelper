@@ -15,6 +15,37 @@ from difflib import SequenceMatcher
 logger = logging.getLogger(__name__)
 
 
+def _clean_meeting_title(title: str) -> str:
+    """Clean WorkIQ meeting title by removing markdown links, attendee metadata, etc.
+    
+    WorkIQ sometimes returns titles like:
+      Mercalis (external attendees with `@mercalis.com`) [1](https://teams.microsoft.com/...)
+    
+    This strips it down to just: Mercalis
+    """
+    if not title:
+        return title
+    
+    # Remove markdown links: [text](url) or [number](url)
+    title = re.sub(r'\[\d+\]\([^)]+\)', '', title)
+    title = re.sub(r'\[[^\]]*\]\([^)]+\)', '', title)
+    
+    # Remove (external attendees with ...) and (external participants ...) metadata
+    title = re.sub(r'\(external\s+(?:attendees|participants)\s+[^)]*\)', '', title, flags=re.IGNORECASE)
+    
+    # Remove any remaining URLs
+    title = re.sub(r'https?://\S+', '', title)
+    
+    # Remove backtick-wrapped emails/domains
+    title = re.sub(r'`[^`]*`', '', title)
+    
+    # Clean up whitespace and trailing punctuation
+    title = re.sub(r'\s+', ' ', title).strip()
+    title = title.strip('* ·-')
+    
+    return title
+
+
 def fuzzy_match_score(text1: str, text2: str) -> float:
     """
     Calculate fuzzy match score between two strings.
@@ -165,15 +196,41 @@ def _parse_meetings_response(response: str, date_str: str) -> List[Dict[str, Any
     if not response or 'no meetings' in response.lower():
         return meetings
     
+    # Normalize non-standard whitespace characters (WorkIQ sometimes uses
+    # U+00FF, U+00A0, and other non-breaking characters instead of spaces)
+    response = re.sub(r'[\u00ff\u00a0\u2007\u202f\u2009\u200a]', ' ', response)
+    
     # Try table format first (most common from WorkIQ)
     # Look for lines that start with | and contain times
     time_pattern = re.compile(r'(\d{1,2}:\d{2}\s*(?:AM|PM))', re.IGNORECASE)
     
-    for line in response.split('\n'):
+    # Detect column layout from header row (WorkIQ varies column order)
+    # Default: time=0, title=1, company=2
+    title_col_idx = None
+    time_col_idx = None
+    company_col_idx = None
+    
+    lines = response.split('\n')
+    for line in lines:
+        line_stripped = line.strip()
+        if line_stripped.startswith('|') and ('Meeting' in line_stripped or 'Title' in line_stripped):
+            temp = line_stripped.replace('\\|', '\x00')
+            header_parts = [p.replace('\x00', '|').strip().lower() for p in temp.split('|')]
+            header_parts = [p for p in header_parts if p]
+            for i, h in enumerate(header_parts):
+                if 'title' in h or 'meeting' in h:
+                    title_col_idx = i
+                elif 'time' in h:
+                    time_col_idx = i
+                elif 'company' in h or 'external' in h or 'customer' in h:
+                    company_col_idx = i
+            break
+    
+    for line in lines:
         line = line.strip()
         
         # Skip header row or separator rows
-        if not line.startswith('|') or '---' in line or 'Time' in line and 'Meeting' in line:
+        if not line.startswith('|') or '---' in line or ('Time' in line and 'Meeting' in line):
             continue
         
         # Split carefully on unescaped pipes
@@ -201,13 +258,20 @@ def _parse_meetings_response(response: str, date_str: str) -> List[Dict[str, Any
         if time_str is None:
             continue
         
-        # Title is usually in the next column, company after that
-        title = parts[time_col + 1] if len(parts) > time_col + 1 else ''
-        company = parts[time_col + 2] if len(parts) > time_col + 2 else ''
+        # Use header-detected column layout if available
+        if title_col_idx is not None:
+            title = parts[title_col_idx] if len(parts) > title_col_idx else ''
+            company = parts[company_col_idx] if company_col_idx is not None and len(parts) > company_col_idx else ''
+        else:
+            # Fallback: assume title is after time, company after that
+            title = parts[time_col + 1] if len(parts) > time_col + 1 else ''
+            company = parts[time_col + 2] if len(parts) > time_col + 2 else ''
         
-        # Clean up title - remove bold markers
+        # Clean up title - remove bold markers and WorkIQ metadata
         title = title.strip('* ')
+        title = _clean_meeting_title(title)
         company = company.strip('* ')
+        company = _clean_meeting_title(company)
         
         meeting = {
             'id': '',
@@ -250,7 +314,7 @@ def _parse_meetings_response(response: str, date_str: str) -> List[Dict[str, Any
         if not title_match:
             continue
             
-        title = title_match.group(1).strip()
+        title = _clean_meeting_title(title_match.group(1).strip())
         
         meeting = {
             'id': '',
@@ -344,8 +408,14 @@ def get_meeting_summary(meeting_title: str, date_str: str = None) -> Dict[str, A
     """
     date_context = f"on {date_str}" if date_str else ""
     
+    # Clean title to avoid CLI argument parsing issues
+    clean_title = _clean_meeting_title(meeting_title)
+    # Remove any quotes that could break CLI argument parsing
+    clean_title = clean_title.replace('"', '').replace("'", '')
+    
     # Simplified prompt - let WorkIQ format naturally
-    question = f'Summarize the meeting "{meeting_title}" {date_context} in approximately 250 words. Include key discussion points, technologies mentioned, and any action items.'
+    # NOTE: Do NOT wrap clean_title in quotes - they get passed through to the CLI
+    question = f'Summarize the meeting called {clean_title} {date_context} in approximately 250 words. Include key discussion points, technologies mentioned, and any action items.'
     
     try:
         response = query_workiq(question, timeout=120)

@@ -301,7 +301,7 @@ def customer_update_notes(id):
 # API routes
 @customers_bp.route('/api/customers', methods=['GET'])
 def api_customers_list():
-    """API endpoint for listing all customers (for quick create modal)."""
+    """API endpoint for listing all customers (for quick create modal, fill my day, etc.)."""
     customers = Customer.query.options(
         db.joinedload(Customer.territory)
     ).order_by(Customer.name).all()
@@ -309,6 +309,8 @@ def api_customers_list():
     results = [{
         'id': c.id,
         'name': c.name,
+        'nickname': c.nickname,
+        'tpid_url': c.tpid_url,
         'territory': c.territory.name if c.territory else None
     } for c in customers]
     
