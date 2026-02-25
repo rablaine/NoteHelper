@@ -155,6 +155,7 @@ def call_logs_calendar_api():
             'customer_id': log.customer.id if log.customer else None,
             'has_milestone': len(log.milestones) > 0,
             'has_task': log.msx_tasks.count() > 0,
+            'has_hok': any(t.is_hok for t in log.msx_tasks.all()),
             'time': log.call_date.strftime('%I:%M %p').lstrip('0') if log.call_date.hour != 0 or log.call_date.minute != 0 else None
         })
     
