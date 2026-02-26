@@ -293,6 +293,10 @@ function syncMilestones() {
     const progressBar = document.getElementById('syncProgressBar');
     const detail = document.getElementById('syncDetail');
 
+    // Warn user if they try to leave during sync
+    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+    window.addEventListener('beforeunload', warnOnLeave);
+
     // Disable button, show spinner
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing...';
@@ -352,6 +356,7 @@ function syncMilestones() {
                     detail.innerHTML = `<i class="bi bi-x-circle text-danger"></i> ${data.customer}: ${data.error}`;
                 }
             } else if (type === 'complete') {
+                window.removeEventListener('beforeunload', warnOnLeave);
                 progressBar.classList.remove('progress-bar-animated');
                 progressBar.style.width = '100%';
                 progressBar.textContent = '100%';
@@ -390,6 +395,7 @@ function syncMilestones() {
         }
         return pump();
     }).catch(error => {
+        window.removeEventListener('beforeunload', warnOnLeave);
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync from MSX';
         alertEl.className = 'alert alert-danger mb-4';

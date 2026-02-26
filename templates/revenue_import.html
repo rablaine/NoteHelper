@@ -152,6 +152,10 @@ document.getElementById('importForm').addEventListener('submit', async function(
     importBtn.disabled = true;
     importBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Importing...';
     
+    // Warn user if they try to leave during import
+    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+    window.addEventListener('beforeunload', warnOnLeave);
+    
     // Show progress
     importProgress.classList.remove('d-none');
     importResults.classList.add('d-none');
@@ -241,6 +245,7 @@ document.getElementById('importForm').addEventListener('submit', async function(
             </div>
         `;
     } finally {
+        window.removeEventListener('beforeunload', warnOnLeave);
         importBtn.disabled = false;
         importBtn.innerHTML = '<i class="bi bi-upload"></i> Import';
     }
