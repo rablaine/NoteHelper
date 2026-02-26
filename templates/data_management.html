@@ -220,6 +220,10 @@
         // Reset UI
         btn.disabled = true;
         btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Importing...';
+        
+        // Warn user if they try to leave during import
+        function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+        window.addEventListener('beforeunload', warnOnLeave);
         progressDiv.classList.remove('d-none');
         resultsDiv.classList.add('d-none');
         errorDiv.classList.add('d-none');
@@ -298,6 +302,7 @@
             errorDiv.classList.remove('d-none');
             document.getElementById('msxImportErrorText').textContent = error.message;
         } finally {
+            window.removeEventListener('beforeunload', warnOnLeave);
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-cloud-download"></i> Import My Accounts from MSX';
         }
