@@ -141,7 +141,8 @@
         </thead>
         <tbody>
             {% for ms in milestones %}
-            <tr class="milestone-row"
+            <tr class="milestone-row" style="cursor: pointer;"
+                onclick="window.location='{{ url_for('milestones.milestone_view', id=ms.id) }}';"
                 data-seller-id="{{ ms.seller.id if ms.seller else '' }}"
                 data-status="{{ ms.status }}"
                 data-area="{{ ms.workload_area }}"
@@ -156,16 +157,11 @@
                 <!-- Milestone Info -->
                 <td>
                     <div class="fw-semibold">
-                        {% if ms.on_my_team %}<i class="bi bi-people-fill text-primary me-1" title="On my team"></i>{% endif %}<a href="{{ url_for('milestones.milestone_view', id=ms.id) }}" class="text-decoration-none">{{ ms.title }}</a>
+                        {% if ms.on_my_team %}<i class="bi bi-people-fill text-primary me-1" title="On my team"></i>{% endif %}{{ ms.title }}
                     </div>
                     {% if ms.opportunity_name %}
                         <div class="text-muted small">
-                            <i class="bi bi-briefcase"></i>
-                            {% if ms.opportunity %}
-                                <a href="{{ url_for('opportunities.opportunity_view', id=ms.opportunity.id) }}" class="text-decoration-none text-muted">{{ ms.opportunity_name }}</a>
-                            {% else %}
-                                {{ ms.opportunity_name }}
-                            {% endif %}
+                            <i class="bi bi-briefcase"></i> {{ ms.opportunity_name }}
                         </div>
                     {% endif %}
                     {% if ms.milestone_number %}
@@ -178,7 +174,7 @@
                 <!-- Customer -->
                 <td>
                     {% if ms.customer %}
-                        <a href="{{ url_for('customers.customer_view', id=ms.customer.id) }}" class="text-decoration-none">
+                        <a href="{{ url_for('customers.customer_view', id=ms.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">
                             {{ ms.customer.name }}
                         </a>
                     {% else %}
@@ -190,7 +186,8 @@
                 <td>
                     {% if ms.seller %}
                         <a href="{{ url_for('sellers.seller_view', id=ms.seller.id) }}" 
-                           class="badge {{ get_seller_color(ms.seller.id) }} text-decoration-none">
+                           class="badge {{ get_seller_color(ms.seller.id) }} text-decoration-none"
+                           onclick="event.stopPropagation();">
                             <i class="bi bi-person"></i> {{ ms.seller.name }}
                         </a>
                     {% else %}
@@ -256,7 +253,7 @@
                 <!-- MSX Link -->
                 <td class="text-center">
                     {% if ms.url %}
-                        <a href="{{ ms.url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Open in MSX">
+                        <a href="{{ ms.url }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Open in MSX" onclick="event.stopPropagation();">
                             <i class="bi bi-box-arrow-up-right"></i>
                         </a>
                     {% endif %}
