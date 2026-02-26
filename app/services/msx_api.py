@@ -601,6 +601,7 @@ def get_milestones_by_account(
                     "status": status,
                     "status_code": status_code,
                     "status_sort": MILESTONE_STATUS_ORDER.get(status, 99),
+                    "msx_opportunity_id": raw.get("_msp_opportunityid_value"),
                     "opportunity_name": opp_name,
                     "workload": workload,
                     "monthly_usage": monthly_usage,
@@ -634,6 +635,225 @@ def get_milestones_by_account(
         return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
     except Exception as e:
         logger.exception(f"Error getting milestones for account {account_id}")
+        return {"success": False, "error": str(e)}
+
+
+def build_opportunity_url(opportunity_id: str) -> str:
+    """
+    Build a direct MSX URL for an opportunity.
+    
+    Args:
+        opportunity_id: The opportunity GUID.
+        
+    Returns:
+        Full MSX URL to open the opportunity record.
+    """
+    return (
+        f"https://microsoftsales.crm.dynamics.com/main.aspx"
+        f"?appid={MSX_APP_ID}"
+        f"&pagetype=entityrecord"
+        f"&etn=opportunity"
+        f"&id={opportunity_id}"
+    )
+
+
+def get_opportunity(opportunity_id: str) -> Dict[str, Any]:
+    """
+    Fetch a single opportunity from MSX by GUID.
+    
+    Fetches fresh details every time (no caching). Includes the forecast
+    comments JSON field for reading/writing comments.
+    
+    Args:
+        opportunity_id: The opportunity GUID.
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - opportunity: Dict with name, number, status, value, comments, etc.
+        - error: str if failed
+    """
+    try:
+        url = (
+            f"{CRM_BASE_URL}/opportunities({opportunity_id})"
+            f"?$select=name,msp_opportunitynumber,statecode,statuscode,"
+            f"estimatedvalue,estimatedclosedate,customerneed,description,"
+            f"msp_forecastcomments,msp_forecastcommentsjsonfield,"
+            f"msp_forecastcomments_lastmodifiedon,msp_competethreatlevel,"
+            f"_parentaccountid_value,_ownerid_value"
+        )
+        
+        response = _msx_request('GET', url)
+        
+        if response.status_code == 200:
+            raw = response.json()
+            
+            # Parse comments from JSON field
+            import json as json_lib
+            comments = []
+            json_str = raw.get("msp_forecastcommentsjsonfield")
+            if json_str:
+                try:
+                    comments = json_lib.loads(json_str)
+                except (json_lib.JSONDecodeError, TypeError):
+                    logger.warning(f"Could not parse comments JSON for opp {opportunity_id}")
+            
+            # Resolve userId GUIDs to display names
+            if comments:
+                unique_ids = set()
+                for c in comments:
+                    uid = c.get("userId", "").strip("{} ")
+                    if uid:
+                        unique_ids.add(uid)
+                
+                name_cache = {}
+                for uid in unique_ids:
+                    try:
+                        user_url = f"{CRM_BASE_URL}/systemusers({uid})?$select=fullname"
+                        user_resp = _msx_request('GET', user_url)
+                        if user_resp.status_code == 200:
+                            name_cache[uid] = user_resp.json().get("fullname", "Unknown")
+                    except Exception:
+                        pass
+                
+                for c in comments:
+                    uid = c.get("userId", "").strip("{} ")
+                    c["displayName"] = name_cache.get(uid, "Unknown")
+            
+            # Build structured response
+            state_formatted = raw.get(
+                "statecode@OData.Community.Display.V1.FormattedValue", "Unknown"
+            )
+            status_formatted = raw.get(
+                "statuscode@OData.Community.Display.V1.FormattedValue", ""
+            )
+            owner = raw.get(
+                "_ownerid_value@OData.Community.Display.V1.FormattedValue", ""
+            )
+            compete = raw.get(
+                "msp_competethreatlevel@OData.Community.Display.V1.FormattedValue", ""
+            )
+            
+            opportunity = {
+                "id": opportunity_id,
+                "name": raw.get("name", ""),
+                "number": raw.get("msp_opportunitynumber", ""),
+                "state": state_formatted,
+                "status": status_formatted,
+                "statecode": raw.get("statecode"),
+                "estimated_value": raw.get("estimatedvalue"),
+                "estimated_close_date": raw.get("estimatedclosedate"),
+                "customer_need": raw.get("customerneed", ""),
+                "description": raw.get("description", ""),
+                "owner": owner,
+                "compete_threat": compete,
+                "comments": comments,
+                "comments_plain": raw.get("msp_forecastcomments", ""),
+                "comments_last_modified": raw.get("msp_forecastcomments_lastmodifiedon", ""),
+                "url": build_opportunity_url(opportunity_id),
+            }
+            
+            return {"success": True, "opportunity": opportunity}
+        
+        elif response.status_code == 401:
+            return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 404:
+            return {"success": False, "error": "Opportunity not found in MSX."}
+        else:
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {response.text[:200]}"
+            }
+    
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error getting opportunity {opportunity_id}")
+        return {"success": False, "error": str(e)}
+
+
+def add_opportunity_comment(
+    opportunity_id: str,
+    comment_text: str,
+) -> Dict[str, Any]:
+    """
+    Append a comment to an opportunity's forecast comments field.
+    
+    Reads the current comments JSON, appends the new comment, and PATCHes
+    the updated JSON back. Uses the current MSX user's GUID as the author.
+    
+    Args:
+        opportunity_id: The opportunity GUID.
+        comment_text: The comment text to add.
+        
+    Returns:
+        Dict with:
+        - success: bool
+        - comment_count: int (total comments after adding)
+        - error: str if failed
+    """
+    import json as json_lib
+    
+    try:
+        # Step 1: Get current comments
+        read_url = (
+            f"{CRM_BASE_URL}/opportunities({opportunity_id})"
+            f"?$select=msp_forecastcommentsjsonfield"
+        )
+        read_response = _msx_request('GET', read_url)
+        
+        if read_response.status_code != 200:
+            return {
+                "success": False,
+                "error": f"Failed to read comments: HTTP {read_response.status_code}"
+            }
+        
+        current_json_str = read_response.json().get("msp_forecastcommentsjsonfield") or "[]"
+        try:
+            current_comments = json_lib.loads(current_json_str)
+        except (json_lib.JSONDecodeError, TypeError):
+            current_comments = []
+        
+        # Step 2: Get current user GUID for the comment author
+        user_id = get_current_user_id()
+        if not user_id:
+            return {"success": False, "error": "Could not get current user ID"}
+        
+        # Step 3: Build new comment (matching MSX UI format)
+        new_comment = {
+            "userId": f"{{{user_id.upper()}}}",
+            "modifiedOn": dt.utcnow().strftime("%m/%d/%Y, %I:%M:%S %p"),
+            "comment": comment_text,
+        }
+        current_comments.append(new_comment)
+        
+        # Step 4: PATCH back to MSX
+        patch_url = f"{CRM_BASE_URL}/opportunities({opportunity_id})"
+        payload = {
+            "msp_forecastcommentsjsonfield": json_lib.dumps(current_comments),
+        }
+        
+        patch_response = _msx_request('PATCH', patch_url, json_data=payload)
+        
+        if patch_response.status_code < 400:
+            return {
+                "success": True,
+                "comment_count": len(current_comments),
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"PATCH failed: HTTP {patch_response.status_code} - {patch_response.text[:200]}"
+            }
+    
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error adding comment to opportunity {opportunity_id}")
         return {"success": False, "error": str(e)}
 
 

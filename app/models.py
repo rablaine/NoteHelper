@@ -501,6 +501,31 @@ class CallLog(db.Model):
         return f'<CallLog {self.id} for {self.customer.name}>'
 
 
+class Opportunity(db.Model):
+    """Opportunity from MSX that groups milestones under a customer."""
+    __tablename__ = 'opportunities'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # MSX identifiers
+    msx_opportunity_id = db.Column(db.String(50), nullable=False, unique=True)  # GUID from MSX
+    opportunity_number = db.Column(db.String(50), nullable=True)  # e.g., "7-3FU4Q45URI"
+    name = db.Column(db.String(500), nullable=False)
+    
+    # Relationships
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    
+    # Relationships
+    customer = db.relationship('Customer', backref=db.backref('opportunities', lazy='dynamic'))
+    milestones = db.relationship('Milestone', back_populates='opportunity', lazy='dynamic')
+    
+    def __repr__(self) -> str:
+        return f'<Opportunity {self.id}: {self.name[:50]}>'
+
+
 class Milestone(db.Model):
     """Milestone from MSX sales platform that can be linked to call logs."""
     __tablename__ = 'milestones'
@@ -516,7 +541,7 @@ class Milestone(db.Model):
     title = db.Column(db.String(500), nullable=True)  # msp_name from MSX
     msx_status = db.Column(db.String(50), nullable=True)  # "On Track", "Cancelled", etc.
     msx_status_code = db.Column(db.Integer, nullable=True)  # Numeric status code
-    opportunity_name = db.Column(db.String(500), nullable=True)  # Parent opportunity name
+    opportunity_name = db.Column(db.String(500), nullable=True)  # Parent opportunity name (legacy, kept for compat)
     
     # Milestone tracker fields (populated from MSX sync)
     due_date = db.Column(db.DateTime, nullable=True)  # Target completion date from MSX
@@ -528,12 +553,14 @@ class Milestone(db.Model):
     
     # Relationships
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+    opportunity_id = db.Column(db.Integer, db.ForeignKey('opportunities.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     # Relationships
     customer = db.relationship('Customer', backref=db.backref('milestones', lazy='dynamic'))
+    opportunity = db.relationship('Opportunity', back_populates='milestones')
     call_logs = db.relationship(
         'CallLog',
         secondary=call_logs_milestones,

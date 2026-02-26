@@ -3,21 +3,28 @@
 {% block title %}{{ milestone.title or 'Milestone' }} - NoteHelper{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>
-        <i class="bi bi-flag"></i>
-        {{ milestone.title or 'Untitled Milestone' }}
-    </h1>
-    <div>
-        <a href="{{ milestone.url }}" target="_blank" class="btn btn-success">
+<div class="d-flex justify-content-between align-items-center mb-4 gap-3">
+    <div style="min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 0.5rem;">
+        <h1 class="mb-0" style="white-space: nowrap; flex-shrink: 0;">
+            <i class="bi bi-flag"></i>
+        </h1>
+        <h1 class="mb-0 text-truncate" style="min-width: 0;" title="{{ milestone.title or 'Untitled Milestone' }}">
+            {{ milestone.title or 'Untitled Milestone' }}
+        </h1>
+        {% if milestone.msx_status %}
+        <span class="badge fs-6 {% if milestone.msx_status == 'On Track' %}bg-success{% elif milestone.msx_status == 'At Risk' %}bg-warning text-dark{% elif milestone.msx_status == 'Blocked' %}bg-danger{% elif milestone.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}">{{ milestone.msx_status }}</span>
+        {% endif %}
+    </div>
+    <div class="flex-shrink-0 d-flex gap-2">
+        <a href="{{ milestone.url }}" target="_blank" class="btn btn-outline-success text-nowrap">
             <i class="bi bi-box-arrow-up-right"></i> Open in MSX
         </a>
-        <a href="{{ url_for('milestones.milestone_edit', id=milestone.id) }}" class="btn btn-outline-primary">
+        <a href="{{ url_for('milestones.milestone_edit', id=milestone.id) }}" class="btn btn-outline-primary text-nowrap">
             <i class="bi bi-pencil"></i> Edit
         </a>
-        <form method="POST" action="{{ url_for('milestones.milestone_delete', id=milestone.id) }}" 
+        <form method="POST" action="{{ url_for('milestones.milestone_delete', id=milestone.id) }}"
               class="d-inline" onsubmit="return confirm('Are you sure you want to delete this milestone?');">
-            <button type="submit" class="btn btn-outline-danger">
+            <button type="submit" class="btn btn-outline-danger text-nowrap">
                 <i class="bi bi-trash"></i> Delete
             </button>
         </form>
@@ -25,30 +32,97 @@
 </div>
 
 <div class="row">
-    <div class="col-md-8">
-        <!-- Milestone Details -->
-        <div class="card mb-4">
+    <!-- Left column: Details -->
+    <div class="col-md-4">
+        <!-- Navigation Card -->
+        <div class="card mb-3">
             <div class="card-header">
-                <i class="bi bi-link-45deg"></i> Milestone URL
+                <h5 class="mb-0"><i class="bi bi-signpost-split"></i> Navigation</h5>
             </div>
             <div class="card-body">
-                <a href="{{ milestone.url }}" target="_blank" class="text-break">
-                    {{ milestone.url }}
-                    <i class="bi bi-box-arrow-up-right ms-1"></i>
-                </a>
+                {% if milestone.customer %}
+                <p class="mb-2">
+                    <i class="bi bi-building text-muted"></i> <strong>Customer:</strong>
+                    <a href="{{ url_for('customers.customer_view', id=milestone.customer.id) }}">{{ milestone.customer.get_display_name() }}</a>
+                </p>
+                {% endif %}
+                {% if milestone.opportunity %}
+                <p class="mb-0">
+                    <i class="bi bi-briefcase text-muted"></i> <strong>Opportunity:</strong>
+                    <a href="{{ url_for('opportunities.opportunity_view', id=milestone.opportunity.id) }}">{{ milestone.opportunity.name[:50] }}{% if milestone.opportunity.name|length > 50 %}...{% endif %}</a>
+                </p>
+                {% endif %}
+                {% if not milestone.customer and not milestone.opportunity %}
+                <p class="text-muted mb-0">Not linked to a customer or opportunity.</p>
+                {% endif %}
             </div>
         </div>
-        
-        <!-- Associated Call Logs -->
+
+        <!-- Details Card -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Details</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% if milestone.milestone_number %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Number</span>
+                    <span>{{ milestone.milestone_number }}</span>
+                </li>
+                {% endif %}
+                {% if milestone.workload %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Workload</span>
+                    <span>{{ milestone.workload }}</span>
+                </li>
+                {% endif %}
+                {% if milestone.dollar_value %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Value</span>
+                    <span>${{ "{:,.0f}".format(milestone.dollar_value) }}</span>
+                </li>
+                {% endif %}
+                {% if milestone.monthly_usage %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Monthly Usage</span>
+                    <span>${{ "{:,.0f}".format(milestone.monthly_usage) }}</span>
+                </li>
+                {% endif %}
+                {% if milestone.due_date %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Due Date</span>
+                    <span>{{ milestone.due_date.strftime('%b %d, %Y') }}</span>
+                </li>
+                {% endif %}
+                {% if milestone.last_synced_at %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Last Synced</span>
+                    <span>{{ milestone.last_synced_at.strftime('%b %d, %Y %I:%M %p') }}</span>
+                </li>
+                {% endif %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Created</span>
+                    <span>{{ milestone.created_at.strftime('%b %d, %Y') }}</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span class="text-muted">Last Updated</span>
+                    <span>{{ milestone.updated_at.strftime('%b %d, %Y') }}</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Right column: Call Logs -->
+    <div class="col-md-8">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-journal-text"></i> Associated Call Logs</span>
+                <h5 class="mb-0"><i class="bi bi-journal-text"></i> Associated Call Logs</h5>
                 <span class="badge bg-secondary">{{ milestone.call_logs|length }}</span>
             </div>
             {% if milestone.call_logs %}
             <div class="list-group list-group-flush">
                 {% for call_log in milestone.call_logs|sort(attribute='call_date', reverse=True) %}
-                <a href="{{ url_for('call_logs.call_log_view', id=call_log.id) }}" 
+                <a href="{{ url_for('call_logs.call_log_view', id=call_log.id) }}"
                    class="list-group-item list-group-item-action">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
@@ -74,29 +148,6 @@
                 No call logs associated with this milestone yet.
             </div>
             {% endif %}
-        </div>
-    </div>
-    
-    <div class="col-md-4">
-        <!-- Metadata -->
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-info-circle"></i> Details
-            </div>
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item d-flex justify-content-between">
-                    <span class="text-muted">Created</span>
-                    <span>{{ milestone.created_at.strftime('%b %d, %Y') }}</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span class="text-muted">Last Updated</span>
-                    <span>{{ milestone.updated_at.strftime('%b %d, %Y') }}</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span class="text-muted">Linked Calls</span>
-                    <span>{{ milestone.call_logs|length }}</span>
-                </li>
-            </ul>
         </div>
     </div>
 </div>
