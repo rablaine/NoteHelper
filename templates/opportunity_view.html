@@ -87,9 +87,8 @@
                     {% for ms in milestones %}
                         <div class="{% if not loop.last %}mb-2 pb-2 border-bottom{% endif %}">
                             <div class="d-flex justify-content-between align-items-start">
-                                <a href="{{ ms.url }}" target="_blank" class="text-decoration-none" title="{{ ms.display_text }}">
+                                <a href="{{ url_for('milestones.milestone_view', id=ms.id) }}" class="text-decoration-none" title="{{ ms.display_text }}">
                                     <i class="bi bi-flag"></i> {{ ms.display_text[:40] }}{% if ms.display_text|length > 40 %}...{% endif %}
-                                    <i class="bi bi-box-arrow-up-right small"></i>
                                 </a>
                                 <span class="badge {% if ms.msx_status == 'On Track' %}bg-success{% elif ms.msx_status == 'At Risk' %}bg-warning text-dark{% elif ms.msx_status == 'Blocked' %}bg-danger{% elif ms.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}">
                                     {{ ms.msx_status or 'Unknown' }}

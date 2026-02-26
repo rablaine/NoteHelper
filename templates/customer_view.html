@@ -103,8 +103,8 @@
             <div class="card-body">
                 {% for milestone_id, milestone in milestone_dict.items()|sort(attribute='1.created_at', reverse=true) %}
                     <div class="{% if not loop.last %}mb-2{% endif %}">
-                        <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}">
-                            <i class="bi bi-flag"></i> {{ milestone.display_text[:35] }}{% if milestone.display_text|length > 35 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i>
+                        <a href="{{ url_for('milestones.milestone_view', id=milestone.id) }}" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}">
+                            <i class="bi bi-flag"></i> {{ milestone.display_text[:35] }}{% if milestone.display_text|length > 35 %}...{% endif %}
                         </a>
                         {% if milestone.msx_status %}
                         <span class="badge {% if milestone.msx_status == 'On Track' %}bg-success{% elif milestone.msx_status == 'At Risk' %}bg-warning text-dark{% elif milestone.msx_status == 'Blocked' %}bg-danger{% elif milestone.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}">{{ milestone.msx_status }}</span>
@@ -273,7 +273,7 @@
                                             <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;" onclick="event.stopPropagation();"><i class="bi bi-building"></i> {{ partner.name }}</a>
                                         {% endfor %}
                                         {% for milestone in call.milestones %}
-                                            <a href="{{ milestone.url }}" target="_blank" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}" onclick="event.stopPropagation();"><i class="bi bi-flag"></i> {{ milestone.display_text[:25] }}{% if milestone.display_text|length > 25 %}...{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
+                                            <a href="{{ url_for('milestones.milestone_view', id=milestone.id) }}" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}" onclick="event.stopPropagation();"><i class="bi bi-flag"></i> {{ milestone.display_text[:25] }}{% if milestone.display_text|length > 25 %}...{% endif %}</a>
                                         {% endfor %}
                                         {% for task in call.msx_tasks %}
                                             {% if task.msx_task_url %}

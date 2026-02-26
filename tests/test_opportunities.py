@@ -363,7 +363,114 @@ class TestMsxApiOpportunityField:
         assert sample_dict['msx_opportunity_id'] == 'opp-guid-here'
 
 
-class TestOpportunityViewRoute:
+class TestMilestoneViewPage:
+    """Tests for the enriched milestone view page with navigation links."""
+
+    def test_milestone_view_shows_opportunity_link(self, app, client, db_session, sample_user):
+        """Test that milestone view page shows link to parent opportunity."""
+        customer = Customer(
+            name='MS View Corp', tpid=7001, user_id=sample_user.id,
+        )
+        db_session.add(customer)
+        db_session.flush()
+
+        opp = Opportunity(
+            msx_opportunity_id='opp-ms-view',
+            name='Parent Opportunity',
+            customer_id=customer.id,
+            user_id=sample_user.id,
+        )
+        db_session.add(opp)
+        db_session.flush()
+
+        ms = Milestone(
+            msx_milestone_id='ms-view-test',
+            url='https://example.com/ms-view-test',
+            title='Test Milestone',
+            msx_status='On Track',
+            workload='Azure VM',
+            dollar_value=25000.0,
+            opportunity_id=opp.id,
+            customer_id=customer.id,
+            user_id=sample_user.id,
+        )
+        db_session.add(ms)
+        db_session.commit()
+
+        response = client.get(f'/milestone/{ms.id}')
+        assert response.status_code == 200
+        html = response.data.decode()
+
+        # Milestone details
+        assert 'Test Milestone' in html
+        assert 'On Track' in html
+        assert 'Azure VM' in html
+        assert '$25,000' in html
+
+        # Navigation links
+        assert 'Parent Opportunity' in html
+        assert f'/opportunity/{opp.id}' in html
+        assert 'MS View Corp' in html
+        assert f'/customer/{customer.id}' in html
+
+        # MSX link only on this page
+        assert 'Open in MSX' in html
+
+    def test_milestone_view_shows_call_logs(self, app, client, db_session, sample_user):
+        """Test that milestone view page shows associated call logs."""
+        from app.models import CallLog
+        from datetime import datetime, timezone
+
+        customer = Customer(
+            name='Call Log Corp', tpid=7002, user_id=sample_user.id,
+        )
+        db_session.add(customer)
+        db_session.flush()
+
+        ms = Milestone(
+            msx_milestone_id='ms-calls-test',
+            url='https://example.com/ms-calls-test',
+            title='Milestone With Calls',
+            user_id=sample_user.id,
+        )
+        db_session.add(ms)
+        db_session.flush()
+
+        call = CallLog(
+            customer_id=customer.id,
+            call_date=datetime(2026, 2, 15, tzinfo=timezone.utc),
+            content='Discussed migration plan',
+            user_id=sample_user.id,
+        )
+        call.milestones.append(ms)
+        db_session.add(call)
+        db_session.commit()
+
+        response = client.get(f'/milestone/{ms.id}')
+        assert response.status_code == 200
+        html = response.data.decode()
+
+        assert 'Call Log Corp' in html
+        assert 'Feb 15, 2026' in html
+        assert '1' in html  # badge count
+
+    def test_milestone_view_without_opportunity(self, app, client, db_session, sample_user):
+        """Test milestone view page when no opportunity is linked."""
+        ms = Milestone(
+            msx_milestone_id='ms-no-opp-view',
+            url='https://example.com/ms-no-opp-view',
+            title='Orphan Milestone',
+            user_id=sample_user.id,
+        )
+        db_session.add(ms)
+        db_session.commit()
+
+        response = client.get(f'/milestone/{ms.id}')
+        assert response.status_code == 200
+        html = response.data.decode()
+
+        assert 'Orphan Milestone' in html
+        assert 'Not linked to a customer or opportunity' in html
     """Tests for the opportunity view page route."""
 
     def _make_msx_opportunity(self, **overrides):
