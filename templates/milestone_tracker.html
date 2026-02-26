@@ -156,11 +156,16 @@
                 <!-- Milestone Info -->
                 <td>
                     <div class="fw-semibold">
-                        {% if ms.on_my_team %}<i class="bi bi-people-fill text-primary me-1" title="On my team"></i>{% endif %}{{ ms.title }}
+                        {% if ms.on_my_team %}<i class="bi bi-people-fill text-primary me-1" title="On my team"></i>{% endif %}<a href="{{ url_for('milestones.milestone_view', id=ms.id) }}" class="text-decoration-none">{{ ms.title }}</a>
                     </div>
                     {% if ms.opportunity_name %}
                         <div class="text-muted small">
-                            <i class="bi bi-briefcase"></i> {{ ms.opportunity_name }}
+                            <i class="bi bi-briefcase"></i>
+                            {% if ms.opportunity %}
+                                <a href="{{ url_for('opportunities.opportunity_view', id=ms.opportunity.id) }}" class="text-decoration-none text-muted">{{ ms.opportunity_name }}</a>
+                            {% else %}
+                                {{ ms.opportunity_name }}
+                            {% endif %}
                         </div>
                     {% endif %}
                     {% if ms.milestone_number %}

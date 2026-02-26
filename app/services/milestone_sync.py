@@ -500,6 +500,7 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
         .options(
             db.joinedload(Milestone.customer).joinedload(Customer.seller),
             db.joinedload(Milestone.customer).joinedload(Customer.territory),
+            db.joinedload(Milestone.opportunity),
         )
         .all()
     )
@@ -563,6 +564,10 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
                 "id": ms.customer.territory.id,
                 "name": ms.customer.territory.name,
             } if ms.customer and ms.customer.territory else None,
+            "opportunity": {
+                "id": ms.opportunity.id,
+                "name": ms.opportunity.name,
+            } if ms.opportunity else None,
         })
     
     # Default sort: largest monthly usage first
