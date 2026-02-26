@@ -50,6 +50,9 @@ def run_migrations(db):
     # Migration: Add due_date column to msx_tasks table
     _migrate_msx_tasks_due_date(db, inspector)
     
+    # Migration: Create opportunities table and add opportunity_id FK to milestones
+    _migrate_opportunities_table(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -316,3 +319,44 @@ def _migrate_msx_tasks_due_date(db, inspector):
         return
     
     _add_column_if_not_exists(db, inspector, 'msx_tasks', 'due_date', 'DATETIME')
+
+
+def _migrate_opportunities_table(db, inspector):
+    """
+    Create opportunities table and add opportunity_id FK to milestones.
+    
+    Opportunities are parent entities to milestones in MSX.
+    This migration:
+    1. Creates the opportunities table if it doesn't exist
+    2. Adds opportunity_id FK column to milestones table
+    """
+    if not _table_exists(inspector, 'opportunities'):
+        print("  Creating opportunities table...")
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE opportunities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    msx_opportunity_id VARCHAR(50) NOT NULL UNIQUE,
+                    opportunity_number VARCHAR(50),
+                    name VARCHAR(500) NOT NULL,
+                    customer_id INTEGER REFERENCES customers(id),
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            conn.commit()
+        print("    Created opportunities table")
+    else:
+        print("  Opportunities table already exists - skipping")
+    
+    # Add opportunity_id FK to milestones
+    if _table_exists(inspector, 'milestones'):
+        _add_column_if_not_exists(
+            db, inspector, 'milestones', 'opportunity_id',
+            'INTEGER REFERENCES opportunities(id)'
+        )
+        _add_index_if_not_exists(
+            db, inspector, 'milestones', 'ix_milestones_opportunity_id',
+            ['opportunity_id']
+        )

@@ -100,50 +100,70 @@ This means **milestone sync already has opportunity GUIDs for free** — we just
 
 ## Implementation Plan
 
-### Phase 1: Store Opportunity GUIDs During Milestone Sync
+### Phase 1: Opportunity Model + Milestone FK (Proper OLTP Design)
 
-**Goal:** Capture opportunity GUIDs that we already receive from the milestone API, with zero additional API calls.
+**Goal:** Create a proper `Opportunity` table with 1:many relationship to milestones, populated during milestone sync with zero additional API calls.
+
+**Data model:**
+```
+Customer  1───M  Opportunity  1───M  Milestone
+```
 
 **Changes:**
 
-1. **Milestone model** — Add `opportunity_id` column (String, the MSX GUID):
+1. **New `Opportunity` model** in `models.py`:
    ```python
-   opportunity_id = db.Column(db.String(50), nullable=True)  # MSX opportunity GUID
+   class Opportunity(db.Model):
+       __tablename__ = 'opportunities'
+       id = db.Column(db.Integer, primary_key=True)
+       msx_opportunity_id = db.Column(db.String(50), nullable=False, unique=True)  # GUID
+       opportunity_number = db.Column(db.String(50), nullable=True)  # e.g., "7-3FU4Q45URI"
+       name = db.Column(db.String(500), nullable=False)
+       customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+       user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+       created_at = db.Column(db.DateTime, ...)
+       updated_at = db.Column(db.DateTime, ...)
+       # Relationships
+       customer = db.relationship('Customer', backref='opportunities')
+       milestones = db.relationship('Milestone', back_populates='opportunity')
    ```
 
-2. **msx_api.py** `get_milestones_by_account()` — Include `_msp_opportunityid_value` in the returned dict:
+2. **Milestone model** — Add `opportunity_id` FK to Opportunity, keep `opportunity_name` for backward compat:
    ```python
-   milestones.append({
-       ...
-       "opportunity_id": raw.get("_msp_opportunityid_value"),  # NEW
-       "opportunity_name": opp_name,
-       ...
-   })
+   opportunity_id = db.Column(db.Integer, db.ForeignKey('opportunities.id'), nullable=True)
+   opportunity = db.relationship('Opportunity', back_populates='milestones')
    ```
 
-3. **milestone_sync.py** — Store `opportunity_id` during create/update:
+3. **msx_api.py** — Include opportunity GUID in milestone response dict (already in the API data):
    ```python
-   milestone.opportunity_id = msx_data.get("opportunity_id") or milestone.opportunity_id
+   "msx_opportunity_id": raw.get("_msp_opportunityid_value"),
    ```
 
-4. **Migration** — Add `opportunity_id` column to milestones table.
+4. **milestone_sync.py** — Upsert Opportunity record before linking milestone:
+   ```python
+   opp = Opportunity.query.filter_by(msx_opportunity_id=msx_opp_guid).first()
+   if not opp:
+       opp = Opportunity(msx_opportunity_id=msx_opp_guid, name=opp_name, ...)
+       db.session.add(opp)
+   milestone.opportunity_id = opp.id
+   ```
 
-**Result:** After next sync, every milestone has a link to its parent opportunity GUID. 
+5. **Migration** — Create `opportunities` table + add `opportunity_id` FK to milestones.
+
+**Result:** After next sync, every milestone has a proper FK to its parent Opportunity, and `customer.opportunities` lists all opps.
 
 ### Phase 2: Customer Opportunity List
 
-**Goal:** On the customer view page, show a list of opportunities grouped from the customer's milestones.
-
-**Approach:** No new API call needed. We derive the unique opportunities from the customer's milestones (which already have `opportunity_id` and `opportunity_name`).
+**Goal:** On the customer view page, show opportunities via `customer.opportunities` relationship.
 
 **Changes:**
 
-1. **Customer view template** — Add "Opportunities" section showing unique opportunities derived from milestones:
-   - Group milestones by `opportunity_id`
+1. **Customer view template** — Add "Opportunities" section:
+   - Query `customer.opportunities` directly (proper ORM relationship)
    - Show: opportunity name, count of milestones, aggregate BACV
    - Each opportunity links to the opportunity detail page
 
-2. **Route** — Add `opportunity_view` route that takes an opportunity GUID.
+2. **Route** — Add `opportunity_view` route that takes an opportunity ID.
 
 ### Phase 3: Opportunity Detail Page (Fresh from MSX)
 

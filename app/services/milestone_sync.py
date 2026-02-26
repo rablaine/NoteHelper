@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Generator
 
-from app.models import db, Customer, Milestone, User
+from app.models import db, Customer, Milestone, Opportunity, User
 from app.services.msx_api import (
     extract_account_id_from_url,
     get_milestones_by_account,
@@ -278,17 +278,25 @@ def sync_customer_milestones(
         # Parse due date if present
         due_date = _parse_msx_date(msx_ms.get("due_date"))
         
+        # Upsert the parent Opportunity if we have an opportunity GUID
+        opportunity = _upsert_opportunity(
+            msx_ms, customer.id, user_id
+        )
+        
         # Find existing milestone or create new one
         milestone = Milestone.query.filter_by(msx_milestone_id=msx_id).first()
         
         if milestone:
             # Update existing milestone with latest data from MSX
             _update_milestone_from_msx(milestone, msx_ms, customer.id, due_date, now)
+            if opportunity:
+                milestone.opportunity_id = opportunity.id
             result["updated"] += 1
         else:
             # Create new milestone
             milestone = _create_milestone_from_msx(
-                msx_ms, customer.id, user_id, due_date, now
+                msx_ms, customer.id, user_id, due_date, now,
+                opportunity_id=opportunity.id if opportunity else None,
             )
             db.session.add(milestone)
             result["created"] += 1
@@ -350,6 +358,7 @@ def _create_milestone_from_msx(
     user_id: int,
     due_date: Optional[datetime],
     now: datetime,
+    opportunity_id: Optional[int] = None,
 ) -> Milestone:
     """Create a new Milestone from MSX data."""
     return Milestone(
@@ -367,7 +376,52 @@ def _create_milestone_from_msx(
         last_synced_at=now,
         customer_id=customer_id,
         user_id=user_id,
+        opportunity_id=opportunity_id,
     )
+
+
+def _upsert_opportunity(
+    msx_data: Dict[str, Any],
+    customer_id: int,
+    user_id: int,
+) -> Optional[Opportunity]:
+    """
+    Upsert an Opportunity record from milestone data.
+    
+    The milestone API returns the parent opportunity GUID and name.
+    We create or update the Opportunity record so milestones can FK to it.
+    
+    Args:
+        msx_data: Milestone dict from MSX API (contains msx_opportunity_id, opportunity_name).
+        customer_id: The customer this opportunity belongs to.
+        user_id: The user ID for new records.
+        
+    Returns:
+        The Opportunity instance, or None if no opportunity GUID was provided.
+    """
+    msx_opp_id = msx_data.get("msx_opportunity_id")
+    if not msx_opp_id:
+        return None
+    
+    opp_name = msx_data.get("opportunity_name", "Unknown Opportunity")
+    
+    opportunity = Opportunity.query.filter_by(msx_opportunity_id=msx_opp_id).first()
+    if opportunity:
+        # Update name in case it changed
+        opportunity.name = opp_name or opportunity.name
+        opportunity.customer_id = customer_id
+    else:
+        opportunity = Opportunity(
+            msx_opportunity_id=msx_opp_id,
+            name=opp_name,
+            customer_id=customer_id,
+            user_id=user_id,
+        )
+        db.session.add(opportunity)
+        # Flush to get the ID assigned so we can FK to it
+        db.session.flush()
+    
+    return opportunity
 
 
 def _parse_msx_date(date_str: Optional[str]) -> Optional[datetime]:
