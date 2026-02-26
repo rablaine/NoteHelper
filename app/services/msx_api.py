@@ -2081,13 +2081,15 @@ def find_my_territories(atu_filter: Optional[str] = None) -> Dict[str, Any]:
                 
                 # Try to derive POD from territory name
                 # e.g., "East.SMECC.MAA.0601" -> "East POD 06"
+                # Note: some territories have suffixes like ".A" or ".B"
+                # (e.g., "East.SMECC.HLA.0610.A"), so always use index 3
                 name_parts = terr.get("name", "").split(".")
                 pod_name = None
                 if len(name_parts) >= 4:
                     region = name_parts[0]  # "East"
-                    suffix = name_parts[-1]  # "0601"
-                    if len(suffix) >= 2:
-                        pod_num = suffix[:2]  # "06"
+                    territory_num = name_parts[3]  # "0601" or "0610"
+                    if len(territory_num) >= 2:
+                        pod_num = territory_num[:2]  # "06"
                         pod_name = f"{region} POD {pod_num}"
                 
                 territories.append({
@@ -2254,12 +2256,14 @@ def scan_account(account_id: str) -> Dict[str, Any]:
             territory_info["atu"] = terr.get("msp_accountteamunitname")
             
             # Derive POD from territory name (e.g., "East.SMECC.MAA.0601" -> "East POD 06")
+            # Note: some territories have suffixes like ".A" or ".B"
+            # (e.g., "East.SMECC.HLA.0610.A"), so always use index 3
             name_parts = terr.get("name", "").split(".")
             if len(name_parts) >= 4:
                 region = name_parts[0]
-                suffix = name_parts[-1]
-                if len(suffix) >= 2:
-                    pod_num = suffix[:2]
+                territory_num = name_parts[3]
+                if len(territory_num) >= 2:
+                    pod_num = territory_num[:2]
                     territory_info["pod"] = f"{region} POD {pod_num}"
                     # Extract ATU code from name (e.g., "MAA" from "East.SMECC.MAA.0601")
                     territory_info["atu_code"] = name_parts[2] if len(name_parts) >= 3 else None
@@ -2359,12 +2363,14 @@ def get_account_details(account_id: str, territory_cache: Optional[Dict] = None)
             terr_name = terr.get("name", "")
             
             # Derive POD from territory name (e.g., "East.SMECC.MAA.0601" -> "East POD 06")
+            # Note: some territories have suffixes like ".A" or ".B"
+            # (e.g., "East.SMECC.HLA.0610.A"), so always use index 3
             name_parts = terr_name.split(".")
             if len(name_parts) >= 4:
                 region = name_parts[0]
-                suffix = name_parts[-1]
-                if len(suffix) >= 2:
-                    pod_num = suffix[:2]
+                territory_num = name_parts[3]
+                if len(territory_num) >= 2:
+                    pod_num = territory_num[:2]
                     pod_name = f"{region} POD {pod_num}"
             
             territory_info = {
