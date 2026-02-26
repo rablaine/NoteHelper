@@ -141,7 +141,6 @@
                             </div>
                             <small class="text-muted">
                                 <span class="badge bg-light text-dark border">{{ task.task_category_name or 'Unknown' }}</span>
-                                <span class="ms-1">{{ task.duration_minutes }} min</span>
                                 {% if task.due_date %}
                                 <span class="ms-1"><i class="bi bi-calendar-event"></i> {{ task.due_date.strftime('%b %d, %Y') }}</span>
                                 {% endif %}
@@ -248,13 +247,6 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label for="modal_task_duration" class="form-label">Duration (min)</label>
-                            <input type="number" class="form-control" id="modal_task_duration" 
-                                   value="60" min="15" step="15">
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
                             <label for="modal_task_due_date" class="form-label">
                                 <i class="bi bi-calendar-event me-1"></i>Due Date
                             </label>
@@ -285,8 +277,16 @@
 <script>
 let taskCategories = [];
 
+function getTomorrowDate() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+}
+
 // Load task categories on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Auto-populate due date as tomorrow
+    document.getElementById('modal_task_due_date').value = getTomorrowDate();
     fetch('/api/msx/task-categories')
         .then(response => response.json())
         .then(data => {
@@ -326,7 +326,6 @@ function hideTaskError() {
 function createTask() {
     const subject = document.getElementById('modal_task_subject').value.trim();
     const category = document.getElementById('modal_task_category').value;
-    const duration = document.getElementById('modal_task_duration').value || 60;
     const description = document.getElementById('modal_task_description').value.trim();
     const dueDate = document.getElementById('modal_task_due_date').value;
 
@@ -353,7 +352,7 @@ function createTask() {
         body: JSON.stringify({
             subject: subject,
             task_category: parseInt(category),
-            duration_minutes: parseInt(duration),
+            duration_minutes: 60,
             description: description || null,
             due_date: dueDate ? dueDate + 'T23:59:59Z' : null
         })
@@ -381,9 +380,8 @@ function createTask() {
 document.getElementById('newTaskModal').addEventListener('hidden.bs.modal', function() {
     document.getElementById('modal_task_subject').value = '';
     document.getElementById('modal_task_category').value = '';
-    document.getElementById('modal_task_duration').value = '60';
     document.getElementById('modal_task_description').value = '';
-    document.getElementById('modal_task_due_date').value = '';
+    document.getElementById('modal_task_due_date').value = getTomorrowDate();
     hideTaskError();
 });
 </script>

@@ -150,7 +150,6 @@ class TestMilestoneViewTasks:
         html = response.data.decode()
         assert 'Display Me Task' in html
         assert 'Architecture Design Session' in html
-        assert '90 min' in html
         assert 'HoK' in html
 
     def test_milestone_view_shows_task_linked_call_log(self, app, client, db_session, sample_user):
