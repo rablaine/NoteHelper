@@ -20,8 +20,12 @@ logger = logging.getLogger(__name__)
 # MSX app ID for account URLs
 MSX_APP_ID = "fe0c3504-3700-e911-a849-000d3a10b7cc"
 
-# Request timeout
-REQUEST_TIMEOUT = 20
+# Request timeout (seconds per attempt)
+REQUEST_TIMEOUT = 45
+
+# Retry settings for transient failures (timeouts, connection errors)
+MAX_RETRIES = 3
+RETRY_BACKOFF_SECONDS = [1, 3, 5]  # Wait between retries
 
 # Standard headers for OData requests
 def _get_headers(token: str) -> Dict[str, str]:
@@ -42,25 +46,28 @@ def _msx_request(
     retry_on_auth_failure: bool = True
 ) -> requests.Response:
     """
-    Make an MSX API request with automatic token refresh on 401/403.
+    Make an MSX API request with automatic retries.
     
-    If we get a 401 (expired) or 403 (access denied), forces a token refresh
-    and retries once. This handles cases where the cached token looks valid
-    but has been invalidated server-side.
+    Retries on:
+    - 401/403: Forces token refresh and retries once
+    - Timeout/ConnectionError: Retries up to MAX_RETRIES times with backoff
     
     Args:
-        method: HTTP method ('GET', 'POST', etc.)
+        method: HTTP method ('GET', 'POST', 'PATCH')
         url: Full URL to request
         headers: Request headers (if None, will get fresh token and build headers)
-        json_data: JSON body for POST requests
+        json_data: JSON body for POST/PATCH requests
         retry_on_auth_failure: Whether to auto-retry on 401/403 (default True)
         
     Returns:
         requests.Response object
         
     Raises:
-        requests.exceptions.Timeout, ConnectionError, etc.
+        requests.exceptions.Timeout if all retries exhausted
+        requests.exceptions.ConnectionError if all retries exhausted
     """
+    import time
+    
     # Get token and build headers if not provided
     if headers is None:
         token = get_msx_token()
@@ -72,15 +79,38 @@ def _msx_request(
             return response
         headers = _get_headers(token)
     
-    # Make the request
-    if method.upper() == 'GET':
-        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-    elif method.upper() == 'POST':
-        response = requests.post(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
-    elif method.upper() == 'PATCH':
-        response = requests.patch(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
-    else:
-        raise ValueError(f"Unsupported HTTP method: {method}")
+    def _do_request(hdrs):
+        """Execute the HTTP request with the given headers."""
+        if method.upper() == 'GET':
+            return requests.get(url, headers=hdrs, timeout=REQUEST_TIMEOUT)
+        elif method.upper() == 'POST':
+            return requests.post(url, headers=hdrs, json=json_data, timeout=REQUEST_TIMEOUT)
+        elif method.upper() == 'PATCH':
+            return requests.patch(url, headers=hdrs, json=json_data, timeout=REQUEST_TIMEOUT)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+    
+    # Retry loop for transient failures (timeouts, connection errors)
+    last_exception = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = _do_request(headers)
+            last_exception = None
+            break  # Success — got a response (even if it's an error status)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            last_exception = e
+            if attempt < MAX_RETRIES - 1:
+                wait = RETRY_BACKOFF_SECONDS[min(attempt, len(RETRY_BACKOFF_SECONDS) - 1)]
+                logger.warning(
+                    f"MSX request {method} attempt {attempt + 1}/{MAX_RETRIES} failed "
+                    f"({type(e).__name__}), retrying in {wait}s..."
+                )
+                time.sleep(wait)
+            else:
+                logger.error(
+                    f"MSX request {method} failed after {MAX_RETRIES} attempts: {e}"
+                )
+                raise
     
     # Check for auth failures that might be due to stale token
     if response.status_code in (401, 403) and retry_on_auth_failure:
@@ -100,14 +130,23 @@ def _msx_request(
         
         fresh_headers = _get_headers(fresh_token)
         
-        # Retry the request (without retry flag to prevent infinite loop)
+        # Retry the request with fresh headers (also with timeout retry)
         logger.info("Retrying MSX request with fresh token...")
-        if method.upper() == 'GET':
-            response = requests.get(url, headers=fresh_headers, timeout=REQUEST_TIMEOUT)
-        elif method.upper() == 'POST':
-            response = requests.post(url, headers=fresh_headers, json=json_data, timeout=REQUEST_TIMEOUT)
-        elif method.upper() == 'PATCH':
-            response = requests.patch(url, headers=fresh_headers, json=json_data, timeout=REQUEST_TIMEOUT)
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = _do_request(fresh_headers)
+                break
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                if attempt < MAX_RETRIES - 1:
+                    wait = RETRY_BACKOFF_SECONDS[min(attempt, len(RETRY_BACKOFF_SECONDS) - 1)]
+                    logger.warning(
+                        f"MSX retry (fresh token) attempt {attempt + 1}/{MAX_RETRIES} failed "
+                        f"({type(e).__name__}), retrying in {wait}s..."
+                    )
+                    time.sleep(wait)
+                else:
+                    logger.error(f"MSX retry (fresh token) failed after {MAX_RETRIES} attempts: {e}")
+                    raise
         
         if response.status_code in (401, 403):
             logger.warning(f"Still got {response.status_code} after token refresh - likely a real permission issue")
