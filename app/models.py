@@ -639,7 +639,7 @@ class MsxTask(db.Model):
     due_date = db.Column(db.DateTime, nullable=True)  # scheduledend from MSX
     
     # Relationships
-    call_log_id = db.Column(db.Integer, db.ForeignKey('call_logs.id'), nullable=False)
+    call_log_id = db.Column(db.Integer, db.ForeignKey('call_logs.id'), nullable=True)
     milestone_id = db.Column(db.Integer, db.ForeignKey('milestones.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     

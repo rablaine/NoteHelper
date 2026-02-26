@@ -112,8 +112,74 @@
         </div>
     </div>
 
-    <!-- Right column: Call Logs -->
+    <!-- Right column: Tasks + Call Logs -->
     <div class="col-md-8">
+        <!-- Tasks Card -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-check2-square"></i> Tasks</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary">{{ tasks|length }}</span>
+                    {% if milestone.msx_milestone_id %}
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newTaskModal">
+                        <i class="bi bi-plus-circle me-1"></i> New Task
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% if tasks %}
+            <div class="list-group list-group-flush">
+                {% for task in tasks %}
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-bold">
+                                {{ task.subject }}
+                                {% if task.is_hok %}
+                                <span class="badge bg-warning text-dark ms-1" title="Hands-on-Keyboard">★ HoK</span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">
+                                <span class="badge bg-light text-dark border">{{ task.task_category_name or 'Unknown' }}</span>
+                                <span class="ms-1">{{ task.duration_minutes }} min</span>
+                                {% if task.due_date %}
+                                <span class="ms-1"><i class="bi bi-calendar-event"></i> {{ task.due_date.strftime('%b %d, %Y') }}</span>
+                                {% endif %}
+                                <span class="ms-1 text-muted">Created {{ task.created_at.strftime('%b %d, %Y') }}</span>
+                            </small>
+                            {% if task.description %}
+                            <div class="small text-muted mt-1">{{ task.description }}</div>
+                            {% endif %}
+                            {% if task.call_log %}
+                            <div class="small mt-1">
+                                <i class="bi bi-journal-text text-muted"></i>
+                                <a href="{{ url_for('call_logs.call_log_view', id=task.call_log.id) }}">Linked Call Log</a>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div>
+                            {% if task.msx_task_url %}
+                            <a href="{{ task.msx_task_url }}" target="_blank" class="btn btn-outline-success btn-sm" title="Open in MSX">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="card-body text-muted">
+                {% if milestone.msx_milestone_id %}
+                No tasks created yet. Click <strong>New Task</strong> to create one.
+                {% else %}
+                Tasks cannot be created — this milestone has no MSX ID.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Call Logs Card -->
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-journal-text"></i> Associated Call Logs</h5>
@@ -151,4 +217,175 @@
         </div>
     </div>
 </div>
+
+{% if milestone.msx_milestone_id %}
+<!-- New Task Modal -->
+<div class="modal fade" id="newTaskModal" tabindex="-1" aria-labelledby="newTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="newTaskModalLabel">
+                    <i class="bi bi-plus-circle me-1"></i> Create Task on Milestone
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Error alert -->
+                <div id="task_error" class="alert alert-danger" style="display: none;"></div>
+                
+                <!-- Form fields -->
+                <div id="task_form_fields">
+                    <div class="mb-3">
+                        <label for="modal_task_subject" class="form-label">Task Title <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="modal_task_subject" 
+                               placeholder="Brief task description...">
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label for="modal_task_category" class="form-label">Category <span class="text-danger">*</span></label>
+                            <select class="form-select" id="modal_task_category">
+                                <option value="">-- Select task category --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="modal_task_duration" class="form-label">Duration (min)</label>
+                            <input type="number" class="form-control" id="modal_task_duration" 
+                                   value="60" min="15" step="15">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="modal_task_due_date" class="form-label">
+                                <i class="bi bi-calendar-event me-1"></i>Due Date
+                            </label>
+                            <input type="date" class="form-control" id="modal_task_due_date">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modal_task_description" class="form-label">Description (optional)</label>
+                        <textarea class="form-control" id="modal_task_description" 
+                                  rows="2" placeholder="Additional details..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="create_task_btn" onclick="createTask()">
+                    <i class="bi bi-cloud-upload me-1"></i> Create Task in MSX
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if milestone.msx_milestone_id %}
+<script>
+let taskCategories = [];
+
+// Load task categories on page load
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/msx/task-categories')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.categories) {
+                taskCategories = data.categories;
+                populateTaskCategories();
+            }
+        })
+        .catch(error => console.error('Failed to load task categories:', error));
+});
+
+function populateTaskCategories() {
+    const select = document.getElementById('modal_task_category');
+    select.innerHTML = '<option value="">-- Select task category --</option>';
+    taskCategories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.value;
+        option.textContent = cat.label;
+        if (cat.is_hok) {
+            option.style.fontWeight = 'bold';
+            option.textContent = '★ ' + cat.label;
+        }
+        select.appendChild(option);
+    });
+}
+
+function showTaskError(msg) {
+    const el = document.getElementById('task_error');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+function hideTaskError() {
+    document.getElementById('task_error').style.display = 'none';
+}
+
+function createTask() {
+    const subject = document.getElementById('modal_task_subject').value.trim();
+    const category = document.getElementById('modal_task_category').value;
+    const duration = document.getElementById('modal_task_duration').value || 60;
+    const description = document.getElementById('modal_task_description').value.trim();
+    const dueDate = document.getElementById('modal_task_due_date').value;
+
+    // Validation
+    if (!subject) {
+        showTaskError('Task title is required');
+        return;
+    }
+    if (!category) {
+        showTaskError('Task category is required');
+        return;
+    }
+
+    // Show loading state
+    const btn = document.getElementById('create_task_btn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Creating...';
+    hideTaskError();
+
+    fetch('{{ url_for("milestones.milestone_create_task", id=milestone.id) }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            subject: subject,
+            task_category: parseInt(category),
+            duration_minutes: parseInt(duration),
+            description: description || null,
+            due_date: dueDate ? dueDate + 'T23:59:59Z' : null
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+
+        if (result.success) {
+            // Refresh the page to show the new task
+            window.location.reload();
+        } else {
+            showTaskError(result.error || 'Failed to create task');
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        showTaskError('Network error: ' + error.message);
+    });
+}
+
+// Reset modal form when it's closed
+document.getElementById('newTaskModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('modal_task_subject').value = '';
+    document.getElementById('modal_task_category').value = '';
+    document.getElementById('modal_task_duration').value = '60';
+    document.getElementById('modal_task_description').value = '';
+    document.getElementById('modal_task_due_date').value = '';
+    hideTaskError();
+});
+</script>
+{% endif %}
 {% endblock %}
