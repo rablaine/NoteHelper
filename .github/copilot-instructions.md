@@ -101,6 +101,15 @@
 - **Run tests before committing** - Ensure all tests pass with `pytest tests/`
 - Add tests for any bugs discovered to prevent regression
 
+## Terminal Command Rules
+
+**CRITICAL - DO NOT VIOLATE THESE RULES:**
+- **NEVER pipe, redirect, or filter pytest output** — always run `pytest tests/` plain and wait for it to finish. The test suite is large (350+ tests) and takes time. Let it complete.
+- **NEVER kill a running command and re-run it** — if a command is still running, WAIT. Do not start a new terminal command while one is still executing.
+- **NEVER chain pytest with `| Select-Object`, `| Out-String`, `| Where-Object`, `2>&1`, or any other output manipulation** — this causes truncation and wastes massive amounts of time re-running.
+- **Set timeout to 0 for pytest runs** — the suite can take over 60 seconds. Use `timeout: 0` so it doesn't get killed early.
+- If output appears truncated, DO NOT re-run the command with different piping. Just re-run the same plain command and wait.
+
 ## Architecture Patterns
 
 **Design Pattern(s):** MVC (Model-View-Controller) pattern with Flask
