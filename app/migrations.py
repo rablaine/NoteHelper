@@ -52,6 +52,9 @@ def run_migrations(db):
     
     # Migration: Create opportunities table and add opportunity_id FK to milestones
     _migrate_opportunities_table(db, inspector)
+
+    # Migration: Make call_log_id nullable on msx_tasks (tasks can be created from milestone view)
+    _migrate_msx_tasks_nullable_call_log(db, inspector)
     
     # =========================================================================
     # End migrations
@@ -177,7 +180,7 @@ def _migrate_milestones_for_msx(db, inspector):
                     task_category_name VARCHAR(100),
                     duration_minutes INTEGER DEFAULT 60 NOT NULL,
                     is_hok BOOLEAN DEFAULT 0 NOT NULL,
-                    call_log_id INTEGER NOT NULL REFERENCES call_logs(id),
+                    call_log_id INTEGER REFERENCES call_logs(id),
                     milestone_id INTEGER NOT NULL REFERENCES milestones(id),
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
                 )
@@ -360,3 +363,57 @@ def _migrate_opportunities_table(db, inspector):
             db, inspector, 'milestones', 'ix_milestones_opportunity_id',
             ['opportunity_id']
         )
+
+
+def _migrate_msx_tasks_nullable_call_log(db, inspector):
+    """
+    Make call_log_id nullable on msx_tasks table.
+    
+    Tasks can now be created directly from the milestone view page
+    without an associated call log. SQLite doesn't support ALTER COLUMN,
+    so we rebuild the table if call_log_id is currently NOT NULL.
+    """
+    if not _table_exists(inspector, 'msx_tasks'):
+        print("  msx_tasks table does not exist - skipping nullable call_log migration")
+        return
+    
+    # Check if call_log_id is currently NOT NULL
+    columns = inspector.get_columns('msx_tasks')
+    call_log_col = next((c for c in columns if c['name'] == 'call_log_id'), None)
+    
+    if call_log_col and call_log_col.get('nullable') == False:
+        print("  Making call_log_id nullable on msx_tasks...")
+        with db.engine.connect() as conn:
+            # SQLite requires table rebuild to change NOT NULL constraint
+            conn.execute(text("ALTER TABLE msx_tasks RENAME TO msx_tasks_old"))
+            conn.execute(text("""
+                CREATE TABLE msx_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    msx_task_id VARCHAR(50) NOT NULL UNIQUE,
+                    msx_task_url VARCHAR(2000),
+                    subject VARCHAR(500) NOT NULL,
+                    description TEXT,
+                    task_category INTEGER NOT NULL,
+                    task_category_name VARCHAR(100),
+                    duration_minutes INTEGER DEFAULT 60 NOT NULL,
+                    is_hok BOOLEAN DEFAULT 0 NOT NULL,
+                    due_date DATETIME,
+                    call_log_id INTEGER REFERENCES call_logs(id),
+                    milestone_id INTEGER NOT NULL REFERENCES milestones(id),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+            """))
+            conn.execute(text("""
+                INSERT INTO msx_tasks (id, msx_task_id, msx_task_url, subject, description,
+                    task_category, task_category_name, duration_minutes, is_hok, due_date,
+                    call_log_id, milestone_id, created_at)
+                SELECT id, msx_task_id, msx_task_url, subject, description,
+                    task_category, task_category_name, duration_minutes, is_hok, due_date,
+                    call_log_id, milestone_id, created_at
+                FROM msx_tasks_old
+            """))
+            conn.execute(text("DROP TABLE msx_tasks_old"))
+            conn.commit()
+        print("    Made call_log_id nullable on msx_tasks")
+    else:
+        print("  msx_tasks.call_log_id already nullable - skipping")

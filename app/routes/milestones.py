@@ -6,12 +6,12 @@ across customers, sorted by dollar value and due date urgency.
 """
 import logging
 import calendar as cal
-from datetime import date
+from datetime import date, datetime
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, g, jsonify, Response, stream_with_context,
 )
-from app.models import db, Milestone, CallLog, Customer
+from app.models import db, Milestone, MsxTask, CallLog, Customer
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +58,98 @@ def milestone_create():
 
 @bp.route('/milestone/<int:id>')
 def milestone_view(id):
-    """View a milestone and its associated call logs."""
+    """View a milestone and its associated call logs and tasks."""
     milestone = Milestone.query.get_or_404(id)
-    return render_template('milestone_view.html', milestone=milestone)
+    tasks = MsxTask.query.filter_by(milestone_id=milestone.id).order_by(
+        MsxTask.created_at.desc()
+    ).all()
+    return render_template('milestone_view.html', milestone=milestone, tasks=tasks)
+
+
+@bp.route('/milestone/<int:id>/tasks', methods=['POST'])
+def milestone_create_task(id):
+    """
+    Create a task on a milestone from the milestone view page.
+    
+    Expects JSON body with task details. Creates the task in MSX first,
+    then stores a local MsxTask record (without a call log association).
+    
+    Returns JSON response for the modal form.
+    """
+    milestone = Milestone.query.get_or_404(id)
+    
+    if not request.is_json:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+    
+    data = request.json
+    subject = (data.get("subject") or "").strip()
+    task_category = data.get("task_category")
+    duration_minutes = data.get("duration_minutes", 60)
+    description = (data.get("description") or "").strip()
+    due_date_str = data.get("due_date")
+    
+    if not subject:
+        return jsonify({"success": False, "error": "Task title is required"}), 400
+    if not task_category:
+        return jsonify({"success": False, "error": "Task category is required"}), 400
+    if not milestone.msx_milestone_id:
+        return jsonify({"success": False, "error": "Milestone has no MSX ID — cannot create task"}), 400
+    
+    # Import here to avoid circular imports
+    from app.services.msx_api import create_task, TASK_CATEGORIES, HOK_TASK_CATEGORIES
+    
+    # Create the task in MSX
+    result = create_task(
+        milestone_id=milestone.msx_milestone_id,
+        subject=subject,
+        task_category=int(task_category),
+        duration_minutes=int(duration_minutes),
+        description=description or None,
+        due_date=due_date_str,
+    )
+    
+    if not result.get("success"):
+        return jsonify(result), 400
+    
+    # Look up category display name
+    cat_info = next(
+        (c for c in TASK_CATEGORIES if c["value"] == int(task_category)),
+        {"label": "Unknown", "is_hok": False}
+    )
+    
+    # Parse due date for local storage
+    task_due_date = None
+    if due_date_str:
+        try:
+            task_due_date = datetime.strptime(due_date_str[:10], '%Y-%m-%d')
+        except (ValueError, TypeError):
+            pass
+    
+    # Store local record (no call_log_id)
+    msx_task = MsxTask(
+        msx_task_id=result["task_id"],
+        msx_task_url=result.get("task_url", ""),
+        subject=subject,
+        description=description or None,
+        task_category=int(task_category),
+        task_category_name=cat_info["label"],
+        duration_minutes=int(duration_minutes),
+        is_hok=int(task_category) in HOK_TASK_CATEGORIES,
+        due_date=task_due_date,
+        call_log_id=None,
+        milestone_id=milestone.id,
+    )
+    db.session.add(msx_task)
+    db.session.commit()
+    
+    logger.info(f"Created task '{subject}' on milestone {milestone.id} (MSX: {result['task_id']})")
+    
+    return jsonify({
+        "success": True,
+        "task_id": result["task_id"],
+        "task_url": result.get("task_url", ""),
+        "message": f"Task '{subject}' created successfully",
+    })
 
 
 @bp.route('/milestone/<int:id>/edit', methods=['GET', 'POST'])
