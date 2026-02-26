@@ -868,19 +868,27 @@ def get_customers_using_product(product: str) -> list[dict]:
     Returns:
         List of dicts with customer info and revenue data
     """
+    from app.models import Customer
+    
+    # Build a fresh customer name -> ID lookup (case-insensitive)
+    # This avoids stale customer_id values stored in product_revenue_data
+    customer_lookup = {}
+    for c in Customer.query.all():
+        customer_lookup[c.name.lower()] = c.id
+        if c.nickname:
+            customer_lookup[c.nickname.lower()] = c.id
+    
     # Get latest revenue for each customer using this product
     results = db.session.query(
         ProductRevenueData.customer_name,
         ProductRevenueData.bucket,
-        ProductRevenueData.customer_id,
         db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
         db.func.max(ProductRevenueData.month_date).label('latest_month')
     ).filter_by(
         product=product
     ).group_by(
         ProductRevenueData.customer_name,
-        ProductRevenueData.bucket,
-        ProductRevenueData.customer_id
+        ProductRevenueData.bucket
     ).order_by(
         db.func.sum(ProductRevenueData.revenue).desc()
     ).all()
@@ -889,7 +897,7 @@ def get_customers_using_product(product: str) -> list[dict]:
         {
             'customer_name': r.customer_name,
             'bucket': r.bucket,
-            'customer_id': r.customer_id,
+            'customer_id': customer_lookup.get(r.customer_name.lower()),
             'total_revenue': r.total_revenue or 0,
             'latest_month': r.latest_month
         }
@@ -944,8 +952,17 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
     Returns:
         List of dicts with customer info and revenue data
     """
+    from app.models import Customer, RevenueAnalysis
+    
+    # Build a fresh customer name -> ID lookup (case-insensitive)
+    # This avoids stale customer_id values stored in product_revenue_data
+    customer_lookup = {}
+    for c in Customer.query.all():
+        customer_lookup[c.name.lower()] = c.id
+        if c.nickname:
+            customer_lookup[c.nickname.lower()] = c.id
+    
     # Get customer names for this seller from analyses
-    from app.models import RevenueAnalysis
     seller_customers = db.session.query(
         db.distinct(RevenueAnalysis.customer_name)
     ).filter_by(seller_name=seller_name).subquery()
@@ -953,7 +970,6 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
     results = db.session.query(
         ProductRevenueData.customer_name,
         ProductRevenueData.bucket,
-        ProductRevenueData.customer_id,
         db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
         db.func.max(ProductRevenueData.month_date).label('latest_month')
     ).filter(
@@ -961,8 +977,7 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
         ProductRevenueData.customer_name.in_(seller_customers)
     ).group_by(
         ProductRevenueData.customer_name,
-        ProductRevenueData.bucket,
-        ProductRevenueData.customer_id
+        ProductRevenueData.bucket
     ).order_by(
         db.func.sum(ProductRevenueData.revenue).desc()
     ).all()
@@ -971,7 +986,7 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
         {
             'customer_name': r.customer_name,
             'bucket': r.bucket,
-            'customer_id': r.customer_id,
+            'customer_id': customer_lookup.get(r.customer_name.lower()),
             'total_revenue': r.total_revenue or 0,
             'latest_month': r.latest_month
         }
@@ -1054,6 +1069,14 @@ def get_new_product_users(consolidated_product: str, months_lookback: int = 6) -
     
     new_user_names = {r.customer_name: r.first_usage_date for r in new_users_query}
     
+    # Build a fresh customer name -> ID lookup (case-insensitive)
+    from app.models import Customer
+    customer_lookup = {}
+    for c in Customer.query.all():
+        customer_lookup[c.name.lower()] = c.id
+        if c.nickname:
+            customer_lookup[c.nickname.lower()] = c.id
+    
     # Get seller info and total revenue for these customers
     results = []
     for customer_name, first_usage_date in new_user_names.items():
@@ -1093,7 +1116,7 @@ def get_new_product_users(consolidated_product: str, months_lookback: int = 6) -
             'first_usage_fiscal': first_usage_fiscal,
             'total_revenue': total_rev,
             'latest_month_revenue': latest_rev,
-            'customer_id': analysis.customer_id if analysis else None
+            'customer_id': customer_lookup.get(customer_name.lower())
         })
     
     # Sort by seller name (None last), then by customer name
