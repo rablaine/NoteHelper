@@ -21,6 +21,9 @@ from app.services.msx_auth import (
     start_device_code_flow,
     get_device_code_status,
     cancel_device_code_flow,
+    get_az_cli_status,
+    start_az_login,
+    set_subscription,
 )
 from app.services.msx_api import (
     test_connection,
@@ -162,6 +165,66 @@ def device_code_cancel():
     """Cancel any active device code flow."""
     cancel_device_code_flow()
     return jsonify({"success": True, "message": "Device code flow cancelled"})
+
+
+# -----------------------------------------------------------------------------
+# Browser-based az login flow
+# -----------------------------------------------------------------------------
+
+@msx_bp.route('/az-status')
+def az_cli_status():
+    """Check Azure CLI install & login status (no CRM token needed).
+
+    Returns az_installed, logged_in, user_email, message.
+    """
+    return jsonify(get_az_cli_status())
+
+
+@msx_bp.route('/az-login/start', methods=['POST'])
+def az_login_start():
+    """Launch ``az login --tenant ...`` in a visible console window.
+
+    The frontend should poll ``/api/msx/az-status`` afterwards to detect
+    when the user has completed sign-in.
+    """
+    result = start_az_login()
+
+    # If already logged in, also set subscription and grab a CRM token
+    if result.get("success"):
+        status = get_az_cli_status()
+        if status.get("logged_in"):
+            set_subscription()
+            refresh_token()
+
+    return jsonify(result)
+
+
+@msx_bp.route('/az-login/complete', methods=['POST'])
+def az_login_complete():
+    """Called by the frontend once polling detects a successful login.
+
+    Sets the subscription and refreshes the CRM token so subsequent
+    API calls work immediately.
+    """
+    status = get_az_cli_status()
+    if not status.get("logged_in"):
+        return jsonify({"success": False, "error": "Not logged in yet"}), 400
+
+    set_subscription()
+    token_ok = refresh_token()
+    auth = get_msx_auth_status()
+
+    # Serialise datetimes
+    if auth.get("expires_on"):
+        auth["expires_on"] = auth["expires_on"].isoformat()
+    if auth.get("last_refresh"):
+        auth["last_refresh"] = auth["last_refresh"].isoformat()
+
+    return jsonify({
+        "success": token_ok,
+        "user_email": status.get("user_email"),
+        "auth_status": auth,
+    })
 
 
 # -----------------------------------------------------------------------------

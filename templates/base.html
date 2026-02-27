@@ -336,37 +336,29 @@
                     <!-- STEP 2: Authenticate with MSX -->
                     <div class="onboarding-step d-none" id="onboardingStep2">
                         <h6 class="mb-3"><i class="bi bi-shield-lock text-primary"></i> Connect to MSX</h6>
-                        <p>NoteHelper uses your Azure credentials to access MSX data. We'll use device code authentication — it's the same flow you use for Azure CLI.</p>
+                        <p>NoteHelper uses your Azure credentials to access MSX data. We'll open a browser window to sign in with your Microsoft account.</p>
                         
                         <div class="card mb-3">
                             <div class="card-body text-center" id="authCard">
-                                <!-- Initial state -->
+                                <!-- Initial state: not checked yet -->
                                 <div id="authInitial">
-                                    <p class="mb-3">Click below to start the authentication process.</p>
+                                    <p class="mb-3">Click below to sign in with your Microsoft account.</p>
                                     <button class="btn btn-primary btn-lg" id="onboardStartAuth">
-                                        <i class="bi bi-key"></i> Start Authentication
+                                        <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
                                     </button>
                                 </div>
-                                <!-- Device code state -->
-                                <div id="authDeviceCode" class="d-none">
-                                    <p class="mb-2">Open this URL in your browser:</p>
-                                    <a href="" id="authDeviceUrl" target="_blank" class="btn btn-outline-primary btn-lg mb-3">
-                                        <i class="bi bi-box-arrow-up-right"></i> <span id="authDeviceUrlText"></span>
-                                    </a>
-                                    <p class="mb-2">Then enter this code:</p>
-                                    <div class="d-flex justify-content-center align-items-center gap-2 mb-3">
-                                        <code class="fs-3 fw-bold p-2 border rounded" id="authDeviceCodeText"></code>
-                                        <button class="btn btn-outline-secondary btn-sm" id="authCopyCode" title="Copy code">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
+                                <!-- Waiting state: az login launched, polling -->
+                                <div id="authWaiting" class="d-none">
+                                    <p class="mb-2 text-primary fw-bold">A console window has opened.</p>
+                                    <p class="mb-3">Complete sign-in in the browser window that appeared. This page will update automatically.</p>
                                     <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                                    <span class="text-muted ms-2">Waiting for you to sign in...</span>
+                                    <span class="text-muted ms-2">Waiting for sign-in to complete...</span>
                                 </div>
                                 <!-- Success state -->
                                 <div id="authSuccess" class="d-none">
                                     <i class="bi bi-check-circle-fill text-success fs-1"></i>
                                     <p class="mt-2 mb-0 fw-bold text-success">Connected to MSX!</p>
+                                    <small class="text-muted" id="authUserEmail"></small>
                                 </div>
                                 <!-- Error state -->
                                 <div id="authError" class="d-none">
@@ -374,6 +366,15 @@
                                     <p class="mt-2 mb-1 fw-bold text-warning" id="authErrorMessage">Authentication failed</p>
                                     <button class="btn btn-outline-primary btn-sm" id="authRetry">
                                         <i class="bi bi-arrow-clockwise"></i> Try Again
+                                    </button>
+                                </div>
+                                <!-- CLI not installed -->
+                                <div id="authNoCli" class="d-none">
+                                    <i class="bi bi-exclamation-triangle-fill text-danger fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-danger">Azure CLI Not Installed</p>
+                                    <p class="text-muted">Install Azure CLI from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then try again.</p>
+                                    <button class="btn btn-outline-primary btn-sm" id="authRetryNoCli">
+                                        <i class="bi bi-arrow-clockwise"></i> Check Again
                                     </button>
                                 </div>
                                 <!-- Already authenticated state -->
@@ -694,12 +695,23 @@
                 // --- Step 2: Authentication ---
                 async function checkExistingAuth() {
                     try {
+                        // First check if we already have a CRM token cached
                         const resp = await fetch('/api/msx/status');
                         const data = await resp.json();
                         if (data.authenticated) {
                             authCompleted = true;
                             showAuthState('authAlready');
                             updateNextButton();
+                            return;
+                        }
+                        // Then check if az CLI is logged in (even without cached token)
+                        const azResp = await fetch('/api/msx/az-status');
+                        const azData = await azResp.json();
+                        if (!azData.az_installed) {
+                            showAuthState('authNoCli');
+                        } else if (azData.logged_in) {
+                            // Logged in to az but no CRM token yet — complete the flow
+                            await completeAzLogin(azData.user_email);
                         }
                     } catch (err) {
                         console.error('Failed to check auth status:', err);
@@ -707,63 +719,73 @@
                 }
 
                 function showAuthState(stateId) {
-                    ['authInitial', 'authDeviceCode', 'authSuccess', 'authError', 'authAlready'].forEach(id => {
-                        document.getElementById(id).classList.add('d-none');
+                    ['authInitial', 'authWaiting', 'authSuccess', 'authError', 'authNoCli', 'authAlready'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.classList.add('d-none');
                     });
                     document.getElementById(stateId).classList.remove('d-none');
                 }
 
-                async function startDeviceCodeAuth() {
-                    showAuthState('authDeviceCode');
+                async function startAzLogin() {
+                    showAuthState('authWaiting');
                     try {
-                        const resp = await fetch('/api/msx/device-code/start', { method: 'POST' });
+                        const resp = await fetch('/api/msx/az-login/start', { method: 'POST' });
                         const data = await resp.json();
                         if (data.error) {
                             document.getElementById('authErrorMessage').textContent = data.error;
                             showAuthState('authError');
                             return;
                         }
-                        document.getElementById('authDeviceUrlText').textContent = data.verification_uri || 'https://microsoft.com/devicelogin';
-                        document.getElementById('authDeviceUrl').href = data.verification_uri || 'https://microsoft.com/devicelogin';
-                        document.getElementById('authDeviceCodeText').textContent = data.user_code || '';
-                        // Start polling
-                        pollAuthStatus();
+                        // Start polling for login completion
+                        pollAzLoginStatus();
                     } catch (err) {
-                        document.getElementById('authErrorMessage').textContent = 'Could not start authentication';
+                        document.getElementById('authErrorMessage').textContent = 'Could not start sign-in';
                         showAuthState('authError');
                     }
                 }
 
-                function pollAuthStatus() {
+                function pollAzLoginStatus() {
                     if (authPollTimer) clearInterval(authPollTimer);
                     authPollTimer = setInterval(async () => {
                         try {
-                            const resp = await fetch('/api/msx/device-code/status');
+                            const resp = await fetch('/api/msx/az-status');
                             const data = await resp.json();
-                            if (data.completed) {
+                            if (data.logged_in) {
                                 clearInterval(authPollTimer);
                                 authPollTimer = null;
-                                if (data.success) {
-                                    authCompleted = true;
-                                    showAuthState('authSuccess');
-                                    updateNextButton();
-                                } else {
-                                    document.getElementById('authErrorMessage').textContent = data.error || 'Authentication failed';
-                                    showAuthState('authError');
-                                }
+                                await completeAzLogin(data.user_email);
                             }
                         } catch (err) {
                             console.error('Auth poll error:', err);
                         }
-                    }, 3000);
+                    }, 2000);
                 }
 
-                document.getElementById('onboardStartAuth').addEventListener('click', startDeviceCodeAuth);
-                document.getElementById('authRetry').addEventListener('click', startDeviceCodeAuth);
-                document.getElementById('authCopyCode').addEventListener('click', () => {
-                    const code = document.getElementById('authDeviceCodeText').textContent;
-                    navigator.clipboard.writeText(code).catch(() => {});
-                });
+                async function completeAzLogin(userEmail) {
+                    try {
+                        // Tell backend to set subscription + refresh CRM token
+                        const resp = await fetch('/api/msx/az-login/complete', { method: 'POST' });
+                        const data = await resp.json();
+                        if (data.success) {
+                            authCompleted = true;
+                            showAuthState('authSuccess');
+                            const emailEl = document.getElementById('authUserEmail');
+                            if (emailEl && userEmail) emailEl.textContent = 'Signed in as ' + userEmail;
+                            updateNextButton();
+                        } else {
+                            document.getElementById('authErrorMessage').textContent = data.error || 'Failed to get CRM token';
+                            showAuthState('authError');
+                        }
+                    } catch (err) {
+                        document.getElementById('authErrorMessage').textContent = 'Failed to complete sign-in';
+                        showAuthState('authError');
+                    }
+                }
+
+                document.getElementById('onboardStartAuth').addEventListener('click', startAzLogin);
+                document.getElementById('authRetry').addEventListener('click', startAzLogin);
+                const retryNoCliBtn = document.getElementById('authRetryNoCli');
+                if (retryNoCliBtn) retryNoCliBtn.addEventListener('click', checkExistingAuth);
 
                 // --- Step 3: Import Accounts ---
                 function showImportState(prefix, stateId) {

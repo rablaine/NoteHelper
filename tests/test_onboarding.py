@@ -5,6 +5,7 @@ Verifies that the multi-step onboarding modal appears when appropriate,
 the dismiss endpoint works, and the modal is hidden after dismissal.
 """
 import pytest
+from unittest.mock import patch, MagicMock
 
 
 class TestOnboardingWizardDisplay:
@@ -59,9 +60,10 @@ class TestOnboardingWizardDisplay:
         assert 'Choose Your Theme' in html
         assert 'onboardDarkModeToggle' in html
 
-        # Step 2: Authentication
+        # Step 2: Authentication (az login flow)
         assert 'Connect to MSX' in html
         assert 'onboardStartAuth' in html
+        assert 'Sign In to Azure' in html
 
         # Step 3: Import Accounts
         assert 'Import Your Accounts' in html
@@ -270,3 +272,148 @@ class TestResetOnboarding:
         assert 'id="welcomeModal"' in html
         # The button element itself (not JS getElementById reference)
         assert 'id="rerunSetupBtn"' not in html
+
+
+class TestAzLoginEndpoints:
+    """Tests for the browser-based az login API endpoints."""
+
+    @patch('app.routes.msx.get_az_cli_status')
+    def test_az_status_endpoint(self, mock_status, client, app):
+        """GET /api/msx/az-status should return az CLI status."""
+        mock_status.return_value = {
+            "az_installed": True,
+            "logged_in": True,
+            "user_email": "test@microsoft.com",
+            "message": "Logged in as test@microsoft.com",
+        }
+        response = client.get('/api/msx/az-status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['az_installed'] is True
+        assert data['logged_in'] is True
+        assert data['user_email'] == 'test@microsoft.com'
+
+    @patch('app.routes.msx.get_az_cli_status')
+    def test_az_status_not_installed(self, mock_status, client, app):
+        """GET /api/msx/az-status should report when CLI not installed."""
+        mock_status.return_value = {
+            "az_installed": False,
+            "logged_in": False,
+            "user_email": None,
+            "message": "Azure CLI not installed",
+        }
+        response = client.get('/api/msx/az-status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['az_installed'] is False
+
+    @patch('app.routes.msx.get_az_cli_status')
+    @patch('app.routes.msx.start_az_login')
+    def test_az_login_start_endpoint(self, mock_login, mock_status, client, app):
+        """POST /api/msx/az-login/start should launch az login."""
+        mock_login.return_value = {
+            "success": True,
+            "message": "Browser will open. Complete sign-in to continue.",
+        }
+        mock_status.return_value = {
+            "az_installed": True,
+            "logged_in": False,
+            "user_email": None,
+            "message": "Not logged in",
+        }
+        response = client.post('/api/msx/az-login/start')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+
+    @patch('app.routes.msx.start_az_login')
+    def test_az_login_start_no_cli(self, mock_login, client, app):
+        """POST /api/msx/az-login/start should report error when CLI missing."""
+        mock_login.return_value = {
+            "success": False,
+            "error": "Azure CLI not installed. Install from https://aka.ms/installazurecli",
+        }
+        response = client.post('/api/msx/az-login/start')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'not installed' in data['error']
+
+    @patch('app.routes.msx.get_msx_auth_status')
+    @patch('app.routes.msx.refresh_token')
+    @patch('app.routes.msx.set_subscription')
+    @patch('app.routes.msx.get_az_cli_status')
+    def test_az_login_complete_success(self, mock_status, mock_sub,
+                                       mock_refresh, mock_auth, client, app):
+        """POST /api/msx/az-login/complete should set subscription and refresh token."""
+        mock_status.return_value = {
+            "az_installed": True,
+            "logged_in": True,
+            "user_email": "test@microsoft.com",
+            "message": "Logged in as test@microsoft.com",
+        }
+        mock_sub.return_value = True
+        mock_refresh.return_value = True
+        mock_auth.return_value = {
+            "authenticated": True,
+            "user": "test@microsoft.com",
+            "expires_on": None,
+            "last_refresh": None,
+            "error": None,
+        }
+        response = client.post('/api/msx/az-login/complete')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['user_email'] == 'test@microsoft.com'
+
+    @patch('app.routes.msx.get_az_cli_status')
+    def test_az_login_complete_not_logged_in(self, mock_status, client, app):
+        """POST /api/msx/az-login/complete should 400 when not logged in."""
+        mock_status.return_value = {
+            "az_installed": True,
+            "logged_in": False,
+            "user_email": None,
+            "message": "Not logged in",
+        }
+        response = client.post('/api/msx/az-login/complete')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['success'] is False
+
+
+class TestOnboardingAuthUiElements:
+    """Tests that the wizard Step 2 has the correct az-login UI elements."""
+
+    def test_step2_has_sign_in_button(self, client, app):
+        """Step 2 should show the 'Sign In to Azure' button."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'Sign In to Azure' in html
+        assert 'onboardStartAuth' in html
+
+    def test_step2_has_auth_states(self, client, app):
+        """Step 2 should have all auth state divs."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="authInitial"' in html
+        assert 'id="authWaiting"' in html
+        assert 'id="authSuccess"' in html
+        assert 'id="authError"' in html
+        assert 'id="authNoCli"' in html
+        assert 'id="authAlready"' in html
+
+    def test_step2_no_device_code_elements(self, client, app):
+        """Step 2 should NOT have old device code elements."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'authDeviceCode' not in html
+        assert 'authCopyCode' not in html
+        assert 'devicelogin' not in html
+
+    def test_step2_has_retry_buttons(self, client, app):
+        """Step 2 should have retry buttons for error states."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="authRetry"' in html
+        assert 'id="authRetryNoCli"' in html
