@@ -201,3 +201,72 @@ class TestOldModalRemoval:
         response = client.get('/')
         assert response.status_code == 200
         assert b'NoteHelper' in response.data
+
+
+class TestResetOnboarding:
+    """Tests for the reset-onboarding API endpoint and re-run button."""
+
+    def test_reset_onboarding_endpoint(self, client, app):
+        """POST to reset-onboarding should set first_run_modal_dismissed to False."""
+        # First dismiss
+        client.post('/api/preferences/dismiss-welcome-modal',
+                     content_type='application/json')
+
+        # Then reset
+        response = client.post('/api/preferences/reset-onboarding',
+                               content_type='application/json')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['first_run_modal_dismissed'] is False
+
+        with app.app_context():
+            from app.models import UserPreference
+            pref = UserPreference.query.first()
+            assert pref.first_run_modal_dismissed is False
+
+    def test_reset_then_wizard_shows_again(self, client, app):
+        """After resetting, the wizard should render again."""
+        # Dismiss
+        client.post('/api/preferences/dismiss-welcome-modal',
+                     content_type='application/json')
+        # Verify dismissed
+        response = client.get('/')
+        assert b'id="welcomeModal"' not in response.data
+
+        # Reset
+        client.post('/api/preferences/reset-onboarding',
+                     content_type='application/json')
+        # Verify wizard is back
+        response = client.get('/')
+        assert b'id="welcomeModal"' in response.data
+
+    def test_rerun_button_shown_when_dismissed_no_customers(self, client, app):
+        """Re-run button should appear when wizard dismissed and no customers exist."""
+        with app.app_context():
+            from app.models import db, UserPreference
+            pref = UserPreference.query.first()
+            pref.first_run_modal_dismissed = True
+            db.session.commit()
+
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # The actual button element (not just JS reference)
+        assert 'id="rerunSetupBtn"' in html
+        assert 'Setup Wizard' in html
+
+        # Clean up
+        with app.app_context():
+            from app.models import db, UserPreference
+            pref = UserPreference.query.first()
+            pref.first_run_modal_dismissed = False
+            db.session.commit()
+
+    def test_rerun_button_hidden_when_wizard_not_dismissed(self, client, app):
+        """Re-run button should NOT appear when wizard hasn't been dismissed yet."""
+        # When first_run_modal_dismissed is False, the wizard itself shows
+        # and the re-run button HTML element should not be rendered
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="welcomeModal"' in html
+        # The button element itself (not JS getElementById reference)
+        assert 'id="rerunSetupBtn"' not in html

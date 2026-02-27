@@ -1754,6 +1754,19 @@ def dismiss_welcome_modal():
     return jsonify({'first_run_modal_dismissed': True}), 200
 
 
+@main_bp.route('/api/preferences/reset-onboarding', methods=['POST'])
+def reset_onboarding():
+    """Reset the onboarding wizard so it shows again on next page load."""
+    user_id = g.user.id if g.user.is_authenticated else 1
+    
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if pref:
+        pref.first_run_modal_dismissed = False
+        db.session.commit()
+    
+    return jsonify({'first_run_modal_dismissed': False}), 200
+
+
 # =============================================================================
 # Context Processor
 # =============================================================================
@@ -1767,6 +1780,7 @@ def inject_preferences():
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
     colored_sellers = pref.colored_sellers if pref else True
     first_run_modal_dismissed = pref.first_run_modal_dismissed if pref else False
+    has_customers = Customer.query.first() is not None
     
     # Get pending link requests count
     pending_link_requests_count = 0
@@ -1783,6 +1797,7 @@ def inject_preferences():
         topic_sort_by_calls=topic_sort_by_calls,
         colored_sellers=colored_sellers,
         first_run_modal_dismissed=first_run_modal_dismissed,
+        has_customers=has_customers,
         get_seller_color=get_seller_color_with_pref,
         pending_link_requests_count=pending_link_requests_count
     )

@@ -242,6 +242,11 @@
                     </li>
                 </ul>
                 <div class="d-flex align-items-center gap-2">
+                    {% if first_run_modal_dismissed and not has_customers %}
+                    <button class="btn btn-warning btn-sm" id="rerunSetupBtn" title="Re-run setup wizard">
+                        <i class="bi bi-rocket-takeoff"></i> Setup Wizard
+                    </button>
+                    {% endif %}
                     <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#quickCustomerLookupModal" title="Quick customer lookup">
                         <i class="bi bi-building"></i>
                     </button>
@@ -892,6 +897,22 @@
                 showStep(1);
             }
         });
+
+        // Re-run Setup Wizard button
+        const rerunBtn = document.getElementById('rerunSetupBtn');
+        if (rerunBtn) {
+            rerunBtn.addEventListener('click', async () => {
+                try {
+                    await fetch('/api/preferences/reset-onboarding', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    window.location.reload();
+                } catch (err) {
+                    console.error('Failed to reset onboarding:', err);
+                }
+            });
+        }
         
         // Dark Mode Toggle (only if it exists in menu)
         const darkModeToggle = document.getElementById('darkModeToggle');
