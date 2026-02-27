@@ -155,7 +155,11 @@
                         <!-- Product Rows -->
                         {% for p in product_summary %}
                         <tr>
-                            <td class="ps-3">{{ p.product }}</td>
+                            <td class="ps-3">
+                                <a href="{{ url_for('revenue.revenue_product_view', product=p.product) }}" class="text-decoration-none">
+                                    {{ p.product }}
+                                </a>
+                            </td>
                             {% for month in recent_months %}
                             <td class="text-end">
                                 {% set current_rev = p.month_revenues.get(month, 0) %}
