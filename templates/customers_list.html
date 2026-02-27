@@ -27,6 +27,36 @@
     .collapsed .seller-chevron {
         transform: rotate(-90deg);
     }
+
+    /* Seller group header card */
+    .seller-header {
+        border: 1px solid rgba(var(--bs-body-color-rgb), 0.15);
+        border-radius: 0.375rem;
+        padding: 0.6rem 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background-color: rgba(var(--bs-body-color-rgb), 0.06);
+        cursor: pointer;
+    }
+    .seller-header:hover {
+        background-color: rgba(var(--bs-body-color-rgb), 0.1);
+    }
+    .seller-header.expanded {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        border-bottom: none;
+    }
+
+    /* Connect customer list to seller header */
+    .seller-collapse .list-group {
+        margin-top: 0 !important;
+    }
+    .seller-collapse .list-group .list-group-item:first-child {
+        border-top: 2px solid rgba(var(--bs-body-color-rgb), 0.15);
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+    }
 </style>
 {% endblock %}
 
@@ -65,23 +95,28 @@
         </div>
         {% for group in grouped_customers %}
             <div class="mb-3">
-                <h4 class="mb-0">
-                    <a href="#sellerGroup{{ group.seller.id }}" class="text-decoration-none d-flex align-items-center" data-bs-toggle="collapse" role="button" aria-expanded="true" aria-controls="sellerGroup{{ group.seller.id }}">
-                        <i class="bi bi-chevron-down me-2 seller-chevron"></i>
-                        <i class="bi bi-person"></i>&nbsp;<span>{{ group.seller.name }}</span>
-                    </a>
+                <div class="seller-header collapsed" data-bs-toggle="collapse" data-bs-target="#sellerGroup{{ group.seller.id }}" role="button" aria-expanded="false" aria-controls="sellerGroup{{ group.seller.id }}">
+                    <i class="bi bi-chevron-down me-2 seller-chevron"></i>
+                    <h4 class="mb-0 d-inline"><i class="bi bi-person"></i>&nbsp;{{ group.seller.name }}</h4>
                     {% if group.seller.seller_type %}
-                        <span class="badge {% if group.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %} ms-2">{{ group.seller.seller_type }}</span>
+                        <span class="badge {% if group.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ group.seller.seller_type }}</span>
                     {% endif %}
-                    {% if group.seller.territories %}
-                        {% for territory in group.seller.territories|sort(attribute='name') %}
-                            <span class="badge bg-secondary ms-2"><i class="bi bi-geo-alt"></i> {{ territory.name }}</span>
-                        {% endfor %}
-                    {% endif %}
-                    <span class="text-muted ms-2" style="font-size: 0.9rem;">({{ group.customers|length }} customers)</span>
-                    <a href="{{ url_for('sellers.seller_view', id=group.seller.id) }}" class="btn btn-sm btn-outline-primary ms-2" title="View seller"><i class="bi bi-box-arrow-up-right"></i></a>
-                </h4>
-                <div class="collapse show seller-collapse" id="sellerGroup{{ group.seller.id }}">
+                    <a href="{{ url_for('sellers.seller_view', id=group.seller.id) }}" class="btn btn-sm btn-outline-primary" title="View seller" onclick="event.stopPropagation();"><i class="bi bi-box-arrow-up-right"></i></a>
+                    <span class="ms-auto d-flex align-items-center flex-wrap gap-1">
+                        {% if group.seller.territories %}
+                            {% if group.seller.territories|length <= 2 %}
+                                {% for territory in group.seller.territories|sort(attribute='name') %}
+                                    <a href="{{ url_for('territories.territory_view', id=territory.id) }}" class="badge bg-secondary text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ territory.name }}</a>
+                                {% endfor %}
+                            {% else %}
+                                <a href="{{ url_for('territories.territory_view', id=group.seller.territories|sort(attribute='name')|first|attr('id')) }}" class="badge bg-secondary text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-geo-alt"></i> {{ group.seller.territories|sort(attribute='name')|first|attr('name') }}</a>
+                                <span class="badge bg-secondary" title="{{ group.seller.territories|sort(attribute='name')|map(attribute='name')|join(', ') }}">+{{ group.seller.territories|length - 1 }} more</span>
+                            {% endif %}
+                        {% endif %}
+                        <span class="text-muted" style="font-size: 0.9rem;">({{ group.customers|length }} customers)</span>
+                    </span>
+                </div>
+                <div class="collapse seller-collapse" id="sellerGroup{{ group.seller.id }}" data-seller-key="seller-{{ group.seller.id }}">
                     <div class="list-group mt-2">
                     {% for customer in group.customers %}
                         <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
@@ -117,14 +152,14 @@
         
         {% if customers_without_seller %}
             <div class="mb-3">
-                <h4 class="mb-0">
-                    <a href="#sellerGroupUnassigned" class="text-decoration-none d-flex align-items-center" data-bs-toggle="collapse" role="button" aria-expanded="true" aria-controls="sellerGroupUnassigned">
-                        <i class="bi bi-chevron-down me-2 seller-chevron"></i>
-                        <i class="bi bi-question-circle"></i>&nbsp;<span>No Seller Assigned</span>
-                    </a>
-                    <span class="text-muted ms-2" style="font-size: 0.9rem;">({{ customers_without_seller|length }} customers)</span>
-                </h4>
-                <div class="collapse show seller-collapse" id="sellerGroupUnassigned">
+                <div class="seller-header collapsed" data-bs-toggle="collapse" data-bs-target="#sellerGroupUnassigned" role="button" aria-expanded="false" aria-controls="sellerGroupUnassigned">
+                    <i class="bi bi-chevron-down me-2 seller-chevron"></i>
+                    <h4 class="mb-0 d-inline"><i class="bi bi-question-circle"></i>&nbsp;No Seller Assigned</h4>
+                    <span class="ms-auto">
+                        <span class="text-muted" style="font-size: 0.9rem;">({{ customers_without_seller|length }} customers)</span>
+                    </span>
+                </div>
+                <div class="collapse seller-collapse" id="sellerGroupUnassigned" data-seller-key="seller-unassigned">
                     <div class="list-group mt-2">
                     {% for customer in customers_without_seller %}
                         <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
@@ -313,16 +348,84 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Seller group collapse state persistence via localStorage
+    const STORAGE_KEY = 'notehelper_expanded_sellers';
+
+    function getExpandedSellers() {
+        try {
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function saveExpandedSellers(expanded) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(expanded));
+        } catch (e) { /* ignore */ }
+    }
+
+    // Restore expanded state from localStorage
+    const expandedSellers = getExpandedSellers();
+    document.querySelectorAll('.seller-collapse').forEach(el => {
+        const key = el.getAttribute('data-seller-key');
+        if (key && expandedSellers.includes(key)) {
+            el.classList.add('show');
+            // Update the toggle link and header to match
+            const toggle = document.querySelector(`[aria-controls="${el.id}"]`);
+            if (toggle) {
+                toggle.classList.remove('collapsed');
+                toggle.setAttribute('aria-expanded', 'true');
+            }
+            const header = el.previousElementSibling;
+            if (header && header.classList.contains('seller-header')) {
+                header.classList.add('expanded');
+            }
+        }
+    });
+
+    // Listen for show/hide events to persist state and toggle header style
+    document.querySelectorAll('.seller-collapse').forEach(el => {
+        el.addEventListener('shown.bs.collapse', function() {
+            const header = this.previousElementSibling;
+            if (header && header.classList.contains('seller-header')) {
+                header.classList.add('expanded');
+            }
+            const key = this.getAttribute('data-seller-key');
+            if (!key) return;
+            const expanded = getExpandedSellers();
+            if (!expanded.includes(key)) {
+                expanded.push(key);
+                saveExpandedSellers(expanded);
+            }
+        });
+        el.addEventListener('hidden.bs.collapse', function() {
+            const header = this.previousElementSibling;
+            if (header && header.classList.contains('seller-header')) {
+                header.classList.remove('expanded');
+            }
+            const key = this.getAttribute('data-seller-key');
+            if (!key) return;
+            const expanded = getExpandedSellers().filter(k => k !== key);
+            saveExpandedSellers(expanded);
+        });
+    });
+
     // Expand/Collapse All seller groups
     const expandAllBtn = document.getElementById('expandAllBtn');
     const collapseAllBtn = document.getElementById('collapseAllBtn');
     if (expandAllBtn) {
         expandAllBtn.addEventListener('click', function() {
+            const allKeys = [];
             document.querySelectorAll('.seller-collapse').forEach(el => {
                 if (!el.classList.contains('show')) {
                     new bootstrap.Collapse(el, { toggle: true });
                 }
+                const key = el.getAttribute('data-seller-key');
+                if (key) allKeys.push(key);
             });
+            saveExpandedSellers(allKeys);
         });
     }
     if (collapseAllBtn) {
@@ -330,6 +433,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.seller-collapse.show').forEach(el => {
                 new bootstrap.Collapse(el, { toggle: true });
             });
+            saveExpandedSellers([]);
         });
     }
 });
