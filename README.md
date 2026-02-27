@@ -6,13 +6,13 @@ A single-user note-taking application for Azure technical sellers to capture and
 
 ### Prerequisites
 
-- **Python 3.13+**
-- pip and venv (included with Python)
+- **Python 3.13+** (the launcher can install this for you)
+- **Azure CLI** (optional — required for MSX and AI features; the launcher can install this too)
 - Git
 
 ### Quick Start
 
-The fastest way to get running — the launcher script handles venv creation, dependency installation, and `.env` setup automatically:
+The fastest way to get running — just clone and run `start.bat`. It checks for prerequisites, offers to install anything missing via `winget`, then sets up the app:
 
 ```powershell
 git clone https://github.com/rablaine/NoteHelper.git
@@ -21,10 +21,11 @@ start.bat
 ```
 
 The script will:
-1. Create a Python virtual environment (if one doesn't exist)
-2. Install all dependencies from `requirements.txt`
-3. Create a `.env` file with a generated secret key (if one doesn't exist)
-4. Start the server on `http://localhost:5000`
+1. Check for Python 3.13+ and Azure CLI — offer to install via `winget` if missing
+2. Create a Python virtual environment (if one doesn't exist)
+3. Install all dependencies from `requirements.txt`
+4. Create a `.env` file with a generated secret key (if one doesn't exist)
+5. Start the server on `http://localhost:5000`
 
 On subsequent runs, the script detects the existing venv and `.env`, installs any new dependencies, and launches the app.
 
