@@ -14,19 +14,10 @@ A single-user note-taking application for Azure technical sellers to capture and
 
 The fastest way to get running — the launcher script handles venv creation, dependency installation, and `.env` setup automatically:
 
-**Windows:**
 ```powershell
 git clone https://github.com/rablaine/NoteHelper.git
 cd NoteHelper
 start.bat
-```
-
-**Linux / macOS:**
-```bash
-git clone https://github.com/rablaine/NoteHelper.git
-cd NoteHelper
-chmod +x start.sh
-./start.sh
 ```
 
 The script will:
@@ -52,9 +43,7 @@ cd NoteHelper
 2. **Create virtual environment:**
 ```powershell
 python -m venv venv
-.\venv\Scripts\Activate.ps1  # Windows PowerShell
-# or
-source venv/bin/activate      # Linux/Mac
+.\venv\Scripts\Activate.ps1
 ```
 
 3. **Install dependencies:**
@@ -63,8 +52,8 @@ pip install -r requirements.txt
 ```
 
 4. **Set up environment variables:**
-```bash
-cp .env.example .env
+```powershell
+copy .env.example .env
 # Generate a secret key and add it to .env:
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
