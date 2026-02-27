@@ -217,17 +217,14 @@ pytest --cov=app tests/  # with coverage
 - Safe to experiment and break things
 
 **Production Environment:**
-- Docker container running locally or on server
-- SQLite database (persisted in mounted `data/` volume)
-- Container images built automatically via GitHub Actions on push to `main` branch
-- Pull latest image with: `docker pull ghcr.io/rablaine/notehelper:latest`
+- Runs locally or on a server via `python run.py` or Gunicorn
+- SQLite database (persisted in `data/` directory)
 - Real user data - handle with care
 
 ## Git & Version Control
 
-**Branching Strategy:** Feature branches (main builds Docker images)
+**Branching Strategy:** Feature branches off `main`
 - **ALWAYS create feature branches for new work** - Never commit directly to `main`
-- `main` branch triggers Docker image build via GitHub Actions
 - Create feature branches from `main` for all changes
 - Merge back to `main` only when feature is complete and tested
 
@@ -250,14 +247,14 @@ pytest --cov=app tests/  # with coverage
 4. **Prompt user to manually test new features or bug fixes** - Before committing, always ask the user to test the changes in the running app to verify everything works as expected
 5. Commit to feature branch with descriptive message
 6. **STOP AND WAIT for user confirmation** before merging to `main` — **NEVER merge to main without explicit user approval**
-7. When user says ready: merge to `main` with `--no-ff` and push (triggers Docker image build)
+7. When user says ready: merge to `main` with `--no-ff` and push
    - **Always use `git merge --no-ff`** to preserve feature branch history
 
 **CRITICAL — DO NOT AUTO-MERGE:**
 - **NEVER merge a feature branch to `main` on your own** — always wait for the user to test and explicitly say to merge
 - Building a feature and committing to the feature branch is fine — merging to `main` requires user sign-off
 - If the user says "commit" that does NOT mean "merge to main" — it means commit to the current feature branch only
-- Merging to `main` triggers a production Docker build — treat it as a deployment gate
+- Merging to `main` is a deployment gate — treat it seriously
 
 **Merge to Production Checklist:**
 - All tests passing (`pytest tests/`)
