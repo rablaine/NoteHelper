@@ -23,6 +23,7 @@ from app.services.msx_auth import (
     cancel_device_code_flow,
     get_az_cli_status,
     start_az_login,
+    get_az_login_process_status,
     set_subscription,
 )
 from app.services.msx_api import (
@@ -184,8 +185,8 @@ def az_cli_status():
 def az_login_start():
     """Launch ``az login --tenant ...`` in a visible console window.
 
-    The frontend should poll ``/api/msx/az-status`` afterwards to detect
-    when the user has completed sign-in.
+    The frontend should poll ``/api/msx/az-login/status`` afterwards to
+    detect when the process finishes.
     """
     result = start_az_login()
 
@@ -197,6 +198,16 @@ def az_login_start():
             refresh_token()
 
     return jsonify(result)
+
+
+@msx_bp.route('/az-login/status')
+def az_login_status():
+    """Poll the az login process status (instant, no subprocess calls).
+
+    Returns running, exit_code, elapsed_seconds so the frontend can
+    detect success/failure immediately when the process exits.
+    """
+    return jsonify(get_az_login_process_status())
 
 
 @msx_bp.route('/az-login/complete', methods=['POST'])

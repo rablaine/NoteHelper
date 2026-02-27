@@ -381,6 +381,65 @@ class TestAzLoginEndpoints:
         data = response.get_json()
         assert data['success'] is False
 
+    @patch('app.routes.msx.get_az_login_process_status')
+    def test_az_login_status_running(self, mock_proc, client, app):
+        """GET /api/msx/az-login/status should report running process."""
+        mock_proc.return_value = {
+            "active": True,
+            "running": True,
+            "exit_code": None,
+            "elapsed_seconds": 5.2,
+        }
+        response = client.get('/api/msx/az-login/status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['running'] is True
+        assert data['exit_code'] is None
+
+    @patch('app.routes.msx.get_az_login_process_status')
+    def test_az_login_status_success(self, mock_proc, client, app):
+        """GET /api/msx/az-login/status should report exit code 0 on success."""
+        mock_proc.return_value = {
+            "active": True,
+            "running": False,
+            "exit_code": 0,
+            "elapsed_seconds": 12.3,
+        }
+        response = client.get('/api/msx/az-login/status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['running'] is False
+        assert data['exit_code'] == 0
+
+    @patch('app.routes.msx.get_az_login_process_status')
+    def test_az_login_status_failed(self, mock_proc, client, app):
+        """GET /api/msx/az-login/status should report non-zero exit on failure."""
+        mock_proc.return_value = {
+            "active": True,
+            "running": False,
+            "exit_code": 1,
+            "elapsed_seconds": 300.0,
+        }
+        response = client.get('/api/msx/az-login/status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['running'] is False
+        assert data['exit_code'] == 1
+
+    @patch('app.routes.msx.get_az_login_process_status')
+    def test_az_login_status_no_process(self, mock_proc, client, app):
+        """GET /api/msx/az-login/status should handle no active process."""
+        mock_proc.return_value = {
+            "active": False,
+            "running": False,
+            "exit_code": None,
+            "elapsed_seconds": 0,
+        }
+        response = client.get('/api/msx/az-login/status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['active'] is False
+
 
 class TestOnboardingAuthUiElements:
     """Tests that the wizard Step 2 has the correct az-login UI elements."""

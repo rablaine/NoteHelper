@@ -312,6 +312,7 @@ SUBSCRIPTION_ID = "0832b3b6-22b3-4c47-8d8b-572054b97257"
 _az_login_state: Dict[str, Any] = {
     "active": False,
     "process": None,
+    "started_at": None,
 }
 
 
@@ -416,6 +417,7 @@ def start_az_login() -> Dict[str, Any]:
         _az_login_state = {
             "active": True,
             "process": process,
+            "started_at": time.time(),
         }
 
         logger.info("Launched az login in console window")
@@ -432,6 +434,36 @@ def start_az_login() -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Failed to launch az login")
         return {"success": False, "error": str(e)}
+
+
+def get_az_login_process_status() -> Dict[str, Any]:
+    """Check the status of the launched az login process.
+
+    Uses ``process.poll()`` which is instant (no subprocess calls).
+
+    Returns:
+        Dict with:
+        - active: bool (was a login launched)
+        - running: bool (process still running)
+        - exit_code: int or None
+        - elapsed_seconds: float
+    """
+    global _az_login_state
+
+    if not _az_login_state.get("active") or not _az_login_state.get("process"):
+        return {"active": False, "running": False, "exit_code": None, "elapsed_seconds": 0}
+
+    process = _az_login_state["process"]
+    started_at = _az_login_state.get("started_at") or time.time()
+    elapsed = time.time() - started_at
+    exit_code = process.poll()  # None if still running, int if exited
+
+    return {
+        "active": True,
+        "running": exit_code is None,
+        "exit_code": exit_code,
+        "elapsed_seconds": round(elapsed, 1),
+    }
 
 
 def set_subscription() -> bool:

@@ -746,6 +746,10 @@
 
                 function pollAzLoginStatus() {
                     if (authPollTimer) clearInterval(authPollTimer);
+                    // Poll az account show every 1.5s — az login process stays
+                    // running (hangs on subscription prompt) so we can't rely
+                    // on process exit. The tenant auth completes as soon as the
+                    // user signs in via browser.
                     authPollTimer = setInterval(async () => {
                         try {
                             const resp = await fetch('/api/msx/az-status');
@@ -758,10 +762,14 @@
                         } catch (err) {
                             console.error('Auth poll error:', err);
                         }
-                    }, 2000);
+                    }, 1500);
                 }
 
                 async function completeAzLogin(userEmail) {
+                    // Show a brief "Connecting..." state while we grab the CRM token
+                    const waitingEl = document.querySelector('#authWaiting span');
+                    if (waitingEl) waitingEl.textContent = 'Connecting to MSX...';
+                    showAuthState('authWaiting');
                     try {
                         // Tell backend to set subscription + refresh CRM token
                         const resp = await fetch('/api/msx/az-login/complete', { method: 'POST' });
@@ -770,7 +778,8 @@
                             authCompleted = true;
                             showAuthState('authSuccess');
                             const emailEl = document.getElementById('authUserEmail');
-                            if (emailEl && userEmail) emailEl.textContent = 'Signed in as ' + userEmail;
+                            const email = userEmail || data.user_email;
+                            if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
                             updateNextButton();
                         } else {
                             document.getElementById('authErrorMessage').textContent = data.error || 'Failed to get CRM token';
