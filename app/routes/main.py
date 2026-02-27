@@ -697,17 +697,21 @@ def data_management_import():
     if not file.filename.endswith('.csv'):
         return {'error': 'File must be a CSV'}, 400
     
+    # Save uploaded file BEFORE entering generator — Werkzeug 3.1+ closes
+    # request file handles eagerly, so we must read the file while the
+    # request context is still fully active.
+    temp_file_obj = tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.csv')
+    temp_path = temp_file_obj.name
+    try:
+        file.save(temp_path)
+    finally:
+        temp_file_obj.close()
+    
     def generate():
         """Generator function to stream progress updates."""
-        temp_path = None
         try:
             # Send progress message
             yield "data: " + json.dumps({"message": "Saving uploaded file..."}) + "\n\n"
-            
-            # Save uploaded file temporarily
-            with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.csv') as temp_file:
-                file.save(temp_file.name)
-                temp_path = temp_file.name
             
             yield "data: " + json.dumps({"message": "Reading CSV file..."}) + "\n\n"
             
