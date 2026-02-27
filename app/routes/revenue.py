@@ -416,11 +416,12 @@ def revenue_customer_view(customer_id: int):
         flash('Customer not found.', 'danger')
         return redirect(url_for('revenue.revenue_dashboard'))
     
-    # Use customer name to look up revenue data (revenue tables store customer_name)
+    # Query revenue data by customer_id (set during import with fuzzy matching)
+    # Display the NoteHelper customer name in the UI
     customer_name = customer.name
     
     # Get all analyses for this customer (all buckets)
-    analyses = RevenueAnalysis.query.filter_by(customer_name=customer_name).all()
+    analyses = RevenueAnalysis.query.filter_by(customer_id=customer_id).all()
     
     # Get revenue history by bucket
     buckets = ['Core DBs', 'Analytics', 'Modern DBs']
@@ -429,17 +430,19 @@ def revenue_customer_view(customer_id: int):
     bucket_product_data = {}  # Full product data with monthly revenues
     
     for bucket in buckets:
-        history = get_customer_revenue_history(customer_name, bucket)
+        history = get_customer_revenue_history(bucket=bucket, customer_id=customer_id)
         if history:
             revenue_by_bucket[bucket] = history
             # Get products for this bucket
-            products = get_products_for_bucket(customer_name, bucket)
+            products = get_products_for_bucket(bucket=bucket, customer_id=customer_id)
             products_by_bucket[bucket] = products
             
             # Get product history for grid display
             product_history = {}
             for p in products:
-                p_history = get_product_revenue_history(customer_name, bucket, p['product'])
+                p_history = get_product_revenue_history(
+                    bucket=bucket, product=p['product'], customer_id=customer_id
+                )
                 if p_history:
                     product_history[p['product']] = p_history
             
@@ -496,13 +499,15 @@ def revenue_bucket_products(customer_id: int, bucket: str):
         return redirect(url_for('revenue.revenue_dashboard'))
     
     customer_name = customer.name
-    # Get products with totals
-    products = get_products_for_bucket(customer_name, bucket)
+    # Get products with totals (query by customer_id for fuzzy-matched customers)
+    products = get_products_for_bucket(bucket=bucket, customer_id=customer_id)
     
     # Get product history for drill-down
     product_history = {}
     for p in products:
-        history = get_product_revenue_history(customer_name, bucket, p['product'])
+        history = get_product_revenue_history(
+            bucket=bucket, product=p['product'], customer_id=customer_id
+        )
         if history:
             product_history[p['product']] = history
     
@@ -529,7 +534,7 @@ def revenue_bucket_products(customer_id: int, bucket: str):
     
     # Get the bucket-level analysis if it exists
     analysis = RevenueAnalysis.query.filter_by(
-        customer_name=customer_name,
+        customer_id=customer_id,
         bucket=bucket
     ).first()
     

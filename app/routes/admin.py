@@ -4,7 +4,11 @@ Handles admin panel, user management, and domain whitelisting.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 
-from app.models import db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog, utc_now
+from app.models import (
+    db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog,
+    RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
+    RevenueConfig, RevenueEngagement, utc_now
+)
 
 # Create blueprint
 admin_bp = Blueprint('admin', __name__)
@@ -20,7 +24,10 @@ def admin_panel():
         'total_sellers': Seller.query.count(),
         'total_customers': Customer.query.count(),
         'total_topics': Topic.query.count(),
-        'total_call_logs': CallLog.query.count()
+        'total_call_logs': CallLog.query.count(),
+        'total_revenue_records': CustomerRevenueData.query.count() + ProductRevenueData.query.count(),
+        'total_revenue_analyses': RevenueAnalysis.query.count(),
+        'total_revenue_imports': RevenueImport.query.count()
     }
     
     # Get or create AI config
@@ -48,6 +55,29 @@ def admin_ai_logs():
         log.user = users.get(log.user_id)
     
     return render_template('admin_ai_logs.html', logs=logs)
+
+
+@admin_bp.route('/api/admin/clear-revenue', methods=['POST'])
+def api_clear_revenue_data():
+    """Delete all revenue data (imports, records, analyses, engagements, config)."""
+    try:
+        deleted = {}
+        deleted['engagements'] = RevenueEngagement.query.delete()
+        deleted['analyses'] = RevenueAnalysis.query.delete()
+        deleted['product_records'] = ProductRevenueData.query.delete()
+        deleted['bucket_records'] = CustomerRevenueData.query.delete()
+        deleted['imports'] = RevenueImport.query.delete()
+        deleted['configs'] = RevenueConfig.query.delete()
+        db.session.commit()
+        total = sum(deleted.values())
+        return jsonify({
+            'success': True,
+            'message': f'Deleted {total} revenue records.',
+            'details': deleted
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # API routes

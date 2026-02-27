@@ -669,17 +669,24 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
     if not customer_buckets:
         return {'analyzed': 0, 'actionable': 0, 'skipped': 0}
     
-    # Build a lookup of customer name -> Customer record for seller/tpid info
-    # This pulls from our existing Customer table, matching by name
+    # Build customer_id lookup from revenue data (set during import with fuzzy matching)
+    # This is more accurate than name matching since import uses progressive word-prefix
+    # and acronym matching to link CSV customer names to NoteHelper customers
+    customer_id_pairs = db.session.query(
+        CustomerRevenueData.customer_name,
+        db.func.max(CustomerRevenueData.customer_id)
+    ).filter(
+        CustomerRevenueData.customer_id.isnot(None)
+    ).group_by(
+        CustomerRevenueData.customer_name
+    ).all()
+    customer_id_from_revenue = {name: cid for name, cid in customer_id_pairs}
+    
+    # Build Customer lookup by ID for seller/tpid info
     all_customers = Customer.query.options(
         db.joinedload(Customer.seller)
     ).all()
-    customer_lookup = {}
-    for c in all_customers:
-        customer_lookup[c.name] = c
-        # Also add nickname as a lookup if it exists
-        if c.nickname:
-            customer_lookup[c.nickname] = c
+    customer_by_id = {c.id: c for c in all_customers}
     
     # Determine months to analyze
     all_months = db.session.query(
@@ -696,16 +703,15 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
     for cb in customer_buckets:
         customer_name, bucket, tpid = cb
         
-        # Look up customer in our existing database to get seller info
-        existing_customer = customer_lookup.get(customer_name)
-        if existing_customer:
-            customer_id = existing_customer.id
-            seller_name = existing_customer.seller.name if existing_customer.seller else None
+        # Get customer_id from revenue data (set during import with fuzzy matching)
+        customer_id = customer_id_from_revenue.get(customer_name)
+        if customer_id:
+            existing_customer = customer_by_id.get(customer_id)
+            seller_name = existing_customer.seller.name if existing_customer and existing_customer.seller else None
             # Use TPID from our database if not in revenue data
-            if not tpid and existing_customer.tpid:
+            if not tpid and existing_customer and existing_customer.tpid:
                 tpid = existing_customer.tpid
         else:
-            customer_id = None
             seller_name = None
         
         # Get revenue data for this customer/bucket

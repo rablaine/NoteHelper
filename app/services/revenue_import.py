@@ -934,19 +934,27 @@ def get_months_in_database() -> list[dict]:
 
 
 def get_customer_revenue_history(
-    customer_name: str,
-    bucket: Optional[str] = None
+    customer_name: Optional[str] = None,
+    bucket: Optional[str] = None,
+    *,
+    customer_id: Optional[int] = None
 ) -> list[CustomerRevenueData]:
     """Get revenue history for a specific customer.
     
     Args:
-        customer_name: Customer name to look up
+        customer_name: Customer name to look up (from CSV)
         bucket: Optional bucket filter (Core DBs, Analytics, Modern DBs)
+        customer_id: NoteHelper customer ID (preferred over customer_name)
         
     Returns:
         List of CustomerRevenueData records ordered by month
     """
-    query = CustomerRevenueData.query.filter_by(customer_name=customer_name)
+    if customer_id:
+        query = CustomerRevenueData.query.filter_by(customer_id=customer_id)
+    elif customer_name:
+        query = CustomerRevenueData.query.filter_by(customer_name=customer_name)
+    else:
+        return []
     
     if bucket:
         query = query.filter_by(bucket=bucket)
@@ -955,24 +963,32 @@ def get_customer_revenue_history(
 
 
 def get_product_revenue_history(
-    customer_name: str,
-    bucket: str,
-    product: Optional[str] = None
+    customer_name: Optional[str] = None,
+    bucket: Optional[str] = None,
+    product: Optional[str] = None,
+    *,
+    customer_id: Optional[int] = None
 ) -> list[ProductRevenueData]:
     """Get product-level revenue history for a customer/bucket.
     
     Args:
-        customer_name: Customer name to look up
+        customer_name: Customer name to look up (from CSV)
         bucket: Bucket name (Core DBs, Analytics, Modern DBs)
         product: Optional specific product filter
+        customer_id: NoteHelper customer ID (preferred over customer_name)
         
     Returns:
         List of ProductRevenueData records ordered by product then month
     """
-    query = ProductRevenueData.query.filter_by(
-        customer_name=customer_name,
-        bucket=bucket
-    )
+    if customer_id:
+        query = ProductRevenueData.query.filter_by(customer_id=customer_id)
+    elif customer_name:
+        query = ProductRevenueData.query.filter_by(customer_name=customer_name)
+    else:
+        return []
+    
+    if bucket:
+        query = query.filter_by(bucket=bucket)
     
     if product:
         query = query.filter_by(product=product)
@@ -983,23 +999,39 @@ def get_product_revenue_history(
     ).all()
 
 
-def get_products_for_bucket(customer_name: str, bucket: str) -> list[dict]:
+def get_products_for_bucket(
+    customer_name: Optional[str] = None,
+    bucket: Optional[str] = None,
+    *,
+    customer_id: Optional[int] = None
+) -> list[dict]:
     """Get all products used by a customer in a specific bucket with totals.
     
     Args:
-        customer_name: Customer name
+        customer_name: Customer name (from CSV)
         bucket: Bucket name
+        customer_id: NoteHelper customer ID (preferred over customer_name)
         
     Returns:
         List of dicts with product name and total revenue
     """
+    filters = []
+    if customer_id:
+        filters.append(ProductRevenueData.customer_id == customer_id)
+    elif customer_name:
+        filters.append(ProductRevenueData.customer_name == customer_name)
+    else:
+        return []
+    
+    if bucket:
+        filters.append(ProductRevenueData.bucket == bucket)
+    
     results = db.session.query(
         ProductRevenueData.product,
         db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
         db.func.count(ProductRevenueData.id).label('month_count')
-    ).filter_by(
-        customer_name=customer_name,
-        bucket=bucket
+    ).filter(
+        *filters
     ).group_by(
         ProductRevenueData.product
     ).order_by(
@@ -1051,13 +1083,10 @@ def get_customers_using_product(product: str) -> list[dict]:
     Returns:
         List of dicts with customer info and revenue data
     """
-    # Build customer lookup (exact + prefix + acronym matching)
-    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
-    
-    # Get latest revenue for each customer using this product
     results = db.session.query(
         ProductRevenueData.customer_name,
         ProductRevenueData.bucket,
+        db.func.max(ProductRevenueData.customer_id).label('customer_id'),
         db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
         db.func.max(ProductRevenueData.month_date).label('latest_month')
     ).filter_by(
@@ -1073,7 +1102,7 @@ def get_customers_using_product(product: str) -> list[dict]:
         {
             'customer_name': r.customer_name,
             'bucket': r.bucket,
-            'customer_id': _resolve_customer_id(exact_lookup, cleaned_names, r.customer_name, acronym_lookup),
+            'customer_id': r.customer_id,
             'total_revenue': r.total_revenue or 0,
             'latest_month': r.latest_month
         }
@@ -1130,9 +1159,6 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
     """
     from app.models import RevenueAnalysis
     
-    # Build customer lookup (exact + prefix + acronym matching)
-    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
-    
     # Get customer names for this seller from analyses
     seller_customers = db.session.query(
         db.distinct(RevenueAnalysis.customer_name)
@@ -1141,6 +1167,7 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
     results = db.session.query(
         ProductRevenueData.customer_name,
         ProductRevenueData.bucket,
+        db.func.max(ProductRevenueData.customer_id).label('customer_id'),
         db.func.sum(ProductRevenueData.revenue).label('total_revenue'),
         db.func.max(ProductRevenueData.month_date).label('latest_month')
     ).filter(
@@ -1157,7 +1184,7 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
         {
             'customer_name': r.customer_name,
             'bucket': r.bucket,
-            'customer_id': _resolve_customer_id(exact_lookup, cleaned_names, r.customer_name, acronym_lookup),
+            'customer_id': r.customer_id,
             'total_revenue': r.total_revenue or 0,
             'latest_month': r.latest_month
         }
@@ -1240,8 +1267,18 @@ def get_new_product_users(consolidated_product: str, months_lookback: int = 6) -
     
     new_user_names = {r.customer_name: r.first_usage_date for r in new_users_query}
     
-    # Build customer lookup (exact + prefix + acronym matching)
-    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
+    # Get customer_id mapping from revenue data (set during import)
+    customer_id_map = dict(
+        db.session.query(
+            ProductRevenueData.customer_name,
+            db.func.max(ProductRevenueData.customer_id)
+        ).filter(
+            ProductRevenueData.product.in_(matching_products),
+            ProductRevenueData.customer_id.isnot(None)
+        ).group_by(
+            ProductRevenueData.customer_name
+        ).all()
+    )
     
     # Get seller info and total revenue for these customers
     results = []
@@ -1282,7 +1319,7 @@ def get_new_product_users(consolidated_product: str, months_lookback: int = 6) -
             'first_usage_fiscal': first_usage_fiscal,
             'total_revenue': total_rev,
             'latest_month_revenue': latest_rev,
-            'customer_id': _resolve_customer_id(exact_lookup, cleaned_names, customer_name, acronym_lookup)
+            'customer_id': customer_id_map.get(customer_name)
         })
     
     # Sort by seller name (None last), then by customer name
