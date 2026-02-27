@@ -8,9 +8,12 @@ from bs4 import BeautifulSoup
 def test_admin_panel_stats_are_clickable(client):
     """Test that admin panel statistics have clickable links."""
     # Make user admin first
-    from app.models import db, User
+    from app.models import db, User, UserPreference
     user = User.query.first()
     user.is_admin = True
+    # Dismiss onboarding modal so it doesn't interfere with admin panel parsing
+    pref = UserPreference.query.first()
+    pref.first_run_modal_dismissed = True
     db.session.commit()
     
     response = client.get('/admin')
@@ -18,8 +21,9 @@ def test_admin_panel_stats_are_clickable(client):
     
     soup = BeautifulSoup(response.data, 'html.parser')
     
-    # Check that stat numbers are wrapped in links
-    stats_section = soup.find('div', class_='card-body')
+    # Find stats within main content area (not modals)
+    main_content = soup.find('main')
+    stats_section = main_content.find('div', class_='card-body')
     links = stats_section.find_all('a')
     
     # Should have links for: Call Logs, Customers, Sellers, Territories, Topics, PODs
@@ -34,6 +38,10 @@ def test_admin_panel_stats_are_clickable(client):
     
     topics_link = soup.find('a', href='/topics')
     assert topics_link is not None, "Topics stat should be clickable"
+
+    # Clean up
+    pref.first_run_modal_dismissed = False
+    db.session.commit()
 
 
 def test_topics_toggle_shows_current_state(client):

@@ -88,9 +88,6 @@ def get_seller_color(seller_id: int, use_colors: bool = True) -> str:
 @main_bp.route('/')
 def index():
     """Home page showing recent activity and stats."""
-    # Check if this is a first-time user
-    show_first_time_modal = session.pop('show_first_time_modal', False)
-    
     # Eager load relationships for recent calls to avoid N+1 queries
     recent_calls = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
@@ -105,7 +102,7 @@ def index():
         'sellers': Seller.query.count(),
         'topics': Topic.query.count()
     }
-    return render_template('index.html', recent_calls=recent_calls, stats=stats, show_first_time_modal=show_first_time_modal)
+    return render_template('index.html', recent_calls=recent_calls, stats=stats)
 
 
 @main_bp.route('/api/call-logs/calendar')

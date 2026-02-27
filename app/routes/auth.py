@@ -239,9 +239,6 @@ def first_time_new_user():
     # Log user in
     login_user(user)
     
-    # Set flag for first-time user modal
-    session['show_first_time_modal'] = True
-    
     flash(f'Welcome, {user.name}! Your account has been created.', 'success')
     
     return redirect(url_for('main.index'))
