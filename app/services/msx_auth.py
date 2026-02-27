@@ -427,15 +427,16 @@ def az_logout() -> Dict[str, Any]:
 
 
 def start_az_login() -> Dict[str, Any]:
-    """Launch ``az login`` in a visible console window.
+    """Launch ``az login --allow-no-subscriptions`` in a visible console window.
 
     We intentionally omit ``--tenant`` so the user can sign in with any
-    account.  After sign-in, ``get_az_cli_status()`` checks whether the
-    tenant is correct and the frontend handles wrong-tenant detection.
+    account.  The ``--allow-no-subscriptions`` flag ensures the login
+    succeeds even when the account has no Azure subscriptions (e.g. a
+    personal account), so ``az account show`` will still return the
+    tenant ID and we can detect wrong-tenant logins.
 
-    On Windows this opens a new console window where the browser-based auth
-    flow runs.  The caller should poll ``get_az_cli_status()`` afterwards to
-    know when login completes.
+    The caller should poll ``get_az_cli_status()`` afterwards to know
+    when login completes.
 
     Returns:
         Dict with success, message, error.
@@ -443,7 +444,7 @@ def start_az_login() -> Dict[str, Any]:
     global _az_login_state
 
     try:
-        cmd = "az login"
+        cmd = "az login --allow-no-subscriptions"
 
         if IS_WINDOWS:
             import subprocess as _sp
@@ -455,7 +456,7 @@ def start_az_login() -> Dict[str, Any]:
         else:
             # On Linux/Mac, launch in background
             process = subprocess.Popen(
-                ["az", "login"],
+                ["az", "login", "--allow-no-subscriptions"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
