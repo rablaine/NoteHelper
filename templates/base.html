@@ -253,15 +253,7 @@
                             <i class="bi bi-person-circle"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuDropdown">
-                            <li>
-                                <a class="dropdown-item" href="#" id="coloredSellersToggle">
-                                    <i class="bi {{ 'bi-palette-fill' if colored_sellers else 'bi-palette' }}" id="coloredSellersIcon"></i> 
-                                    <span id="coloredSellersLabel">{{ 'Seller Badge Colors' if not colored_sellers else 'Grey Seller Badges' }}</span>
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('main.preferences') }}"><i class="bi bi-sliders"></i> Settings</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('main.data_management') }}"><i class="bi bi-database"></i> Data Management</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('admin.admin_panel') }}"><i class="bi bi-shield-lock"></i> Admin Panel</a></li>
                         </ul>
@@ -320,9 +312,9 @@
                     
                     <div class="mb-3">
                         <h6 class="mb-2"><i class="bi bi-file-earmark-spreadsheet"></i> Import Your Data</h6>
-                        <p class="mb-2">Ready to import your alignment sheet? Head to <strong>Data Management</strong> to get started.</p>
-                        <a href="{{ url_for('main.data_management') }}" class="btn btn-outline-primary btn-sm" id="goToDataManagement">
-                            <i class="bi bi-database"></i> Go to Data Management
+                        <p class="mb-2">Ready to import your accounts? Head to the <strong>Admin Panel</strong> and use MSX Import to get started.</p>
+                        <a href="{{ url_for('admin.admin_panel') }}" class="btn btn-outline-primary btn-sm" id="goToDataManagement">
+                            <i class="bi bi-shield-lock"></i> Go to Admin Panel
                         </a>
                     </div>
                 </div>
@@ -499,39 +491,6 @@
             } catch (error) {
                 console.error('Failed to save dark mode preference:', error);
             }
-            });
-        }
-        
-        // Colored Sellers Toggle
-        const coloredSellersToggle = document.getElementById('coloredSellersToggle');
-        const coloredSellersIcon = document.getElementById('coloredSellersIcon');
-        const coloredSellersLabel = document.getElementById('coloredSellersLabel');
-        
-        if (coloredSellersToggle) {
-            coloredSellersToggle.addEventListener('click', async function(e) {
-                e.preventDefault();
-                
-                // Get current state
-                const currentlyColored = htmlElement.getAttribute('data-colored-sellers') === 'true';
-                const newColored = !currentlyColored;
-                
-                // Update UI immediately
-                htmlElement.setAttribute('data-colored-sellers', newColored ? 'true' : 'false');
-                coloredSellersIcon.className = newColored ? 'bi bi-palette-fill' : 'bi bi-palette';
-                coloredSellersLabel.textContent = newColored ? 'Grey Seller Badges' : 'Seller Badge Colors';
-                
-                // Save preference to server
-                try {
-                    await fetch('/api/preferences/colored-sellers', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ colored_sellers: newColored })
-                    });
-                } catch (error) {
-                    console.error('Failed to save colored sellers preference:', error);
-                }
             });
         }
     </script>

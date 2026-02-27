@@ -95,71 +95,124 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- System-Wide Data Management -->
-        <div class="card mb-4 border-danger">
-            <div class="card-header bg-danger text-white">
-                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> System-Wide Data</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <h6><i class="bi bi-download"></i> Export</h6>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="includeAiConfig" checked>
-                            <label class="form-check-label" for="includeAiConfig">Include AI Config</label>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button id="exportJsonBtn" class="btn btn-sm btn-primary">
-                                <i class="bi bi-filetype-json"></i> JSON
-                            </button>
-                            <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-sm btn-info">
-                                <i class="bi bi-filetype-csv"></i> CSV
-                            </a>
-                        </div>
+                <hr>
+                <!-- Import Accounts from MSX -->
+                <h6><i class="bi bi-cloud-download"></i> Import Accounts from MSX</h6>
+                <p class="text-muted small mb-2">
+                    Imports all accounts you're assigned to in MSX, along with territories, PODs, sellers, solution engineers, and verticals.
+                </p>
+                <button class="btn btn-primary" type="button" id="importFromMsxBtn">
+                    <i class="bi bi-cloud-download"></i> Import My Accounts
+                </button>
+                
+                <!-- MSX Import Progress -->
+                <div id="msxImportProgress" class="mt-3 d-none">
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted" id="msxImportStatusText">Starting import...</small>
+                        <small class="text-muted" id="msxImportProgressPercent">0%</small>
                     </div>
-                    <div class="col-md-4 mb-3">
-                        <h6><i class="bi bi-upload"></i> Import</h6>
-                        <form id="importJsonForm" enctype="multipart/form-data">
-                            <input type="file" class="form-control form-control-sm mb-2" id="importJsonFile" accept=".json" required>
-                            <button type="submit" class="btn btn-sm btn-warning">
-                                <i class="bi bi-upload"></i> Restore Backup
-                            </button>
-                        </form>
-                        <div id="importJsonResult" class="mt-2"></div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                             role="progressbar" id="msxImportProgressBar" style="width: 0%"></div>
                     </div>
-                    <div class="col-md-4 mb-3">
-                        <h6><i class="bi bi-trash"></i> Clear All</h6>
-                        <p class="small text-danger mb-2">Deletes ALL data from ALL users</p>
-                        <button class="btn btn-sm btn-danger" id="clearAllDataBtn">
-                            <i class="bi bi-trash"></i> Clear Everything
-                        </button>
+                </div>
+                
+                <!-- MSX Import Results -->
+                <div id="msxImportResults" class="mt-3 d-none">
+                    <div class="alert alert-success mb-0">
+                        <h6 class="alert-heading"><i class="bi bi-check-circle"></i> Import Complete!</h6>
+                        <div id="msxImportSummary"></div>
+                    </div>
+                </div>
+                
+                <!-- MSX Import Error -->
+                <div id="msxImportError" class="mt-3 d-none">
+                    <div class="alert alert-danger mb-0">
+                        <h6 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Import Error</h6>
+                        <p class="mb-0" id="msxImportErrorText"></p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Revenue Data Management -->
-        <div class="card mb-4 border-warning">
-            <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="bi bi-currency-dollar"></i> Revenue Data</h5>
+        <!-- Export Call Logs -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-download"></i> Export Call Logs</h5>
             </div>
             <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <p class="mb-1">
-                            <strong>{{ stats.total_revenue_records }}</strong> revenue records,
-                            <strong>{{ stats.total_revenue_analyses }}</strong> analyses,
-                            <strong>{{ stats.total_revenue_imports }}</strong> imports
-                        </p>
-                        <p class="small text-muted mb-0">Delete all revenue data to re-import cleanly with updated customer matching.</p>
+                <p class="text-muted small mb-2">Export your call logs with enriched data for backup or analysis.</p>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-success" id="exportCallLogsJsonBtn">
+                        <i class="bi bi-file-earmark-code"></i> JSON
+                    </button>
+                    <button class="btn btn-success" id="exportCallLogsCsvBtn">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Danger Zone (collapsed by default) -->
+        <div class="card mb-4 border-danger">
+            <div class="card-header bg-danger text-white collapsed" data-bs-toggle="collapse" data-bs-target="#dangerZoneCollapse" aria-expanded="false" role="button" style="cursor: pointer;">
+                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-exclamation-triangle"></i> Danger Zone</span>
+                    <i class="bi bi-chevron-down"></i>
+                </h5>
+            </div>
+            <div class="collapse" id="dangerZoneCollapse">
+                <div class="card-body">
+                    <!-- System Backup & Restore -->
+                    <div class="row mb-4">
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="bi bi-download"></i> System Backup (Export)</h6>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="includeAiConfig" checked>
+                                <label class="form-check-label" for="includeAiConfig">Include AI Config</label>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button id="exportJsonBtn" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-filetype-json"></i> JSON
+                                </button>
+                                <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-sm btn-info">
+                                    <i class="bi bi-filetype-csv"></i> CSV
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="bi bi-upload"></i> System Restore (Import)</h6>
+                            <form id="importJsonForm" enctype="multipart/form-data">
+                                <input type="file" class="form-control form-control-sm mb-2" id="importJsonFile" accept=".json" required>
+                                <button type="submit" class="btn btn-sm btn-warning">
+                                    <i class="bi bi-upload"></i> Restore Backup
+                                </button>
+                            </form>
+                            <div id="importJsonResult" class="mt-2"></div>
+                        </div>
                     </div>
-                    <div class="col-md-4 text-end">
-                        <button class="btn btn-danger" id="clearRevenueBtn">
-                            <i class="bi bi-trash"></i> Delete All Revenue Data
-                        </button>
+                    <hr>
+                    <!-- Delete Operations -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="bi bi-trash"></i> Clear All Data</h6>
+                            <p class="small text-danger mb-2">Deletes ALL data from ALL users</p>
+                            <button class="btn btn-sm btn-danger" id="clearAllDataBtn">
+                                <i class="bi bi-trash"></i> Clear Everything
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="bi bi-currency-dollar"></i> Delete Revenue Data</h6>
+                            <p class="small text-muted mb-1">
+                                <strong>{{ stats.total_revenue_records }}</strong> records,
+                                <strong>{{ stats.total_revenue_analyses }}</strong> analyses,
+                                <strong>{{ stats.total_revenue_imports }}</strong> imports
+                            </p>
+                            <p class="small text-muted mb-2">Delete all revenue data to re-import with updated matching.</p>
+                            <button class="btn btn-sm btn-danger" id="clearRevenueBtn">
+                                <i class="bi bi-trash"></i> Delete Revenue Data
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -421,6 +474,126 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
 
 // Load MSX status on page load
 loadMsxStatus();
+
+// Export Call Logs
+document.getElementById('exportCallLogsJsonBtn').addEventListener('click', function() {
+    window.location.href = '/api/data-management/export/call-logs-json';
+});
+document.getElementById('exportCallLogsCsvBtn').addEventListener('click', function() {
+    window.location.href = '/api/data-management/export/call-logs-csv';
+});
+
+// MSX Import Accounts (SSE streaming)
+document.getElementById('importFromMsxBtn').addEventListener('click', async function() {
+    const btn = this;
+    const progressDiv = document.getElementById('msxImportProgress');
+    const resultsDiv = document.getElementById('msxImportResults');
+    const errorDiv = document.getElementById('msxImportError');
+    const statusText = document.getElementById('msxImportStatusText');
+    const progressPercent = document.getElementById('msxImportProgressPercent');
+    const progressBar = document.getElementById('msxImportProgressBar');
+    const summaryDiv = document.getElementById('msxImportSummary');
+    
+    // Reset UI
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Importing...';
+    
+    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+    window.addEventListener('beforeunload', warnOnLeave);
+    progressDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-none');
+    errorDiv.classList.add('d-none');
+    statusText.textContent = 'Starting import...';
+    progressPercent.textContent = '0%';
+    progressBar.style.width = '0%';
+    
+    try {
+        const response = await fetch('/api/msx/import-stream');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        
+                        if (data.message) {
+                            statusText.textContent = data.message;
+                        }
+                        
+                        if (data.progress !== undefined) {
+                            progressPercent.textContent = `${data.progress}%`;
+                            progressBar.style.width = `${data.progress}%`;
+                        }
+                        
+                        if (data.complete && data.summary) {
+                            progressDiv.classList.add('d-none');
+                            resultsDiv.classList.remove('d-none');
+                            
+                            const s = data.summary;
+                            summaryDiv.innerHTML = `
+                                <ul class="mb-0">
+                                    <li>PODs: ${s.pods_created || 0} created</li>
+                                    <li>Territories: ${s.territories_created || 0} created</li>
+                                    <li>Sellers: ${s.sellers_created || 0} created</li>
+                                    <li>Solution Engineers: ${s.solution_engineers_created || 0} created</li>
+                                    <li>Verticals: ${s.verticals_created || 0} created</li>
+                                    <li>Customers: ${s.customers_created || 0} created, ${s.customers_skipped || 0} skipped</li>
+                                </ul>
+                                <a href="{{ url_for('customers.customers_list') }}" class="btn btn-sm btn-outline-primary mt-2">
+                                    <i class="bi bi-people"></i> View Customers
+                                </a>
+                            `;
+                        }
+                    } catch (parseError) {
+                        if (parseError.message !== 'Unexpected end of JSON input') {
+                            console.error('SSE parse error:', parseError);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        progressDiv.classList.add('d-none');
+        errorDiv.classList.remove('d-none');
+        document.getElementById('msxImportErrorText').textContent = error.message;
+    } finally {
+        window.removeEventListener('beforeunload', warnOnLeave);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Import My Accounts';
+    }
+});
+
+// Danger Zone chevron rotation
+const dangerHeader = document.querySelector('[data-bs-target="#dangerZoneCollapse"]');
+if (dangerHeader) {
+    const chevron = dangerHeader.querySelector('.bi-chevron-down');
+    document.getElementById('dangerZoneCollapse').addEventListener('shown.bs.collapse', function() {
+        chevron.style.transform = 'rotate(180deg)';
+        chevron.style.transition = 'transform 0.2s';
+    });
+    document.getElementById('dangerZoneCollapse').addEventListener('hidden.bs.collapse', function() {
+        chevron.style.transform = 'rotate(0deg)';
+    });
+}
 
 }); // end DOMContentLoaded
 </script>
