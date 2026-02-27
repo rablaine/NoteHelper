@@ -23,7 +23,7 @@ Categories:
 from __future__ import annotations
 
 import statistics
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass, field
 
@@ -763,13 +763,13 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
             if analysis.category != signals.category:
                 analysis.previous_category = analysis.category
                 analysis.previous_priority_score = analysis.priority_score
-                analysis.status_changed_at = datetime.utcnow()
+                analysis.status_changed_at = datetime.now(timezone.utc)
         
         # Update fields
         analysis.customer_id = customer_id
         analysis.tpid = tpid
         analysis.seller_name = seller_name
-        analysis.analyzed_at = datetime.utcnow()
+        analysis.analyzed_at = datetime.now(timezone.utc)
         analysis.months_analyzed = len(revenues)
         analysis.avg_revenue = signals.avg_revenue
         analysis.latest_revenue = revenues[-1]

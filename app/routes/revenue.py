@@ -717,7 +717,7 @@ def record_engagement(analysis_id: int):
     analysis = RevenueAnalysis.query.get_or_404(analysis_id)
     
     if request.method == 'POST':
-        from datetime import datetime
+        from datetime import datetime, timezone
         
         status = request.form.get('status', 'pending')
         seller_response = request.form.get('seller_response', '').strip()
@@ -735,12 +735,12 @@ def record_engagement(analysis_id: int):
         # Set response fields if provided
         if seller_response:
             engagement.seller_response = seller_response
-            engagement.response_date = datetime.utcnow()
+            engagement.response_date = datetime.now(timezone.utc)
         
         # Set resolution fields if resolved
         if status == 'resolved' and resolution_notes:
             engagement.resolution_notes = resolution_notes
-            engagement.resolved_at = datetime.utcnow()
+            engagement.resolved_at = datetime.now(timezone.utc)
         
         db.session.add(engagement)
         db.session.commit()
@@ -764,7 +764,7 @@ def record_engagement(analysis_id: int):
 @revenue_bp.route('/api/revenue/engagement/<int:analysis_id>', methods=['POST'])
 def api_record_engagement(analysis_id: int):
     """API endpoint to record engagement (for modals)."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     analysis = RevenueAnalysis.query.get_or_404(analysis_id)
     
@@ -784,11 +784,11 @@ def api_record_engagement(analysis_id: int):
     
     if seller_response:
         engagement.seller_response = seller_response
-        engagement.response_date = datetime.utcnow()
+        engagement.response_date = datetime.now(timezone.utc)
     
     if status == 'resolved' and resolution_notes:
         engagement.resolution_notes = resolution_notes
-        engagement.resolved_at = datetime.utcnow()
+        engagement.resolved_at = datetime.now(timezone.utc)
     
     db.session.add(engagement)
     db.session.commit()

@@ -717,7 +717,7 @@ Return JSON format:
         try:
             from app.services.msx_api import extract_account_id_from_url, get_milestones_by_account
             
-            customer = Customer.query.get(int(customer_id))
+            customer = db.session.get(Customer, int(customer_id))
             if customer and customer.tpid_url:
                 account_id = extract_account_id_from_url(customer.tpid_url)
                 if account_id:
@@ -845,7 +845,7 @@ def api_fill_my_day_save():
         return jsonify({'success': False, 'error': 'Invalid date/time format'}), 400
     
     # Verify customer exists
-    customer = Customer.query.get(int(customer_id))
+    customer = db.session.get(Customer, int(customer_id))
     if not customer:
         return jsonify({'success': False, 'error': 'Customer not found'}), 404
     
@@ -857,6 +857,7 @@ def api_fill_my_day_save():
             content=content,
             user_id=g.user.id
         )
+        db.session.add(call_log)
         
         # Add topics
         if topic_ids:
@@ -892,8 +893,6 @@ def api_fill_my_day_save():
                     milestone.opportunity_name = milestone_data['opportunity_name']
             
             call_log.milestones = [milestone]
-        
-        db.session.add(call_log)
         
         # Link pre-created MSX task if provided
         if created_task_id and milestone_data and milestone_data.get('msx_milestone_id'):

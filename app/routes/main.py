@@ -365,7 +365,7 @@ def analytics():
     # Customers not called recently (90+ days or never)
     customers_with_recent_calls = db.session.query(CallLog.customer_id).filter(
         CallLog.call_date >= three_months_ago
-    ).distinct().subquery()
+    ).distinct().scalar_subquery()
     
     customers_needing_attention = Customer.query.filter(
         ~Customer.id.in_(customers_with_recent_calls)
@@ -448,7 +448,7 @@ def my_data_export_call_logs_json():
     
     # Create response
     response_data = {
-        'export_date': datetime.utcnow().isoformat(),
+        'export_date': datetime.now(timezone.utc).isoformat(),
         'user_email': g.user.email,
         'call_logs_count': len(export_data),
         'call_logs': export_data
@@ -456,7 +456,7 @@ def my_data_export_call_logs_json():
     
     response = make_response(json.dumps(response_data, indent=2))
     response.headers['Content-Type'] = 'application/json'
-    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_call_logs_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.json'
+    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_call_logs_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.json'
     return response
 
 
@@ -501,7 +501,7 @@ def my_data_export_call_logs_csv():
     # Create response
     response = make_response(output.getvalue())
     response.headers['Content-Type'] = 'text/csv'
-    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_call_logs_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
+    response.headers['Content-Disposition'] = f'attachment; filename=notehelper_call_logs_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.csv'
     return response
 
 
@@ -586,8 +586,8 @@ def my_data_import_json():
                 call_date=call_date,
                 content=call_data.get('content', ''),
                 user_id=g.user.id,
-                created_at=datetime.fromisoformat(call_data['created_at']) if call_data.get('created_at') else datetime.utcnow(),
-                updated_at=datetime.fromisoformat(call_data['updated_at']) if call_data.get('updated_at') else datetime.utcnow()
+                created_at=datetime.fromisoformat(call_data['created_at']) if call_data.get('created_at') else datetime.now(timezone.utc),
+                updated_at=datetime.fromisoformat(call_data['updated_at']) if call_data.get('updated_at') else datetime.now(timezone.utc)
             )
             
             # Add topics
@@ -1262,7 +1262,7 @@ def import_full_json():
                 call_date=datetime.fromisoformat(cl_data['call_date']) if isinstance(cl_data['call_date'], str) else cl_data['call_date'],
                 content=cl_data['content'],
                 user_id=new_user_id,
-                created_at=datetime.fromisoformat(cl_data['created_at']) if isinstance(cl_data.get('created_at'), str) else datetime.utcnow()
+                created_at=datetime.fromisoformat(cl_data['created_at']) if isinstance(cl_data.get('created_at'), str) else datetime.now(timezone.utc)
             )
             # Add topic associations
             for topic_id in cl_data.get('topic_ids', []):

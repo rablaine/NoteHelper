@@ -4,7 +4,7 @@ Tests for the Milestone Tracker feature.
 Tests the sync service, tracker routes, model additions, and template rendering.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 
@@ -78,7 +78,7 @@ class TestMilestoneModel:
             user = User.query.first()
             ms = Milestone(
                 url='https://example.com/ms6',
-                due_date=datetime.utcnow() - timedelta(days=5),
+                due_date=datetime.now(timezone.utc) - timedelta(days=5),
                 user_id=user.id,
             )
             assert ms.due_date_urgency == 'past_due'
@@ -90,7 +90,7 @@ class TestMilestoneModel:
             user = User.query.first()
             ms = Milestone(
                 url='https://example.com/ms7',
-                due_date=datetime.utcnow() + timedelta(days=3),
+                due_date=datetime.now(timezone.utc) + timedelta(days=3),
                 user_id=user.id,
             )
             assert ms.due_date_urgency == 'this_week'
@@ -102,7 +102,7 @@ class TestMilestoneModel:
             user = User.query.first()
             ms = Milestone(
                 url='https://example.com/ms8',
-                due_date=datetime.utcnow() + timedelta(days=20),
+                due_date=datetime.now(timezone.utc) + timedelta(days=20),
                 user_id=user.id,
             )
             assert ms.due_date_urgency == 'this_month'
@@ -114,7 +114,7 @@ class TestMilestoneModel:
             user = User.query.first()
             ms = Milestone(
                 url='https://example.com/ms9',
-                due_date=datetime.utcnow() + timedelta(days=60),
+                due_date=datetime.now(timezone.utc) + timedelta(days=60),
                 user_id=user.id,
             )
             assert ms.due_date_urgency == 'future'
@@ -147,7 +147,7 @@ class TestMilestoneModel:
                 dollar_value=50000.0,
                 workload='Azure Data',
                 monthly_usage=1234.56,
-                last_synced_at=datetime.utcnow(),
+                last_synced_at=datetime.now(timezone.utc),
                 user_id=user.id,
                 customer_id=sample_data['customer1_id'],
             )
@@ -174,7 +174,7 @@ class TestMilestoneSyncService:
         """Helper to ensure we have a customer with a proper MSX tpid_url."""
         with app.app_context():
             from app.models import db, Customer
-            customer = Customer.query.get(sample_data['customer1_id'])
+            customer = db.session.get(Customer, sample_data['customer1_id'])
             # Set a proper MSX URL with a GUID
             customer.tpid_url = (
                 'https://microsoftsales.crm.dynamics.com/main.aspx'
@@ -214,7 +214,7 @@ class TestMilestoneSyncService:
             from app.models import db, Customer, Milestone, User
             from app.services.milestone_sync import sync_customer_milestones
             
-            customer = Customer.query.get(customer_id)
+            customer = db.session.get(Customer, customer_id)
             user = User.query.first()
             
             result = sync_customer_milestones(customer, user.id)
@@ -292,7 +292,7 @@ class TestMilestoneSyncService:
             from app.models import db, Customer, Milestone, User
             from app.services.milestone_sync import sync_customer_milestones
             
-            customer = Customer.query.get(customer_id)
+            customer = db.session.get(Customer, customer_id)
             user = User.query.first()
             
             result = sync_customer_milestones(customer, user.id)
@@ -301,7 +301,7 @@ class TestMilestoneSyncService:
             assert result["created"] == 0
             assert result["updated"] == 1
             
-            ms = Milestone.query.get(existing_id)
+            ms = db.session.get(Milestone, existing_id)
             assert ms.title == "Updated Title"
             assert ms.msx_status == "At Risk"
             assert ms.dollar_value == 200000.0
@@ -345,7 +345,7 @@ class TestMilestoneSyncService:
             from app.models import db, Customer, Milestone, User
             from app.services.milestone_sync import sync_customer_milestones
             
-            customer = Customer.query.get(customer_id)
+            customer = db.session.get(Customer, customer_id)
             user = User.query.first()
             
             result = sync_customer_milestones(customer, user.id)
@@ -353,7 +353,7 @@ class TestMilestoneSyncService:
             assert result["success"] is True
             assert result["deactivated"] == 1
             
-            ms = Milestone.query.get(disappearing_id)
+            ms = db.session.get(Milestone, disappearing_id)
             assert ms.msx_status == "Completed"
             
             # Cleanup
@@ -371,10 +371,10 @@ class TestMilestoneSyncService:
         }
         
         with app.app_context():
-            from app.models import Customer, User
+            from app.models import db, Customer, User
             from app.services.milestone_sync import sync_customer_milestones
             
-            customer = Customer.query.get(customer_id)
+            customer = db.session.get(Customer, customer_id)
             user = User.query.first()
             
             result = sync_customer_milestones(customer, user.id)
@@ -385,11 +385,11 @@ class TestMilestoneSyncService:
     def test_sync_customer_without_tpid_url(self, app, sample_data):
         """Sync should fail for customers without tpid_url."""
         with app.app_context():
-            from app.models import Customer, User
+            from app.models import db, Customer, User
             from app.services.milestone_sync import sync_customer_milestones
             
             # customer2 has no tpid_url
-            customer = Customer.query.get(sample_data['customer2_id'])
+            customer = db.session.get(Customer, sample_data['customer2_id'])
             user = User.query.first()
             
             result = sync_customer_milestones(customer, user.id)
@@ -459,11 +459,11 @@ class TestMilestoneTrackerData:
                 msx_status="On Track",
                 dollar_value=500000.0,
                 monthly_usage=50000.0,
-                due_date=datetime.utcnow() - timedelta(days=10),
+                due_date=datetime.now(timezone.utc) - timedelta(days=10),
                 workload="Data: SQL Modernization to Azure SQL DB",
                 customer_id=sample_data['customer1_id'],
                 user_id=user.id,
-                last_synced_at=datetime.utcnow(),
+                last_synced_at=datetime.now(timezone.utc),
             )
             ms2 = Milestone(
                 msx_milestone_id="tracker-ms-2",
@@ -472,11 +472,11 @@ class TestMilestoneTrackerData:
                 msx_status="At Risk",
                 dollar_value=10000.0,
                 monthly_usage=1000.0,
-                due_date=datetime.utcnow() + timedelta(days=3),
+                due_date=datetime.now(timezone.utc) + timedelta(days=3),
                 workload="Infra: Windows",
                 customer_id=sample_data['customer1_id'],
                 user_id=user.id,
-                last_synced_at=datetime.utcnow(),
+                last_synced_at=datetime.now(timezone.utc),
             )
             ms3 = Milestone(
                 msx_milestone_id="tracker-ms-3",
@@ -485,7 +485,7 @@ class TestMilestoneTrackerData:
                 msx_status="Blocked",
                 dollar_value=None,
                 monthly_usage=None,
-                due_date=datetime.utcnow() + timedelta(days=45),
+                due_date=datetime.now(timezone.utc) + timedelta(days=45),
                 workload="AI: Foundry Models - OpenAI",
                 customer_id=sample_data['customer1_id'],
                 user_id=user.id,
@@ -523,7 +523,7 @@ class TestMilestoneTrackerData:
             
             # Cleanup
             for mid in ids:
-                ms = Milestone.query.get(mid)
+                ms = db.session.get(Milestone, mid)
                 if ms:
                     db.session.delete(ms)
             db.session.commit()
@@ -548,7 +548,7 @@ class TestMilestoneTrackerData:
             
             # Cleanup
             for mid in ids:
-                ms = Milestone.query.get(mid)
+                ms = db.session.get(Milestone, mid)
                 if ms:
                     db.session.delete(ms)
             db.session.commit()
@@ -571,7 +571,7 @@ class TestMilestoneTrackerData:
             
             # Cleanup
             for mid in ids:
-                ms = Milestone.query.get(mid)
+                ms = db.session.get(Milestone, mid)
                 if ms:
                     db.session.delete(ms)
             db.session.commit()
@@ -593,7 +593,7 @@ class TestMilestoneTrackerData:
             
             # Cleanup
             for mid in ids:
-                ms = Milestone.query.get(mid)
+                ms = db.session.get(Milestone, mid)
                 if ms:
                     db.session.delete(ms)
             db.session.commit()
@@ -621,7 +621,7 @@ class TestMilestoneTrackerData:
             
             # Cleanup
             for mid in ids:
-                ms = Milestone.query.get(mid)
+                ms = db.session.get(Milestone, mid)
                 if ms:
                     db.session.delete(ms)
             db.session.commit()
@@ -655,7 +655,7 @@ class TestMilestoneTrackerRoutes:
                 msx_status="On Track",
                 dollar_value=75000.0,
                 monthly_usage=7500.0,
-                due_date=datetime.utcnow() + timedelta(days=5),
+                due_date=datetime.now(timezone.utc) + timedelta(days=5),
                 customer_id=sample_data['customer1_id'],
                 user_id=user.id,
             )
@@ -992,7 +992,7 @@ class TestFiscalYearFilter:
         self._setup_mock_request(mock_request)
 
         with patch('app.services.msx_api.dt') as mock_dt:
-            mock_dt.utcnow.return_value = datetime(2025, 10, 15)
+            mock_dt.now.return_value = datetime(2025, 10, 15, tzinfo=timezone.utc)
             get_milestones_by_account('acct-id', current_fy_only=True)
 
         url = mock_request.call_args[0][1]
@@ -1006,7 +1006,7 @@ class TestFiscalYearFilter:
         self._setup_mock_request(mock_request)
 
         with patch('app.services.msx_api.dt') as mock_dt:
-            mock_dt.utcnow.return_value = datetime(2026, 3, 15)
+            mock_dt.now.return_value = datetime(2026, 3, 15, tzinfo=timezone.utc)
             get_milestones_by_account('acct-id', current_fy_only=True)
 
         url = mock_request.call_args[0][1]

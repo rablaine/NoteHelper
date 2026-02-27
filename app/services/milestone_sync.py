@@ -7,7 +7,7 @@ manually via button or on a schedule (e.g., 3 AM daily).
 """
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Generator
 
 from app.models import db, Customer, Milestone, Opportunity, User
@@ -46,7 +46,7 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
         - errors: list of error strings
         - duration_seconds: float
     """
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
     
     results = {
         "success": True,
@@ -95,7 +95,7 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
             logger.exception(f"Error syncing milestones for customer {customer.id}")
     
     # Calculate duration
-    results["duration_seconds"] = (datetime.utcnow() - start_time).total_seconds()
+    results["duration_seconds"] = (datetime.now(timezone.utc) - start_time).total_seconds()
     
     # If all customers failed, mark as failure
     if results["customers_synced"] == 0 and results["customers_failed"] > 0:
@@ -129,7 +129,7 @@ def sync_all_customer_milestones_stream(
     Args:
         user_id: The user ID to associate with new milestones.
     """
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     customers = Customer.query.filter(
         Customer.tpid_url.isnot(None),
@@ -197,7 +197,7 @@ def sync_all_customer_milestones_stream(
                 'error': str(e),
             })
 
-    duration = (datetime.utcnow() - start_time).total_seconds()
+    duration = (datetime.now(timezone.utc) - start_time).total_seconds()
 
     # Update team membership flags (one extra API call)
     _update_team_memberships()
@@ -263,7 +263,7 @@ def sync_customer_milestones(
         return result
     
     msx_milestones = msx_result.get("milestones", [])
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     # Track which MSX milestone IDs we saw from MSX
     seen_msx_ids = set()
@@ -506,7 +506,7 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
     )
     
     # Build the data structure
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     tracker_items = []
     
     total_monthly_usage = 0
@@ -528,7 +528,8 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
         fiscal_quarter = ""
         fiscal_year = ""
         if ms.due_date:
-            days_until = (ms.due_date - now).days
+            due = ms.due_date if ms.due_date.tzinfo else ms.due_date.replace(tzinfo=timezone.utc)
+            days_until = (due - now).days
             # Microsoft fiscal year starts July 1
             # Q1 = Jul-Sep, Q2 = Oct-Dec, Q3 = Jan-Mar, Q4 = Apr-Jun
             month = ms.due_date.month
