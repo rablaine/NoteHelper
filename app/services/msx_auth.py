@@ -427,7 +427,11 @@ def az_logout() -> Dict[str, Any]:
 
 
 def start_az_login() -> Dict[str, Any]:
-    """Launch ``az login --tenant <TENANT>`` in a visible console window.
+    """Launch ``az login`` in a visible console window.
+
+    We intentionally omit ``--tenant`` so the user can sign in with any
+    account.  After sign-in, ``get_az_cli_status()`` checks whether the
+    tenant is correct and the frontend handles wrong-tenant detection.
 
     On Windows this opens a new console window where the browser-based auth
     flow runs.  The caller should poll ``get_az_cli_status()`` afterwards to
@@ -439,7 +443,7 @@ def start_az_login() -> Dict[str, Any]:
     global _az_login_state
 
     try:
-        cmd = f"az login --tenant {TENANT_ID}"
+        cmd = "az login"
 
         if IS_WINDOWS:
             import subprocess as _sp
@@ -451,7 +455,7 @@ def start_az_login() -> Dict[str, Any]:
         else:
             # On Linux/Mac, launch in background
             process = subprocess.Popen(
-                ["az", "login", "--tenant", TENANT_ID],
+                ["az", "login"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

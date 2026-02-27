@@ -351,6 +351,7 @@
                                 <div id="authWaiting" class="d-none">
                                     <p class="mb-2 text-primary fw-bold">A browser window should open for sign-in.</p>
                                     <p class="mb-2">Sign in with your <strong>Microsoft corporate account</strong>. This page will update automatically.</p>
+                                    <p class="mb-2 small text-muted"><i class="bi bi-info-circle"></i> It may take a few seconds to detect your sign-in after the browser closes.</p>
                                     <div class="mb-3">
                                         <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
                                         <span class="text-muted ms-2" id="authWaitingStatus">Waiting for sign-in to complete...</span>
@@ -366,6 +367,7 @@
                                     <i class="bi bi-check-circle-fill text-success fs-1"></i>
                                     <p class="mt-2 mb-0 fw-bold text-success">Connected to MSX!</p>
                                     <small class="text-muted" id="authUserEmail"></small>
+                                    <p class="mt-2 mb-0 small text-muted" id="authAutoAdvance">Moving to next step...</p>
                                 </div>
                                 <!-- Error state -->
                                 <div id="authError" class="d-none">
@@ -389,6 +391,7 @@
                                     <i class="bi bi-check-circle-fill text-success fs-1"></i>
                                     <p class="mt-2 mb-0 fw-bold text-success">Already connected to MSX!</p>
                                     <small class="text-muted">Your existing session is still active.</small>
+                                    <p class="mt-2 mb-0 small text-muted">Moving to next step...</p>
                                 </div>
                                 <!-- Wrong tenant state -->
                                 <div id="authWrongTenant" class="d-none">
@@ -728,6 +731,8 @@
                             authCompleted = true;
                             showAuthState('authAlready');
                             updateNextButton();
+                            // Auto-advance after a brief pause so user sees the success state
+                            setTimeout(() => { if (currentStep === 2) showStep(3); }, 2000);
                             return;
                         }
                         // Then check if az CLI is logged in (even without cached token)
@@ -858,6 +863,8 @@
                             const email = userEmail || data.user_email;
                             if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
                             updateNextButton();
+                            // Auto-advance after a brief pause so user sees the success state
+                            setTimeout(() => { if (currentStep === 2) showStep(3); }, 2000);
                         } else {
                             document.getElementById('authErrorMessage').textContent = data.error || 'Failed to get CRM token';
                             showAuthState('authError');
