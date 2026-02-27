@@ -525,8 +525,22 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
         
         # Days until due
         days_until = None
+        fiscal_quarter = ""
+        fiscal_year = ""
         if ms.due_date:
             days_until = (ms.due_date - now).days
+            # Microsoft fiscal year starts July 1
+            # Q1 = Jul-Sep, Q2 = Oct-Dec, Q3 = Jan-Mar, Q4 = Apr-Jun
+            month = ms.due_date.month
+            year = ms.due_date.year
+            if month >= 7:
+                fy = year + 1
+                q = 1 if month <= 9 else 2
+            else:
+                fy = year
+                q = 3 if month <= 3 else 4
+            fiscal_quarter = f"FY{fy % 100:02d} Q{q}"
+            fiscal_year = f"FY{fy % 100:02d}"
         
         # Extract area prefix from workload (e.g., "Infra" from "Infra: Windows")
         workload_area = ""
@@ -548,6 +562,8 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
             "due_date": ms.due_date,
             "dollar_value": ms.dollar_value,
             "days_until_due": days_until,
+            "fiscal_quarter": fiscal_quarter,
+            "fiscal_year": fiscal_year,
             "urgency": urgency,
             "url": ms.url,
             "last_synced_at": ms.last_synced_at,
@@ -595,6 +611,12 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
         if item["workload_area"]
     ))
     
+    # Get unique fiscal quarters for filter dropdown, sorted chronologically
+    quarters = sorted(set(
+        item["fiscal_quarter"] for item in tracker_items
+        if item["fiscal_quarter"]
+    ))
+    
     return {
         "milestones": tracker_items,
         "summary": {
@@ -606,4 +628,5 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
         "last_sync": last_sync,
         "sellers": sellers,
         "areas": areas,
+        "quarters": quarters,
     }

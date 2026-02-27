@@ -80,10 +80,28 @@
 <div class="card mb-4">
     <div class="card-body py-2">
         <div class="row align-items-center">
-            <div class="col-md-3">
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" id="searchInput" class="form-control" placeholder="Search milestones...">
+            <div class="col-md-2">
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle w-100 text-start text-truncate" type="button" id="quarterDropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <i class="bi bi-calendar3"></i> Quarters
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="quarterDropdown" style="min-width: 100%;">
+                        <li>
+                            <button class="dropdown-item small" type="button" id="quarterSelectAll">Select All</button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item small" type="button" id="quarterSelectNone">Clear All</button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        {% for q in quarters %}
+                        <li>
+                            <label class="dropdown-item small mb-0">
+                                <input class="form-check-input me-2 quarter-checkbox" type="checkbox" value="{{ q }}" checked>
+                                {{ q }}
+                            </label>
+                        </li>
+                        {% endfor %}
+                    </ul>
                 </div>
             </div>
             <div class="col-md-2">
@@ -110,8 +128,8 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-1">
-                <div class="form-check form-switch mt-1">
+            <div class="col-md-2">
+                <div class="form-check form-switch mt-1 text-nowrap">
                     <input class="form-check-input" type="checkbox" id="myTeamFilter">
                     <label class="form-check-label small" for="myTeamFilter">My Team</label>
                 </div>
@@ -146,6 +164,7 @@
                 data-seller-id="{{ ms.seller.id if ms.seller else '' }}"
                 data-status="{{ ms.status }}"
                 data-area="{{ ms.workload_area }}"
+                data-quarter="{{ ms.fiscal_quarter }}"
                 data-on-my-team="{{ 'true' if ms.on_my_team else 'false' }}"
                 data-customer="{{ ms.customer.name|lower if ms.customer else '' }}"
                 data-seller-name="{{ ms.seller.name|lower if ms.seller else 'zzz' }}"
@@ -407,7 +426,7 @@ function syncMilestones() {
 // Client-side Filtering
 // =============================================================================
 function applyFilters() {
-    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const selectedQuarters = Array.from(document.querySelectorAll('.quarter-checkbox:checked')).map(cb => cb.value);
     const sellerFilter = document.getElementById('sellerFilter').value;
     const statusFilter = document.getElementById('statusFilter').value;
     const areaFilter = document.getElementById('areaFilter').value;
@@ -419,8 +438,12 @@ function applyFilters() {
     rows.forEach(row => {
         let visible = true;
         
-        // Search filter
-        if (searchTerm && !row.dataset.search.includes(searchTerm)) {
+        // Quarter filter
+        if (selectedQuarters.length > 0 && row.dataset.quarter && !selectedQuarters.includes(row.dataset.quarter)) {
+            visible = false;
+        }
+        // Show rows with no quarter (no due date) unless quarters are actively filtered
+        if (selectedQuarters.length > 0 && !row.dataset.quarter && selectedQuarters.length < document.querySelectorAll('.quarter-checkbox').length) {
             visible = false;
         }
         
@@ -450,10 +473,39 @@ function applyFilters() {
     
     document.getElementById('filteredCount').textContent = 
         `${visibleCount} of {{ milestones|length }} milestones`;
+    
+    // Update dropdown button text
+    updateQuarterButtonText();
 }
 
+function updateQuarterButtonText() {
+    const btn = document.getElementById('quarterDropdown');
+    const total = document.querySelectorAll('.quarter-checkbox').length;
+    const checked = document.querySelectorAll('.quarter-checkbox:checked').length;
+    if (checked === 0) {
+        btn.innerHTML = '<i class="bi bi-calendar3"></i> No Quarters';
+    } else if (checked === total) {
+        btn.innerHTML = '<i class="bi bi-calendar3"></i> All Quarters';
+    } else {
+        const selected = Array.from(document.querySelectorAll('.quarter-checkbox:checked')).map(cb => cb.value);
+        btn.innerHTML = '<i class="bi bi-calendar3"></i> ' + selected.join(', ');
+    }
+}
+
+// Quarter checkbox listeners
+document.querySelectorAll('.quarter-checkbox').forEach(cb => {
+    cb.addEventListener('change', applyFilters);
+});
+document.getElementById('quarterSelectAll')?.addEventListener('click', function() {
+    document.querySelectorAll('.quarter-checkbox').forEach(cb => cb.checked = true);
+    applyFilters();
+});
+document.getElementById('quarterSelectNone')?.addEventListener('click', function() {
+    document.querySelectorAll('.quarter-checkbox').forEach(cb => cb.checked = false);
+    applyFilters();
+});
+
 // Attach filter listeners
-document.getElementById('searchInput').addEventListener('input', applyFilters);
 document.getElementById('sellerFilter').addEventListener('change', applyFilters);
 document.getElementById('statusFilter').addEventListener('change', applyFilters);
 document.getElementById('areaFilter').addEventListener('change', applyFilters);

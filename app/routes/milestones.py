@@ -261,6 +261,7 @@ def milestone_tracker():
         last_sync=tracker_data["last_sync"],
         sellers=tracker_data["sellers"],
         areas=tracker_data["areas"],
+        quarters=tracker_data["quarters"],
     )
 
 
