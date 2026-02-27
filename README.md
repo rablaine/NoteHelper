@@ -72,6 +72,14 @@ pytest
 pytest --cov=app tests/  # with coverage
 ```
 
+## Compliance
+
+This application stores customer account data locally. To remain compliant with organizational data handling policies:
+
+- **Must run on a Microsoft-managed device** (Intune-enrolled or domain-joined)
+- **Must reside on a BitLocker-encrypted drive**
+- Do not copy the database file (`data/notehelper.db`) to unmanaged devices or unencrypted storage
+
 ## License
 
 MIT License - see LICENSE file for details
