@@ -57,9 +57,9 @@ After the server is running, you need to connect to MSX and import your data:
 
 2. **Refresh your token:** In the app, click the **Admin** menu (top-right) → **Admin Panel** → **Refresh Token** and then **Test Token** to verify the connection is working.
 
-3. **Import accounts:** Go to **Admin** → **Data Management** → **Import Accounts from MSX**. This pulls in your customer accounts.
+3. **Import accounts:** In the app, go to **Admin Panel** → **Import My Accounts**. This pulls in your customer accounts.
 
-4. **Import milestones:** From the same Data Management page, run **Import Milestones** to pull in your milestone data.
+4. **Import milestones:** From the Admin Panel, run **Import Milestones** to pull in your milestone data.
 
 5. **Import revenue history:** Go to **Revenue Analyzer** and import revenue data for your accounts.
 
@@ -71,6 +71,61 @@ Once these steps are complete, you're all set — your customer accounts, milest
 pytest
 pytest --cov=app tests/  # with coverage
 ```
+
+## AI Features (Optional)
+
+NoteHelper can use Azure OpenAI to auto-suggest topics, match milestones, and analyze call notes. This requires an Azure OpenAI resource and a service principal for authentication.
+
+### 1. Create an Azure OpenAI Resource
+
+1. In the [Azure Portal](https://portal.azure.com), create an **Azure OpenAI** resource
+2. Once deployed, go to **Keys and Endpoint** and copy the **Endpoint** URL (e.g. `https://your-resource.openai.azure.com/`)
+3. Go to **Model deployments** → **Manage Deployments** and deploy a model (e.g. `gpt-4o-mini`). Note the **deployment name**
+
+### 2. Create a Service Principal
+
+```bash
+# Create the service principal
+az ad sp create-for-rbac --name "NoteHelper-AI" --skip-assignment
+
+# Note the output values:
+# - appId      → AZURE_CLIENT_ID
+# - password   → AZURE_CLIENT_SECRET
+# - tenant     → AZURE_TENANT_ID
+```
+
+### 3. Grant Permissions on the OpenAI Resource
+
+The service principal needs the **Cognitive Services OpenAI User** role on your Azure OpenAI resource:
+
+```bash
+# Get your OpenAI resource ID
+az cognitiveservices account show \
+  --name your-openai-resource-name \
+  --resource-group your-resource-group \
+  --query id -o tsv
+
+# Assign the role
+az role assignment create \
+  --assignee <AZURE_CLIENT_ID> \
+  --role "Cognitive Services OpenAI User" \
+  --scope <resource-id-from-above>
+```
+
+### 4. Add to .env
+
+```dotenv
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
+AZURE_OPENAI_API_VERSION=2024-08-01-preview
+AZURE_CLIENT_ID=your-app-id
+AZURE_CLIENT_SECRET=your-password
+AZURE_TENANT_ID=your-tenant-id
+```
+
+### 5. Verify in NoteHelper
+
+After restarting the server, AI features are automatically enabled when `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT` are configured. The AI-powered "Suggest Topics" button will appear on the call log form.
 
 ## Compliance
 

@@ -5,7 +5,7 @@ Handles admin panel, user management, and domain whitelisting.
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 
 from app.models import (
-    db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIConfig, AIQueryLog,
+    db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
     RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
     RevenueConfig, RevenueEngagement, utc_now
 )
@@ -30,14 +30,7 @@ def admin_panel():
         'total_revenue_imports': RevenueImport.query.count()
     }
     
-    # Get or create AI config
-    ai_config = AIConfig.query.first()
-    if not ai_config:
-        ai_config = AIConfig()
-        db.session.add(ai_config)
-        db.session.commit()
-    
-    return render_template('admin_panel.html', stats=stats, ai_config=ai_config)
+    return render_template('admin_panel.html', stats=stats)
 
 
 @admin_bp.route('/admin/ai-logs')
@@ -82,46 +75,26 @@ def api_clear_revenue_data():
 
 # API routes
 @admin_bp.route('/api/admin/domain/add', methods=['POST'])
-@admin_bp.route('/api/admin/ai-config', methods=['POST'])
-def api_admin_ai_config_update():
-    """Update AI configuration."""
-    data = request.get_json()
-    
-    # Get or create AI config
-    ai_config = AIConfig.query.first()
-    if not ai_config:
-        ai_config = AIConfig()
-        db.session.add(ai_config)
-    
-    # Update fields
-    ai_config.enabled = data.get('enabled', False)
-    ai_config.endpoint_url = data.get('endpoint_url', '').strip() or None
-    ai_config.api_key = data.get('api_key', '').strip() or None
-    ai_config.deployment_name = data.get('deployment_name', '').strip() or None
-    ai_config.api_version = data.get('api_version', '2024-08-01-preview').strip()
-    ai_config.system_prompt = data.get('system_prompt', '').strip() or ai_config.system_prompt
-    
-    db.session.commit()
-    
-    return jsonify({'success': True, 'message': 'AI configuration updated successfully'})
+def api_admin_domain_add():
+    """Placeholder for domain add (no longer used but route kept for compatibility)."""
+    return jsonify({'success': False, 'error': 'This endpoint is no longer available'}), 410
 
 
 @admin_bp.route('/api/admin/ai-config/test', methods=['POST'])
 def api_admin_ai_config_test():
-    """Test AI configuration by making a sample API call using Entra ID auth."""
-    import os
-    from openai import AzureOpenAI
-    from azure.identity import ClientSecretCredential, get_bearer_token_provider
+    """Test AI configuration by making a sample API call using Entra ID auth.
     
-    # Get current form values from request instead of database
-    data = request.get_json() or {}
-    endpoint_url = data.get('endpoint_url', '').strip()
-    deployment_name = data.get('deployment_name', '').strip()
-    api_version = data.get('api_version', '2024-12-01-preview').strip()
+    All connection details are read from environment variables.
+    """
+    import os
+    from app.routes.ai import get_azure_openai_client, get_openai_deployment
+    
+    endpoint_url = os.environ.get('AZURE_OPENAI_ENDPOINT', '')
+    deployment_name = get_openai_deployment()
     
     # Validate required fields
     if not endpoint_url or not deployment_name:
-        return jsonify({'error': 'Please fill in endpoint URL and deployment name before testing'}), 400
+        return jsonify({'error': 'Missing AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_DEPLOYMENT in .env file'}), 400
     
     # Check for service principal credentials in environment
     client_id = os.environ.get('AZURE_CLIENT_ID')
@@ -132,23 +105,7 @@ def api_admin_ai_config_test():
         return jsonify({'error': 'Missing Azure service principal environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)'}), 400
     
     try:
-        # Create credential and token provider
-        credential = ClientSecretCredential(
-            tenant_id=tenant_id,
-            client_id=client_id,
-            client_secret=client_secret
-        )
-        token_provider = get_bearer_token_provider(
-            credential, 
-            "https://cognitiveservices.azure.com/.default"
-        )
-        
-        # Create Azure OpenAI client
-        client = AzureOpenAI(
-            api_version=api_version,
-            azure_endpoint=endpoint_url,
-            azure_ad_token_provider=token_provider,
-        )
+        client = get_azure_openai_client()
         
         response = client.chat.completions.create(
             messages=[

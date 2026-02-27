@@ -1041,28 +1041,11 @@ def data_management_import():
 @main_bp.route('/api/data-management/export/json', methods=['GET'])
 def export_full_json():
     """Export complete database as JSON for disaster recovery."""
-    from app.models import UserPreference, AIConfig
-    
-    # Check if AI config should be excluded
-    exclude_ai_config = request.args.get('exclude_ai_config', 'false').lower() == 'true'
-    
-    # Export AI config if it exists and not excluded
-    ai_config_data = None
-    if not exclude_ai_config:
-        ai_config = AIConfig.query.first()
-        if ai_config:
-            ai_config_data = {
-                'enabled': ai_config.enabled,
-                'endpoint_url': ai_config.endpoint_url,
-                'api_key': ai_config.api_key,
-                'deployment_name': ai_config.deployment_name,
-                'api_version': ai_config.api_version,
-                'system_prompt': ai_config.system_prompt
-            }
+    from app.models import UserPreference
     
     data = {
         'export_date': datetime.now(timezone.utc).isoformat(),
-        'version': '2.1',  # Bumped version to include user preferences and AI config
+        'version': '2.2',
         'users': [{'id': u.id, 'microsoft_azure_id': u.microsoft_azure_id, 
                    'external_azure_id': u.external_azure_id, 'email': u.email,
                    'microsoft_email': u.microsoft_email, 'external_email': u.external_email,
@@ -1072,7 +1055,6 @@ def export_full_json():
                              'topic_sort_by_calls': p.topic_sort_by_calls,
                              'territory_view_accounts': p.territory_view_accounts,
                              'colored_sellers': p.colored_sellers} for p in UserPreference.query.all()],
-        'ai_config': ai_config_data,
         'pods': [{'id': p.id, 'name': p.name, 'user_id': p.user_id} for p in POD.query.all()],
         'territories': [{'id': t.id, 'name': t.name, 'pod_id': t.pod_id, 'user_id': t.user_id} for t in Territory.query.all()],
         'sellers': [{'id': s.id, 'name': s.name, 'alias': s.alias, 'seller_type': s.seller_type, 
@@ -1318,35 +1300,6 @@ def import_full_json():
                         db.session.add(new_pref)
                     imported_prefs += 1
         
-        # Import AI Config (if present in export)
-        imported_ai_config = False
-        if data.get('ai_config'):
-            from app.models import AIConfig
-            ai_data = data['ai_config']
-            
-            # Check if AI config already exists
-            existing_config = AIConfig.query.first()
-            if existing_config:
-                # Update existing config
-                existing_config.enabled = ai_data.get('enabled', False)
-                existing_config.endpoint_url = ai_data.get('endpoint_url')
-                existing_config.api_key = ai_data.get('api_key')
-                existing_config.deployment_name = ai_data.get('deployment_name')
-                existing_config.api_version = ai_data.get('api_version', '2024-08-01-preview')
-                existing_config.system_prompt = ai_data.get('system_prompt', existing_config.system_prompt)
-            else:
-                # Create new config
-                new_config = AIConfig(
-                    enabled=ai_data.get('enabled', False),
-                    endpoint_url=ai_data.get('endpoint_url'),
-                    api_key=ai_data.get('api_key'),
-                    deployment_name=ai_data.get('deployment_name'),
-                    api_version=ai_data.get('api_version', '2024-08-01-preview'),
-                    system_prompt=ai_data.get('system_prompt')
-                )
-                db.session.add(new_config)
-            imported_ai_config = True
-        
         db.session.commit()
         
         message = f'Successfully imported {created_users} users, {len(pod_map)} PODs, ' \
@@ -1356,8 +1309,6 @@ def import_full_json():
         
         if imported_prefs > 0:
             message += f', {imported_prefs} user preferences'
-        if imported_ai_config:
-            message += ', AI config'
         
         return {
             'success': True,

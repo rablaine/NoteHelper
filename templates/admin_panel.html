@@ -167,14 +167,10 @@
                     <div class="row mb-4">
                         <div class="col-md-6 mb-3">
                             <h6><i class="bi bi-download"></i> System Backup (Export)</h6>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="includeAiConfig" checked>
-                                <label class="form-check-label" for="includeAiConfig">Include AI Config</label>
-                            </div>
                             <div class="d-flex gap-2">
-                                <button id="exportJsonBtn" class="btn btn-sm btn-primary">
+                                <a href="{{ url_for('main.export_full_json') }}" class="btn btn-sm btn-primary">
                                     <i class="bi bi-filetype-json"></i> JSON
-                                </button>
+                                </a>
                                 <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-sm btn-info">
                                     <i class="bi bi-filetype-csv"></i> CSV
                                 </a>
@@ -273,55 +269,6 @@ document.getElementById('clearRevenueBtn').addEventListener('click', function() 
     } else if (confirmation !== null) {
         alert('Confirmation text did not match. Operation cancelled.');
     }
-});
-
-// Parse full AI Foundry URL and auto-fill fields (optional feature)
-const aiFullUrlInput = document.getElementById('aiFullUrl');
-if (aiFullUrlInput) {
-    aiFullUrlInput.addEventListener('input', function() {
-        const fullUrl = this.value.trim();
-        if (!fullUrl) return;
-        
-        try {
-            const url = new URL(fullUrl);
-            
-            // Extract deployment name from path
-            // Pattern: /openai/deployments/{deployment_name}/chat/completions
-            const pathMatch = url.pathname.match(/\/deployments\/([^\/]+)/);
-            if (pathMatch) {
-                const deploymentName = pathMatch[1];
-                document.getElementById('aiDeployment').value = deploymentName;
-                
-                // Use just the origin (base URL) - SDK adds the path automatically
-                document.getElementById('aiEndpoint').value = url.origin;
-            }
-            
-            // Extract api-version from query params
-            const apiVersion = url.searchParams.get('api-version');
-            if (apiVersion) {
-                document.getElementById('aiApiVersion').value = apiVersion;
-            }
-            
-            // Show success feedback
-            this.classList.add('is-valid');
-            setTimeout(() => this.classList.remove('is-valid'), 2000);
-        } catch (e) {
-            // Invalid URL, show error feedback
-            if (fullUrl.length > 10) {
-                this.classList.add('is-invalid');
-                setTimeout(() => this.classList.remove('is-invalid'), 2000);
-            }
-        }
-    });
-}
-
-// JSON Export with optional AI config
-document.getElementById('exportJsonBtn').addEventListener('click', function() {
-    const includeAiConfig = document.getElementById('includeAiConfig').checked;
-    const url = includeAiConfig 
-        ? '{{ url_for("main.export_full_json") }}'
-        : '{{ url_for("main.export_full_json") }}?exclude_ai_config=true';
-    window.location.href = url;
 });
 
 // JSON Import

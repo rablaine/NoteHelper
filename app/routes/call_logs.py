@@ -314,7 +314,6 @@ def call_log_create():
     
     # Pass date and time (from query param or now)
     from datetime import date
-    from app.models import AIConfig
     date_param = request.args.get('date', '')
     if date_param:
         # Validate date format
@@ -329,8 +328,9 @@ def call_log_create():
     # Current time for new call logs (default to now)
     now_time = datetime.now().strftime('%H:%M')
     
-    # Load AI config for AI button visibility
-    ai_config = AIConfig.query.first()
+    # Check if AI features are enabled
+    from app.routes.ai import is_ai_enabled
+    ai_enabled = is_ai_enabled()
     
     return render_template('call_log_form.html', 
                          call_log=None, 
@@ -345,7 +345,7 @@ def call_log_create():
                          referrer=referrer,
                          today=today,
                          now_time=now_time,
-                         ai_config=ai_config)
+                         ai_enabled=ai_enabled)
 
 
 @call_logs_bp.route('/call-log/<int:id>')
@@ -425,11 +425,11 @@ def call_log_edit(id):
     partners = Partner.query.order_by(Partner.name).all()
     
     # Load AI config for AI button visibility
-    from app.models import AIConfig
-    ai_config = AIConfig.query.first()
+    from app.routes.ai import is_ai_enabled
+    ai_enabled = is_ai_enabled()
     
     return render_template('call_log_form.html',
-                         ai_config=ai_config,
+                         ai_enabled=ai_enabled,
                          call_log=call_log,
                          customers=customers,
                          sellers=sellers,
@@ -661,15 +661,14 @@ def api_fill_my_day_process():
     
     # Step 2: AI analysis (topics + task suggestion) - only if we got a real summary
     ai_client = None
-    ai_config = None
+    deployment_name = None
     if result['summary_ok']:
         try:
-            from app.routes.ai import get_azure_openai_client
-            from app.models import AIConfig
+            from app.routes.ai import get_azure_openai_client, get_openai_deployment, is_ai_enabled
             
-            ai_config = AIConfig.query.first()
-            if ai_config and ai_config.api_key:
-                ai_client = get_azure_openai_client(ai_config)
+            deployment_name = get_openai_deployment()
+            if is_ai_enabled():
+                ai_client = get_azure_openai_client()
                 if ai_client:
                     # Analyze call for topics
                     all_topics = Topic.query.order_by(Topic.name).all()
@@ -688,7 +687,7 @@ Return JSON format:
 {{"topics": ["topic1", "topic2"], "task_subject": "...", "task_description": "..."}}"""
                     
                     response = ai_client.chat.completions.create(
-                        model=ai_config.deployment_name or 'gpt-4o-mini',
+                        model=deployment_name,
                         messages=[{'role': 'user', 'content': prompt}],
                         temperature=0.3,
                         max_tokens=500,
@@ -727,7 +726,7 @@ Return JSON format:
                         milestones = msx_result['milestones']
                         
                         # AI match if we have a client and milestones
-                        if ai_client and ai_config and len(milestones) > 0:
+                        if ai_client and len(milestones) > 0:
                             milestone_list = "\n".join([
                                 f"- ID: {m['id']}, Name: {m['name']}, Status: {m['status']}, "
                                 f"Opportunity: {m.get('opportunity_name', '')}, "
@@ -750,7 +749,7 @@ Return JSON:
 {{"milestone_id": "THE_ID_OR_NULL", "reason": "why", "task_subject": "...", "task_description": "..."}}"""
                             
                             ms_response = ai_client.chat.completions.create(
-                                model=ai_config.deployment_name or 'gpt-4o-mini',
+                                model=deployment_name,
                                 messages=[{'role': 'user', 'content': ms_prompt}],
                                 temperature=0.3,
                                 max_tokens=300,
