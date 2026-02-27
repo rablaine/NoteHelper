@@ -10,7 +10,7 @@ Uses msx_auth for token management.
 
 import requests
 import logging
-from datetime import datetime as dt
+from datetime import datetime as dt, timezone as tz
 from typing import Optional, Dict, Any, List
 
 from app.services.msx_auth import get_msx_token, refresh_token, CRM_BASE_URL
@@ -542,7 +542,7 @@ def get_milestones_by_account(
             filters.append("msp_OpportunityId/statecode eq 0")
         if current_fy_only:
             # Microsoft fiscal year starts July 1. FY2026 = July 2025 - June 2026.
-            now = dt.utcnow()
+            now = dt.now(tz.utc)
             fy_start_year = now.year if now.month >= 7 else now.year - 1
             fy_start = f"{fy_start_year}-07-01"
             fy_end = f"{fy_start_year + 1}-06-30"
@@ -824,7 +824,7 @@ def add_opportunity_comment(
         # Step 3: Build new comment (matching MSX UI format)
         new_comment = {
             "userId": f"{{{user_id.upper()}}}",
-            "modifiedOn": dt.utcnow().strftime("%m/%d/%Y, %I:%M:%S %p"),
+            "modifiedOn": dt.now(tz.utc).strftime("%m/%d/%Y, %I:%M:%S %p"),
             "comment": comment_text,
         }
         current_comments.append(new_comment)

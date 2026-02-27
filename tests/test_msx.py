@@ -213,7 +213,7 @@ class TestMsxRoutes:
         """Test milestones endpoint when customer has no TPID URL."""
         # Ensure customer has no tpid_url
         with app.app_context():
-            customer = Customer.query.get(sample_customer.id)
+            customer = db.session.get(Customer, sample_customer.id)
             customer.tpid_url = None
             db.session.commit()
         
@@ -238,7 +238,7 @@ class TestMsxRoutes:
         """Test milestones endpoint returns MSX milestones."""
         # Set up customer with valid TPID URL (needs proper GUID format)
         with app.app_context():
-            customer = Customer.query.get(sample_customer.id)
+            customer = db.session.get(Customer, sample_customer.id)
             customer.tpid_url = 'https://microsoftsales.crm.dynamics.com/main.aspx?id=12345678-1234-1234-1234-123456789abc'
             db.session.commit()
         

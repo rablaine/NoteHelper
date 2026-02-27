@@ -168,8 +168,8 @@ class TestFillMyDaySaveAPI:
 
         # Verify topics were saved
         with client.application.app_context():
-            from app.models import CallLog
-            call_log = CallLog.query.get(data['call_log_id'])
+            from app.models import db, CallLog
+            call_log = db.session.get(CallLog, data['call_log_id'])
             assert len(call_log.topics) == 2
 
     def test_save_call_log_with_milestone(self, client, sample_data):
@@ -203,8 +203,8 @@ class TestFillMyDaySaveAPI:
 
         # Verify milestone was linked
         with client.application.app_context():
-            from app.models import CallLog
-            call_log = CallLog.query.get(data['call_log_id'])
+            from app.models import db, CallLog
+            call_log = db.session.get(CallLog, data['call_log_id'])
             assert len(call_log.milestones) == 1
             assert call_log.milestones[0].msx_milestone_id == 'test-guid-12345'
             assert call_log.milestones[0].title == 'Azure Migration - Phase 1'

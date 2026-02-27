@@ -205,7 +205,7 @@ def get_milestones_for_customer(customer_id: int):
     
     Extracts the account ID from the customer's tpid_url and fetches milestones.
     """
-    customer = Customer.query.get(customer_id)
+    customer = db.session.get(Customer, customer_id)
     if not customer:
         return jsonify({"success": False, "error": "Customer not found"})
     

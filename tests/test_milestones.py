@@ -3,7 +3,7 @@ Tests for milestone functionality.
 """
 import pytest
 from datetime import datetime
-from app.models import Milestone, CallLog
+from app.models import db, Milestone, CallLog
 
 
 class TestMilestoneModel:
@@ -182,7 +182,7 @@ class TestMilestoneCRUD:
         assert b'Milestone deleted successfully' in response.data
         
         # Verify deletion
-        deleted = Milestone.query.get(milestone_id)
+        deleted = db.session.get(Milestone, milestone_id)
         assert deleted is None
 
     def test_milestone_delete_blocked_when_linked_to_call_log(self, client, app, db_session, sample_user, sample_customer):
@@ -212,7 +212,7 @@ class TestMilestoneCRUD:
         assert b'Cannot delete this milestone' in response.data
 
         # Verify milestone still exists
-        still_exists = Milestone.query.get(milestone_id)
+        still_exists = db.session.get(Milestone, milestone_id)
         assert still_exists is not None
 
 
@@ -370,8 +370,8 @@ class TestCallLogMilestoneIntegration:
         
         # Verify new milestone was created and linked
         with app.app_context():
-            from app.models import CallLog
-            call_log = CallLog.query.get(call_log_id)
+            from app.models import db, CallLog
+            call_log = db.session.get(CallLog, call_log_id)
             assert len(call_log.milestones) == 1
             assert call_log.milestones[0].msx_milestone_id == 'new-msx-id-67890'
             assert call_log.milestones[0].url == 'https://example.com/new/milestone'

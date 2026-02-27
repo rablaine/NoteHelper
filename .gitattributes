@@ -1,0 +1,5 @@
+# Auto-detect text files and ensure consistent line endings
+* text=auto
+
+# Batch files must use CRLF line endings
+*.bat text eol=crlf

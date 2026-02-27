@@ -603,9 +603,10 @@ class Milestone(db.Model):
         """Return urgency level based on due date: 'past_due', 'this_week', 'this_month', 'future', 'no_date'."""
         if not self.due_date:
             return 'no_date'
-        from datetime import datetime, timedelta
-        now = datetime.utcnow()
-        days_until = (self.due_date - now).days
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        due = self.due_date if self.due_date.tzinfo else self.due_date.replace(tzinfo=timezone.utc)
+        days_until = (due - now).days
         if days_until < 0:
             return 'past_due'
         elif days_until <= 7:

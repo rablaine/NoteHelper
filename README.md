@@ -6,12 +6,34 @@ A single-user note-taking application for Azure technical sellers to capture and
 
 ### Prerequisites
 
-- **Python 3.13** (must be exactly 3.13 — later versions cause dependency conflicts during install)
-- pip and venv
-- Azure CLI (`az`) installed and available in your PATH
-- Node.js 18+ with npm/npx (optional, required for WorkIQ meeting import feature)
+- **Python 3.13+** (the launcher can install this for you)
+- **Azure CLI** (optional — required for MSX and AI features; the launcher can install this too)
+- Git
 
-### Installation
+### Quick Start
+
+The fastest way to get running — just clone and run `start.bat`. It checks for prerequisites, offers to install anything missing via `winget`, then sets up the app:
+
+```powershell
+git clone https://github.com/rablaine/NoteHelper.git
+cd NoteHelper
+start.bat
+```
+
+The script will:
+1. Check for Python 3.13+ and Azure CLI — offer to install via `winget` if missing
+2. Create a Python virtual environment (if one doesn't exist)
+3. Install all dependencies from `requirements.txt`
+4. Create a `.env` file with a generated secret key (if one doesn't exist)
+5. Start the server on `http://localhost:5000`
+
+On subsequent runs, the script detects the existing venv and `.env`, installs any new dependencies, and launches the app.
+
+> **Note:** Edit `.env` to add your Azure credentials for MSX and AI features. See [AI Features](#ai-features-optional) below.
+
+### Manual Setup
+
+If you prefer to set things up yourself:
 
 1. **Clone the repository:**
 ```bash
@@ -22,9 +44,7 @@ cd NoteHelper
 2. **Create virtual environment:**
 ```powershell
 python -m venv venv
-.\venv\Scripts\Activate.ps1  # Windows
-# or
-source venv/bin/activate      # Linux/Mac
+.\venv\Scripts\Activate.ps1
 ```
 
 3. **Install dependencies:**
@@ -33,11 +53,10 @@ pip install -r requirements.txt
 ```
 
 4. **Set up environment variables:**
-```bash
-cp .env.example .env
-# Generate secret key:
+```powershell
+copy .env.example .env
+# Generate a secret key and add it to .env:
 python -c "import secrets; print(secrets.token_hex(32))"
-# Add the generated key to .env as SECRET_KEY
 ```
 
 5. **Start the server:**

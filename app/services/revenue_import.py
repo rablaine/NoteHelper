@@ -19,7 +19,7 @@ Fiscal Month Format: "FY26-Jan" where FY26 = July 2025 - June 2026
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional, Any
 from io import StringIO, BytesIO
@@ -600,7 +600,7 @@ def import_revenue_csv(
                 if existing:
                     if existing.revenue != revenue:
                         existing.revenue = revenue
-                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_updated_at = datetime.now(timezone.utc)
                         existing.last_import_id = import_record.id
                         bucket_records_updated += 1
                     if customer_id and not existing.customer_id:
@@ -641,7 +641,7 @@ def import_revenue_csv(
                 if existing:
                     if existing.revenue != revenue:
                         existing.revenue = revenue
-                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_updated_at = datetime.now(timezone.utc)
                         existing.last_import_id = import_record.id
                         product_records_updated += 1
                     if customer_id and not existing.customer_id:
@@ -793,7 +793,7 @@ def import_revenue_csv_streaming(
                 if existing:
                     if existing.revenue != revenue:
                         existing.revenue = revenue
-                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_updated_at = datetime.now(timezone.utc)
                         existing.last_import_id = import_record.id
                         bucket_records_updated += 1
                     if customer_id and not existing.customer_id:
@@ -832,7 +832,7 @@ def import_revenue_csv_streaming(
                 if existing:
                     if existing.revenue != revenue:
                         existing.revenue = revenue
-                        existing.last_updated_at = datetime.utcnow()
+                        existing.last_updated_at = datetime.now(timezone.utc)
                         existing.last_import_id = import_record.id
                         product_records_updated += 1
                     if customer_id and not existing.customer_id:
@@ -1123,7 +1123,7 @@ def get_seller_products(seller_name: str) -> list[dict]:
     from app.models import RevenueAnalysis
     seller_customers = db.session.query(
         db.distinct(RevenueAnalysis.customer_name)
-    ).filter_by(seller_name=seller_name).subquery()
+    ).filter_by(seller_name=seller_name).scalar_subquery()
     
     results = db.session.query(
         ProductRevenueData.product,
@@ -1162,7 +1162,7 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
     # Get customer names for this seller from analyses
     seller_customers = db.session.query(
         db.distinct(RevenueAnalysis.customer_name)
-    ).filter_by(seller_name=seller_name).subquery()
+    ).filter_by(seller_name=seller_name).scalar_subquery()
     
     results = db.session.query(
         ProductRevenueData.customer_name,
