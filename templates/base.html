@@ -404,9 +404,14 @@
                                 <div id="importAccountsProgress" class="d-none">
                                     <div class="d-flex align-items-center mb-2">
                                         <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                                        <strong>Importing accounts...</strong>
+                                        <strong id="importAccountsStatusText">Starting import...</strong>
                                     </div>
-                                    <div class="small text-muted" id="importAccountsLog" style="max-height: 200px; overflow-y: auto; font-family: monospace;"></div>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="importAccountsProgressBar" role="progressbar" style="width: 0%">
+                                            <span id="importAccountsProgressPercent">0%</span>
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted" id="importAccountsLog" style="max-height: 150px; overflow-y: auto; font-family: monospace;"></div>
                                 </div>
                                 <!-- Success state -->
                                 <div id="importAccountsSuccess" class="d-none text-center">
@@ -447,9 +452,14 @@
                                 <div id="importMilestonesProgress" class="d-none">
                                     <div class="d-flex align-items-center mb-2">
                                         <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                                        <strong>Syncing milestones...</strong>
+                                        <strong id="importMilestonesStatusText">Starting sync...</strong>
                                     </div>
-                                    <div class="small text-muted" id="importMilestonesLog" style="max-height: 200px; overflow-y: auto; font-family: monospace;"></div>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="importMilestonesProgressBar" role="progressbar" style="width: 0%">
+                                            <span id="importMilestonesProgressPercent">0%</span>
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted" id="importMilestonesLog" style="max-height: 150px; overflow-y: auto; font-family: monospace;"></div>
                                 </div>
                                 <!-- Success state -->
                                 <div id="importMilestonesSuccess" class="d-none text-center">
@@ -807,14 +817,25 @@
                 async function importAccounts() {
                     showImportState('importAccounts', 'Progress');
                     const logDiv = document.getElementById('importAccountsLog');
+                    const statusText = document.getElementById('importAccountsStatusText');
+                    const progressBar = document.getElementById('importAccountsProgressBar');
+                    const progressPercent = document.getElementById('importAccountsProgressPercent');
                     logDiv.innerHTML = '';
-                    let summary = {};
+                    statusText.textContent = 'Starting import...';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+
+                    // Warn user if they try to leave during import
+                    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+                    window.addEventListener('beforeunload', warnOnLeave);
 
                     try {
                         const resp = await fetch('/api/msx/import-stream');
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
                         const reader = resp.body.getReader();
                         const decoder = new TextDecoder();
                         let buffer = '';
+                        let finalSummary = null;
 
                         while (true) {
                             const { done, value } = await reader.read();
@@ -823,33 +844,54 @@
                             const lines = buffer.split('\n');
                             buffer = lines.pop();
                             for (const line of lines) {
-                                if (line.startsWith('data: ')) {
-                                    try {
-                                        const evt = JSON.parse(line.substring(6));
-                                        if (evt.type === 'progress' || evt.type === 'info') {
-                                            logDiv.innerHTML += '<div>' + (evt.message || JSON.stringify(evt)) + '</div>';
-                                            logDiv.scrollTop = logDiv.scrollHeight;
-                                        } else if (evt.type === 'complete') {
-                                            summary = evt;
-                                        } else if (evt.type === 'error') {
-                                            document.getElementById('importAccountsErrorMsg').textContent = evt.message || 'Import failed';
-                                            showImportState('importAccounts', 'Error');
-                                            return;
-                                        }
-                                    } catch (e) { /* skip non-JSON */ }
+                                if (!line.startsWith('data: ')) continue;
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+
+                                    if (data.error) {
+                                        throw new Error(data.error);
+                                    }
+
+                                    if (data.message) {
+                                        statusText.textContent = data.message;
+                                        logDiv.innerHTML += '<div>' + data.message + '</div>';
+                                        logDiv.scrollTop = logDiv.scrollHeight;
+                                    }
+
+                                    if (data.progress !== undefined) {
+                                        progressBar.style.width = data.progress + '%';
+                                        progressPercent.textContent = data.progress + '%';
+                                    }
+
+                                    if (data.complete && data.summary) {
+                                        finalSummary = data.summary;
+                                    }
+                                } catch (parseErr) {
+                                    if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
                                 }
                             }
                         }
+
                         accountsImported = true;
                         const summaryDiv = document.getElementById('importAccountsSummary');
-                        if (summary.customers_created || summary.customers_updated) {
-                            summaryDiv.textContent = (summary.customers_created || 0) + ' customers created, ' + (summary.customers_updated || 0) + ' updated';
+                        if (finalSummary) {
+                            const s = finalSummary;
+                            summaryDiv.innerHTML =
+                                '<ul class="list-unstyled mb-0">' +
+                                '<li><i class="bi bi-people-fill text-primary"></i> PODs: ' + (s.pods_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-geo-alt text-info"></i> Territories: ' + (s.territories_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-person text-primary"></i> Sellers: ' + (s.sellers_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-person-gear text-secondary"></i> Solution Engineers: ' + (s.solution_engineers_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-building text-success"></i> Customers: ' + (s.customers_created || 0) + ' created, ' + (s.customers_skipped || 0) + ' skipped</li>' +
+                                '</ul>';
                         }
                         showImportState('importAccounts', 'Success');
                         updateNextButton();
                     } catch (err) {
-                        document.getElementById('importAccountsErrorMsg').textContent = 'Connection error during import';
+                        document.getElementById('importAccountsErrorMsg').textContent = err.message || 'Connection error during import';
                         showImportState('importAccounts', 'Error');
+                    } finally {
+                        window.removeEventListener('beforeunload', warnOnLeave);
                     }
                 }
 
@@ -857,57 +899,98 @@
                 document.getElementById('importAccountsRetry').addEventListener('click', importAccounts);
 
                 // --- Step 4: Import Milestones ---
+                // The milestone sync endpoint uses named SSE events:
+                //   event: start\ndata: {"total": N}
+                //   event: progress\ndata: {"current":1, "total":N, "customer":"...", "status":"ok"}
+                //   event: complete\ndata: {"synced":N, "created":N, ...}
+                // We need to parse both the 'event:' and 'data:' lines.
                 async function importMilestones() {
                     showImportState('importMilestones', 'Progress');
                     const logDiv = document.getElementById('importMilestonesLog');
+                    const statusText = document.getElementById('importMilestonesStatusText');
+                    const progressBar = document.getElementById('importMilestonesProgressBar');
+                    const progressPercent = document.getElementById('importMilestonesProgressPercent');
                     logDiv.innerHTML = '';
-                    let summary = {};
+                    statusText.textContent = 'Starting sync...';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+
+                    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+                    window.addEventListener('beforeunload', warnOnLeave);
 
                     try {
                         const resp = await fetch('/api/milestone-tracker/sync', {
                             method: 'POST',
                             headers: { 'Accept': 'text/event-stream' }
                         });
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
                         const reader = resp.body.getReader();
                         const decoder = new TextDecoder();
                         let buffer = '';
+                        let completeSummary = null;
 
                         while (true) {
                             const { done, value } = await reader.read();
                             if (done) break;
                             buffer += decoder.decode(value, { stream: true });
-                            const lines = buffer.split('\n');
-                            buffer = lines.pop();
-                            for (const line of lines) {
-                                if (line.startsWith('data: ')) {
-                                    try {
-                                        const evt = JSON.parse(line.substring(6));
-                                        if (evt.type === 'progress' || evt.type === 'info') {
-                                            logDiv.innerHTML += '<div>' + (evt.message || JSON.stringify(evt)) + '</div>';
-                                            logDiv.scrollTop = logDiv.scrollHeight;
-                                        } else if (evt.type === 'complete') {
-                                            summary = evt;
-                                        } else if (evt.type === 'error') {
-                                            document.getElementById('importMilestonesErrorMsg').textContent = evt.message || 'Sync failed';
-                                            showImportState('importMilestones', 'Error');
-                                            return;
-                                        }
-                                    } catch (e) { /* skip non-JSON */ }
+
+                            // SSE events are separated by double newlines
+                            const blocks = buffer.split('\n\n');
+                            buffer = blocks.pop(); // keep incomplete block
+
+                            for (const block of blocks) {
+                                if (!block.trim()) continue;
+                                let eventType = '';
+                                let eventData = null;
+                                for (const line of block.split('\n')) {
+                                    if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+                                    else if (line.startsWith('data: ')) {
+                                        try { eventData = JSON.parse(line.slice(6)); } catch(e) {}
+                                    }
+                                }
+                                if (!eventData) continue;
+
+                                if (eventType === 'start') {
+                                    statusText.textContent = 'Syncing ' + (eventData.total || 0) + ' customers...';
+                                } else if (eventType === 'progress') {
+                                    const pct = eventData.total > 0 ? Math.round(eventData.current / eventData.total * 100) : 0;
+                                    progressBar.style.width = pct + '%';
+                                    progressPercent.textContent = eventData.current + ' / ' + eventData.total;
+                                    const icon = eventData.status === 'ok'
+                                        ? '<i class="bi bi-check-circle text-success"></i>'
+                                        : '<i class="bi bi-x-circle text-danger"></i>';
+                                    statusText.textContent = eventData.customer || ('Customer ' + eventData.current);
+                                    logDiv.innerHTML += '<div>' + icon + ' ' + (eventData.customer || '') +
+                                        (eventData.created ? ' (+' + eventData.created + ' created' + (eventData.updated ? ', ' + eventData.updated + ' updated' : '') + ')' : '') +
+                                        (eventData.error ? ' — ' + eventData.error : '') + '</div>';
+                                    logDiv.scrollTop = logDiv.scrollHeight;
+                                } else if (eventType === 'complete') {
+                                    completeSummary = eventData;
+                                } else if (eventType === 'error') {
+                                    throw new Error(eventData.message || eventData.error || 'Sync failed');
                                 }
                             }
                         }
+
                         milestonesImported = true;
                         const summaryDiv = document.getElementById('importMilestonesSummary');
-                        if (summary.message) {
-                            summaryDiv.textContent = summary.message;
-                        } else if (summary.milestones_synced !== undefined) {
-                            summaryDiv.textContent = summary.milestones_synced + ' milestones synced';
+                        if (completeSummary) {
+                            const cs = completeSummary;
+                            summaryDiv.innerHTML =
+                                '<ul class="list-unstyled mb-0">' +
+                                '<li>' + (cs.synced || 0) + ' customers synced' + (cs.failed ? ', ' + cs.failed + ' failed' : '') + '</li>' +
+                                '<li>' + (cs.created || 0) + ' milestones created, ' + (cs.updated || 0) + ' updated' +
+                                    (cs.deactivated ? ', ' + cs.deactivated + ' deactivated' : '') + '</li>' +
+                                (cs.duration ? '<li>Completed in ' + cs.duration + 's</li>' : '') +
+                                '</ul>';
                         }
                         showImportState('importMilestones', 'Success');
                         updateNextButton();
                     } catch (err) {
-                        document.getElementById('importMilestonesErrorMsg').textContent = 'Connection error during sync';
+                        document.getElementById('importMilestonesErrorMsg').textContent = err.message || 'Connection error during sync';
                         showImportState('importMilestones', 'Error');
+                    } finally {
+                        window.removeEventListener('beforeunload', warnOnLeave);
                     }
                 }
 

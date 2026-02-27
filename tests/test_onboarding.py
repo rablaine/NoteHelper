@@ -65,13 +65,15 @@ class TestOnboardingWizardDisplay:
         assert 'onboardStartAuth' in html
         assert 'Sign In to Azure' in html
 
-        # Step 3: Import Accounts
+        # Step 3: Import Accounts (with progress bar)
         assert 'Import Your Accounts' in html
         assert 'onboardImportAccounts' in html
+        assert 'importAccountsProgressBar' in html
 
-        # Step 4: Import Milestones
+        # Step 4: Import Milestones (with progress bar)
         assert 'Import Milestones' in html
         assert 'onboardImportMilestones' in html
+        assert 'importMilestonesProgressBar' in html
 
         # Step 5: Revenue & Finish
         assert 'Revenue Data' in html
@@ -476,3 +478,49 @@ class TestOnboardingAuthUiElements:
         html = response.data.decode('utf-8')
         assert 'id="authRetry"' in html
         assert 'id="authRetryNoCli"' in html
+
+
+class TestImportUiConsistency:
+    """Tests that wizard import steps have proper progress UI matching admin panel."""
+
+    def test_accounts_import_has_progress_bar(self, client, app):
+        """Step 3 should have a progress bar for account import."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="importAccountsProgressBar"' in html
+        assert 'id="importAccountsProgressPercent"' in html
+        assert 'id="importAccountsStatusText"' in html
+
+    def test_milestones_import_has_progress_bar(self, client, app):
+        """Step 4 should have a progress bar for milestone sync."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="importMilestonesProgressBar"' in html
+        assert 'id="importMilestonesProgressPercent"' in html
+        assert 'id="importMilestonesStatusText"' in html
+
+    def test_accounts_import_has_all_states(self, client, app):
+        """Step 3 should have Initial, Progress, Success, Error states."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="importAccountsInitial"' in html
+        assert 'id="importAccountsProgress"' in html
+        assert 'id="importAccountsSuccess"' in html
+        assert 'id="importAccountsError"' in html
+
+    def test_milestones_import_has_all_states(self, client, app):
+        """Step 4 should have Initial, Progress, Success, Error states."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="importMilestonesInitial"' in html
+        assert 'id="importMilestonesProgress"' in html
+        assert 'id="importMilestonesSuccess"' in html
+        assert 'id="importMilestonesError"' in html
+
+    def test_accounts_import_no_broken_type_check(self, client, app):
+        """JS should NOT check evt.type (old broken pattern)."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # The old broken pattern was: evt.type === 'progress'
+        assert "evt.type === 'progress'" not in html
+        assert "evt.type === 'complete'" not in html
