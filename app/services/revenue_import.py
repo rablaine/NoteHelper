@@ -41,6 +41,197 @@ PRODUCT_CONSOLIDATION_PREFIXES = [
     'Azure Synapse Analytics',
 ]
 
+# Words too short or generic to match on when dropping trailing words
+_SKIP_WORDS = {
+    'a', 'an', 'the', 'of', 'and', 'for', 'in', 'at', 'by', 'to',
+    'american', 'national', 'global', 'united', 'general', 'international',
+}
+
+# Minimum number of words required for a prefix match
+_MIN_PREFIX_WORDS = 1
+
+# Minimum character length for a single-word prefix match
+_MIN_PREFIX_LEN = 4
+
+
+def _clean_for_matching(name: str) -> str:
+    """Clean a company name for prefix matching.
+
+    Lowercases, strips punctuation (commas, periods, etc.), and collapses
+    whitespace so "Azara Healthcare, LLC" becomes "azara healthcare llc".
+
+    Args:
+        name: Raw company name
+
+    Returns:
+        Cleaned lowercase string with punctuation removed
+    """
+    cleaned = re.sub(r'[^\w\s]', '', name.lower())
+    return ' '.join(cleaned.split())
+
+
+def _progressive_word_prefix_match(
+    name_a: str,
+    name_b: str,
+) -> bool:
+    """Check if one name's words match the leading words of the other,
+    progressively dropping trailing words.
+
+    Works at the WORD level, not character level. So "streamline health"
+    does NOT match "streamline healthcare" on the first try (because
+    "health" != "healthcare"), but after dropping "health", "streamline"
+    matches the first word of "streamline healthcare solutions".
+
+    Args:
+        name_a: First cleaned name (from _clean_for_matching)
+        name_b: Second cleaned name (from _clean_for_matching)
+
+    Returns:
+        True if a progressive word-level prefix match is found
+    """
+    if not name_a or not name_b:
+        return False
+
+    words_a = name_a.split()
+    words_b = name_b.split()
+
+    # Try both directions
+    for src_words, tgt_words in [(words_a, words_b), (words_b, words_a)]:
+        # Progressively drop trailing words from src and check if
+        # the remaining words match the leading words of tgt exactly
+        candidate = list(src_words)
+        while candidate:
+            if len(candidate) <= len(tgt_words):
+                # Check if candidate words match the first N words of target
+                if candidate == tgt_words[:len(candidate)]:
+                    # Ensure the match is meaningful
+                    match_str = ' '.join(candidate)
+                    if len(candidate) >= 2 or len(match_str) >= _MIN_PREFIX_LEN:
+                        return True
+            candidate.pop()
+            # Skip trailing stop words
+            while candidate and candidate[-1] in _SKIP_WORDS:
+                candidate.pop()
+
+    return False
+
+
+def _get_acronym(name: str) -> str:
+    """Get the acronym from a company name (first letter of each word).
+
+    Only uses words that are 2+ chars and not stop words.
+    E.g., "Facilities Survey Inc" -> "FSI"
+
+    Args:
+        name: Company name
+
+    Returns:
+        Uppercase acronym string, or empty string if too short
+    """
+    cleaned = re.sub(r'[^\w\s]', '', name)
+    words = [w for w in cleaned.split() if len(w) >= 2 and w.lower() not in _SKIP_WORDS]
+    return ''.join(w[0] for w in words).upper()
+
+
+def _build_customer_lookup() -> tuple[
+    dict[str, int],
+    list[tuple[str, int]],
+    dict[str, int],
+]:
+    """Build customer lookup structures for matching revenue data to customers.
+
+    Returns:
+        Tuple of:
+        - Quick lookup dict: lowercased exact name/nickname -> customer ID
+        - Cleaned names list: (cleaned_name, customer_id) for prefix matching
+        - Acronym lookup: uppercase acronym -> customer ID (for names/nicknames
+          that are 2-6 chars and look like acronyms)
+    """
+    exact_lookup: dict[str, int] = {}
+    cleaned_names: list[tuple[str, int]] = []
+    acronym_lookup: dict[str, int] = {}
+
+    for c in Customer.query.all():
+        exact_lookup[c.name.lower()] = c.id
+        cleaned_names.append((_clean_for_matching(c.name), c.id))
+        # Register acronym of long customer names so CSV short names can match
+        # e.g., customer "Facilities Survey Inc" -> acronym "FSI"
+        name_acronym = _get_acronym(c.name)
+        if len(name_acronym) >= 2 and name_acronym not in acronym_lookup:
+            acronym_lookup[name_acronym] = c.id
+        # If customer name itself looks like an acronym (2-6 chars, all alpha),
+        # register it so revenue names can match by their acronym
+        stripped = c.name.strip()
+        if 2 <= len(stripped) <= 6 and stripped.isalpha():
+            acronym_lookup[stripped.upper()] = c.id
+        if c.nickname:
+            exact_lookup[c.nickname.lower()] = c.id
+            cleaned_names.append((_clean_for_matching(c.nickname), c.id))
+            nick_acronym = _get_acronym(c.nickname)
+            if len(nick_acronym) >= 2 and nick_acronym not in acronym_lookup:
+                acronym_lookup[nick_acronym] = c.id
+            nick_stripped = c.nickname.strip()
+            if 2 <= len(nick_stripped) <= 6 and nick_stripped.isalpha():
+                acronym_lookup[nick_stripped.upper()] = c.id
+
+    return exact_lookup, cleaned_names, acronym_lookup
+
+
+def _resolve_customer_id(
+    exact_lookup: dict[str, int],
+    cleaned_names: list[tuple[str, int]],
+    customer_name: str,
+    acronym_lookup: dict[str, int] | None = None,
+) -> int | None:
+    """Look up a customer ID using exact match, prefix match, then acronym.
+
+    Matching tiers:
+    1. Exact match on name or nickname (case-insensitive)
+    2. Progressive word-prefix matching (drop trailing words)
+    3. Acronym matching ("Facilities Survey Inc" -> "FSI")
+
+    Args:
+        exact_lookup: Dict from _build_customer_lookup() for exact matches
+        cleaned_names: List from _build_customer_lookup() for prefix matches
+        customer_name: Raw customer name from revenue data
+        acronym_lookup: Optional dict from _build_customer_lookup() for acronyms
+
+    Returns:
+        Customer ID if found, None otherwise
+    """
+    # Tier 1: Exact match on name or nickname (case-insensitive)
+    result = exact_lookup.get(customer_name.lower())
+    if result is not None:
+        return result
+
+    # Tier 2: Progressive prefix matching
+    cleaned = _clean_for_matching(customer_name)
+    if len(cleaned) >= _MIN_PREFIX_LEN:
+        for cust_cleaned, cust_id in cleaned_names:
+            if _progressive_word_prefix_match(cleaned, cust_cleaned):
+                return cust_id
+
+    # Tier 3: Acronym matching
+    # Direction A: Revenue name is long, customer name is short acronym
+    #   e.g., CSV "Facilities Survey Inc" -> acronym "FSI" -> matches customer "FSI"
+    # Direction B: Revenue name is short acronym, customer name is long
+    #   e.g., CSV "FSI" -> direct lookup -> matches acronym of "Facilities Survey Inc"
+    if acronym_lookup:
+        # Direction A: compute acronym of the CSV name
+        acronym = _get_acronym(customer_name)
+        if len(acronym) >= 2:
+            result = acronym_lookup.get(acronym)
+            if result is not None:
+                return result
+        # Direction B: CSV name itself might be an acronym — look it up directly
+        stripped = customer_name.strip()
+        if 2 <= len(stripped) <= 6 and stripped.isalpha():
+            result = acronym_lookup.get(stripped.upper())
+            if result is not None:
+                return result
+
+    return None
+
 
 def consolidate_product_name(product: str) -> str:
     """Get the consolidated product name for display purposes.
@@ -361,12 +552,8 @@ def import_revenue_csv(
     product_records_updated = 0
     new_months = set()
     
-    # Build a lookup of existing NoteHelper customers
-    customer_lookup = {}
-    for customer in Customer.query.all():
-        customer_lookup[customer.name.lower()] = customer.id
-        if customer.nickname:
-            customer_lookup[customer.nickname.lower()] = customer.id
+    # Build customer lookup (exact + prefix + acronym matching)
+    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
     
     # Process each row
     for _, row in df.iterrows():
@@ -382,7 +569,7 @@ def import_revenue_csv(
             continue
         
         # Try to match to existing NoteHelper customer
-        customer_id = customer_lookup.get(customer_name.lower())
+        customer_id = _resolve_customer_id(exact_lookup, cleaned_names, customer_name, acronym_lookup)
         
         # Get seller from territory alignments if provided
         seller_name = None
@@ -548,13 +735,9 @@ def import_revenue_csv_streaming(
     product_records_updated = 0
     new_months = set()
     
-    # Build customer lookup
+    # Build customer lookup (exact + prefix + acronym matching)
     yield {"message": "Loading customer database..."}
-    customer_lookup = {}
-    for customer in Customer.query.all():
-        customer_lookup[customer.name.lower()] = customer.id
-        if customer.nickname:
-            customer_lookup[customer.nickname.lower()] = customer.id
+    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
     
     # Process rows with progress updates
     total_rows = len(df)
@@ -581,7 +764,7 @@ def import_revenue_csv_streaming(
             continue
         
         # Try to match to existing NoteHelper customer
-        customer_id = customer_lookup.get(customer_name.lower())
+        customer_id = _resolve_customer_id(exact_lookup, cleaned_names, customer_name, acronym_lookup)
         
         # Get seller from territory alignments if provided
         seller_name = None
@@ -868,15 +1051,8 @@ def get_customers_using_product(product: str) -> list[dict]:
     Returns:
         List of dicts with customer info and revenue data
     """
-    from app.models import Customer
-    
-    # Build a fresh customer name -> ID lookup (case-insensitive)
-    # This avoids stale customer_id values stored in product_revenue_data
-    customer_lookup = {}
-    for c in Customer.query.all():
-        customer_lookup[c.name.lower()] = c.id
-        if c.nickname:
-            customer_lookup[c.nickname.lower()] = c.id
+    # Build customer lookup (exact + prefix + acronym matching)
+    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
     
     # Get latest revenue for each customer using this product
     results = db.session.query(
@@ -897,7 +1073,7 @@ def get_customers_using_product(product: str) -> list[dict]:
         {
             'customer_name': r.customer_name,
             'bucket': r.bucket,
-            'customer_id': customer_lookup.get(r.customer_name.lower()),
+            'customer_id': _resolve_customer_id(exact_lookup, cleaned_names, r.customer_name, acronym_lookup),
             'total_revenue': r.total_revenue or 0,
             'latest_month': r.latest_month
         }
@@ -952,15 +1128,10 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
     Returns:
         List of dicts with customer info and revenue data
     """
-    from app.models import Customer, RevenueAnalysis
+    from app.models import RevenueAnalysis
     
-    # Build a fresh customer name -> ID lookup (case-insensitive)
-    # This avoids stale customer_id values stored in product_revenue_data
-    customer_lookup = {}
-    for c in Customer.query.all():
-        customer_lookup[c.name.lower()] = c.id
-        if c.nickname:
-            customer_lookup[c.nickname.lower()] = c.id
+    # Build customer lookup (exact + prefix + acronym matching)
+    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
     
     # Get customer names for this seller from analyses
     seller_customers = db.session.query(
@@ -986,7 +1157,7 @@ def get_seller_customers_using_product(seller_name: str, product: str) -> list[d
         {
             'customer_name': r.customer_name,
             'bucket': r.bucket,
-            'customer_id': customer_lookup.get(r.customer_name.lower()),
+            'customer_id': _resolve_customer_id(exact_lookup, cleaned_names, r.customer_name, acronym_lookup),
             'total_revenue': r.total_revenue or 0,
             'latest_month': r.latest_month
         }
@@ -1069,13 +1240,8 @@ def get_new_product_users(consolidated_product: str, months_lookback: int = 6) -
     
     new_user_names = {r.customer_name: r.first_usage_date for r in new_users_query}
     
-    # Build a fresh customer name -> ID lookup (case-insensitive)
-    from app.models import Customer
-    customer_lookup = {}
-    for c in Customer.query.all():
-        customer_lookup[c.name.lower()] = c.id
-        if c.nickname:
-            customer_lookup[c.nickname.lower()] = c.id
+    # Build customer lookup (exact + prefix + acronym matching)
+    exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
     
     # Get seller info and total revenue for these customers
     results = []
@@ -1116,7 +1282,7 @@ def get_new_product_users(consolidated_product: str, months_lookback: int = 6) -
             'first_usage_fiscal': first_usage_fiscal,
             'total_revenue': total_rev,
             'latest_month_revenue': latest_rev,
-            'customer_id': customer_lookup.get(customer_name.lower())
+            'customer_id': _resolve_customer_id(exact_lookup, cleaned_names, customer_name, acronym_lookup)
         })
     
     # Sort by seller name (None last), then by customer name

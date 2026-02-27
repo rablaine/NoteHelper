@@ -313,7 +313,7 @@ def revenue_seller_products(seller_name: str):
     )
 
 
-@revenue_bp.route('/revenue/seller/<seller_name>/product/<product>')
+@revenue_bp.route('/revenue/seller/<seller_name>/product/<path:product>')
 def revenue_seller_product_view(seller_name: str, product: str):
     """View seller's customers using a specific product with revenue grid."""
     from app.services.revenue_import import PRODUCT_CONSOLIDATION_PREFIXES
@@ -557,7 +557,7 @@ def revenue_products_list():
     return render_template('revenue_products_list.html', products=products)
 
 
-@revenue_bp.route('/revenue/product/<product>')
+@revenue_bp.route('/revenue/product/<path:product>')
 def revenue_product_view(product: str):
     """View all customers using a specific product."""
     from app.services.revenue_import import PRODUCT_CONSOLIDATION_PREFIXES
