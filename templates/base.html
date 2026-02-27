@@ -349,10 +349,17 @@
                                 </div>
                                 <!-- Waiting state: az login launched, polling -->
                                 <div id="authWaiting" class="d-none">
-                                    <p class="mb-2 text-primary fw-bold">A console window has opened.</p>
-                                    <p class="mb-3">Complete sign-in in the browser window that appeared. This page will update automatically.</p>
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                                    <span class="text-muted ms-2">Waiting for sign-in to complete...</span>
+                                    <p class="mb-2 text-primary fw-bold">A browser window should open for sign-in.</p>
+                                    <p class="mb-2">Sign in with your <strong>Microsoft corporate account</strong>. This page will update automatically.</p>
+                                    <div class="mb-3">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                        <span class="text-muted ms-2" id="authWaitingStatus">Waiting for sign-in to complete...</span>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-outline-secondary btn-sm" id="authCancelBtn">
+                                            <i class="bi bi-x-circle"></i> Cancel
+                                        </button>
+                                    </div>
                                 </div>
                                 <!-- Success state -->
                                 <div id="authSuccess" class="d-none">
@@ -736,8 +743,16 @@
                     document.getElementById(stateId).classList.remove('d-none');
                 }
 
+                const AUTH_POLL_TIMEOUT_MS = 180000; // 3 minutes
+                let authPollStartTime = null;
+                let authElapsedTimer = null;
+
                 async function startAzLogin() {
                     showAuthState('authWaiting');
+                    // Reset the waiting status text
+                    const statusEl = document.getElementById('authWaitingStatus');
+                    if (statusEl) statusEl.textContent = 'Waiting for sign-in to complete...';
+
                     try {
                         const resp = await fetch('/api/msx/az-login/start', { method: 'POST' });
                         const data = await resp.json();
@@ -754,19 +769,44 @@
                     }
                 }
 
+                function cancelAzLogin() {
+                    if (authPollTimer) { clearInterval(authPollTimer); authPollTimer = null; }
+                    if (authElapsedTimer) { clearInterval(authElapsedTimer); authElapsedTimer = null; }
+                    showAuthState('authInitial');
+                }
+
                 function pollAzLoginStatus() {
                     if (authPollTimer) clearInterval(authPollTimer);
+                    if (authElapsedTimer) clearInterval(authElapsedTimer);
+                    authPollStartTime = Date.now();
+
+                    // Update elapsed time display every second
+                    const statusEl = document.getElementById('authWaitingStatus');
+                    authElapsedTimer = setInterval(() => {
+                        const elapsed = Math.round((Date.now() - authPollStartTime) / 1000);
+                        if (statusEl) statusEl.textContent = 'Waiting for sign-in... (' + elapsed + 's)';
+                    }, 1000);
+
                     // Poll az account show every 1.5s — az login process stays
                     // running (hangs on subscription prompt) so we can't rely
                     // on process exit. The tenant auth completes as soon as the
                     // user signs in via browser.
                     authPollTimer = setInterval(async () => {
+                        // Timeout check
+                        if (Date.now() - authPollStartTime > AUTH_POLL_TIMEOUT_MS) {
+                            clearInterval(authPollTimer); authPollTimer = null;
+                            clearInterval(authElapsedTimer); authElapsedTimer = null;
+                            document.getElementById('authErrorMessage').textContent =
+                                'Sign-in timed out. Make sure you\'re using your Microsoft corporate account and try again.';
+                            showAuthState('authError');
+                            return;
+                        }
                         try {
                             const resp = await fetch('/api/msx/az-status');
                             const data = await resp.json();
                             if (data.logged_in) {
-                                clearInterval(authPollTimer);
-                                authPollTimer = null;
+                                clearInterval(authPollTimer); authPollTimer = null;
+                                clearInterval(authElapsedTimer); authElapsedTimer = null;
                                 await completeAzLogin(data.user_email);
                             }
                         } catch (err) {
@@ -777,8 +817,8 @@
 
                 async function completeAzLogin(userEmail) {
                     // Show a brief "Connecting..." state while we grab the CRM token
-                    const waitingEl = document.querySelector('#authWaiting span');
-                    if (waitingEl) waitingEl.textContent = 'Connecting to MSX...';
+                    const statusEl = document.getElementById('authWaitingStatus');
+                    if (statusEl) statusEl.textContent = 'Connecting to MSX...';
                     showAuthState('authWaiting');
                     try {
                         // Tell backend to set subscription + refresh CRM token
@@ -803,6 +843,7 @@
 
                 document.getElementById('onboardStartAuth').addEventListener('click', startAzLogin);
                 document.getElementById('authRetry').addEventListener('click', startAzLogin);
+                document.getElementById('authCancelBtn').addEventListener('click', cancelAzLogin);
                 const retryNoCliBtn = document.getElementById('authRetryNoCli');
                 if (retryNoCliBtn) retryNoCliBtn.addEventListener('click', checkExistingAuth);
 

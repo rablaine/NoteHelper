@@ -473,11 +473,12 @@ class TestOnboardingAuthUiElements:
         assert 'devicelogin' not in html
 
     def test_step2_has_retry_buttons(self, client, app):
-        """Step 2 should have retry buttons for error states."""
+        """Step 2 should have retry and cancel buttons for error/waiting states."""
         response = client.get('/')
         html = response.data.decode('utf-8')
         assert 'id="authRetry"' in html
         assert 'id="authRetryNoCli"' in html
+        assert 'id="authCancelBtn"' in html
 
 
 class TestImportUiConsistency:
