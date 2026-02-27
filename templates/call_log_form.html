@@ -152,8 +152,8 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label for="topic_search" class="form-label mb-0">Topics</label>
-                            {% if ai_config and ai_config.enabled %}
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="aiSuggestBtn">
+                            {% if ai_enabled %}
+                            <button type="button" class="btn btn-sm btn-outline-info" id="aiSuggestBtn">
                                 <i class="bi bi-stars"></i> <span id="aiSuggestBtnText">Auto-tag with AI</span>
                             </button>
                             {% endif %}
@@ -211,8 +211,8 @@
                                 <div id="milestone_loading" class="text-muted small" style="display: none;">
                                     <span class="spinner-border spinner-border-sm me-1"></span> Loading milestones...
                                 </div>
-                                {% if ai_config and ai_config.enabled %}
-                                <button type="button" class="btn btn-sm btn-outline-success" id="aiMatchMilestoneBtn" style="display: none;" onclick="aiMatchMilestone()">
+                                {% if ai_enabled %}
+                                <button type="button" class="btn btn-sm btn-outline-info" id="aiMatchMilestoneBtn" style="display: none;" onclick="aiMatchMilestone()">
                                     <i class="bi bi-stars"></i> <span id="aiMatchMilestoneBtnText">Match Milestone</span>
                                 </button>
                                 {% endif %}
@@ -322,13 +322,6 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-4">
-                                                <label for="task_duration" class="form-label small mb-1">Duration (min)</label>
-                                                <input type="number" class="form-control form-control-sm" id="task_duration" name="task_duration" 
-                                                       value="60" min="15" step="15">
-                                            </div>
-                                        </div>
-                                        <div class="row mb-2">
-                                            <div class="col-md-6">
                                                 <label for="task_due_date" class="form-label small mb-1"><i class="bi bi-calendar-event me-1"></i>Due Date</label>
                                                 <input type="date" class="form-control form-control-sm" id="task_due_date" name="task_due_date">
                                             </div>
@@ -1331,7 +1324,6 @@ function createTaskInMSX() {
     const milestoneId = document.querySelector('input[name="milestone_msx_id"]')?.value;
     const subject = document.getElementById('task_subject').value.trim();
     const category = document.getElementById('task_category').value;
-    const duration = document.getElementById('task_duration').value || 60;
     const description = document.getElementById('task_description').value.trim();
     const dueDate = document.getElementById('task_due_date').value;
     
@@ -1367,7 +1359,6 @@ function createTaskInMSX() {
             milestone_id: milestoneId,
             subject: subject,
             task_category: parseInt(category),
-            duration_minutes: parseInt(duration),
             description: description || null,
             due_date: dueDate ? dueDate + 'T23:59:59Z' : null
         })
@@ -1416,7 +1407,6 @@ function clearCreatedTask() {
     // Clear form fields
     document.getElementById('task_subject').value = '';
     document.getElementById('task_category').value = '';
-    document.getElementById('task_duration').value = '60';
     document.getElementById('task_description').value = '';
     
     // Reset UI
@@ -1442,8 +1432,7 @@ let lastAiCallFailed = false;
 let aiButtonDisabledUntil = 0;
 
 // Show AI button if AI is enabled (no need for API call - we already have this from template)
-{% if ai_config and ai_config.enabled %}
-document.getElementById('aiSuggestBtn').style.display = 'block';
+{% if ai_enabled %}
 {% endif %}
 
 document.getElementById('aiSuggestBtn').addEventListener('click', function() {
@@ -1637,7 +1626,6 @@ function saveDraft() {
     const taskData = {
         subject: document.getElementById('task_subject').value,
         category: document.getElementById('task_category').value,
-        duration: document.getElementById('task_duration').value,
         description: document.getElementById('task_description').value,
         // Include created task info if task was already created
         created_task_id: document.getElementById('created_task_id').value,
@@ -1754,7 +1742,6 @@ function restoreDraft() {
         if (draft.task) {
             document.getElementById('task_subject').value = draft.task.subject || '';
             document.getElementById('task_category').value = draft.task.category || '';
-            document.getElementById('task_duration').value = draft.task.duration || '60';
             document.getElementById('task_description').value = draft.task.description || '';
             
             // Restore created task info if it was already created
@@ -2013,7 +2000,6 @@ function discardDraft() {
         // Clear task fields (with null checks)
         var taskSubject = document.getElementById('task_subject');
         var taskCategory = document.getElementById('task_category');
-        var taskDuration = document.getElementById('task_duration');
         var taskDescription = document.getElementById('task_description');
         var createdTaskId = document.getElementById('created_task_id');
         var createdTaskUrl = document.getElementById('created_task_url');
@@ -2022,7 +2008,6 @@ function discardDraft() {
         
         if (taskSubject) taskSubject.value = '';
         if (taskCategory) taskCategory.value = '';
-        if (taskDuration) taskDuration.value = '60';
         if (taskDescription) taskDescription.value = '';
         if (createdTaskId) createdTaskId.value = '';
         if (createdTaskUrl) createdTaskUrl.value = '';

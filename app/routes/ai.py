@@ -2,20 +2,53 @@
 AI routes for NoteHelper.
 Handles AI-powered topic suggestion and related features.
 Uses Azure OpenAI with Entra ID (Service Principal) authentication.
+All connection config comes from environment variables.
 """
 from flask import Blueprint, request, jsonify, g
 from datetime import date
 import json
 import os
 
-from app.models import db, AIConfig, AIQueryLog, Topic
+from app.models import db, AIQueryLog, Topic
 
 # Create blueprint
 ai_bp = Blueprint('ai', __name__)
 
+# System prompt for topic suggestion (the only AI call that uses a custom prompt)
+TOPIC_SUGGESTION_PROMPT = (
+    "You are a helpful assistant that analyzes call notes and suggests relevant topic tags. "
+    "Based on the call notes provided, return a JSON array of 3-7 short topic tags (1-3 words each) "
+    "that best describe the key technologies, products, or themes discussed. "
+    "Return ONLY a JSON array of strings, nothing else. "
+    'Example: ["Azure OpenAI", "Vector Search", "RAG Pattern"]'
+)
 
-def get_azure_openai_client(ai_config):
-    """Create an Azure OpenAI client with Entra ID authentication."""
+
+def is_ai_enabled() -> bool:
+    """Check if AI features are enabled based on environment configuration.
+    
+    AI is considered enabled when both AZURE_OPENAI_ENDPOINT and
+    AZURE_OPENAI_DEPLOYMENT are set in environment variables.
+    """
+    return bool(
+        os.environ.get('AZURE_OPENAI_ENDPOINT')
+        and os.environ.get('AZURE_OPENAI_DEPLOYMENT')
+    )
+
+
+def get_openai_deployment() -> str:
+    """Get the Azure OpenAI deployment name from environment."""
+    return os.environ.get('AZURE_OPENAI_DEPLOYMENT', '')
+
+
+def get_azure_openai_client():
+    """Create an Azure OpenAI client with Entra ID authentication.
+    
+    All configuration is read from environment variables:
+    - AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID (service principal)
+    - AZURE_OPENAI_ENDPOINT (endpoint URL)
+    - AZURE_OPENAI_API_VERSION (optional, defaults to 2024-08-01-preview)
+    """
     from openai import AzureOpenAI
     from azure.identity import ClientSecretCredential, get_bearer_token_provider
     
@@ -26,6 +59,13 @@ def get_azure_openai_client(ai_config):
     
     if not all([client_id, client_secret, tenant_id]):
         raise ValueError("Missing Azure service principal environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)")
+    
+    # Get OpenAI endpoint from environment
+    endpoint_url = os.environ.get('AZURE_OPENAI_ENDPOINT')
+    api_version = os.environ.get('AZURE_OPENAI_API_VERSION', '2024-08-01-preview')
+    
+    if not endpoint_url:
+        raise ValueError("Missing AZURE_OPENAI_ENDPOINT environment variable")
     
     # Create credential and token provider
     credential = ClientSecretCredential(
@@ -40,8 +80,8 @@ def get_azure_openai_client(ai_config):
     
     # Create Azure OpenAI client
     client = AzureOpenAI(
-        api_version=ai_config.api_version,
-        azure_endpoint=ai_config.endpoint_url,
+        api_version=api_version,
+        azure_endpoint=endpoint_url,
         azure_ad_token_provider=token_provider,
     )
     
@@ -53,12 +93,10 @@ def api_ai_suggest_topics():
     """Generate topic suggestions from call notes using AI."""
     
     # Check if AI features are enabled
-    ai_config = AIConfig.query.first()
-    if not ai_config or not ai_config.enabled:
-        return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
+    if not is_ai_enabled():
+        return jsonify({'success': False, 'error': 'AI features are not configured (set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT in .env)'}), 400
     
-    if not ai_config.endpoint_url or not ai_config.deployment_name:
-        return jsonify({'success': False, 'error': 'AI configuration is incomplete (missing endpoint or deployment name)'}), 400
+    deployment_name = get_openai_deployment()
     
     # Get call notes from request
     data = request.get_json()
@@ -69,15 +107,15 @@ def api_ai_suggest_topics():
     
     # Make AI API call
     try:
-        client = get_azure_openai_client(ai_config)
+        client = get_azure_openai_client()
         
         response = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": ai_config.system_prompt},
+                {"role": "system", "content": TOPIC_SUGGESTION_PROMPT},
                 {"role": "user", "content": f"Call notes:\n\n{call_notes}"}
             ],
             max_tokens=150,
-            model=ai_config.deployment_name
+            model=deployment_name
         )
         
         response_text = response.choices[0].message.content
@@ -91,7 +129,7 @@ def api_ai_suggest_topics():
         raw_response_text = response_text
         
         # Extract token usage and model info
-        model_used = response.model or ai_config.deployment_name
+        model_used = response.model or deployment_name
         prompt_tokens = response.usage.prompt_tokens if response.usage else None
         completion_tokens = response.usage.completion_tokens if response.usage else None
         total_tokens = response.usage.total_tokens if response.usage else None
@@ -210,12 +248,10 @@ def api_ai_match_milestone():
     """Match call notes to the most relevant milestone using AI."""
     
     # Check if AI features are enabled
-    ai_config = AIConfig.query.first()
-    if not ai_config or not ai_config.enabled:
-        return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
+    if not is_ai_enabled():
+        return jsonify({'success': False, 'error': 'AI features are not configured'}), 400
     
-    if not ai_config.endpoint_url or not ai_config.deployment_name:
-        return jsonify({'success': False, 'error': 'AI configuration is incomplete'}), 400
+    deployment_name = get_openai_deployment()
     
     # Get data from request
     data = request.get_json()
@@ -252,7 +288,7 @@ Available Milestones:
 Which milestone best matches what was discussed in the call?"""
     
     try:
-        client = get_azure_openai_client(ai_config)
+        client = get_azure_openai_client()
         
         response = client.chat.completions.create(
             messages=[
@@ -260,7 +296,7 @@ Which milestone best matches what was discussed in the call?"""
                 {"role": "user", "content": user_prompt}
             ],
             max_tokens=150,
-            model=ai_config.deployment_name
+            model=deployment_name
         )
         
         response_text = response.choices[0].message.content.strip()
@@ -325,12 +361,10 @@ def api_ai_analyze_call():
     """
     
     # Check if AI features are enabled
-    ai_config = AIConfig.query.first()
-    if not ai_config or not ai_config.enabled:
-        return jsonify({'success': False, 'error': 'AI features are not enabled'}), 400
+    if not is_ai_enabled():
+        return jsonify({'success': False, 'error': 'AI features are not configured'}), 400
     
-    if not ai_config.endpoint_url or not ai_config.deployment_name:
-        return jsonify({'success': False, 'error': 'AI configuration is incomplete'}), 400
+    deployment_name = get_openai_deployment()
     
     # Get data from request
     data = request.get_json()
@@ -359,7 +393,7 @@ Guidelines:
 {call_notes[:3000]}"""
     
     try:
-        client = get_azure_openai_client(ai_config)
+        client = get_azure_openai_client()
         
         response = client.chat.completions.create(
             messages=[
@@ -367,13 +401,13 @@ Guidelines:
                 {"role": "user", "content": user_prompt}
             ],
             max_tokens=300,
-            model=ai_config.deployment_name
+            model=deployment_name
         )
         
         response_text = response.choices[0].message.content.strip()
         
         # Extract token usage
-        model_used = response.model or ai_config.deployment_name
+        model_used = response.model or deployment_name
         prompt_tokens = response.usage.prompt_tokens if response.usage else None
         completion_tokens = response.usage.completion_tokens if response.usage else None
         total_tokens = response.usage.total_tokens if response.usage else None

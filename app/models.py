@@ -680,30 +680,6 @@ class UserPreference(db.Model):
 # AI Features Models
 # =============================================================================
 
-class AIConfig(db.Model):
-    """Site-wide AI configuration for topic suggestion feature."""
-    __tablename__ = 'ai_config'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    enabled = db.Column(db.Boolean, default=False, nullable=False)
-    endpoint_url = db.Column(db.String(500), nullable=True)
-    api_key = db.Column(db.String(500), nullable=True)
-    deployment_name = db.Column(db.String(100), nullable=True)
-    api_version = db.Column(db.String(50), default='2024-08-01-preview', nullable=False)
-    system_prompt = db.Column(db.Text, default=(
-        "You are a helpful assistant that analyzes call notes and suggests relevant topic tags. "
-        "Based on the call notes provided, return a JSON array of 3-7 short topic tags (1-3 words each) "
-        "that best describe the key technologies, products, or themes discussed. "
-        "Return ONLY a JSON array of strings, nothing else. "
-        "Example: [\"Azure OpenAI\", \"Vector Search\", \"RAG Pattern\"]"
-    ), nullable=False)
-    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
-    
-    def __repr__(self) -> str:
-        return f'<AIConfig enabled={self.enabled} deployment={self.deployment_name}>'
-
-
 class AIQueryLog(db.Model):
     """Audit log of all AI API calls for debugging and prompt improvement."""
     __tablename__ = 'ai_query_log'

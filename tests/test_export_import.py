@@ -16,12 +16,11 @@ def test_export_full_json_structure(client, sample_data):
     # Check top-level structure
     assert 'export_date' in data
     assert 'version' in data
-    assert data['version'] == '2.1'
+    assert data['version'] == '2.2'
     
     # Check all entity types are present including users
     assert 'users' in data
     assert 'user_preferences' in data
-    assert 'ai_config' in data  # Can be None if not configured
     assert 'pods' in data
     assert 'territories' in data
     assert 'sellers' in data
@@ -572,35 +571,6 @@ def test_import_json_includes_user_preferences(app, client):
         assert pref.dark_mode == True
         assert pref.customer_view_grouped == True
         assert pref.topic_sort_by_calls == True
-
-
-def test_export_can_exclude_ai_config(app, client):
-    """Test that AI config can be excluded from export."""
-    from app.models import db, AIConfig
-    
-    with app.app_context():
-        # Create AI config if it doesn't exist
-        ai_config = AIConfig.query.first()
-        if not ai_config:
-            ai_config = AIConfig(
-                enabled=True,
-                endpoint_url='https://test.openai.azure.com',
-                api_key='test-key-123',
-                deployment_name='gpt-4'
-            )
-            db.session.add(ai_config)
-            db.session.commit()
-        
-        # Export with AI config (default)
-        response = client.get('/api/data-management/export/json')
-        export_data = json.loads(response.data)
-        assert export_data['ai_config'] is not None
-        assert export_data['ai_config']['deployment_name'] == 'gpt-4'
-        
-        # Export without AI config
-        response = client.get('/api/data-management/export/json?exclude_ai_config=true')
-        export_data = json.loads(response.data)
-        assert export_data['ai_config'] is None
 
 
 def test_import_csv_creates_entities(app, client):

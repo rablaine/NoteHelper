@@ -4,11 +4,22 @@ Uses mocked Azure OpenAI client with Entra ID authentication.
 """
 
 import json
+import os
 from datetime import date, datetime
 from unittest.mock import patch, MagicMock
 import pytest
 from app import db
-from app.models import AIConfig, AIQueryLog, Topic, User
+from app.models import AIQueryLog, Topic, User
+
+# Common env vars for AI tests
+AI_ENV_VARS = {
+    'AZURE_OPENAI_ENDPOINT': 'https://test.cognitiveservices.azure.com/',
+    'AZURE_OPENAI_DEPLOYMENT': 'gpt-4o-mini',
+    'AZURE_OPENAI_API_VERSION': '2024-12-01-preview',
+    'AZURE_CLIENT_ID': 'test-client-id',
+    'AZURE_CLIENT_SECRET': 'test-client-secret',
+    'AZURE_TENANT_ID': 'test-tenant-id'
+}
 
 
 def create_mock_openai_response(content, model='gpt-4o-mini', prompt_tokens=100, completion_tokens=50):
@@ -24,61 +35,46 @@ def create_mock_openai_response(content, model='gpt-4o-mini', prompt_tokens=100,
     return mock_response
 
 
-class TestAIConfig:
-    """Test AI configuration management."""
-    
-    def test_ai_config_defaults(self, app, client):
-        """Test default AI config values."""
+class TestAIEnabled:
+    """Test AI enabled/disabled detection from environment variables."""
+
+    def test_ai_enabled_when_env_vars_set(self, app):
+        """Test that AI is enabled when endpoint and deployment are set."""
+        from app.routes.ai import is_ai_enabled
         with app.app_context():
-            # Set test user as admin
-            test_user = User.query.first()
-            test_user.is_admin = True
-            db.session.commit()
-        
-        response = client.get('/admin')
-        assert response.status_code == 200
-        
-        # Check that default config exists
-        config = AIConfig.query.first()
-        assert config is not None
-        assert config.enabled is False
-        assert 'helpful assistant' in config.system_prompt.lower()
-    
-    def test_update_ai_config(self, app, client):
-        """Test updating AI configuration."""
+            with patch.dict('os.environ', AI_ENV_VARS):
+                assert is_ai_enabled() is True
+
+    def test_ai_disabled_when_no_endpoint(self, app):
+        """Test that AI is disabled when endpoint is missing."""
+        from app.routes.ai import is_ai_enabled
         with app.app_context():
-            # Set test user as admin
-            test_user = User.query.first()
-            test_user.is_admin = True
-            db.session.commit()
-        
-        response = client.post('/api/admin/ai-config', json={
-            'enabled': True,
-            'endpoint_url': 'https://test.cognitiveservices.azure.com/',
-            'deployment_name': 'gpt-4o-mini',
-            'api_version': '2024-12-01-preview',
-            'system_prompt': 'Custom prompt'
-        })
-        
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data['success'] is True
-        
-        # Verify changes persisted
-        config = AIConfig.query.first()
-        assert config.enabled is True
-        assert config.endpoint_url == 'https://test.cognitiveservices.azure.com/'
-        assert config.deployment_name == 'gpt-4o-mini'
-        assert config.system_prompt == 'Custom prompt'
+            env = {k: v for k, v in AI_ENV_VARS.items() if k != 'AZURE_OPENAI_ENDPOINT'}
+            with patch.dict('os.environ', env, clear=True):
+                assert is_ai_enabled() is False
+
+    def test_ai_disabled_when_no_deployment(self, app):
+        """Test that AI is disabled when deployment is missing."""
+        from app.routes.ai import is_ai_enabled
+        with app.app_context():
+            env = {k: v for k, v in AI_ENV_VARS.items() if k != 'AZURE_OPENAI_DEPLOYMENT'}
+            with patch.dict('os.environ', env, clear=True):
+                assert is_ai_enabled() is False
+
+    def test_ai_disabled_when_env_empty(self, app):
+        """Test that AI is disabled when env vars are empty strings."""
+        from app.routes.ai import is_ai_enabled
+        with app.app_context():
+            env = {**AI_ENV_VARS, 'AZURE_OPENAI_ENDPOINT': '', 'AZURE_OPENAI_DEPLOYMENT': ''}
+            with patch.dict('os.environ', env, clear=True):
+                assert is_ai_enabled() is False
     
 
 class TestAIConnection:
     """Test AI connection testing functionality."""
     
-    @patch('azure.identity.ClientSecretCredential')
-    @patch('azure.identity.get_bearer_token_provider')
-    @patch('openai.AzureOpenAI')
-    def test_connection_test_success(self, mock_client_class, mock_token_provider, mock_credential, app, client):
+    @patch('app.routes.ai.get_azure_openai_client')
+    def test_connection_test_success(self, mock_get_client, app, client):
         """Test successful AI connection test."""
         with app.app_context():
             test_user = User.query.first()
@@ -87,24 +83,26 @@ class TestAIConnection:
         
         # Mock the Azure OpenAI client
         mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
+        mock_get_client.return_value = mock_client
         mock_client.chat.completions.create.return_value = create_mock_openai_response('Connection successful!')
         
-        response = client.post('/api/admin/ai-config/test', json={
-            'endpoint_url': 'https://test.cognitiveservices.azure.com/',
-            'deployment_name': 'gpt-4o-mini',
-            'api_version': '2024-12-01-preview'
-        })
+        # Set env vars for the test
+        with patch.dict('os.environ', {
+            'AZURE_OPENAI_ENDPOINT': 'https://test.cognitiveservices.azure.com/',
+            'AZURE_OPENAI_DEPLOYMENT': 'gpt-4o-mini',
+            'AZURE_CLIENT_ID': 'test-id',
+            'AZURE_CLIENT_SECRET': 'test-secret',
+            'AZURE_TENANT_ID': 'test-tenant'
+        }):
+            response = client.post('/api/admin/ai-config/test', json={})
         
         assert response.status_code == 200
         data = response.get_json()
         assert data['success'] is True
         assert 'successful' in data['message'].lower()
     
-    @patch('azure.identity.ClientSecretCredential')
-    @patch('azure.identity.get_bearer_token_provider')
-    @patch('openai.AzureOpenAI')
-    def test_connection_test_failure(self, mock_client_class, mock_token_provider, mock_credential, app, client):
+    @patch('app.routes.ai.get_azure_openai_client')
+    def test_connection_test_failure(self, mock_get_client, app, client):
         """Test failed AI connection test."""
         with app.app_context():
             test_user = User.query.first()
@@ -112,15 +110,17 @@ class TestAIConnection:
             db.session.commit()
         
         # Mock failed API response
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
-        mock_client.chat.completions.create.side_effect = Exception("Authentication failed")
+        mock_get_client.side_effect = Exception("Authentication failed")
         
-        response = client.post('/api/admin/ai-config/test', json={
-            'endpoint_url': 'https://test.cognitiveservices.azure.com/',
-            'deployment_name': 'gpt-4o-mini',
-            'api_version': '2024-12-01-preview'
-        })
+        # Set env vars for the test
+        with patch.dict('os.environ', {
+            'AZURE_OPENAI_ENDPOINT': 'https://test.cognitiveservices.azure.com/',
+            'AZURE_OPENAI_DEPLOYMENT': 'gpt-4o-mini',
+            'AZURE_CLIENT_ID': 'test-id',
+            'AZURE_CLIENT_SECRET': 'test-secret',
+            'AZURE_TENANT_ID': 'test-tenant'
+        }):
+            response = client.post('/api/admin/ai-config/test', json={})
         
         # Should return error response
         data = response.get_json()
@@ -131,26 +131,12 @@ class TestAIConnection:
 
 class TestAISuggestions:
     """Test AI topic suggestion functionality."""
-    
-    def setup_ai_config(self):
-        """Helper to set up enabled AI config."""
-        config = AIConfig.query.first()
-        if not config:
-            config = AIConfig()
-            db.session.add(config)
-        
-        config.enabled = True
-        config.endpoint_url = 'https://test.cognitiveservices.azure.com/'
-        config.deployment_name = 'gpt-4o-mini'
-        config.api_version = '2024-12-01-preview'
-        db.session.commit()
-        return config
-    
+
+    @patch.dict('os.environ', AI_ENV_VARS)
     @patch('app.routes.ai.get_azure_openai_client')
     def test_suggest_topics_success(self, mock_get_client, app, client):
         """Test successful topic suggestion."""
         with app.app_context():
-            self.setup_ai_config()
             test_user = User.query.first()
             
             # Mock the Azure OpenAI client
@@ -181,12 +167,11 @@ class TestAISuggestions:
             assert log.success is True
             assert 'Azure Functions' in log.request_text
     
+    @patch.dict('os.environ', AI_ENV_VARS)
     @patch('app.routes.ai.get_azure_openai_client')
     def test_suggest_topics_reuses_existing(self, mock_get_client, app, client):
         """Test that existing topics are reused (case-insensitive)."""
         with app.app_context():
-            self.setup_ai_config()
-            
             # Create existing topic with different case
             test_user = User.query.first()
             existing_topic = Topic(name='azure functions', user_id=test_user.id)
@@ -215,15 +200,9 @@ class TestAISuggestions:
             # Total topics in DB should be 2 (not 3)
             assert Topic.query.count() == 2
     
+    @patch.dict('os.environ', {'AZURE_OPENAI_ENDPOINT': '', 'AZURE_OPENAI_DEPLOYMENT': ''})
     def test_suggest_topics_when_disabled(self, app, client):
-        """Test that suggestions fail when AI is disabled."""
-        with app.app_context():
-            # Ensure AI is disabled
-            config = AIConfig.query.first()
-            if config:
-                config.enabled = False
-                db.session.commit()
-        
+        """Test that suggestions fail when AI env vars are not set."""
         response = client.post('/api/ai/suggest-topics', json={
             'call_notes': 'Test content'
         })
@@ -233,10 +212,9 @@ class TestAISuggestions:
         assert data['success'] is False
         assert 'not enabled' in data['error'].lower() or 'not configured' in data['error'].lower()
     
+    @patch.dict('os.environ', AI_ENV_VARS)
     def test_suggest_topics_requires_call_notes(self, app, client):
         """Test that call_notes parameter is required."""
-        with app.app_context():
-            self.setup_ai_config()
         
         response = client.post('/api/ai/suggest-topics', json={})
         
@@ -248,26 +226,12 @@ class TestAISuggestions:
 
 class TestAuditLogging:
     """Test AI audit logging functionality."""
-    
-    def setup_ai_config(self):
-        """Helper to set up enabled AI config."""
-        config = AIConfig.query.first()
-        if not config:
-            config = AIConfig()
-            db.session.add(config)
-        
-        config.enabled = True
-        config.endpoint_url = 'https://test.cognitiveservices.azure.com/'
-        config.deployment_name = 'gpt-4o-mini'
-        config.api_version = '2024-12-01-preview'
-        db.session.commit()
-        return config
-    
+
+    @patch.dict('os.environ', AI_ENV_VARS)
     @patch('app.routes.ai.get_azure_openai_client')
     def test_audit_log_success(self, mock_get_client, app, client):
         """Test that successful calls are logged."""
         with app.app_context():
-            self.setup_ai_config()
             test_user = User.query.first()
             user_id = test_user.id
             
@@ -292,12 +256,11 @@ class TestAuditLogging:
             assert log.error_message is None
             assert isinstance(log.timestamp, datetime)
     
+    @patch.dict('os.environ', AI_ENV_VARS)
     @patch('app.routes.ai.get_azure_openai_client')
     def test_audit_log_failure(self, mock_get_client, app, client):
         """Test that failed calls are logged with error."""
         with app.app_context():
-            self.setup_ai_config()
-            
             # Mock the Azure OpenAI client to raise an error
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
@@ -315,12 +278,11 @@ class TestAuditLogging:
             assert log.error_message is not None
             assert len(log.error_message) > 0
     
+    @patch.dict('os.environ', AI_ENV_VARS)
     @patch('app.routes.ai.get_azure_openai_client')
     def test_audit_log_truncation(self, mock_get_client, app, client):
         """Test that long texts are truncated in audit log."""
         with app.app_context():
-            self.setup_ai_config()
-            
             # Create very long call notes (over 1000 chars)
             long_notes = 'A' * 1500
             

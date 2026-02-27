@@ -145,6 +145,16 @@ FLASK_ENV=development
 FLASK_DEBUG=True
 ```
 
+**Optional Environment Variables (AI Features):**
+```
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
+AZURE_OPENAI_API_VERSION=2024-08-01-preview
+AZURE_CLIENT_ID=your-service-principal-client-id
+AZURE_CLIENT_SECRET=your-service-principal-secret
+AZURE_TENANT_ID=your-azure-tenant-id
+```
+
 **Prerequisites:**
 - Python 3.13+
 - pip and venv
