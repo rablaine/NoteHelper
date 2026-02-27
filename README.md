@@ -6,12 +6,42 @@ A single-user note-taking application for Azure technical sellers to capture and
 
 ### Prerequisites
 
-- **Python 3.13** (must be exactly 3.13 — later versions cause dependency conflicts during install)
-- pip and venv
-- Azure CLI (`az`) installed and available in your PATH
-- Node.js 18+ with npm/npx (optional, required for WorkIQ meeting import feature)
+- **Python 3.13+**
+- pip and venv (included with Python)
+- Git
 
-### Installation
+### Quick Start
+
+The fastest way to get running — the launcher script handles venv creation, dependency installation, and `.env` setup automatically:
+
+**Windows:**
+```powershell
+git clone https://github.com/rablaine/NoteHelper.git
+cd NoteHelper
+start.bat
+```
+
+**Linux / macOS:**
+```bash
+git clone https://github.com/rablaine/NoteHelper.git
+cd NoteHelper
+chmod +x start.sh
+./start.sh
+```
+
+The script will:
+1. Create a Python virtual environment (if one doesn't exist)
+2. Install all dependencies from `requirements.txt`
+3. Create a `.env` file with a generated secret key (if one doesn't exist)
+4. Start the server on `http://localhost:5000`
+
+On subsequent runs, the script detects the existing venv and `.env`, installs any new dependencies, and launches the app.
+
+> **Note:** Edit `.env` to add your Azure credentials for MSX and AI features. See [AI Features](#ai-features-optional) below.
+
+### Manual Setup
+
+If you prefer to set things up yourself:
 
 1. **Clone the repository:**
 ```bash
@@ -22,7 +52,7 @@ cd NoteHelper
 2. **Create virtual environment:**
 ```powershell
 python -m venv venv
-.\venv\Scripts\Activate.ps1  # Windows
+.\venv\Scripts\Activate.ps1  # Windows PowerShell
 # or
 source venv/bin/activate      # Linux/Mac
 ```
@@ -35,9 +65,8 @@ pip install -r requirements.txt
 4. **Set up environment variables:**
 ```bash
 cp .env.example .env
-# Generate secret key:
+# Generate a secret key and add it to .env:
 python -c "import secrets; print(secrets.token_hex(32))"
-# Add the generated key to .env as SECRET_KEY
 ```
 
 5. **Start the server:**
