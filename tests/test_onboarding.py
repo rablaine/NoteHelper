@@ -473,12 +473,104 @@ class TestOnboardingAuthUiElements:
         assert 'devicelogin' not in html
 
     def test_step2_has_retry_buttons(self, client, app):
-        """Step 2 should have retry and cancel buttons for error/waiting states."""
+        """Step 2 should have retry, cancel, and wrong-tenant retry buttons."""
         response = client.get('/')
         html = response.data.decode('utf-8')
         assert 'id="authRetry"' in html
         assert 'id="authRetryNoCli"' in html
         assert 'id="authCancelBtn"' in html
+        assert 'id="authRetryWrongTenant"' in html
+
+    def test_step2_has_wrong_tenant_state(self, client, app):
+        """Step 2 should have the authWrongTenant state div."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="authWrongTenant"' in html
+        assert 'Wrong Account' in html
+        assert 'Microsoft corporate account' in html
+
+
+class TestAzLogoutEndpoint:
+    """Tests for the az logout endpoint."""
+
+    @patch('app.routes.msx.az_logout')
+    def test_az_logout_success(self, mock_logout, client, app):
+        """POST /api/msx/az-logout should call az_logout and return result."""
+        mock_logout.return_value = {"success": True, "message": "Logged out"}
+        response = client.post('/api/msx/az-logout')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        mock_logout.assert_called_once()
+
+    @patch('app.routes.msx.az_logout')
+    def test_az_logout_error(self, mock_logout, client, app):
+        """POST /api/msx/az-logout should return error on failure."""
+        mock_logout.return_value = {"success": False, "error": "something broke"}
+        response = client.post('/api/msx/az-logout')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is False
+
+
+class TestAzWrongTenantDetection:
+    """Tests for wrong tenant detection in az-status."""
+
+    @patch('app.routes.msx.get_az_cli_status')
+    def test_az_status_wrong_tenant(self, mock_status, client, app):
+        """GET /api/msx/az-status should return wrong_tenant when on wrong tenant."""
+        mock_status.return_value = {
+            "az_installed": True,
+            "logged_in": True,
+            "wrong_tenant": True,
+            "user_email": "user@contoso.com",
+            "message": "Signed in as user@contoso.com but on the wrong tenant.",
+        }
+        response = client.get('/api/msx/az-status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['logged_in'] is True
+        assert data['wrong_tenant'] is True
+
+    @patch('app.routes.msx.get_az_cli_status')
+    def test_az_status_correct_tenant(self, mock_status, client, app):
+        """GET /api/msx/az-status should not flag wrong_tenant for correct tenant."""
+        mock_status.return_value = {
+            "az_installed": True,
+            "logged_in": True,
+            "wrong_tenant": False,
+            "user_email": "user@microsoft.com",
+            "message": "Logged in as user@microsoft.com",
+        }
+        response = client.get('/api/msx/az-status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['logged_in'] is True
+        assert data['wrong_tenant'] is False
+
+    @patch('app.services.msx_auth.check_az_cli_installed')
+    @patch('app.services.msx_auth.check_az_logged_in')
+    def test_get_az_cli_status_wrong_tenant_unit(self, mock_logged_in,
+                                                  mock_installed, app):
+        """get_az_cli_status() should set wrong_tenant when tenantId doesn't match."""
+        mock_installed.return_value = True
+        mock_logged_in.return_value = (True, "user@contoso.com", "aaaabbbb-0000-0000-0000-ccccddddeeee")
+        from app.services.msx_auth import get_az_cli_status
+        result = get_az_cli_status()
+        assert result['logged_in'] is True
+        assert result['wrong_tenant'] is True
+
+    @patch('app.services.msx_auth.check_az_cli_installed')
+    @patch('app.services.msx_auth.check_az_logged_in')
+    def test_get_az_cli_status_correct_tenant_unit(self, mock_logged_in,
+                                                    mock_installed, app):
+        """get_az_cli_status() should not flag wrong_tenant for correct tenantId."""
+        mock_installed.return_value = True
+        mock_logged_in.return_value = (True, "user@microsoft.com", "72f988bf-86f1-41af-91ab-2d7cd011db47")
+        from app.services.msx_auth import get_az_cli_status
+        result = get_az_cli_status()
+        assert result['logged_in'] is True
+        assert result['wrong_tenant'] is False
 
 
 class TestImportUiConsistency:

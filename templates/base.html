@@ -390,6 +390,15 @@
                                     <p class="mt-2 mb-0 fw-bold text-success">Already connected to MSX!</p>
                                     <small class="text-muted">Your existing session is still active.</small>
                                 </div>
+                                <!-- Wrong tenant state -->
+                                <div id="authWrongTenant" class="d-none">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-warning">Wrong Account</p>
+                                    <p class="text-muted mb-2">You signed in with the wrong account. Please use your <strong>Microsoft corporate account</strong> (@microsoft.com).</p>
+                                    <button class="btn btn-primary btn-sm" id="authRetryWrongTenant">
+                                        <i class="bi bi-arrow-clockwise"></i> Sign In Again
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -726,6 +735,10 @@
                         const azData = await azResp.json();
                         if (!azData.az_installed) {
                             showAuthState('authNoCli');
+                        } else if (azData.logged_in && azData.wrong_tenant) {
+                            // Signed in but wrong tenant — log them out and show retry
+                            await fetch('/api/msx/az-logout', { method: 'POST' });
+                            showAuthState('authWrongTenant');
                         } else if (azData.logged_in) {
                             // Logged in to az but no CRM token yet — complete the flow
                             await completeAzLogin(azData.user_email);
@@ -736,7 +749,7 @@
                 }
 
                 function showAuthState(stateId) {
-                    ['authInitial', 'authWaiting', 'authSuccess', 'authError', 'authNoCli', 'authAlready'].forEach(id => {
+                    ['authInitial', 'authWaiting', 'authSuccess', 'authError', 'authNoCli', 'authAlready', 'authWrongTenant'].forEach(id => {
                         const el = document.getElementById(id);
                         if (el) el.classList.add('d-none');
                     });
@@ -746,9 +759,11 @@
                 const AUTH_POLL_TIMEOUT_MS = 180000; // 3 minutes
                 let authPollStartTime = null;
                 let authElapsedTimer = null;
+                let authLoginHandled = false; // prevent duplicate completeAzLogin calls
 
                 async function startAzLogin() {
                     showAuthState('authWaiting');
+                    authLoginHandled = false;
                     // Reset the waiting status text
                     const statusEl = document.getElementById('authWaitingStatus');
                     if (statusEl) statusEl.textContent = 'Waiting for sign-in to complete...';
@@ -772,6 +787,7 @@
                 function cancelAzLogin() {
                     if (authPollTimer) { clearInterval(authPollTimer); authPollTimer = null; }
                     if (authElapsedTimer) { clearInterval(authElapsedTimer); authElapsedTimer = null; }
+                    authLoginHandled = false;
                     showAuthState('authInitial');
                 }
 
@@ -801,10 +817,21 @@
                             showAuthState('authError');
                             return;
                         }
+                        // Guard: skip if we already handled a successful login
+                        if (authLoginHandled) return;
                         try {
                             const resp = await fetch('/api/msx/az-status');
                             const data = await resp.json();
-                            if (data.logged_in) {
+                            if (authLoginHandled) return; // re-check after await
+                            if (data.logged_in && data.wrong_tenant) {
+                                // Wrong tenant — stop polling, logout, show retry
+                                authLoginHandled = true;
+                                clearInterval(authPollTimer); authPollTimer = null;
+                                clearInterval(authElapsedTimer); authElapsedTimer = null;
+                                await fetch('/api/msx/az-logout', { method: 'POST' });
+                                showAuthState('authWrongTenant');
+                            } else if (data.logged_in) {
+                                authLoginHandled = true;
                                 clearInterval(authPollTimer); authPollTimer = null;
                                 clearInterval(authElapsedTimer); authElapsedTimer = null;
                                 await completeAzLogin(data.user_email);
@@ -844,6 +871,7 @@
                 document.getElementById('onboardStartAuth').addEventListener('click', startAzLogin);
                 document.getElementById('authRetry').addEventListener('click', startAzLogin);
                 document.getElementById('authCancelBtn').addEventListener('click', cancelAzLogin);
+                document.getElementById('authRetryWrongTenant').addEventListener('click', startAzLogin);
                 const retryNoCliBtn = document.getElementById('authRetryNoCli');
                 if (retryNoCliBtn) retryNoCliBtn.addEventListener('click', checkExistingAuth);
 

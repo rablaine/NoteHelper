@@ -25,6 +25,7 @@ from app.services.msx_auth import (
     start_az_login,
     get_az_login_process_status,
     set_subscription,
+    az_logout,
 )
 from app.services.msx_api import (
     test_connection,
@@ -185,19 +186,25 @@ def az_cli_status():
 def az_login_start():
     """Launch ``az login --tenant ...`` in a visible console window.
 
-    The frontend should poll ``/api/msx/az-login/status`` afterwards to
-    detect when the process finishes.
+    The frontend should poll ``/api/msx/az-status`` afterwards to
+    detect when the user completes sign-in.
     """
     result = start_az_login()
 
     # If already logged in, also set subscription and grab a CRM token
     if result.get("success"):
         status = get_az_cli_status()
-        if status.get("logged_in"):
+        if status.get("logged_in") and not status.get("wrong_tenant"):
             set_subscription()
             refresh_token()
 
     return jsonify(result)
+
+
+@msx_bp.route('/az-logout', methods=['POST'])
+def az_logout_endpoint():
+    """Sign out of Azure CLI (used when wrong tenant detected)."""
+    return jsonify(az_logout())
 
 
 @msx_bp.route('/az-login/status')

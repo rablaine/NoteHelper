@@ -331,11 +331,11 @@ def check_az_cli_installed() -> bool:
         return False
 
 
-def check_az_logged_in() -> tuple[bool, Optional[str]]:
+def check_az_logged_in() -> tuple[bool, Optional[str], Optional[str]]:
     """Check if user is logged in to Azure CLI.
 
     Returns:
-        Tuple of (is_logged_in, user_email).
+        Tuple of (is_logged_in, user_email, tenant_id).
     """
     try:
         cmd = "az account show --output json" if IS_WINDOWS else [
@@ -351,10 +351,11 @@ def check_az_logged_in() -> tuple[bool, Optional[str]]:
         if result.returncode == 0:
             account = json.loads(result.stdout)
             user = account.get("user", {})
-            return True, user.get("name")
-        return False, None
+            tenant_id = account.get("tenantId")
+            return True, user.get("name"), tenant_id
+        return False, None, None
     except (subprocess.SubprocessError, json.JSONDecodeError):
-        return False, None
+        return False, None, None
 
 
 def get_az_cli_status() -> Dict[str, Any]:
@@ -363,25 +364,66 @@ def get_az_cli_status() -> Dict[str, Any]:
     Checks:
     1. Whether Azure CLI is installed
     2. Whether user is logged in (via ``az account show``)
+    3. Whether the tenant matches the expected Microsoft tenant
 
     Returns:
-        Dict with az_installed, logged_in, user_email, message.
+        Dict with az_installed, logged_in, wrong_tenant, user_email, message.
     """
     if not check_az_cli_installed():
         return {
             "az_installed": False,
             "logged_in": False,
+            "wrong_tenant": False,
             "user_email": None,
             "message": "Azure CLI not installed",
         }
 
-    logged_in, user_email = check_az_logged_in()
+    logged_in, user_email, tenant_id = check_az_logged_in()
+
+    wrong_tenant = False
+    if logged_in and tenant_id and tenant_id != TENANT_ID:
+        wrong_tenant = True
+
+    if wrong_tenant:
+        message = (f"Signed in as {user_email} but on the wrong tenant. "
+                   "Please sign in with your Microsoft corporate account.")
+    elif logged_in:
+        message = f"Logged in as {user_email}"
+    else:
+        message = "Not logged in"
+
     return {
         "az_installed": True,
         "logged_in": logged_in,
+        "wrong_tenant": wrong_tenant,
         "user_email": user_email,
-        "message": f"Logged in as {user_email}" if logged_in else "Not logged in",
+        "message": message,
     }
+
+
+def az_logout() -> Dict[str, Any]:
+    """Run ``az logout`` to clear the current Azure CLI session.
+
+    Returns:
+        Dict with success, message.
+    """
+    try:
+        cmd = "az logout" if IS_WINDOWS else ["az", "logout"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            shell=IS_WINDOWS,
+        )
+        if result.returncode == 0:
+            logger.info("Azure CLI logged out")
+            return {"success": True, "message": "Logged out"}
+        logger.warning(f"az logout failed: {result.stderr}")
+        return {"success": True, "message": "Logout completed"}  # non-zero is OK if already logged out
+    except Exception as e:
+        logger.warning(f"Error during az logout: {e}")
+        return {"success": False, "error": str(e)}
 
 
 def start_az_login() -> Dict[str, Any]:
