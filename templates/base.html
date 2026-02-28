@@ -275,6 +275,21 @@
     </div>
     {% endif %}
 
+    <!-- VPN Blocked Banner (shown dynamically when MSX detects IP block) -->
+    <div id="vpnBlockedBanner" class="alert alert-danger mb-0 text-center d-none" role="alert" style="border-radius: 0;">
+        <div class="d-flex align-items-center justify-content-center gap-2 flex-wrap">
+            <span>
+                <i class="bi bi-shield-exclamation"></i>
+                <strong>VPN Required:</strong> MSX blocked your request because you're not on corpnet.
+                Connect to VPN and click
+            </span>
+            <button id="vpnRetryBtn" class="btn btn-sm btn-outline-light" onclick="checkVpnRecovery()">
+                <i class="bi bi-arrow-repeat"></i> I'm back on VPN
+            </button>
+            <span id="vpnRetryStatus" class="small"></span>
+        </div>
+    </div>
+
     <!-- Flash Messages -->
     <div class="container mt-3">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -519,7 +534,7 @@
                         <div class="alert alert-warning mb-3 d-flex align-items-start">
                             <i class="bi bi-shield-lock me-2 mt-1"></i>
                             <div>
-                                <strong>VPN required.</strong> You must be connected to corpnet/VPN before importing. Importing off-VPN will break your auth session and you'll need to sign in again.
+                                <strong>VPN required.</strong> You must be on corpnet/VPN to reach MSX. If you get blocked, just connect to VPN and retry — no re-login needed.
                             </div>
                         </div>
                         
@@ -598,7 +613,7 @@
                         <div class="alert alert-warning mb-3 d-flex align-items-start">
                             <i class="bi bi-shield-lock me-2 mt-1"></i>
                             <div>
-                                <strong>VPN required.</strong> You must be connected to corpnet/VPN before importing. Importing off-VPN will break your auth session and you'll need to sign in again.
+                                <strong>VPN required.</strong> You must be on corpnet/VPN to reach MSX. If you get blocked, just connect to VPN and retry — no re-login needed.
                             </div>
                         </div>
                         
@@ -1197,10 +1212,18 @@
                                     const data = JSON.parse(line.slice(6));
 
                                     if (data.error) {
+                                        // Show VPN banner if this is an IP-blocked error
+                                        if (window.isVpnBlocked && window.isVpnBlocked(data.error)) {
+                                            window.showVpnBanner();
+                                        }
                                         throw new Error(data.error);
                                     }
 
                                     if (data.message) {
+                                        // Check SSE messages for VPN block indicators
+                                        if (window.isVpnBlocked && window.isVpnBlocked(data.message)) {
+                                            window.showVpnBanner();
+                                        }
                                         statusText.textContent = data.message;
                                         logDiv.innerHTML += '<div>' + data.message + '</div>';
                                         logDiv.scrollTop = logDiv.scrollHeight;
@@ -1313,6 +1336,10 @@
                                         (eventData.created ? ' (+' + eventData.created + ' created' + (eventData.updated ? ', ' + eventData.updated + ' updated' : '') + ')' : '') +
                                         (eventData.error ? ' — ' + eventData.error : '') + '</div>';
                                     logDiv.scrollTop = logDiv.scrollHeight;
+                                    // Show VPN banner if a progress error indicates IP block
+                                    if (eventData.error && window.isVpnBlocked && window.isVpnBlocked(eventData.error)) {
+                                        window.showVpnBanner();
+                                    }
                                 } else if (eventType === 'complete') {
                                     completeSummary = eventData;
                                 } else if (eventType === 'error') {
@@ -1852,6 +1879,88 @@
     </script>
     
     {% block extra_js %}{% endblock %}
+
+    <!-- Global VPN Block Detection -->
+    <script>
+    (function() {
+        const banner = document.getElementById('vpnBlockedBanner');
+        if (!banner) return;
+        const retryBtn = document.getElementById('vpnRetryBtn');
+        const retryStatus = document.getElementById('vpnRetryStatus');
+
+        // Show the VPN banner
+        window.showVpnBanner = function() {
+            banner.classList.remove('d-none');
+        };
+
+        // Hide the VPN banner
+        window.hideVpnBanner = function() {
+            banner.classList.add('d-none');
+            retryStatus.textContent = '';
+        };
+
+        // Check if response indicates VPN/IP block
+        window.isVpnBlocked = function(responseText) {
+            if (!responseText) return false;
+            return responseText.includes('IP address is blocked') ||
+                   responseText.includes('0x80095ffe') ||
+                   responseText.includes('IP address blocked');
+        };
+
+        // "I'm back on VPN" button handler
+        window.checkVpnRecovery = async function() {
+            retryBtn.disabled = true;
+            retryStatus.textContent = 'Checking...';
+            retryStatus.className = 'small text-light';
+            try {
+                const resp = await fetch('/api/msx/vpn-check', { method: 'POST' });
+                const data = await resp.json();
+                if (data.success) {
+                    retryStatus.textContent = data.message;
+                    retryStatus.className = 'small text-light';
+                    setTimeout(() => {
+                        window.hideVpnBanner();
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    retryStatus.textContent = data.message || 'Still blocked.';
+                    retryStatus.className = 'small text-warning';
+                    retryBtn.disabled = false;
+                }
+            } catch (err) {
+                retryStatus.textContent = 'Network error — check your connection.';
+                retryStatus.className = 'small text-warning';
+                retryBtn.disabled = false;
+            }
+        };
+
+        // Intercept all fetch() calls to detect VPN blocks globally
+        const _origFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await _origFetch.apply(this, args);
+            // Only check /api/ calls to MSX-related endpoints
+            const url = (typeof args[0] === 'string') ? args[0] : (args[0]?.url || '');
+            if (url.includes('/api/msx/') || url.includes('/api/milestone')) {
+                if (response.status === 403) {
+                    // Clone the response so the caller still gets it
+                    const clone = response.clone();
+                    try {
+                        const text = await clone.text();
+                        if (window.isVpnBlocked(text)) {
+                            window.showVpnBanner();
+                        }
+                    } catch (e) { /* ignore parse errors */ }
+                }
+            }
+            return response;
+        };
+
+        // Check server-side VPN state on page load (in case it was set before this page loaded)
+        fetch('/api/msx/vpn-status').then(r => r.json()).then(data => {
+            if (data.blocked) window.showVpnBanner();
+        }).catch(() => {});
+    })();
+    </script>
 </body>
 </html>
 

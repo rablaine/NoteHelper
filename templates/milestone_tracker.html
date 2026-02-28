@@ -460,6 +460,10 @@ function syncMilestones() {
                     detail.innerHTML = info;
                 } else {
                     detail.innerHTML = `<i class="bi bi-x-circle text-danger"></i> ${data.customer}: ${data.error}`;
+                    // Show VPN banner if error indicates IP block
+                    if (data.error && window.isVpnBlocked && window.isVpnBlocked(data.error)) {
+                        window.showVpnBanner();
+                    }
                 }
             } else if (type === 'complete') {
                 window.removeEventListener('beforeunload', warnOnLeave);

@@ -26,6 +26,9 @@ from app.services.msx_auth import (
     get_az_login_process_status,
     set_subscription,
     az_logout,
+    is_vpn_blocked,
+    get_vpn_state,
+    check_vpn_recovery,
 )
 from app.services.msx_api import (
     test_connection,
@@ -97,6 +100,24 @@ def clear():
     """Clear cached MSX tokens."""
     clear_token_cache()
     return jsonify({"success": True, "message": "Token cache cleared"})
+
+
+@msx_bp.route('/vpn-status')
+def vpn_status():
+    """Get current VPN blocked state."""
+    state = get_vpn_state()
+    if state.get("blocked_at"):
+        state["blocked_at"] = state["blocked_at"].isoformat()
+    if state.get("last_check"):
+        state["last_check"] = state["last_check"].isoformat()
+    return jsonify(state)
+
+
+@msx_bp.route('/vpn-check', methods=['POST'])
+def vpn_check():
+    """User says they're back on VPN — test MSX and clear block if OK."""
+    result = check_vpn_recovery()
+    return jsonify(result)
 
 
 @msx_bp.route('/test')

@@ -62,6 +62,70 @@ _device_code_state: Dict[str, Any] = {
 _refresh_thread: Optional[threading.Thread] = None
 _refresh_running = False
 
+# VPN / IP-blocked state
+_vpn_state: Dict[str, Any] = {
+    "blocked": False,
+    "blocked_at": None,
+    "last_check": None,
+    "error_message": None,
+}
+
+
+def is_vpn_blocked() -> bool:
+    """Check if MSX is currently blocked due to VPN/IP issues."""
+    return _vpn_state["blocked"]
+
+
+def get_vpn_state() -> Dict[str, Any]:
+    """Get current VPN blocked state for UI display."""
+    return dict(_vpn_state)
+
+
+def set_vpn_blocked(error_message: str = "") -> None:
+    """Mark MSX as blocked due to VPN/IP issues. Clears the token cache."""
+    global _vpn_state
+    _vpn_state["blocked"] = True
+    _vpn_state["blocked_at"] = datetime.now(timezone.utc)
+    _vpn_state["error_message"] = error_message or "IP address blocked by MSX"
+    logger.warning(f"MSX VPN block detected: {error_message}")
+    clear_token_cache()
+
+
+def clear_vpn_block() -> None:
+    """Clear the VPN blocked state (e.g. after successful reconnection)."""
+    global _vpn_state
+    _vpn_state = {
+        "blocked": False,
+        "blocked_at": None,
+        "last_check": None,
+        "error_message": None,
+    }
+    logger.info("MSX VPN block cleared")
+
+
+def check_vpn_recovery() -> Dict[str, Any]:
+    """Try to reach MSX and clear VPN block if successful.
+    
+    Returns:
+        Dict with success, message.
+    """
+    global _vpn_state
+    _vpn_state["last_check"] = datetime.now(timezone.utc)
+    
+    # Import here to avoid circular import
+    from app.services.msx_api import test_connection
+    result = test_connection()
+    
+    if result.get("success"):
+        clear_vpn_block()
+        return {"success": True, "message": "VPN connection restored! MSX is accessible."}
+    
+    error = result.get("error", "")
+    if "IP address" in error or "0x80095ffe" in error:
+        return {"success": False, "vpn_blocked": True, "message": "Still blocked. Check your VPN connection."}
+    
+    return {"success": False, "message": f"MSX check failed: {error}"}
+
 
 def _run_az_command() -> Dict[str, Any]:
     """
@@ -221,6 +285,7 @@ def get_msx_auth_status() -> Dict[str, Any]:
         "last_refresh": _token_cache.get("last_refresh"),
         "error": _token_cache.get("error"),
         "refresh_job_running": _refresh_running,
+        "vpn_blocked": _vpn_state["blocked"],
     }
     
     if _token_cache.get("access_token") and expires_on:
@@ -253,18 +318,23 @@ def start_token_refresh_job(interval_seconds: int = 300):
         
         while _refresh_running:
             try:
-                # Check if token needs refresh (< 10 minutes remaining)
-                expires_on = _token_cache.get("expires_on")
-                if expires_on:
-                    now = datetime.now(timezone.utc)
-                    remaining = (expires_on - now).total_seconds()
-                    
-                    if remaining < 600:  # Less than 10 minutes
-                        logger.info("MSX token expiring soon, refreshing...")
-                        refresh_token()
+                # Skip refresh if VPN is blocked — no point refreshing a token
+                # that will just get rejected by the IP firewall
+                if _vpn_state["blocked"]:
+                    logger.debug("Skipping token refresh — VPN blocked")
                 else:
-                    # No token cached, try to get one
-                    refresh_token()
+                    # Check if token needs refresh (< 10 minutes remaining)
+                    expires_on = _token_cache.get("expires_on")
+                    if expires_on:
+                        now = datetime.now(timezone.utc)
+                        remaining = (expires_on - now).total_seconds()
+                        
+                        if remaining < 600:  # Less than 10 minutes
+                            logger.info("MSX token expiring soon, refreshing...")
+                            refresh_token()
+                    else:
+                        # No token cached, try to get one
+                        refresh_token()
                     
             except Exception as e:
                 logger.error(f"Error in MSX token refresh job: {e}")
