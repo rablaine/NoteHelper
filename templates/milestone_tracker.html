@@ -176,12 +176,13 @@
     <table class="table table-hover align-middle" id="milestonesTable">
         <thead>
             <tr>
-                <th style="width: 25%;">Milestone</th>
-                <th style="width: 15%; cursor: pointer;" class="sortable" data-sort="customer" onclick="sortTable('customer')">Customer <i class="bi bi-arrow-down-up text-muted small"></i></th>
-                <th style="width: 12%; cursor: pointer;" class="sortable" data-sort="seller" onclick="sortTable('seller')">Seller <i class="bi bi-arrow-down-up text-muted small"></i></th>
+                <th style="width: 22%;">Milestone</th>
+                <th style="width: 6%;" class="text-center">Team</th>
+                <th style="width: 14%; cursor: pointer;" class="sortable" data-sort="customer" onclick="sortTable('customer')">Customer <i class="bi bi-arrow-down-up text-muted small"></i></th>
+                <th style="width: 11%; cursor: pointer;" class="sortable" data-sort="seller" onclick="sortTable('seller')">Seller <i class="bi bi-arrow-down-up text-muted small"></i></th>
                 <th style="width: 10%; cursor: pointer;" class="sortable" data-sort="status" onclick="sortTable('status')">Status <i class="bi bi-arrow-down-up text-muted small"></i></th>
-                <th style="width: 12%; cursor: pointer;" class="sortable" data-sort="due-date" onclick="sortTable('due-date')">Due Date <i class="bi bi-arrow-down-up text-muted small"></i></th>
-                <th style="width: 12%; cursor: pointer;" class="sortable text-end" data-sort="monthly" onclick="sortTable('monthly')">Est. Monthly $ <i class="bi bi-arrow-down-up text-muted small"></i></th>
+                <th style="width: 11%; cursor: pointer;" class="sortable" data-sort="due-date" onclick="sortTable('due-date')">Due Date <i class="bi bi-arrow-down-up text-muted small"></i></th>
+                <th style="width: 11%; cursor: pointer;" class="sortable text-end" data-sort="monthly" onclick="sortTable('monthly')">Est. Monthly $ <i class="bi bi-arrow-down-up text-muted small"></i></th>
                 <th style="width: 9%;">Workload</th>
                 <th style="width: 5%;" class="text-center">MSX</th>
             </tr>
@@ -205,7 +206,7 @@
                 <!-- Milestone Info -->
                 <td>
                     <div class="fw-semibold">
-                        {% if ms.on_my_team %}<i class="bi bi-people-fill text-primary me-1" title="On my team"></i>{% endif %}{{ ms.title }}
+                        {{ ms.title }}
                     </div>
                     {% if ms.opportunity_name %}
                         <div class="text-muted small">
@@ -216,6 +217,20 @@
                         <div class="text-muted small">
                             <i class="bi bi-hash"></i> {{ ms.milestone_number }}
                         </div>
+                    {% endif %}
+                </td>
+                
+                <!-- Team Status -->
+                <td class="text-center" onclick="event.stopPropagation();">
+                    {% if ms.on_my_team %}
+                    <span class="badge bg-success" title="On my team"><i class="bi bi-people-fill"></i></span>
+                    {% elif ms.msx_milestone_id %}
+                    <button class="btn btn-outline-primary btn-sm py-0 px-1" title="Join milestone team"
+                            onclick="joinTrackerTeam(this, {{ ms.id }})">
+                        <i class="bi bi-person-plus"></i>
+                    </button>
+                    {% else %}
+                    <span class="text-muted">—</span>
                     {% endif %}
                 </td>
                 
@@ -330,6 +345,41 @@
 
 {% block extra_js %}
 <script>
+// =============================================================================
+// Join Milestone Team (inline tracker)
+// =============================================================================
+async function joinTrackerTeam(btn, milestoneId) {
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    try {
+        const resp = await fetch('/api/msx/join-milestone-team', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({milestone_id: milestoneId})
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // Replace button with green badge
+            const cell = btn.closest('td');
+            cell.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i></span>';
+            // Update the row's data attribute so filters still work
+            const row = cell.closest('tr');
+            if (row) row.setAttribute('data-on-my-team', 'true');
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            alert(data.error || 'Failed to join team');
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        alert('Network error: ' + err.message);
+    }
+}
+
 // =============================================================================
 // Sync from MSX
 // =============================================================================

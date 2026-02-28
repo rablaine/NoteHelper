@@ -594,6 +594,7 @@ def get_milestone_tracker_data() -> Dict[str, Any]:
             "fiscal_year": fiscal_year,
             "urgency": urgency,
             "url": ms.url,
+            "msx_milestone_id": ms.msx_milestone_id,
             "last_synced_at": ms.last_synced_at,
             "on_my_team": ms.on_my_team,
             "customer": {

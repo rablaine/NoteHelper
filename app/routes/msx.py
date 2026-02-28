@@ -391,6 +391,82 @@ def create_msx_task():
 
 
 # -----------------------------------------------------------------------------
+# Team Membership Routes
+# -----------------------------------------------------------------------------
+
+@msx_bp.route('/join-milestone-team', methods=['POST'])
+def join_milestone_team():
+    """
+    Add the current user to a milestone's access team in MSX.
+
+    Expected JSON body:
+        milestone_id: local milestone ID (integer)
+
+    Updates the local on_my_team flag on success.
+    """
+    if not request.is_json:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+
+    from app.models import db, Milestone
+    from app.services.msx_api import add_user_to_milestone_team
+
+    milestone_id = request.json.get("milestone_id")
+    if not milestone_id:
+        return jsonify({"success": False, "error": "milestone_id required"}), 400
+
+    milestone = Milestone.query.get(milestone_id)
+    if not milestone:
+        return jsonify({"success": False, "error": "Milestone not found"}), 404
+
+    if not milestone.msx_milestone_id:
+        return jsonify({"success": False, "error": "Milestone has no MSX ID"}), 400
+
+    result = add_user_to_milestone_team(milestone.msx_milestone_id)
+
+    if result.get("success"):
+        milestone.on_my_team = True
+        db.session.commit()
+
+    return jsonify(result)
+
+
+@msx_bp.route('/join-deal-team', methods=['POST'])
+def join_deal_team():
+    """
+    Add the current user to an opportunity's deal team in MSX.
+
+    Expected JSON body:
+        opportunity_id: local opportunity ID (integer)
+
+    Updates the local on_deal_team flag on success.
+    """
+    if not request.is_json:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+
+    from app.models import db, Opportunity
+    from app.services.msx_api import add_user_to_deal_team
+
+    opportunity_id = request.json.get("opportunity_id")
+    if not opportunity_id:
+        return jsonify({"success": False, "error": "opportunity_id required"}), 400
+
+    opportunity = Opportunity.query.get(opportunity_id)
+    if not opportunity:
+        return jsonify({"success": False, "error": "Opportunity not found"}), 404
+
+    if not opportunity.msx_opportunity_id:
+        return jsonify({"success": False, "error": "Opportunity has no MSX ID"}), 400
+
+    result = add_user_to_deal_team(opportunity.msx_opportunity_id)
+
+    if result.get("success"):
+        opportunity.on_deal_team = True
+        db.session.commit()
+
+    return jsonify(result)
+
+
+# -----------------------------------------------------------------------------
 # Exploration / Schema Discovery Routes
 # -----------------------------------------------------------------------------
 

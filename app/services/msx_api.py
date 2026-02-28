@@ -860,6 +860,9 @@ def add_opportunity_comment(
 # Milestone Access Team template ID (from MSX EntityDefinitions)
 MILESTONE_TEAM_TEMPLATE_ID = "316e4735-9e83-eb11-a812-0022481e1be0"
 
+# Opportunity (Deal) Team template ID (from MSX EntityDefinitions)
+OPPORTUNITY_TEAM_TEMPLATE_ID = "cc923a9d-7651-e311-9405-00155db3ba1e"
+
 
 def get_my_milestone_team_ids() -> Dict[str, Any]:
     """
@@ -949,6 +952,204 @@ def get_my_milestone_team_ids() -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Error getting milestone team memberships")
         return {"success": False, "error": str(e), "milestone_ids": set()}
+
+
+def get_my_deal_team_ids() -> Dict[str, Any]:
+    """
+    Get the set of opportunity IDs the current user is on the deal team for.
+
+    Queries the user's access team memberships (teamtype=1) and filters to
+    opportunity teams by checking the team name suffix against the opportunity
+    team template ID.
+
+    Returns:
+        Dict with:
+        - success: bool
+        - opportunity_ids: set of lowercase opportunity GUID strings
+        - error: str if failed
+    """
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return {
+                "success": False,
+                "error": "Could not get current user ID",
+                "opportunity_ids": set(),
+            }
+
+        all_teams = []
+        url = (
+            f"{CRM_BASE_URL}/systemusers({user_id})/teammembership_association"
+            f"?$select=_regardingobjectid_value,teamid,name,teamtype"
+            f"&$filter=teamtype eq 1"
+            f"&$top=5000"
+        )
+        response = _msx_request('GET', url)
+        if response.status_code != 200:
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {response.text[:200]}",
+                "opportunity_ids": set(),
+            }
+
+        data = response.json()
+        all_teams = data.get("value", [])
+
+        next_link = data.get("@odata.nextLink")
+        while next_link:
+            resp = _msx_request('GET', next_link)
+            if resp.status_code == 200:
+                page_data = resp.json()
+                all_teams.extend(page_data.get("value", []))
+                next_link = page_data.get("@odata.nextLink")
+            else:
+                break
+
+        opportunity_ids = set()
+        template_suffix = f"+{OPPORTUNITY_TEAM_TEMPLATE_ID}"
+        for team in all_teams:
+            name = team.get("name", "")
+            if template_suffix in name:
+                regard_id = team.get("_regardingobjectid_value")
+                if regard_id:
+                    opportunity_ids.add(regard_id.lower())
+
+        logger.info(
+            f"Found {len(opportunity_ids)} deal team memberships "
+            f"out of {len(all_teams)} total access teams"
+        )
+
+        return {
+            "success": True,
+            "opportunity_ids": opportunity_ids,
+        }
+
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out.", "opportunity_ids": set()}
+    except requests.exceptions.ConnectionError as e:
+        return {
+            "success": False,
+            "error": f"Connection error: {str(e)[:100]}",
+            "opportunity_ids": set(),
+        }
+    except Exception as e:
+        logger.exception("Error getting deal team memberships")
+        return {"success": False, "error": str(e), "opportunity_ids": set()}
+
+
+def add_user_to_milestone_team(milestone_msx_id: str) -> Dict[str, Any]:
+    """
+    Add the current user to a milestone's access team in MSX.
+
+    Args:
+        milestone_msx_id: The MSX GUID of the milestone.
+
+    Returns:
+        Dict with success: bool and optional error message.
+    """
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return {"success": False, "error": "Could not get current user ID"}
+
+        url = (
+            f"{CRM_BASE_URL}/systemusers({user_id})"
+            f"/Microsoft.Dynamics.CRM.AddUserToRecordTeam"
+        )
+        payload = {
+            "Record": {
+                "@odata.type": "Microsoft.Dynamics.CRM.msp_engagementmilestone",
+                "msp_engagementmilestoneid": milestone_msx_id,
+            },
+            "TeamTemplate": {
+                "@odata.type": "Microsoft.Dynamics.CRM.teamtemplate",
+                "teamtemplateid": MILESTONE_TEAM_TEMPLATE_ID,
+            },
+        }
+
+        response = _msx_request('POST', url, json_data=payload)
+
+        if response.status_code in (200, 204):
+            logger.info(f"Added user to milestone team: {milestone_msx_id}")
+            return {"success": True}
+        else:
+            error_text = response.text[:300]
+            # Check for "already on team" type errors
+            if "already" in error_text.lower() or response.status_code == 409:
+                return {"success": True, "already_on_team": True}
+            logger.warning(
+                f"Failed to add user to milestone team {milestone_msx_id}: "
+                f"HTTP {response.status_code} — {error_text}"
+            )
+            return {
+                "success": False,
+                "error": f"MSX returned HTTP {response.status_code}",
+            }
+
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error adding user to milestone team {milestone_msx_id}")
+        return {"success": False, "error": str(e)}
+
+
+def add_user_to_deal_team(opportunity_msx_id: str) -> Dict[str, Any]:
+    """
+    Add the current user to an opportunity's deal team in MSX.
+
+    Args:
+        opportunity_msx_id: The MSX GUID of the opportunity.
+
+    Returns:
+        Dict with success: bool and optional error message.
+    """
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return {"success": False, "error": "Could not get current user ID"}
+
+        url = (
+            f"{CRM_BASE_URL}/systemusers({user_id})"
+            f"/Microsoft.Dynamics.CRM.AddUserToRecordTeam"
+        )
+        payload = {
+            "Record": {
+                "@odata.type": "Microsoft.Dynamics.CRM.opportunity",
+                "opportunityid": opportunity_msx_id,
+            },
+            "TeamTemplate": {
+                "@odata.type": "Microsoft.Dynamics.CRM.teamtemplate",
+                "teamtemplateid": OPPORTUNITY_TEAM_TEMPLATE_ID,
+            },
+        }
+
+        response = _msx_request('POST', url, json_data=payload)
+
+        if response.status_code in (200, 204):
+            logger.info(f"Added user to deal team: {opportunity_msx_id}")
+            return {"success": True}
+        else:
+            error_text = response.text[:300]
+            if "already" in error_text.lower() or response.status_code == 409:
+                return {"success": True, "already_on_team": True}
+            logger.warning(
+                f"Failed to add user to deal team {opportunity_msx_id}: "
+                f"HTTP {response.status_code} — {error_text}"
+            )
+            return {
+                "success": False,
+                "error": f"MSX returned HTTP {response.status_code}",
+            }
+
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error adding user to deal team {opportunity_msx_id}")
+        return {"success": False, "error": str(e)}
 
 
 def get_current_user_id() -> Optional[str]:
