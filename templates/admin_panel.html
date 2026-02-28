@@ -180,6 +180,71 @@
             </div>
         </div>
 
+        <!-- AI Integration -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-stars"></i> AI Integration</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6>Configuration Status</h6>
+                        <table class="table table-sm mb-0">
+                            <tr>
+                                <td class="text-muted">OpenAI Endpoint</td>
+                                <td>
+                                    {% if ai_config.endpoint %}
+                                    <i class="bi bi-check-circle-fill text-success"></i> Configured
+                                    {% else %}
+                                    <i class="bi bi-x-circle-fill text-danger"></i> Not set
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Deployment</td>
+                                <td>
+                                    {% if ai_config.deployment %}
+                                    <i class="bi bi-check-circle-fill text-success"></i> {{ ai_config.deployment }}
+                                    {% else %}
+                                    <i class="bi bi-x-circle-fill text-danger"></i> Not set
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Service Principal</td>
+                                <td>
+                                    {% if ai_config.has_credentials %}
+                                    <i class="bi bi-check-circle-fill text-success"></i> Configured
+                                    {% else %}
+                                    <i class="bi bi-x-circle-fill text-danger"></i> Not set
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Connection Test</h6>
+                        {% if ai_config.enabled and ai_config.has_credentials %}
+                        <p class="small text-muted mb-2">Click below to verify NoteHelper can reach your Azure OpenAI endpoint.</p>
+                        <button class="btn btn-outline-success" id="aiTestBtn">
+                            <i class="bi bi-lightning"></i> Test AI Connection
+                        </button>
+                        {% elif not ai_config.endpoint %}
+                        <p class="small text-muted mb-2">Set <code>AZURE_OPENAI_ENDPOINT</code> and <code>AZURE_OPENAI_DEPLOYMENT</code> in your <code>.env</code> file to enable AI features.</p>
+                        {% elif not ai_config.has_credentials %}
+                        <p class="small text-muted mb-2">Set <code>AZURE_CLIENT_ID</code>, <code>AZURE_CLIENT_SECRET</code>, and <code>AZURE_TENANT_ID</code> in your <code>.env</code> file.</p>
+                        {% endif %}
+                        <div id="aiTestResult" class="mt-3"></div>
+                    </div>
+                </div>
+                {% if not ai_config.enabled %}
+                <div class="alert alert-info mb-0 py-2">
+                    <i class="bi bi-info-circle"></i> AI features (Auto-tag with AI, Match Milestone) are hidden from the UI when not configured. See the <a href="https://github.com/rablaine/NoteHelper#ai-features-optional" target="_blank">README</a> for setup instructions.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Export Call Logs -->
         <div class="card mb-4">
             <div class="card-header">
@@ -193,6 +258,44 @@
                     </button>
                     <button class="btn btn-success" id="exportCallLogsCsvBtn">
                         <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Wizard -->
+        {% set setup_complete = has_customers and has_milestones and has_revenue %}
+        <div class="card mb-4">
+            <div class="card-header {% if setup_complete %}collapsed{% endif %}" {% if setup_complete %}data-bs-toggle="collapse" data-bs-target="#setupWizardCollapse" aria-expanded="false" role="button" style="cursor: pointer;"{% endif %}>
+                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-rocket-takeoff"></i> Setup Wizard</span>
+                    <span class="d-flex align-items-center gap-2">
+                        {% if setup_complete %}
+                        <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                        <i class="bi bi-chevron-down"></i>
+                        {% endif %}
+                    </span>
+                </h5>
+            </div>
+            <div {% if setup_complete %}class="collapse" id="setupWizardCollapse"{% endif %}>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">Re-run the initial setup wizard to check your progress or complete any remaining steps.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col">
+                            <i class="bi bi-{% if has_customers %}check-circle-fill text-success{% else %}circle text-muted{% endif %} fs-4"></i>
+                            <div class="small mt-1">Accounts</div>
+                        </div>
+                        <div class="col">
+                            <i class="bi bi-{% if has_milestones %}check-circle-fill text-success{% else %}circle text-muted{% endif %} fs-4"></i>
+                            <div class="small mt-1">Milestones</div>
+                        </div>
+                        <div class="col">
+                            <i class="bi bi-{% if has_revenue %}check-circle-fill text-success{% else %}circle text-muted{% endif %} fs-4"></i>
+                            <div class="small mt-1">Revenue</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-warning" id="adminRerunWizardBtn">
+                        <i class="bi bi-rocket-takeoff"></i> {% if setup_complete %}Re-run Setup Wizard{% else %}Launch Setup Wizard{% endif %}
                     </button>
                 </div>
             </div>
@@ -602,6 +705,62 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
 loadMsxStatus();
 checkAdminAuth();
 
+// Setup Wizard - Re-run
+document.getElementById('adminRerunWizardBtn').addEventListener('click', async function() {
+    try {
+        await fetch('/api/preferences/reset-onboarding', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        window.location.href = '/';
+    } catch (err) {
+        alert('Failed to launch setup wizard: ' + err.message);
+    }
+});
+
+// AI Connection Test
+const aiTestBtn = document.getElementById('aiTestBtn');
+if (aiTestBtn) {
+    aiTestBtn.addEventListener('click', async function() {
+        const btn = this;
+        const resultDiv = document.getElementById('aiTestResult');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+        btn.disabled = true;
+        
+        try {
+            const response = await fetch('/api/admin/ai-config/test', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success py-2">
+                        <i class="bi bi-check-circle-fill"></i> <strong>Connection successful!</strong><br>
+                        <small class="text-muted">Response: ${data.response}</small>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger py-2">
+                        <i class="bi bi-x-circle-fill"></i> <strong>Connection failed</strong><br>
+                        <small>${data.error}</small>
+                    </div>
+                `;
+            }
+        } catch (err) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger py-2">
+                    <i class="bi bi-x-circle-fill"></i> <strong>Error</strong><br>
+                    <small>${err.message}</small>
+                </div>
+            `;
+        } finally {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    });
+}
+
 // Export Call Logs
 document.getElementById('exportCallLogsJsonBtn').addEventListener('click', function() {
     window.location.href = '/api/data-management/export/call-logs-json';
@@ -708,6 +867,19 @@ document.getElementById('importFromMsxBtn').addEventListener('click', async func
         btn.innerHTML = '<i class="bi bi-cloud-download"></i> Import My Accounts';
     }
 });
+
+// Setup Wizard chevron rotation
+const setupHeader = document.querySelector('[data-bs-target="#setupWizardCollapse"]');
+if (setupHeader) {
+    const setupChevron = setupHeader.querySelector('.bi-chevron-down');
+    document.getElementById('setupWizardCollapse').addEventListener('shown.bs.collapse', function() {
+        setupChevron.style.transform = 'rotate(180deg)';
+        setupChevron.style.transition = 'transform 0.2s';
+    });
+    document.getElementById('setupWizardCollapse').addEventListener('hidden.bs.collapse', function() {
+        setupChevron.style.transform = 'rotate(0deg)';
+    });
+}
 
 // Danger Zone chevron rotation
 const dangerHeader = document.querySelector('[data-bs-target="#dangerZoneCollapse"]');

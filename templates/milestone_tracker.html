@@ -89,7 +89,7 @@
 
 <!-- Sync Progress Alert (hidden by default) -->
 <div id="syncAlert" class="alert d-none mb-4" role="alert" style="position: relative;">
-    <div id="syncBrainrotToggle" class="brainrot-card-toggle d-none">
+    <div id="syncBrainrotToggle" class="brainrot-card-toggle brainrot-pos-top-right d-none">
         <input type="checkbox" id="syncBrainrotCheck">
         <label for="syncBrainrotCheck" class="small">brainrot mode</label>
     </div>
@@ -472,7 +472,7 @@ function syncMilestones() {
                 if (data.success) {
                     const brToggle = document.getElementById('syncBrainrotToggle');
                     if (brToggle) brToggle.classList.add('d-none');
-                    if (window.setBrainrot) window.setBrainrot(false);
+                    if (window.hideBrainrotPanel) window.hideBrainrotPanel();
                     alertEl.className = 'alert alert-success mb-4';
                     let parts = [];
                     if (data.created > 0) parts.push(`${data.created} new`);
@@ -490,7 +490,7 @@ function syncMilestones() {
                 } else {
                     const brToggle2 = document.getElementById('syncBrainrotToggle');
                     if (brToggle2) brToggle2.classList.add('d-none');
-                    if (window.setBrainrot) window.setBrainrot(false);
+                    if (window.hideBrainrotPanel) window.hideBrainrotPanel();
                     alertEl.className = 'alert alert-danger mb-4';
                     let errorMsg = data.errors ? data.errors.join('; ') : 'Unknown error';
                     msg.innerHTML = `<i class="bi bi-x-circle-fill"></i> Sync failed: ${errorMsg}`;

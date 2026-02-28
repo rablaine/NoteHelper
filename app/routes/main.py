@@ -288,6 +288,8 @@ def search():
 @main_bp.route('/preferences')
 def preferences():
     """User preferences page."""
+    from app.services.workiq_service import DEFAULT_SUMMARY_PROMPT
+    
     user_id = g.user.id if g.user.is_authenticated else 1
     pref = UserPreference.query.filter_by(user_id=user_id).first()
     if not pref:
@@ -310,6 +312,8 @@ def preferences():
                          territory_view_accounts=pref.territory_view_accounts,
                          colored_sellers=pref.colored_sellers,
                          show_customers_without_calls=pref.show_customers_without_calls,
+                         workiq_summary_prompt=pref.workiq_summary_prompt,
+                         default_workiq_prompt=DEFAULT_SUMMARY_PROMPT,
                          stats=stats)
 
 
@@ -1765,6 +1769,25 @@ def reset_onboarding():
         db.session.commit()
     
     return jsonify({'first_run_modal_dismissed': False}), 200
+
+
+@main_bp.route('/api/preferences/workiq-prompt', methods=['POST'])
+def update_workiq_prompt():
+    """Update the custom WorkIQ meeting summary prompt."""
+    user_id = g.user.id if g.user.is_authenticated else 1
+    data = request.get_json()
+    prompt_text = data.get('workiq_summary_prompt', '').strip()
+    
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id)
+        db.session.add(pref)
+    
+    # Empty string means "use default" — store as null
+    pref.workiq_summary_prompt = prompt_text if prompt_text else None
+    db.session.commit()
+    
+    return jsonify({'success': True, 'workiq_summary_prompt': pref.workiq_summary_prompt}), 200
 
 
 # =============================================================================

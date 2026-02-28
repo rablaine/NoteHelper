@@ -17,6 +17,9 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/admin')
 def admin_panel():
     """Admin control panel for system-wide operations."""
+    import os
+    from app.routes.ai import is_ai_enabled
+    
     # Get system-wide statistics
     stats = {
         'total_pods': POD.query.count(),
@@ -30,7 +33,20 @@ def admin_panel():
         'total_revenue_imports': RevenueImport.query.count()
     }
     
-    return render_template('admin_panel.html', stats=stats)
+    # AI configuration status
+    ai_enabled = is_ai_enabled()
+    ai_config = {
+        'enabled': ai_enabled,
+        'endpoint': os.environ.get('AZURE_OPENAI_ENDPOINT', ''),
+        'deployment': os.environ.get('AZURE_OPENAI_DEPLOYMENT', ''),
+        'has_credentials': bool(
+            os.environ.get('AZURE_CLIENT_ID')
+            and os.environ.get('AZURE_CLIENT_SECRET')
+            and os.environ.get('AZURE_TENANT_ID')
+        )
+    }
+    
+    return render_template('admin_panel.html', stats=stats, ai_config=ai_config)
 
 
 @admin_bp.route('/admin/ai-logs')

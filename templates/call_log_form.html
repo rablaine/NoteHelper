@@ -40,7 +40,7 @@
                 <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
                     <i class="bi bi-check-circle text-success"></i> Draft saved
                 </div>
-                {% if not call_log and false %}{# WorkIQ: hidden until integration is ready #}
+                {% if not call_log and ai_enabled %}
                 <button type="button" class="btn btn-success" id="autoFillBtn" onclick="startAutoFill()" title="Auto-fill from meeting transcript">
                     <i class="bi bi-magic"></i> Auto-fill
                 </button>
@@ -192,7 +192,7 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label mb-0">Call Notes *</label>
-                            {% if not call_log and false %}{# WorkIQ: hidden until integration is ready #}
+                            {% if not call_log %}
                             <button type="button" class="btn btn-sm btn-outline-info" id="importMeetingBtn" onclick="openMeetingImport()">
                                 <i class="bi bi-calendar-event"></i> Import from Meeting
                             </button>
@@ -418,6 +418,7 @@
                 <div id="meetingImportLoading" class="text-center py-4">
                     <div class="spinner-border text-primary" role="status"></div>
                     <p class="mt-2">Loading meetings for this date...</p>
+                    <small class="text-muted">This can take up to a minute</small>
                 </div>
                 
                 <div id="meetingImportError" class="alert alert-danger" style="display: none;">
@@ -440,11 +441,33 @@
                 
                 <div id="meetingSummaryLoading" class="text-center py-4" style="display: none;">
                     <div class="spinner-border text-success" role="status"></div>
-                    <p class="mt-2">Generating 250-word summary...</p>
+                    <p class="mt-2">Generating meeting summary...</p>
                     <small class="text-muted">This may take up to 2 minutes for long transcripts</small>
                 </div>
+                
+                <!-- Custom Prompt Section -->
+                <div id="meetingPromptSection" class="mt-3" style="display: none;">
+                    <div class="d-flex align-items-center mb-2">
+                        <a href="#" class="text-decoration-none small" data-bs-toggle="collapse" data-bs-target="#customPromptCollapse">
+                            <i class="bi bi-sliders"></i> Customize summary prompt
+                        </a>
+                    </div>
+                    <div class="collapse" id="customPromptCollapse">
+                        <div class="card card-body bg-light py-2 px-3">
+                            <small class="text-muted mb-1">Edit the prompt used to summarize this meeting. Use <code>{title}</code> and <code>{date}</code> as placeholders.</small>
+                            <textarea class="form-control form-control-sm" id="meetingCustomPrompt" rows="3"></textarea>
+                            <div class="d-flex justify-content-end mt-1">
+                                <button type="button" class="btn btn-sm btn-link" id="resetMeetingPrompt">Reset to default</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer d-flex">
+                <div id="meetingBrainrotToggle" class="brainrot-card-toggle d-none me-auto">
+                    <input type="checkbox" id="meetingBrainrotCheck">
+                    <label for="meetingBrainrotCheck" class="small">brainrot mode</label>
+                </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-success" id="importSelectedMeetingBtn" onclick="importSelectedMeeting()" disabled>
                     <i class="bi bi-download"></i> Import Summary
@@ -1301,6 +1324,20 @@ function selectMilestone(milestone) {
         dueDateInput.value = new Date().toISOString().split('T')[0];
     }
     
+    // Pre-fill task fields from meeting import suggestion (if available)
+    if (typeof pendingTaskSuggestion !== 'undefined' && pendingTaskSuggestion) {
+        var taskSubjectEl = document.getElementById('task_subject');
+        var taskDescEl = document.getElementById('task_description');
+        if (taskSubjectEl && !taskSubjectEl.value && pendingTaskSuggestion.subject) {
+            taskSubjectEl.value = pendingTaskSuggestion.subject;
+        }
+        if (taskDescEl && !taskDescEl.value && pendingTaskSuggestion.description) {
+            taskDescEl.value = pendingTaskSuggestion.description;
+        }
+        // Clear pending suggestion after applying
+        pendingTaskSuggestion = null;
+    }
+    
     // Clear search
     milestoneSearch.value = '';
     milestoneDropdown.style.display = 'none';
@@ -2016,8 +2053,8 @@ function discardDraft() {
         if (createdTaskCatName) createdTaskCatName.value = '';
         if (createdTaskIsHok) createdTaskIsHok.value = '';
         
-        // Redirect back to call logs list
-        window.location.href = '{{ url_for("call_logs.call_logs_list") }}';
+        // Redirect back to home page
+        window.location.href = '{{ url_for("main.index") }}';
     }
 }
 
@@ -2072,6 +2109,38 @@ var meetingImportModal = null;
 var selectedMeetingIndex = null;
 var loadedMeetings = [];
 var autoFillAborted = false;
+var pendingTaskSuggestion = null;  // Stores task title/description from meeting import
+
+// WorkIQ prompt customization
+var userWorkiqPrompt = {{ (workiq_prompt or default_workiq_prompt)|tojson }};
+var defaultWorkiqPrompt = {{ default_workiq_prompt|tojson }};
+
+// Initialize prompt textarea and reset button  
+document.addEventListener('DOMContentLoaded', function() {
+    var promptTextarea = document.getElementById('meetingCustomPrompt');
+    var resetBtn = document.getElementById('resetMeetingPrompt');
+    if (promptTextarea) {
+        promptTextarea.value = userWorkiqPrompt;
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+            if (promptTextarea) {
+                promptTextarea.value = defaultWorkiqPrompt;
+            }
+        });
+    }
+    
+    // Wire up meeting import brainrot checkbox
+    var meetingBrCb = document.getElementById('meetingBrainrotCheck');
+    if (meetingBrCb) {
+        if (localStorage.getItem('brainrot') === '1') meetingBrCb.checked = true;
+        meetingBrCb.addEventListener('change', function() {
+            if (window.setBrainrot) window.setBrainrot(this.checked);
+            if (this.checked && window.showBrainrotPanel) window.showBrainrotPanel();
+            else if (!this.checked && window.hideBrainrotPanel) window.hideBrainrotPanel();
+        });
+    }
+});
 
 // =============================================================================
 // AUTO-FILL ORCHESTRATION
@@ -2244,7 +2313,15 @@ function proceedWithMeeting(meeting, dateStr) {
                 quill.root.innerHTML = content;
             }
             
-            // Step 3: AI analysis (topics + task)
+            // Store task suggestion from WorkIQ for milestone selection
+            if (data.task_subject || data.task_description) {
+                pendingTaskSuggestion = {
+                    subject: data.task_subject || '',
+                    description: data.task_description || ''
+                };
+            }
+            
+            // Step 3: AI analysis (topic tagging)
             setAutoFillStep(3, 'loading');
             analyzeCallWithAI(data.summary, meeting.title);
         })
@@ -2271,21 +2348,13 @@ function analyzeCallWithAI(summary, meetingTitle) {
             console.warn('AI analysis failed:', data.error);
             // Continue anyway - not a blocker
         } else {
-            // Add topics
+            // Add topics (task fields are filled by selectMilestone from WorkIQ suggestion)
             if (data.topics && data.topics.length > 0) {
                 data.topics.forEach(function(topic) {
                     if (!isTopicSelected(topic.id)) {
                         addTopic(topic.id, topic.name);
                     }
                 });
-            }
-            
-            // Fill task fields
-            if (data.task_title) {
-                document.getElementById('task_subject').value = data.task_title;
-            }
-            if (data.task_description) {
-                document.getElementById('task_description').value = data.task_description;
             }
         }
         
@@ -2431,6 +2500,12 @@ function openMeetingImport() {
     // Initialize modal if needed
     if (!meetingImportModal) {
         meetingImportModal = new bootstrap.Modal(document.getElementById('meetingImportModal'));
+        // Hide brainrot when modal closes (any path: cancel, X, import)
+        document.getElementById('meetingImportModal').addEventListener('hidden.bs.modal', function() {
+            var brToggle = document.getElementById('meetingBrainrotToggle');
+            if (brToggle) brToggle.classList.add('d-none');
+            if (window.hideBrainrotPanel) window.hideBrainrotPanel();
+        });
     }
     
     // Reset state
@@ -2446,6 +2521,13 @@ function openMeetingImport() {
     
     // Show modal
     meetingImportModal.show();
+    
+    // Show brainrot toggle while loading
+    var brToggle = document.getElementById('meetingBrainrotToggle');
+    if (brToggle) brToggle.classList.remove('d-none');
+    if (window.isBrainrotOn && window.isBrainrotOn() && window.showBrainrotPanel) {
+        window.showBrainrotPanel();
+    }
     
     // Get date and customer name
     var dateStr = document.getElementById('call_date').value;
@@ -2472,6 +2554,10 @@ function openMeetingImport() {
         .then(response => response.json())
         .then(data => {
             document.getElementById('meetingImportLoading').style.display = 'none';
+            // Hide brainrot when loading finishes - don't distract during meeting selection
+            var brToggle = document.getElementById('meetingBrainrotToggle');
+            if (brToggle) brToggle.classList.add('d-none');
+            if (window.hideBrainrotPanel) window.hideBrainrotPanel();
             
             if (data.error) {
                 showMeetingError(data.error);
@@ -2499,6 +2585,10 @@ function showMeetingError(message) {
     document.getElementById('meetingImportLoading').style.display = 'none';
     document.getElementById('meetingImportError').style.display = 'block';
     document.getElementById('meetingImportErrorText').textContent = message;
+    // Hide brainrot on error too
+    var brToggle = document.getElementById('meetingBrainrotToggle');
+    if (brToggle) brToggle.classList.add('d-none');
+    if (window.hideBrainrotPanel) window.hideBrainrotPanel();
 }
 
 function renderMeetingList(meetings, autoSelectedIndex, autoSelectedReason) {
@@ -2544,6 +2634,12 @@ function renderMeetingList(meetings, autoSelectedIndex, autoSelectedReason) {
     });
     
     document.getElementById('meetingImportContent').style.display = 'block';
+    
+    // Show the prompt customization section when meetings are available
+    var promptSection = document.getElementById('meetingPromptSection');
+    if (promptSection) {
+        promptSection.style.display = 'block';
+    }
 }
 
 function selectMeeting(index) {
@@ -2602,13 +2698,27 @@ function importSelectedMeeting() {
     // Normal manual import flow
     // Show loading state
     document.getElementById('meetingImportContent').style.display = 'none';
+    document.getElementById('meetingPromptSection').style.display = 'none';
     document.getElementById('meetingSummaryLoading').style.display = 'block';
     document.getElementById('importSelectedMeetingBtn').disabled = true;
+    
+    // Re-show brainrot toggle during summary generation
+    var brToggle = document.getElementById('meetingBrainrotToggle');
+    if (brToggle) brToggle.classList.remove('d-none');
+    if (window.isBrainrotOn && window.isBrainrotOn() && window.showBrainrotPanel) {
+        window.showBrainrotPanel();
+    }
     
     // Fetch summary with timeout
     var url = '/api/meetings/summary?title=' + encodeURIComponent(meeting.title);
     if (dateStr) {
         url += '&date=' + encodeURIComponent(dateStr);
+    }
+    
+    // Include custom prompt if user modified it
+    var promptEl = document.getElementById('meetingCustomPrompt');
+    if (promptEl && promptEl.value.trim()) {
+        url += '&prompt=' + encodeURIComponent(promptEl.value.trim());
     }
     
     // Create abort controller for timeout
@@ -2666,6 +2776,14 @@ function importSelectedMeeting() {
             // Auto-suggest topics if any technologies were identified
             if (data.topics && data.topics.length > 0) {
                 autoSuggestTopics(data.topics);
+            }
+            
+            // Store task suggestion for when milestone is selected
+            if (data.task_subject || data.task_description) {
+                pendingTaskSuggestion = {
+                    subject: data.task_subject || '',
+                    description: data.task_description || ''
+                };
             }
             
             // Close modal

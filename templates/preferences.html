@@ -145,6 +145,33 @@
         <div class="alert alert-success d-none" id="saveSuccess">
             <i class="bi bi-check-circle"></i> Preferences saved successfully!
         </div>
+
+        <!-- WorkIQ & AI Settings -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-robot"></i> WorkIQ & AI</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h6 class="mb-1">Meeting Summary Prompt</h6>
+                            <small class="text-muted">Customize how WorkIQ summarizes your meetings. Use <code>{title}</code> and <code>{date}</code> as placeholders.</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="resetPromptBtn" title="Reset to default prompt">
+                            <i class="bi bi-arrow-counterclockwise"></i> Reset
+                        </button>
+                    </div>
+                    <textarea class="form-control" id="workiqPrompt" rows="4" placeholder="Enter your custom meeting summary prompt...">{{ workiq_summary_prompt or default_workiq_prompt }}</textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small class="text-muted" id="promptStatus"></small>
+                        <button type="button" class="btn btn-sm btn-primary" id="savePromptBtn">
+                            <i class="bi bi-check-lg"></i> Save Prompt
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -306,6 +333,63 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             saveSuccess.classList.add('d-none');
         }, 3000);
+    }
+    
+    // WorkIQ prompt save
+    const savePromptBtn = document.getElementById('savePromptBtn');
+    const resetPromptBtn = document.getElementById('resetPromptBtn');
+    const workiqPrompt = document.getElementById('workiqPrompt');
+    const promptStatus = document.getElementById('promptStatus');
+    const defaultPrompt = {{ default_workiq_prompt|tojson }};
+    
+    if (savePromptBtn) {
+        savePromptBtn.addEventListener('click', function() {
+            const prompt = workiqPrompt.value.trim();
+            
+            fetch('/api/preferences/workiq-prompt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workiq_summary_prompt: prompt })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccess();
+                    promptStatus.textContent = 'Saved!';
+                    promptStatus.className = 'text-success small';
+                    setTimeout(() => { promptStatus.textContent = ''; }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error saving prompt:', error);
+                promptStatus.textContent = 'Error saving prompt';
+                promptStatus.className = 'text-danger small';
+            });
+        });
+    }
+    
+    if (resetPromptBtn) {
+        resetPromptBtn.addEventListener('click', function() {
+            workiqPrompt.value = defaultPrompt;
+            // Auto-save the reset
+            fetch('/api/preferences/workiq-prompt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workiq_summary_prompt: '' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccess();
+                    promptStatus.textContent = 'Reset to default';
+                    promptStatus.className = 'text-muted small';
+                    setTimeout(() => { promptStatus.textContent = ''; }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error resetting prompt:', error);
+            });
+        });
     }
 });
 </script>

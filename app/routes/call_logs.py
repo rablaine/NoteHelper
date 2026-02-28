@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime
 import logging
 
-from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask
+from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask, UserPreference
 from app.services.msx_api import create_task, TASK_CATEGORIES
 
 logger = logging.getLogger(__name__)
@@ -332,6 +332,12 @@ def call_log_create():
     from app.routes.ai import is_ai_enabled
     ai_enabled = is_ai_enabled()
     
+    # Get user's custom WorkIQ prompt (for meeting import modal)
+    from app.services.workiq_service import DEFAULT_SUMMARY_PROMPT
+    user_id = g.user.id if g.user.is_authenticated else 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    user_prompt = pref.workiq_summary_prompt if pref and pref.workiq_summary_prompt else DEFAULT_SUMMARY_PROMPT
+    
     return render_template('call_log_form.html', 
                          call_log=None, 
                          customers=customers,
@@ -345,7 +351,9 @@ def call_log_create():
                          referrer=referrer,
                          today=today,
                          now_time=now_time,
-                         ai_enabled=ai_enabled)
+                         ai_enabled=ai_enabled,
+                         workiq_prompt=user_prompt,
+                         default_workiq_prompt=DEFAULT_SUMMARY_PROMPT)
 
 
 @call_logs_bp.route('/call-log/<int:id>')
@@ -544,6 +552,7 @@ def api_get_meeting_summary():
     Query params:
         title: Meeting title (required)
         date: Date in YYYY-MM-DD format (optional, helps narrow down)
+        prompt: Custom prompt template (optional, uses {title} and {date} placeholders)
         
     Returns JSON:
         - summary: The 250-word meeting summary
@@ -555,16 +564,19 @@ def api_get_meeting_summary():
     
     title = request.args.get('title')
     date_str = request.args.get('date')
+    custom_prompt = request.args.get('prompt')
     
     if not title:
         return jsonify({'error': 'title parameter is required'}), 400
     
     try:
-        result = get_meeting_summary(title, date_str)
+        result = get_meeting_summary(title, date_str, custom_prompt=custom_prompt)
         return jsonify({
             'summary': result.get('summary', ''),
             'topics': result.get('topics', []),
             'action_items': result.get('action_items', []),
+            'task_subject': result.get('task_subject', ''),
+            'task_description': result.get('task_description', ''),
             'success': True
         })
     except Exception as e:
@@ -635,7 +647,7 @@ def api_fill_my_day_process():
               'task_subject': '', 'task_description': '', 'summary_ok': False,
               'milestone': None}
     
-    # Step 1: Get meeting summary
+    # Step 1: Get meeting summary (WorkIQ provides summary + task suggestion)
     try:
         summary_data = get_meeting_summary(title, date_str)
         summary = summary_data.get('summary', '')
@@ -654,6 +666,10 @@ def api_fill_my_day_process():
         result['summary'] = summary
         result['content_html'] = content_html
         result['summary_ok'] = bool(summary and not summary.startswith('Error'))
+        
+        # Use WorkIQ task suggestion as default (OpenAI milestone match may override)
+        result['task_subject'] = summary_data.get('task_subject', '')
+        result['task_description'] = summary_data.get('task_description', '')
     except Exception as e:
         logger.error(f"Fill My Day - summary error for '{title}': {e}")
         result['summary'] = f'[Could not fetch summary: {str(e)}]'
@@ -681,16 +697,14 @@ Available topics: {', '.join(topic_names)}
 Meeting summary:
 {result['summary']}
 
-Also suggest a brief task subject (1 line) and task description (2-3 lines) for follow-up work.
-
 Return JSON format:
-{{"topics": ["topic1", "topic2"], "task_subject": "...", "task_description": "..."}}"""
+{{"topics": ["topic1", "topic2"]}}"""
                     
                     response = ai_client.chat.completions.create(
                         model=deployment_name,
                         messages=[{'role': 'user', 'content': prompt}],
                         temperature=0.3,
-                        max_tokens=500,
+                        max_tokens=200,
                         response_format={"type": "json_object"}
                     )
                     
@@ -706,8 +720,6 @@ Return JSON format:
                                 break
                     
                     result['topics'] = matched_topics
-                    result['task_subject'] = ai_result.get('task_subject', '')
-                    result['task_description'] = ai_result.get('task_description', '')
         except Exception as e:
             logger.warning(f"Fill My Day - AI analysis error for '{title}': {e}")
             # Non-fatal - continue without AI enrichment
@@ -742,17 +754,16 @@ Call Notes:
 Available Milestones:
 {milestone_list}
 
-Which milestone best matches what was discussed? Also suggest a task subject and description
-specifically for this milestone.
+Which milestone best matches what was discussed?
 
 Return JSON:
-{{"milestone_id": "THE_ID_OR_NULL", "reason": "why", "task_subject": "...", "task_description": "..."}}"""
+{{"milestone_id": "THE_ID_OR_NULL", "reason": "why"}}"""
                             
                             ms_response = ai_client.chat.completions.create(
                                 model=deployment_name,
                                 messages=[{'role': 'user', 'content': ms_prompt}],
                                 temperature=0.3,
-                                max_tokens=300,
+                                max_tokens=150,
                                 response_format={"type": "json_object"}
                             )
                             
@@ -777,11 +788,6 @@ Return JSON:
                                         'workload': matched.get('workload', ''),
                                         'reason': ms_ai.get('reason', '')
                                     }
-                                    # Use milestone-specific task if provided
-                                    if ms_ai.get('task_subject'):
-                                        result['task_subject'] = ms_ai['task_subject']
-                                    if ms_ai.get('task_description'):
-                                        result['task_description'] = ms_ai['task_description']
         except Exception as e:
             logger.warning(f"Fill My Day - milestone matching error for '{title}': {e}")
             # Non-fatal - continue without milestone

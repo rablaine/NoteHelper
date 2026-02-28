@@ -124,4 +124,8 @@ def create_app():
     from app.services.msx_auth import start_token_refresh_job
     start_token_refresh_job(interval_seconds=300)  # Check every 5 minutes
     
+    # Start scheduled milestone sync (if MILESTONE_SYNC_HOUR is configured)
+    from app.services.scheduled_sync import start_scheduled_sync
+    start_scheduled_sync(app)
+    
     return app
