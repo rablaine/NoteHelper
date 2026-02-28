@@ -40,7 +40,7 @@
                 <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
                     <i class="bi bi-check-circle text-success"></i> Draft saved
                 </div>
-                {% if not call_log and false %}{# WorkIQ: hidden until integration is ready #}
+                {% if not call_log %}
                 <button type="button" class="btn btn-success" id="autoFillBtn" onclick="startAutoFill()" title="Auto-fill from meeting transcript">
                     <i class="bi bi-magic"></i> Auto-fill
                 </button>
@@ -192,7 +192,7 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label mb-0">Call Notes *</label>
-                            {% if not call_log and false %}{# WorkIQ: hidden until integration is ready #}
+                            {% if not call_log %}
                             <button type="button" class="btn btn-sm btn-outline-info" id="importMeetingBtn" onclick="openMeetingImport()">
                                 <i class="bi bi-calendar-event"></i> Import from Meeting
                             </button>
@@ -442,6 +442,24 @@
                     <div class="spinner-border text-success" role="status"></div>
                     <p class="mt-2">Generating 250-word summary...</p>
                     <small class="text-muted">This may take up to 2 minutes for long transcripts</small>
+                </div>
+                
+                <!-- Custom Prompt Section -->
+                <div id="meetingPromptSection" class="mt-3" style="display: none;">
+                    <div class="d-flex align-items-center mb-2">
+                        <a href="#" class="text-decoration-none small" data-bs-toggle="collapse" data-bs-target="#customPromptCollapse">
+                            <i class="bi bi-sliders"></i> Customize summary prompt
+                        </a>
+                    </div>
+                    <div class="collapse" id="customPromptCollapse">
+                        <div class="card card-body bg-light py-2 px-3">
+                            <small class="text-muted mb-1">Edit the prompt used to summarize this meeting. Use <code>{title}</code> and <code>{date}</code> as placeholders.</small>
+                            <textarea class="form-control form-control-sm" id="meetingCustomPrompt" rows="3"></textarea>
+                            <div class="d-flex justify-content-end mt-1">
+                                <button type="button" class="btn btn-sm btn-link" id="resetMeetingPrompt">Reset to default</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -2073,6 +2091,26 @@ var selectedMeetingIndex = null;
 var loadedMeetings = [];
 var autoFillAborted = false;
 
+// WorkIQ prompt customization
+var userWorkiqPrompt = {{ (workiq_prompt or default_workiq_prompt)|tojson }};
+var defaultWorkiqPrompt = {{ default_workiq_prompt|tojson }};
+
+// Initialize prompt textarea and reset button  
+document.addEventListener('DOMContentLoaded', function() {
+    var promptTextarea = document.getElementById('meetingCustomPrompt');
+    var resetBtn = document.getElementById('resetMeetingPrompt');
+    if (promptTextarea) {
+        promptTextarea.value = userWorkiqPrompt;
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+            if (promptTextarea) {
+                promptTextarea.value = defaultWorkiqPrompt;
+            }
+        });
+    }
+});
+
 // =============================================================================
 // AUTO-FILL ORCHESTRATION
 // =============================================================================
@@ -2544,6 +2582,12 @@ function renderMeetingList(meetings, autoSelectedIndex, autoSelectedReason) {
     });
     
     document.getElementById('meetingImportContent').style.display = 'block';
+    
+    // Show the prompt customization section when meetings are available
+    var promptSection = document.getElementById('meetingPromptSection');
+    if (promptSection) {
+        promptSection.style.display = 'block';
+    }
 }
 
 function selectMeeting(index) {
@@ -2602,6 +2646,7 @@ function importSelectedMeeting() {
     // Normal manual import flow
     // Show loading state
     document.getElementById('meetingImportContent').style.display = 'none';
+    document.getElementById('meetingPromptSection').style.display = 'none';
     document.getElementById('meetingSummaryLoading').style.display = 'block';
     document.getElementById('importSelectedMeetingBtn').disabled = true;
     
@@ -2609,6 +2654,12 @@ function importSelectedMeeting() {
     var url = '/api/meetings/summary?title=' + encodeURIComponent(meeting.title);
     if (dateStr) {
         url += '&date=' + encodeURIComponent(dateStr);
+    }
+    
+    // Include custom prompt if user modified it
+    var promptEl = document.getElementById('meetingCustomPrompt');
+    if (promptEl && promptEl.value.trim()) {
+        url += '&prompt=' + encodeURIComponent(promptEl.value.trim());
     }
     
     // Create abort controller for timeout

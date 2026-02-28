@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime
 import logging
 
-from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask
+from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask, UserPreference
 from app.services.msx_api import create_task, TASK_CATEGORIES
 
 logger = logging.getLogger(__name__)
@@ -332,6 +332,12 @@ def call_log_create():
     from app.routes.ai import is_ai_enabled
     ai_enabled = is_ai_enabled()
     
+    # Get user's custom WorkIQ prompt (for meeting import modal)
+    from app.services.workiq_service import DEFAULT_SUMMARY_PROMPT
+    user_id = g.user.id if g.user.is_authenticated else 1
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    user_prompt = pref.workiq_summary_prompt if pref and pref.workiq_summary_prompt else DEFAULT_SUMMARY_PROMPT
+    
     return render_template('call_log_form.html', 
                          call_log=None, 
                          customers=customers,
@@ -345,7 +351,9 @@ def call_log_create():
                          referrer=referrer,
                          today=today,
                          now_time=now_time,
-                         ai_enabled=ai_enabled)
+                         ai_enabled=ai_enabled,
+                         workiq_prompt=user_prompt,
+                         default_workiq_prompt=DEFAULT_SUMMARY_PROMPT)
 
 
 @call_logs_bp.route('/call-log/<int:id>')
@@ -544,6 +552,7 @@ def api_get_meeting_summary():
     Query params:
         title: Meeting title (required)
         date: Date in YYYY-MM-DD format (optional, helps narrow down)
+        prompt: Custom prompt template (optional, uses {title} and {date} placeholders)
         
     Returns JSON:
         - summary: The 250-word meeting summary
@@ -555,12 +564,13 @@ def api_get_meeting_summary():
     
     title = request.args.get('title')
     date_str = request.args.get('date')
+    custom_prompt = request.args.get('prompt')
     
     if not title:
         return jsonify({'error': 'title parameter is required'}), 400
     
     try:
-        result = get_meeting_summary(title, date_str)
+        result = get_meeting_summary(title, date_str, custom_prompt=custom_prompt)
         return jsonify({
             'summary': result.get('summary', ''),
             'topics': result.get('topics', []),

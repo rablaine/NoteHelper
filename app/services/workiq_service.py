@@ -14,6 +14,13 @@ from difflib import SequenceMatcher
 
 logger = logging.getLogger(__name__)
 
+# Default meeting summary prompt template.
+# Users can customize this in Settings. Use {title} and {date} as placeholders.
+DEFAULT_SUMMARY_PROMPT = (
+    'Summarize the meeting called {title} {date} in approximately 250 words. '
+    'Include key discussion points, technologies mentioned, and any action items.'
+)
+
 
 def _clean_meeting_title(title: str) -> str:
     """Clean WorkIQ meeting title by removing markdown links, attendee metadata, etc.
@@ -408,13 +415,16 @@ def find_best_customer_match(meetings: List[Dict[str, Any]], customer_name: str)
     return None
 
 
-def get_meeting_summary(meeting_title: str, date_str: str = None) -> Dict[str, Any]:
+def get_meeting_summary(meeting_title: str, date_str: str = None,
+                        custom_prompt: str = None) -> Dict[str, Any]:
     """
     Get a detailed 250-word summary for a specific meeting.
     
     Args:
         meeting_title: The meeting title to summarize
         date_str: Optional date for context (YYYY-MM-DD)
+        custom_prompt: Optional custom prompt template. Use {title} and {date}
+                      as placeholders. Falls back to DEFAULT_SUMMARY_PROMPT.
         
     Returns:
         Dict with:
@@ -429,9 +439,15 @@ def get_meeting_summary(meeting_title: str, date_str: str = None) -> Dict[str, A
     # Remove any quotes that could break CLI argument parsing
     clean_title = clean_title.replace('"', '').replace("'", '')
     
-    # Simplified prompt - let WorkIQ format naturally
-    # NOTE: Do NOT wrap clean_title in quotes - they get passed through to the CLI
-    question = f'Summarize the meeting called {clean_title} {date_context} in approximately 250 words. Include key discussion points, technologies mentioned, and any action items.'
+    # Build prompt from template (custom or default)
+    stripped_prompt = custom_prompt.strip() if custom_prompt else ''
+    prompt_template = stripped_prompt if stripped_prompt else DEFAULT_SUMMARY_PROMPT
+    try:
+        question = prompt_template.format(title=clean_title, date=date_context)
+    except (KeyError, IndexError):
+        # If custom prompt has bad placeholders, fall back to default
+        logger.warning(f"Custom prompt had invalid placeholders, using default")
+        question = DEFAULT_SUMMARY_PROMPT.format(title=clean_title, date=date_context)
     
     try:
         response = query_workiq(question, timeout=120)

@@ -60,6 +60,9 @@ def run_migrations(db):
     # Migration: Add on_deal_team column to opportunities table
     _migrate_opportunities_deal_team(db, inspector)
     
+    # Migration: Add workiq_summary_prompt to user_preferences
+    _migrate_workiq_summary_prompt(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -439,4 +442,13 @@ def _migrate_opportunities_deal_team(db, inspector):
         _add_column_if_not_exists(
             db, inspector, 'opportunities', 'on_deal_team',
             'BOOLEAN NOT NULL DEFAULT 0'
+        )
+
+
+def _migrate_workiq_summary_prompt(db, inspector):
+    """Add workiq_summary_prompt column to user_preferences table."""
+    if 'user_preferences' in inspector.get_table_names():
+        _add_column_if_not_exists(
+            db, inspector, 'user_preferences', 'workiq_summary_prompt',
+            'TEXT'
         )

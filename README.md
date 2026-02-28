@@ -145,6 +145,80 @@ AZURE_TENANT_ID=your-tenant-id
 
 After restarting the server, AI features are automatically enabled when `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT` are configured. The AI-powered "Suggest Topics" button will appear on the call log form.
 
+> **Note:** When AI environment variables are not configured, all AI buttons (Auto-tag with AI, Match Milestone) are automatically hidden from the UI.
+
+## WorkIQ Integration (Meeting Import)
+
+NoteHelper integrates with [WorkIQ](https://github.com/nicklhw/workiq) to import meeting summaries from Microsoft Teams. WorkIQ fetches meeting transcripts and generates structured summaries that can be imported directly into call logs.
+
+### Prerequisites
+
+- **Node.js 18+** — WorkIQ runs via `npx`
+- **Microsoft 365 Copilot license** — required for transcript access
+- **Delegated authentication** — WorkIQ uses your browser-based Microsoft identity (no service principal needed). You'll be prompted to authenticate in your browser the first time WorkIQ runs.
+
+### How It Works
+
+1. When creating a new call log, click **Import from Meeting** (above the notes editor) or **Auto-fill** (top right)
+2. Select the date — NoteHelper queries WorkIQ for your meetings on that date
+3. Pick a meeting from the list (NoteHelper auto-selects the best match if a customer is chosen)
+4. NoteHelper fetches a ~250-word summary including discussion points, technologies, and action items
+5. The summary is inserted into the call log editor
+
+### Customizing the Summary Prompt
+
+The prompt used to generate meeting summaries can be customized:
+
+- **Global default:** Go to **Settings** → **WorkIQ & AI** → edit the **Meeting Summary Prompt** textarea. Use `{title}` and `{date}` as placeholders.
+- **Per-meeting override:** When importing a meeting, click **Customize summary prompt** to edit the prompt for just that import.
+
+### No Extra Configuration Needed
+
+WorkIQ uses delegated auth — it authenticates through your browser session. No environment variables are needed beyond having Node.js installed. If `npx` is available on your PATH, WorkIQ will work.
+
+## Scheduled Milestone Sync (Optional)
+
+NoteHelper can automatically sync milestones from MSX on a daily schedule. This keeps your milestone data fresh without manual intervention.
+
+### Setup
+
+Add the `MILESTONE_SYNC_HOUR` environment variable to your `.env` file:
+
+```dotenv
+# Sync milestones daily at 3:00 AM
+MILESTONE_SYNC_HOUR=3
+```
+
+The value is the hour in 24-hour format (0-23) in your **local time zone**. When configured:
+
+- A background thread checks every 60 seconds if it's time to sync
+- The sync runs once per day at the configured hour
+- All customers with MSX account links are synced
+- Results are logged to the console
+
+To disable scheduled sync, remove or comment out the `MILESTONE_SYNC_HOUR` variable.
+
+### Verifying
+
+Check your server logs for messages like:
+```
+Scheduled milestone sync started (daily at 03:00)
+Starting scheduled milestone sync at 2025-01-15T03:00:12
+Scheduled sync complete: 42 customers, 5 new, 18 updated
+```
+
+### Windows Task Scheduler Alternative
+
+If you prefer to use Windows Task Scheduler instead of the built-in background sync:
+
+1. Create a new Basic Task in Task Scheduler
+2. Set the trigger to **Daily** at your preferred time
+3. Set the action to run:
+   ```
+   powershell.exe -Command "Invoke-RestMethod -Method POST -Uri http://localhost:5000/api/milestone-tracker/sync"
+   ```
+4. Make sure NoteHelper is running when the task fires
+
 ## Compliance
 
 This application stores customer account data locally. To remain compliant with organizational data handling policies:
