@@ -647,7 +647,7 @@ def api_fill_my_day_process():
               'task_subject': '', 'task_description': '', 'summary_ok': False,
               'milestone': None}
     
-    # Step 1: Get meeting summary
+    # Step 1: Get meeting summary (WorkIQ provides summary + task suggestion)
     try:
         summary_data = get_meeting_summary(title, date_str)
         summary = summary_data.get('summary', '')
@@ -666,6 +666,10 @@ def api_fill_my_day_process():
         result['summary'] = summary
         result['content_html'] = content_html
         result['summary_ok'] = bool(summary and not summary.startswith('Error'))
+        
+        # Use WorkIQ task suggestion as default (OpenAI milestone match may override)
+        result['task_subject'] = summary_data.get('task_subject', '')
+        result['task_description'] = summary_data.get('task_description', '')
     except Exception as e:
         logger.error(f"Fill My Day - summary error for '{title}': {e}")
         result['summary'] = f'[Could not fetch summary: {str(e)}]'
@@ -693,16 +697,14 @@ Available topics: {', '.join(topic_names)}
 Meeting summary:
 {result['summary']}
 
-Also suggest a brief task subject (1 line) and task description (2-3 lines) for follow-up work.
-
 Return JSON format:
-{{"topics": ["topic1", "topic2"], "task_subject": "...", "task_description": "..."}}"""
+{{"topics": ["topic1", "topic2"]}}"""
                     
                     response = ai_client.chat.completions.create(
                         model=deployment_name,
                         messages=[{'role': 'user', 'content': prompt}],
                         temperature=0.3,
-                        max_tokens=500,
+                        max_tokens=200,
                         response_format={"type": "json_object"}
                     )
                     
@@ -718,8 +720,6 @@ Return JSON format:
                                 break
                     
                     result['topics'] = matched_topics
-                    result['task_subject'] = ai_result.get('task_subject', '')
-                    result['task_description'] = ai_result.get('task_description', '')
         except Exception as e:
             logger.warning(f"Fill My Day - AI analysis error for '{title}': {e}")
             # Non-fatal - continue without AI enrichment
@@ -754,17 +754,16 @@ Call Notes:
 Available Milestones:
 {milestone_list}
 
-Which milestone best matches what was discussed? Also suggest a task subject and description
-specifically for this milestone.
+Which milestone best matches what was discussed?
 
 Return JSON:
-{{"milestone_id": "THE_ID_OR_NULL", "reason": "why", "task_subject": "...", "task_description": "..."}}"""
+{{"milestone_id": "THE_ID_OR_NULL", "reason": "why"}}"""
                             
                             ms_response = ai_client.chat.completions.create(
                                 model=deployment_name,
                                 messages=[{'role': 'user', 'content': ms_prompt}],
                                 temperature=0.3,
-                                max_tokens=300,
+                                max_tokens=150,
                                 response_format={"type": "json_object"}
                             )
                             
@@ -789,11 +788,6 @@ Return JSON:
                                         'workload': matched.get('workload', ''),
                                         'reason': ms_ai.get('reason', '')
                                     }
-                                    # Use milestone-specific task if provided
-                                    if ms_ai.get('task_subject'):
-                                        result['task_subject'] = ms_ai['task_subject']
-                                    if ms_ai.get('task_description'):
-                                        result['task_description'] = ms_ai['task_description']
         except Exception as e:
             logger.warning(f"Fill My Day - milestone matching error for '{title}': {e}")
             # Non-fatal - continue without milestone
