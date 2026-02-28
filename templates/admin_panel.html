@@ -82,16 +82,61 @@
                         <div id="msxTestResult" class="mt-3"></div>
                     </div>
                     <div class="col-md-6">
-                        <h6>How to Authenticate</h6>
-                        <div id="msxLoginInstructions">
-                            <p class="small text-muted mb-2">MSX uses your Azure CLI session. To authenticate:</p>
-                            <ol class="small mb-0">
-                                <li>Connect to VPN</li>
-                                <li>Open a terminal on this machine</li>
-                                <li>Run: <code>az login --tenant 72f988bf-86f1-41af-91ab-2d7cd011db47</code></li>
-                                <li>Complete the browser sign-in</li>
-                                <li>Click "Refresh Token"</li>
-                            </ol>
+                        <h6>Sign In</h6>
+                        <div id="adminAuthCard">
+                            <!-- Initial state -->
+                            <div id="adminAuthInitial">
+                                <p class="small text-muted mb-2">Click below to sign in via Azure CLI. A browser window will open.</p>
+                                <p class="small text-muted mb-3"><i class="bi bi-info-circle"></i> Make sure you select your <strong>Microsoft corporate account</strong>.</p>
+                                <button class="btn btn-primary" id="adminStartAuthBtn">
+                                    <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
+                                </button>
+                            </div>
+                            <!-- Waiting state -->
+                            <div id="adminAuthWaiting" class="d-none">
+                                <p class="small text-primary fw-bold mb-2">A browser window should open for sign-in.</p>
+                                <p class="small mb-2">Select your <strong>Microsoft corporate account</strong>. This will update automatically.</p>
+                                <div class="mb-2">
+                                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                    <span class="text-muted ms-2 small" id="adminAuthWaitingStatus">Waiting for sign-in to complete...</span>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm" id="adminAuthCancelBtn">
+                                    <i class="bi bi-x-circle"></i> Cancel
+                                </button>
+                            </div>
+                            <!-- Success state -->
+                            <div id="adminAuthSuccess" class="d-none">
+                                <div class="d-flex align-items-center gap-2 text-success mb-2">
+                                    <i class="bi bi-check-circle-fill fs-4"></i>
+                                    <div>
+                                        <strong>Connected to MSX!</strong><br>
+                                        <small class="text-muted" id="adminAuthEmail"></small>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Error state -->
+                            <div id="adminAuthError" class="d-none">
+                                <div class="d-flex align-items-center gap-2 text-warning mb-2">
+                                    <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+                                    <div>
+                                        <strong id="adminAuthErrorMsg">Authentication failed</strong><br>
+                                        <small class="text-muted">Make sure you selected your Microsoft corporate account.</small>
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary btn-sm" id="adminAuthRetryBtn">
+                                    <i class="bi bi-arrow-clockwise"></i> Try Again
+                                </button>
+                            </div>
+                            <!-- No CLI state -->
+                            <div id="adminAuthNoCli" class="d-none">
+                                <div class="d-flex align-items-center gap-2 text-danger mb-2">
+                                    <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+                                    <div>
+                                        <strong>Azure CLI not installed</strong><br>
+                                        <small>Install from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then reload.</small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -328,11 +373,13 @@ async function loadMsxStatus() {
                     </div>
                 </div>
             `;
+            // Show success state in auth card
+            showAdminAuthState('adminAuthSuccess');
         } else {
             let errorMsg = data.error || 'Not authenticated';
             // Make common errors more user-friendly
             if (errorMsg.includes('az login')) {
-                errorMsg = 'Run "az login" in a terminal first';
+                errorMsg = 'Not signed in — click Sign In to Azure';
             } else if (errorMsg.includes('not installed')) {
                 errorMsg = 'Azure CLI not installed';
             }
@@ -358,6 +405,138 @@ async function loadMsxStatus() {
         `;
     }
 }
+
+// --- Admin Panel: Browser-based Az Login Flow ---
+const ADMIN_POLL_INTERVAL = 1500;
+const ADMIN_POLL_TIMEOUT = 20000;
+let adminPollTimer = null;
+let adminElapsedTimer = null;
+let adminPollStart = null;
+let adminLoginHandled = false;
+
+function showAdminAuthState(stateId) {
+    ['adminAuthInitial', 'adminAuthWaiting', 'adminAuthSuccess',
+     'adminAuthError', 'adminAuthNoCli'].forEach(id => {
+        document.getElementById(id).classList.add('d-none');
+    });
+    document.getElementById(stateId).classList.remove('d-none');
+}
+
+async function checkAdminAuth() {
+    try {
+        const resp = await fetch('/api/msx/status');
+        const data = await resp.json();
+        if (data.authenticated) {
+            showAdminAuthState('adminAuthSuccess');
+            return;
+        }
+        const azResp = await fetch('/api/msx/az-status');
+        const azData = await azResp.json();
+        if (!azData.az_installed) {
+            showAdminAuthState('adminAuthNoCli');
+        } else if (azData.logged_in) {
+            await completeAdminLogin(azData.user_email);
+        } else {
+            showAdminAuthState('adminAuthInitial');
+        }
+    } catch (err) {
+        showAdminAuthState('adminAuthInitial');
+    }
+}
+
+async function startAdminLogin() {
+    showAdminAuthState('adminAuthWaiting');
+    adminLoginHandled = false;
+    const statusEl = document.getElementById('adminAuthWaitingStatus');
+    if (statusEl) statusEl.textContent = 'Waiting for sign-in to complete...';
+
+    try {
+        const resp = await fetch('/api/msx/az-login/start', { method: 'POST' });
+        const data = await resp.json();
+        if (data.error) {
+            document.getElementById('adminAuthErrorMsg').textContent = data.error;
+            showAdminAuthState('adminAuthError');
+            return;
+        }
+        pollAdminLoginStatus();
+    } catch (err) {
+        document.getElementById('adminAuthErrorMsg').textContent = 'Could not start sign-in';
+        showAdminAuthState('adminAuthError');
+    }
+}
+
+function cancelAdminLogin() {
+    if (adminPollTimer) { clearInterval(adminPollTimer); adminPollTimer = null; }
+    if (adminElapsedTimer) { clearInterval(adminElapsedTimer); adminElapsedTimer = null; }
+    adminLoginHandled = false;
+    showAdminAuthState('adminAuthInitial');
+}
+
+function pollAdminLoginStatus() {
+    if (adminPollTimer) clearInterval(adminPollTimer);
+    if (adminElapsedTimer) clearInterval(adminElapsedTimer);
+    adminPollStart = Date.now();
+
+    const statusEl = document.getElementById('adminAuthWaitingStatus');
+    adminElapsedTimer = setInterval(() => {
+        const elapsed = Math.round((Date.now() - adminPollStart) / 1000);
+        if (statusEl) statusEl.textContent = 'Waiting for sign-in... (' + elapsed + 's)';
+    }, 1000);
+
+    adminPollTimer = setInterval(async () => {
+        if (Date.now() - adminPollStart > ADMIN_POLL_TIMEOUT) {
+            clearInterval(adminPollTimer); adminPollTimer = null;
+            clearInterval(adminElapsedTimer); adminElapsedTimer = null;
+            document.getElementById('adminAuthErrorMsg').textContent = 'Authentication timed out';
+            showAdminAuthState('adminAuthError');
+            return;
+        }
+        if (adminLoginHandled) return;
+        try {
+            const resp = await fetch('/api/msx/az-status');
+            const data = await resp.json();
+            if (adminLoginHandled) return;
+            if (data.logged_in) {
+                adminLoginHandled = true;
+                clearInterval(adminPollTimer); adminPollTimer = null;
+                clearInterval(adminElapsedTimer); adminElapsedTimer = null;
+                await completeAdminLogin(data.user_email);
+            }
+        } catch (err) {
+            console.error('Admin auth poll error:', err);
+        }
+    }, ADMIN_POLL_INTERVAL);
+}
+
+async function completeAdminLogin(userEmail) {
+    const statusEl = document.getElementById('adminAuthWaitingStatus');
+    if (statusEl) statusEl.textContent = 'Connecting to MSX...';
+    showAdminAuthState('adminAuthWaiting');
+    try {
+        const resp = await fetch('/api/msx/az-login/complete', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            showAdminAuthState('adminAuthSuccess');
+            const emailEl = document.getElementById('adminAuthEmail');
+            const email = userEmail || data.user_email;
+            if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
+            // Refresh the status panel too
+            loadMsxStatus();
+        } else {
+            document.getElementById('adminAuthErrorMsg').textContent =
+                data.error || 'Failed to get CRM token';
+            showAdminAuthState('adminAuthError');
+        }
+    } catch (err) {
+        document.getElementById('adminAuthErrorMsg').textContent = 'Failed to complete sign-in';
+        showAdminAuthState('adminAuthError');
+    }
+}
+
+// Wire up admin auth buttons
+document.getElementById('adminStartAuthBtn').addEventListener('click', startAdminLogin);
+document.getElementById('adminAuthRetryBtn').addEventListener('click', startAdminLogin);
+document.getElementById('adminAuthCancelBtn').addEventListener('click', cancelAdminLogin);
 
 // MSX Refresh Token
 document.getElementById('msxRefreshBtn').addEventListener('click', async function() {
@@ -419,8 +598,9 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
     }
 });
 
-// Load MSX status on page load
+// Load MSX status and auth state on page load
 loadMsxStatus();
+checkAdminAuth();
 
 // Export Call Logs
 document.getElementById('exportCallLogsJsonBtn').addEventListener('click', function() {

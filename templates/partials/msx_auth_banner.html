@@ -1,0 +1,229 @@
+{#
+    MSX Auth Check Banner
+    Include this partial on any page with MSX integration.
+    On page load, checks if the MSX token is valid. If not, shows a
+    dismissible warning banner with a "Sign In to Azure" button that
+    launches the browser-based az login flow.
+
+    Usage:  {% include 'partials/msx_auth_banner.html' %}
+#}
+
+<!-- MSX Auth Banner -->
+<div id="msxAuthBanner" class="d-none">
+    <!-- Checking state (brief flash while verifying) -->
+    <div id="msxAuthChecking" class="alert alert-secondary d-flex align-items-center mb-3 d-none" role="alert">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+        <span>Checking MSX connection...</span>
+    </div>
+
+    <!-- Not authenticated -->
+    <div id="msxAuthNeeded" class="alert alert-warning d-flex align-items-center justify-content-between mb-3 d-none" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div>
+                <strong>MSX not connected.</strong>
+                <span class="d-none d-sm-inline">Sign in to Azure to enable MSX features on this page.</span>
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm ms-3 text-nowrap" id="msxBannerSignInBtn">
+            <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
+        </button>
+    </div>
+
+    <!-- Waiting for sign-in -->
+    <div id="msxAuthWaiting" class="alert alert-info d-flex align-items-center justify-content-between mb-3 d-none" role="alert">
+        <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+            <div>
+                <strong>A browser window should open for sign-in.</strong>
+                <span class="ms-1" id="msxBannerWaitingStatus">Waiting for sign-in to complete...</span>
+            </div>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm ms-3 text-nowrap" id="msxBannerCancelBtn">
+            <i class="bi bi-x-circle"></i> Cancel
+        </button>
+    </div>
+
+    <!-- Success -->
+    <div id="msxAuthSuccess" class="alert alert-success d-flex align-items-center mb-3 d-none" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        <div>
+            <strong>Connected to MSX!</strong>
+            <span class="text-muted ms-1" id="msxBannerEmail"></span>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div id="msxAuthError" class="alert alert-danger d-flex align-items-center justify-content-between mb-3 d-none" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div>
+                <strong id="msxBannerErrorMsg">Authentication failed.</strong>
+                <span class="small text-muted ms-1">Make sure you selected your Microsoft corporate account.</span>
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm ms-3 text-nowrap" id="msxBannerRetryBtn">
+            <i class="bi bi-arrow-clockwise"></i> Try Again
+        </button>
+    </div>
+
+    <!-- CLI not installed -->
+    <div id="msxAuthNoCli" class="alert alert-danger d-flex align-items-center mb-3 d-none" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <div>
+            <strong>Azure CLI not installed.</strong>
+            Install from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then reload this page.
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // --- MSX Auth Banner Logic ---
+    const POLL_INTERVAL_MS = 1500;
+    const POLL_TIMEOUT_MS = 20000;
+    let pollTimer = null;
+    let elapsedTimer = null;
+    let pollStartTime = null;
+    let loginHandled = false;
+
+    function showBannerState(stateId) {
+        const banner = document.getElementById('msxAuthBanner');
+        banner.classList.remove('d-none');
+        ['msxAuthChecking', 'msxAuthNeeded', 'msxAuthWaiting', 'msxAuthSuccess',
+         'msxAuthError', 'msxAuthNoCli'].forEach(id => {
+            document.getElementById(id).classList.add('d-none');
+        });
+        document.getElementById(stateId).classList.remove('d-none');
+    }
+
+    function hideBanner() {
+        document.getElementById('msxAuthBanner').classList.add('d-none');
+    }
+
+    async function checkMsxAuth() {
+        showBannerState('msxAuthChecking');
+        try {
+            const resp = await fetch('/api/msx/status');
+            const data = await resp.json();
+            if (data.authenticated) {
+                hideBanner();
+                return;
+            }
+            // Not authenticated — check if az CLI is available
+            const azResp = await fetch('/api/msx/az-status');
+            const azData = await azResp.json();
+            if (!azData.az_installed) {
+                showBannerState('msxAuthNoCli');
+            } else if (azData.logged_in) {
+                // Logged in to az but no CRM token — complete the flow silently
+                await completeMsxLogin(azData.user_email);
+            } else {
+                showBannerState('msxAuthNeeded');
+            }
+        } catch (err) {
+            console.error('MSX auth check failed:', err);
+            showBannerState('msxAuthNeeded');
+        }
+    }
+
+    async function startMsxLogin() {
+        showBannerState('msxAuthWaiting');
+        loginHandled = false;
+        const statusEl = document.getElementById('msxBannerWaitingStatus');
+        if (statusEl) statusEl.textContent = 'Waiting for sign-in to complete...';
+
+        try {
+            const resp = await fetch('/api/msx/az-login/start', { method: 'POST' });
+            const data = await resp.json();
+            if (data.error) {
+                document.getElementById('msxBannerErrorMsg').textContent = data.error;
+                showBannerState('msxAuthError');
+                return;
+            }
+            pollMsxLoginStatus();
+        } catch (err) {
+            document.getElementById('msxBannerErrorMsg').textContent = 'Could not start sign-in';
+            showBannerState('msxAuthError');
+        }
+    }
+
+    function cancelMsxLogin() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+        loginHandled = false;
+        showBannerState('msxAuthNeeded');
+    }
+
+    function pollMsxLoginStatus() {
+        if (pollTimer) clearInterval(pollTimer);
+        if (elapsedTimer) clearInterval(elapsedTimer);
+        pollStartTime = Date.now();
+
+        const statusEl = document.getElementById('msxBannerWaitingStatus');
+        elapsedTimer = setInterval(() => {
+            const elapsed = Math.round((Date.now() - pollStartTime) / 1000);
+            if (statusEl) statusEl.textContent = 'Waiting for sign-in... (' + elapsed + 's)';
+        }, 1000);
+
+        pollTimer = setInterval(async () => {
+            if (Date.now() - pollStartTime > POLL_TIMEOUT_MS) {
+                clearInterval(pollTimer); pollTimer = null;
+                clearInterval(elapsedTimer); elapsedTimer = null;
+                document.getElementById('msxBannerErrorMsg').textContent = 'Authentication timed out';
+                showBannerState('msxAuthError');
+                return;
+            }
+            if (loginHandled) return;
+            try {
+                const resp = await fetch('/api/msx/az-status');
+                const data = await resp.json();
+                if (loginHandled) return;
+                if (data.logged_in) {
+                    loginHandled = true;
+                    clearInterval(pollTimer); pollTimer = null;
+                    clearInterval(elapsedTimer); elapsedTimer = null;
+                    await completeMsxLogin(data.user_email);
+                }
+            } catch (err) {
+                console.error('MSX auth poll error:', err);
+            }
+        }, POLL_INTERVAL_MS);
+    }
+
+    async function completeMsxLogin(userEmail) {
+        const statusEl = document.getElementById('msxBannerWaitingStatus');
+        if (statusEl) statusEl.textContent = 'Connecting to MSX...';
+        showBannerState('msxAuthWaiting');
+        try {
+            const resp = await fetch('/api/msx/az-login/complete', { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                showBannerState('msxAuthSuccess');
+                const emailEl = document.getElementById('msxBannerEmail');
+                const email = userEmail || data.user_email;
+                if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
+                // Auto-hide the success banner after 3 seconds
+                setTimeout(hideBanner, 3000);
+                // Dispatch event so page-specific JS can react to auth success
+                document.dispatchEvent(new CustomEvent('msxAuthSuccess'));
+            } else {
+                document.getElementById('msxBannerErrorMsg').textContent =
+                    data.error || 'Failed to get CRM token';
+                showBannerState('msxAuthError');
+            }
+        } catch (err) {
+            document.getElementById('msxBannerErrorMsg').textContent = 'Failed to complete sign-in';
+            showBannerState('msxAuthError');
+        }
+    }
+
+    // Wire up buttons
+    document.getElementById('msxBannerSignInBtn').addEventListener('click', startMsxLogin);
+    document.getElementById('msxBannerRetryBtn').addEventListener('click', startMsxLogin);
+    document.getElementById('msxBannerCancelBtn').addEventListener('click', cancelMsxLogin);
+
+    // Check auth on page load
+    checkMsxAuth();
+})();
+</script>

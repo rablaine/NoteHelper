@@ -3,6 +3,8 @@
 {% block title %}Milestone Tracker - NoteHelper{% endblock %}
 
 {% block content %}
+{% include 'partials/msx_auth_banner.html' %}
+
 {% if sync_status and sync_status.state == 'incomplete' %}
 <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
     <i class="bi bi-exclamation-triangle-fill me-2"></i>
