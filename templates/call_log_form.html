@@ -38,7 +38,7 @@
                 <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
                     <i class="bi bi-check-circle text-success"></i> Draft saved
                 </div>
-                {% if not call_log %}
+                {% if not call_log and false %}{# WorkIQ: hidden until integration is ready #}
                 <button type="button" class="btn btn-success" id="autoFillBtn" onclick="startAutoFill()" title="Auto-fill from meeting transcript">
                     <i class="bi bi-magic"></i> Auto-fill
                 </button>
@@ -190,7 +190,7 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label mb-0">Call Notes *</label>
-                            {% if not call_log %}
+                            {% if not call_log and false %}{# WorkIQ: hidden until integration is ready #}
                             <button type="button" class="btn btn-sm btn-outline-info" id="importMeetingBtn" onclick="openMeetingImport()">
                                 <i class="bi bi-calendar-event"></i> Import from Meeting
                             </button>

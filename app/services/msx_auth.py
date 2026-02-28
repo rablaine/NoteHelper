@@ -301,6 +301,248 @@ def clear_token_cache():
     logger.info("MSX token cache cleared")
 
 
+# ---------------------------------------------------------------------------
+# Azure CLI status & browser-based az login flow
+# ---------------------------------------------------------------------------
+
+# Subscription ID to set after login
+SUBSCRIPTION_ID = "0832b3b6-22b3-4c47-8d8b-572054b97257"
+
+# Login process tracking
+_az_login_state: Dict[str, Any] = {
+    "active": False,
+    "process": None,
+    "started_at": None,
+}
+
+
+def check_az_cli_installed() -> bool:
+    """Check if Azure CLI is installed and in PATH."""
+    try:
+        result = subprocess.run(
+            "az --version" if IS_WINDOWS else ["az", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            shell=IS_WINDOWS,
+        )
+        return result.returncode == 0
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return False
+
+
+def check_az_logged_in() -> tuple[bool, Optional[str], Optional[str]]:
+    """Check if user is logged in to Azure CLI.
+
+    Returns:
+        Tuple of (is_logged_in, user_email, tenant_id).
+    """
+    try:
+        cmd = "az account show --output json" if IS_WINDOWS else [
+            "az", "account", "show", "--output", "json"
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            shell=IS_WINDOWS,
+        )
+        if result.returncode == 0:
+            account = json.loads(result.stdout)
+            user = account.get("user", {})
+            tenant_id = account.get("tenantId")
+            return True, user.get("name"), tenant_id
+        return False, None, None
+    except (subprocess.SubprocessError, json.JSONDecodeError):
+        return False, None, None
+
+
+def get_az_cli_status() -> Dict[str, Any]:
+    """Get current Azure CLI authentication status (no CRM token needed).
+
+    Checks:
+    1. Whether Azure CLI is installed
+    2. Whether user is logged in (via ``az account show``)
+    3. Whether the tenant matches the expected Microsoft tenant
+
+    Returns:
+        Dict with az_installed, logged_in, wrong_tenant, user_email, message.
+    """
+    if not check_az_cli_installed():
+        return {
+            "az_installed": False,
+            "logged_in": False,
+            "wrong_tenant": False,
+            "user_email": None,
+            "message": "Azure CLI not installed",
+        }
+
+    logged_in, user_email, tenant_id = check_az_logged_in()
+
+    wrong_tenant = False
+    if logged_in and tenant_id and tenant_id != TENANT_ID:
+        wrong_tenant = True
+
+    if wrong_tenant:
+        message = (f"Signed in as {user_email} but on the wrong tenant. "
+                   "Please sign in with your Microsoft corporate account.")
+    elif logged_in:
+        message = f"Logged in as {user_email}"
+    else:
+        message = "Not logged in"
+
+    return {
+        "az_installed": True,
+        "logged_in": logged_in,
+        "wrong_tenant": wrong_tenant,
+        "user_email": user_email,
+        "message": message,
+    }
+
+
+def az_logout() -> Dict[str, Any]:
+    """Run ``az logout`` to clear the current Azure CLI session.
+
+    Returns:
+        Dict with success, message.
+    """
+    try:
+        cmd = "az logout" if IS_WINDOWS else ["az", "logout"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            shell=IS_WINDOWS,
+        )
+        if result.returncode == 0:
+            logger.info("Azure CLI logged out")
+            return {"success": True, "message": "Logged out"}
+        logger.warning(f"az logout failed: {result.stderr}")
+        return {"success": True, "message": "Logout completed"}  # non-zero is OK if already logged out
+    except Exception as e:
+        logger.warning(f"Error during az logout: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def start_az_login() -> Dict[str, Any]:
+    """Launch ``az login --tenant <TENANT>`` in a visible console window.
+
+    The ``--tenant`` flag scopes the browser auth to the Microsoft
+    corporate tenant.  If the user picks a non-Microsoft account the
+    browser will reject it.  The frontend polls ``az account show`` and
+    uses a short timeout to catch any failures.
+
+    Returns:
+        Dict with success, message, error.
+    """
+    global _az_login_state
+
+    # Kill any lingering az login process from a previous attempt
+    prev = _az_login_state.get("process")
+    if prev is not None:
+        try:
+            prev.kill()
+            logger.info("Killed previous az login process (pid=%s)", prev.pid)
+        except OSError:
+            pass  # already dead
+
+    try:
+        cmd = f"az login --tenant {TENANT_ID}"
+
+        if IS_WINDOWS:
+            import subprocess as _sp
+            process = _sp.Popen(
+                cmd,
+                shell=True,
+                creationflags=_sp.CREATE_NEW_CONSOLE,
+            )
+        else:
+            # On Linux/Mac, launch in background
+            process = subprocess.Popen(
+                ["az", "login", "--tenant", TENANT_ID],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        _az_login_state = {
+            "active": True,
+            "process": process,
+            "started_at": time.time(),
+        }
+
+        logger.info("Launched az login in console window")
+        return {
+            "success": True,
+            "message": "Browser will open. Complete sign-in to continue.",
+        }
+
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "error": "Azure CLI not installed. Install from https://aka.ms/installazurecli",
+        }
+    except Exception as e:
+        logger.exception("Failed to launch az login")
+        return {"success": False, "error": str(e)}
+
+
+def get_az_login_process_status() -> Dict[str, Any]:
+    """Check the status of the launched az login process.
+
+    Uses ``process.poll()`` which is instant (no subprocess calls).
+
+    Returns:
+        Dict with:
+        - active: bool (was a login launched)
+        - running: bool (process still running)
+        - exit_code: int or None
+        - elapsed_seconds: float
+    """
+    global _az_login_state
+
+    if not _az_login_state.get("active") or not _az_login_state.get("process"):
+        return {"active": False, "running": False, "exit_code": None, "elapsed_seconds": 0}
+
+    process = _az_login_state["process"]
+    started_at = _az_login_state.get("started_at") or time.time()
+    elapsed = time.time() - started_at
+    exit_code = process.poll()  # None if still running, int if exited
+
+    return {
+        "active": True,
+        "running": exit_code is None,
+        "exit_code": exit_code,
+        "elapsed_seconds": round(elapsed, 1),
+    }
+
+
+def set_subscription() -> bool:
+    """Set the Azure subscription after successful login."""
+    try:
+        cmd = (
+            f"az account set -s {SUBSCRIPTION_ID}"
+            if IS_WINDOWS
+            else ["az", "account", "set", "-s", SUBSCRIPTION_ID]
+        )
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            shell=IS_WINDOWS,
+        )
+        if result.returncode == 0:
+            logger.info(f"Subscription set to {SUBSCRIPTION_ID}")
+            return True
+        logger.warning(f"Failed to set subscription: {result.stderr}")
+        return False
+    except Exception as e:
+        logger.warning(f"Error setting subscription: {e}")
+        return False
+
+
 def start_device_code_flow() -> Dict[str, Any]:
     """
     Start the Azure CLI device code login flow.

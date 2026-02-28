@@ -28,7 +28,8 @@ from typing import Optional
 from dataclasses import dataclass, field
 
 from app.models import (
-    db, CustomerRevenueData, RevenueAnalysis, RevenueConfig, Customer
+    db, CustomerRevenueData, RevenueAnalysis, RevenueConfig, Customer,
+    SyncStatus
 )
 
 
@@ -646,17 +647,51 @@ def build_expansion_rationale(signals: CustomerSignals) -> str:
 # DATABASE INTEGRATION
 # =============================================================================
 
-def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dict:
+def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True,
+                        progress_callback: callable = None) -> dict:
     """
     Run analysis on all customers in the database.
     
     Args:
         user_id: User ID for loading config
         exclude_latest_month: Whether to exclude most recent month (usually partial)
+        progress_callback: Optional callback(current, total) called after each customer/bucket
         
     Returns:
         Dict with stats about the analysis run
     """
+    result = None
+    for update in _run_analysis_generator(user_id, exclude_latest_month):
+        if update.get('complete'):
+            result = update['stats']
+        elif progress_callback:
+            progress_callback(update['current'], update['total'])
+    return result or {'analyzed': 0, 'actionable': 0, 'skipped': 0}
+
+
+def run_analysis_streaming(user_id: int, exclude_latest_month: bool = True):
+    """
+    Run analysis on all customers, yielding progress dicts for SSE streaming.
+    
+    Yields:
+        Dicts with 'current', 'total', and 'progress' keys during analysis,
+        then a final dict with 'complete' True and 'stats' keys.
+    """
+    for update in _run_analysis_generator(user_id, exclude_latest_month):
+        if update.get('complete'):
+            yield update
+        else:
+            pct = round(update['current'] / update['total'] * 100) if update['total'] > 0 else 0
+            update['progress'] = pct
+            yield update
+
+
+def _run_analysis_generator(user_id: int, exclude_latest_month: bool = True):
+    """
+    Core analysis generator. Yields progress dicts after each customer/bucket,
+    then a final dict with complete=True and stats.
+    """
+    SyncStatus.mark_started('revenue_analysis')
     config = AnalysisConfig.from_db(user_id)
     
     # Get all unique customer/bucket combinations
@@ -667,7 +702,11 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
     ).distinct().all()
     
     if not customer_buckets:
-        return {'analyzed': 0, 'actionable': 0, 'skipped': 0}
+        stats = {'analyzed': 0, 'actionable': 0, 'skipped': 0}
+        SyncStatus.mark_completed('revenue_analysis', success=True,
+                                  items_synced=0, details='No customer data to analyze')
+        yield {'complete': True, 'stats': stats}
+        return
     
     # Build customer_id lookup from revenue data (set during import with fuzzy matching)
     # This is more accurate than name matching since import uses progressive word-prefix
@@ -699,8 +738,9 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
         month_dates = month_dates[:-1]  # Exclude most recent
     
     stats = {'analyzed': 0, 'actionable': 0, 'skipped': 0}
+    total_buckets = len(customer_buckets)
     
-    for cb in customer_buckets:
+    for idx, cb in enumerate(customer_buckets):
         customer_name, bucket, tpid = cb
         
         # Get customer_id from revenue data (set during import with fuzzy matching)
@@ -723,6 +763,7 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
         
         if len(revenue_data) < 3:
             stats['skipped'] += 1
+            yield {'current': idx + 1, 'total': total_buckets}
             continue
         
         revenues = [rd.revenue for rd in revenue_data]
@@ -741,6 +782,7 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
         
         if not signals:
             stats['skipped'] += 1
+            yield {'current': idx + 1, 'total': total_buckets}
             continue
         
         # Determine action
@@ -794,10 +836,18 @@ def run_analysis_for_all(user_id: int, exclude_latest_month: bool = True) -> dic
         stats['analyzed'] += 1
         if signals.recommended_action not in ["NO ACTION", "MONITOR"]:
             stats['actionable'] += 1
+        
+        yield {'current': idx + 1, 'total': total_buckets}
     
     db.session.commit()
+
+    SyncStatus.mark_completed(
+        'revenue_analysis', success=True,
+        items_synced=stats['analyzed'],
+        details=f"{stats['analyzed']} analyzed, {stats['actionable']} actionable, {stats['skipped']} skipped"
+    )
     
-    return stats
+    yield {'complete': True, 'stats': stats}
 
 
 def get_actionable_analyses(

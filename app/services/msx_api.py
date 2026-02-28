@@ -11,7 +11,7 @@ Uses msx_auth for token management.
 import requests
 import logging
 from datetime import datetime as dt, timezone as tz
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 
 from app.services.msx_auth import get_msx_token, refresh_token, CRM_BASE_URL
 
@@ -1167,7 +1167,8 @@ def query_next_page(next_link: str) -> Dict[str, Any]:
 
 def batch_query_accounts(
     account_ids: List[str],
-    batch_size: int = 15
+    batch_size: int = 15,
+    progress_callback: Optional[Callable[[int, int, int], None]] = None,
 ) -> Dict[str, Any]:
     """
     Query multiple accounts in batches using OData 'or' filter.
@@ -1177,14 +1178,17 @@ def batch_query_accounts(
     Args:
         account_ids: List of account GUIDs to query
         batch_size: How many accounts per query (default 15 to avoid URL length limits)
+        progress_callback: Optional callback(batch_num, total_batches, fetched_so_far)
+            called after each batch completes.
         
     Returns:
         Dict with success/error and accounts dict keyed by account ID
     """
     all_accounts = {}  # accountid -> account record
+    total_batches = (len(account_ids) + batch_size - 1) // batch_size
     
     try:
-        for i in range(0, len(account_ids), batch_size):
+        for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
             batch = account_ids[i:i + batch_size]
             
             # Build OR filter: accountid eq 'X' or accountid eq 'Y' or ...
@@ -1209,6 +1213,9 @@ def batch_query_accounts(
                 acct_id = record.get("accountid")
                 if acct_id:
                     all_accounts[acct_id] = record
+            
+            if progress_callback:
+                progress_callback(batch_num, total_batches, len(all_accounts))
         
         return {
             "success": True,
@@ -1223,7 +1230,8 @@ def batch_query_accounts(
 
 def batch_query_territories(
     territory_ids: List[str],
-    batch_size: int = 15
+    batch_size: int = 15,
+    progress_callback: Optional[Callable[[int, int, int], None]] = None,
 ) -> Dict[str, Any]:
     """
     Query multiple territories in batches.
@@ -1231,6 +1239,8 @@ def batch_query_territories(
     Args:
         territory_ids: List of territory GUIDs to query
         batch_size: How many territories per query
+        progress_callback: Optional callback(batch_num, total_batches, fetched_so_far)
+            called after each batch completes.
         
     Returns:
         Dict with territories dict keyed by territory ID
@@ -1240,8 +1250,9 @@ def batch_query_territories(
     try:
         # Deduplicate territory IDs
         unique_ids = list(set(territory_ids))
+        total_batches = (len(unique_ids) + batch_size - 1) // batch_size
         
-        for i in range(0, len(unique_ids), batch_size):
+        for batch_num, i in enumerate(range(0, len(unique_ids), batch_size), start=1):
             batch = unique_ids[i:i + batch_size]
             
             filter_parts = [f"territoryid eq {tid}" for tid in batch]
@@ -1262,6 +1273,9 @@ def batch_query_territories(
                 terr_id = record.get("territoryid")
                 if terr_id:
                     all_territories[terr_id] = record
+            
+            if progress_callback:
+                progress_callback(batch_num, total_batches, len(all_territories))
         
         return {
             "success": True,

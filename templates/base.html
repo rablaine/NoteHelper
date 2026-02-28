@@ -213,13 +213,13 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('revenue.revenue_dashboard') }}">
-                            <i class="bi bi-currency-dollar"></i> Revenue
+                        <a class="nav-link" href="{{ url_for('milestones.milestone_tracker') }}">
+                            <i class="bi bi-flag-fill"></i> Milestones
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('milestones.milestone_tracker') }}">
-                            <i class="bi bi-flag-fill"></i> Milestones
+                        <a class="nav-link" href="{{ url_for('revenue.revenue_dashboard') }}">
+                            <i class="bi bi-currency-dollar"></i> Revenue
                         </a>
                     </li>
                     <li class="nav-item dropdown">
@@ -227,13 +227,11 @@
                             <i class="bi bi-three-dots"></i> More
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="moreMenuDropdown">
-                            <li><a class="dropdown-item" href="{{ url_for('main.index') }}"><i class="bi bi-house"></i> Home</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('call_logs.call_logs_list') }}"><i class="bi bi-telephone"></i> Call Logs</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('topics.topics_list') }}"><i class="bi bi-tags"></i> Topics</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('partners.partners_list') }}"><i class="bi bi-building"></i> Partners</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('main.search') }}"><i class="bi bi-search"></i> Search</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('main.analytics') }}"><i class="bi bi-graph-up"></i> Analytics</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('call_logs.fill_my_day') }}"><i class="bi bi-lightning-charge"></i> Fill My Day</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('territories.territories_list') }}"><i class="bi bi-geo-alt"></i> Territories</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('pods.pods_list') }}"><i class="bi bi-diagram-3"></i> PODs</a></li>
@@ -242,6 +240,11 @@
                     </li>
                 </ul>
                 <div class="d-flex align-items-center gap-2">
+                    {% if first_run_modal_dismissed and not has_customers %}
+                    <button class="btn btn-warning btn-sm" id="rerunSetupBtn" title="Re-run setup wizard">
+                        <i class="bi bi-rocket-takeoff"></i> Setup Wizard
+                    </button>
+                    {% endif %}
                     <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#quickCustomerLookupModal" title="Quick customer lookup">
                         <i class="bi bi-building"></i>
                     </button>
@@ -286,42 +289,467 @@
         {% endwith %}
     </div>
 
-    <!-- First-Run Welcome Modal -->
+    <!-- First-Run Onboarding Wizard -->
+    <!-- Brainrot mode styles (always available, used by wizard + milestone tracker) -->
+    <style>
+        /* Brainrot mode - barely visible toggle in card corner */
+        .brainrot-card-toggle {
+            position: absolute !important;
+            top: 6px;
+            right: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            z-index: 10;
+            padding: 0;
+            margin: 0;
+            min-height: auto;
+        }
+        .brainrot-card-toggle input,
+        .brainrot-card-toggle label {
+            opacity: 0 !important;
+            transition: opacity 0.3s;
+            cursor: pointer;
+            font-size: 0.7rem;
+            margin: 0;
+            padding: 0;
+        }
+        .brainrot-card-toggle:hover input,
+        .brainrot-card-toggle:hover label {
+            opacity: 1 !important;
+        }
+        .brainrot-card-toggle.brainrot-active input,
+        .brainrot-card-toggle.brainrot-active label {
+            opacity: 0.15 !important;
+        }
+        .brainrot-card-toggle.brainrot-active:hover input,
+        .brainrot-card-toggle.brainrot-active:hover label {
+            opacity: 1 !important;
+        }
+        /* When checked, keep visible (don't hide the active toggle) */
+        .brainrot-card-toggle input:checked,
+        .brainrot-card-toggle input:checked + label {
+            opacity: 0.6 !important;
+        }
+        .brainrot-card-toggle:hover input:checked,
+        .brainrot-card-toggle:hover input:checked + label {
+            opacity: 1 !important;
+        }
+        /* Floating brainrot panel */
+        .brainrot-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            background: rgba(0, 0, 0, 0.92);
+            border-radius: 12px;
+            padding: 8px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+            width: 400px;
+        }
+        .brainrot-panel .brainrot-close {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: rgba(0,0,0,0.8);
+            border: 2px solid rgba(255,255,255,0.3);
+            color: #fff;
+            font-size: 0.9rem;
+            cursor: pointer;
+            opacity: 0.8;
+            line-height: 1;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+        }
+        .brainrot-panel .brainrot-close:hover {
+            opacity: 1;
+            background: rgba(220,53,69,0.9);
+        }
+        .brainrot-panel img {
+            width: 100%;
+            max-height: 480px;
+            object-fit: contain;
+            border-radius: 8px;
+            display: block;
+            pointer-events: none;
+            background: #111;
+        }
+    </style>
     {% if not first_run_modal_dismissed %}
+    <style>
+        /* Make onboarding dark mode toggle clearly interactive */
+        #onboardDarkModeToggle {
+            cursor: pointer;
+        }
+        #onboardDarkModeToggle:not(:checked) {
+            background-color: #e8a317;
+            border-color: #e8a317;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+        }
+        #onboardDarkModeToggle:hover {
+            filter: brightness(0.85);
+        }
+        label[for='onboardDarkModeToggle']:hover {
+            opacity: 0.8;
+        }
+    </style>
     <div class="modal fade" id="welcomeModal" tabindex="-1" aria-labelledby="welcomeModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="welcomeModalLabel">
                         <i class="bi bi-rocket-takeoff"></i> Welcome to NoteHelper!
                     </h5>
+                    <!-- Step indicator -->
+                    <span class="badge bg-secondary ms-auto me-2" id="onboardingStepBadge">Step 1 of 5</span>
                 </div>
                 <div class="modal-body">
-                    <p class="lead mb-3">Let's get you set up in just a few steps:</p>
-                    
-                    <div class="mb-4">
-                        <h6 class="mb-2"><i class="bi bi-moon-stars"></i> Choose Your Theme</h6>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="welcomeDarkModeToggle" {{ 'checked' if dark_mode else '' }}>
-                            <label class="form-check-label" for="welcomeDarkModeToggle">
-                                <span id="welcomeDarkModeLabel">{{ 'Dark Mode' if dark_mode else 'Light Mode' }}</span>
-                            </label>
+                    <!-- Progress bar -->
+                    <div class="progress mb-4" style="height: 6px;">
+                        <div class="progress-bar" id="onboardingProgress" role="progressbar" style="width: 20%"></div>
+                    </div>
+
+                    <!-- STEP 1: Welcome + Dark Mode -->
+                    <div class="onboarding-step" id="onboardingStep1">
+                        <p class="lead mb-3">Let's get you set up! This wizard will walk you through connecting to MSX and importing your data.</p>
+                        
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="card-title mb-1"><i class="bi bi-moon-stars text-primary"></i> Choose Your Theme</h6>
+                                        <p class="text-muted small mb-0">You can always change this later in Settings</p>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 ms-3">
+                                        <span class="small text-nowrap" style="cursor: pointer;" onclick="document.getElementById('onboardDarkModeToggle').click()"><i class="bi bi-sun-fill text-warning"></i> Light</span>
+                                        <div class="form-check form-switch mb-0">
+                                            <input class="form-check-input" type="checkbox" role="switch" id="onboardDarkModeToggle" style="width: 3em; height: 1.5em;" {{ 'checked' if dark_mode else '' }}>
+                                        </div>
+                                        <span class="small text-nowrap" style="cursor: pointer;" onclick="document.getElementById('onboardDarkModeToggle').click()"><i class="bi bi-moon-fill"></i> Dark</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <small class="text-muted">You can always change this later in <i class="bi bi-sliders"></i> Settings</small>
+                        
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle"></i> <strong>What's next:</strong> We'll connect to MSX to pull in your accounts, milestones, and get your revenue data ready.
+                        </div>
                     </div>
-                    
-                    <div class="mb-3">
-                        <h6 class="mb-2"><i class="bi bi-file-earmark-spreadsheet"></i> Import Your Data</h6>
-                        <p class="mb-2">Ready to import your accounts? Head to the <strong>Admin Panel</strong> and use MSX Import to get started.</p>
-                        <a href="{{ url_for('admin.admin_panel') }}" class="btn btn-outline-primary btn-sm" id="goToDataManagement">
-                            <i class="bi bi-shield-lock"></i> Go to Admin Panel
-                        </a>
+
+                    <!-- STEP 2: Authenticate with MSX -->
+                    <div class="onboarding-step d-none" id="onboardingStep2">
+                        <h6 class="mb-3"><i class="bi bi-shield-lock text-primary"></i> Connect to MSX</h6>
+                        <p>NoteHelper uses your Azure credentials to access MSX data. We'll open a browser window to sign in with your Microsoft account.</p>
+                        
+                        <div class="card mb-3">
+                            <div class="card-body text-center" id="authCard">
+                                <!-- Initial state: not checked yet -->
+                                <div id="authInitial">
+                                    <p class="mb-2">Click below to sign in to Azure.</p>
+                                    <p class="mb-3 small text-muted"><i class="bi bi-info-circle"></i> Make sure you select your <strong>Microsoft corporate account</strong> or authentication will fail.</p>
+                                    <button class="btn btn-primary btn-lg" id="onboardStartAuth">
+                                        <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
+                                    </button>
+                                </div>
+                                <!-- Waiting state: az login launched, polling -->
+                                <div id="authWaiting" class="d-none">
+                                    <p class="mb-2 text-primary fw-bold">A browser window should open for sign-in.</p>
+                                    <p class="mb-2">Select your <strong>Microsoft corporate account</strong>. This page will update automatically.</p>
+                                    <p class="mb-2 small text-muted"><i class="bi bi-info-circle"></i> It may take a few seconds to detect your sign-in after the browser closes.</p>
+                                    <div class="mb-3">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                        <span class="text-muted ms-2" id="authWaitingStatus">Waiting for sign-in to complete...</span>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-outline-secondary btn-sm" id="authCancelBtn">
+                                            <i class="bi bi-x-circle"></i> Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Success state -->
+                                <div id="authSuccess" class="d-none">
+                                    <i class="bi bi-check-circle-fill text-success fs-1"></i>
+                                    <p class="mt-2 mb-0 fw-bold text-success">Connected to MSX!</p>
+                                    <small class="text-muted" id="authUserEmail"></small>
+                                    <p class="mt-2 mb-0 small text-muted" id="authAutoAdvance">Moving to next step...</p>
+                                </div>
+                                <!-- Error/timeout state -->
+                                <div id="authError" class="d-none">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-warning" id="authErrorMessage">Authentication timed out</p>
+                                    <p class="small text-muted mb-2">Make sure you selected your Microsoft corporate account and try again.</p>
+                                    <button class="btn btn-primary btn-sm" id="authRetry">
+                                        <i class="bi bi-arrow-clockwise"></i> Try Again
+                                    </button>
+                                </div>
+                                <!-- CLI not installed -->
+                                <div id="authNoCli" class="d-none">
+                                    <i class="bi bi-exclamation-triangle-fill text-danger fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-danger">Azure CLI Not Installed</p>
+                                    <p class="text-muted">Install Azure CLI from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then try again.</p>
+                                    <button class="btn btn-outline-primary btn-sm" id="authRetryNoCli">
+                                        <i class="bi bi-arrow-clockwise"></i> Check Again
+                                    </button>
+                                </div>
+                                <!-- Already authenticated state -->
+                                <div id="authAlready" class="d-none">
+                                    <i class="bi bi-check-circle-fill text-success fs-1"></i>
+                                    <p class="mt-2 mb-0 fw-bold text-success">Already connected to MSX!</p>
+                                    <small class="text-muted">Your existing session is still active.</small>
+                                    <p class="mt-2 mb-0 small text-muted">Moving to next step...</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- STEP 3: Import Accounts -->
+                    <div class="onboarding-step d-none" id="onboardingStep3">
+                        <h6 class="mb-3"><i class="bi bi-building text-primary"></i> Import Your Accounts</h6>
+                        <p>We'll import your customer accounts, territories, sellers, and POD members from MSX. This usually takes 1-3 minutes.</p>
+                        
+                        <div class="alert alert-warning mb-3 d-flex align-items-start">
+                            <i class="bi bi-shield-lock me-2 mt-1"></i>
+                            <div>
+                                <strong>VPN required.</strong> You must be connected to corpnet/VPN before importing. Importing off-VPN will break your auth session and you'll need to sign in again.
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-body" id="importAccountsCard">
+                                <!-- Initial state -->
+                                <div id="importAccountsInitial" class="text-center">
+                                    <button class="btn btn-primary btn-lg" id="onboardImportAccounts">
+                                        <i class="bi bi-cloud-download"></i> Import My Accounts
+                                    </button>
+                                </div>
+                                <!-- Progress state -->
+                                <div id="importAccountsProgress" class="d-none">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                        <strong id="importAccountsStatusText">Starting import...</strong>
+                                    </div>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="importAccountsProgressBar" role="progressbar" style="width: 0%">
+                                            <span id="importAccountsProgressPercent">0%</span>
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted" id="importAccountsLog" style="max-height: 150px; overflow-y: auto; font-family: monospace;"></div>
+
+                                </div>
+                                <!-- Success state -->
+                                <div id="importAccountsSuccess" class="d-none text-center">
+                                    <i class="bi bi-check-circle-fill text-success fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-success">Accounts imported!</p>
+                                    <div id="importAccountsSummary" class="text-muted small"></div>
+                                    <p class="mt-2 mb-0 small text-muted">Review the results above, then click <strong>Next</strong> when you're ready.</p>
+                                </div>
+                                <!-- Error state -->
+                                <div id="importAccountsError" class="d-none text-center">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-warning" id="importAccountsErrorMsg">Import failed</p>
+                                    <button class="btn btn-outline-primary btn-sm" id="importAccountsRetry">
+                                        <i class="bi bi-arrow-clockwise"></i> Try Again
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info mb-0">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-lightbulb me-2 mt-1"></i>
+                                <div>
+                                    <strong>Tip:</strong> While you wait, you can export your revenue CSV from MSXi — you'll upload it in Step 5.
+                                    <br>
+                                    <a class="text-decoration-none" data-bs-toggle="collapse" href="#revenueTipInstructions" role="button" aria-expanded="false">
+                                        Show me how <i class="bi bi-chevron-down small"></i>
+                                    </a>
+                                    <div class="collapse mt-2" id="revenueTipInstructions">
+                                        <ol class="mb-2 small">
+                                            <li>Go to <a href="https://msxinsights.microsoft.com/User/report/47b95fcd-1857-47f2-9c4b-8413a508ae00?reportTab=ReportSection146fc780baf4c55d7158" target="_blank">SME&C ACR Service Level Subscription Details SL4 - WW</a>
+                                                <br><span class="text-muted">Or go to <a href="https://aka.ms/msxi" target="_blank">aka.ms/msxi</a> and search for the report name</span></li>
+                                            <li>Scroll to <strong>"ACR Details by Quarter / Month"</strong></li>
+                                            <li>Under Choose Fields (left), check <strong>"ServiceLevel4"</strong></li>
+                                            <li>In Filters (right), find <strong>ServiceCompGrouping</strong> and select your buckets</li>
+                                            <li>Right-click the header → <strong>Expand to next level</strong> (repeat twice)</li>
+                                            <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
+                                            <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
+                                        </ol>
+                                        <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush — these instructions are also shown in Step 5.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 4: Import Milestones -->
+                    <div class="onboarding-step d-none" id="onboardingStep4">
+                        <h6 class="mb-3"><i class="bi bi-flag text-primary"></i> Import Milestones</h6>
+                        <p>Now let's pull in your milestone data from MSX. This syncs milestone status for all your accounts.</p>
+                        
+                        <div class="alert alert-warning mb-3 d-flex align-items-start">
+                            <i class="bi bi-shield-lock me-2 mt-1"></i>
+                            <div>
+                                <strong>VPN required.</strong> You must be connected to corpnet/VPN before importing. Importing off-VPN will break your auth session and you'll need to sign in again.
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-body" id="importMilestonesCard">
+                                <!-- Initial state -->
+                                <div id="importMilestonesInitial" class="text-center">
+                                    <div id="milestonesIncompleteWarning" class="alert alert-warning py-2 mb-3 d-none">
+                                        <i class="bi bi-exclamation-triangle"></i> Your last milestone sync didn't finish. Run it again to get complete data.
+                                    </div>
+                                    <button class="btn btn-primary btn-lg" id="onboardImportMilestones">
+                                        <i class="bi bi-cloud-download"></i> Import Milestones
+                                    </button>
+                                    <p class="mt-2 mb-0 small text-muted"><i class="bi bi-info-circle"></i> Optional — you can do this anytime from the Milestone Tracker.</p>
+                                </div>
+                                <!-- Progress state -->
+                                <div id="importMilestonesProgress" class="d-none">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                        <strong id="importMilestonesStatusText">Starting sync...</strong>
+                                    </div>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="importMilestonesProgressBar" role="progressbar" style="width: 0%">
+                                            <span id="importMilestonesProgressPercent">0%</span>
+                                        </div>
+                                    </div>
+                                    <div class="small text-muted" id="importMilestonesLog" style="max-height: 150px; overflow-y: auto; font-family: monospace;"></div>
+
+                                </div>
+                                <!-- Success state -->
+                                <div id="importMilestonesSuccess" class="d-none text-center">
+                                    <i class="bi bi-check-circle-fill text-success fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-success">Milestones synced!</p>
+                                    <div id="importMilestonesSummary" class="text-muted small"></div>
+                                </div>
+                                <!-- Error state -->
+                                <div id="importMilestonesError" class="d-none text-center">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-warning" id="importMilestonesErrorMsg">Sync failed</p>
+                                    <button class="btn btn-outline-primary btn-sm" id="importMilestonesRetry">
+                                        <i class="bi bi-arrow-clockwise"></i> Try Again
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info mb-0">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-lightbulb me-2 mt-1"></i>
+                                <div>
+                                    <strong>Tip:</strong> While you wait, you can export your revenue CSV from MSXi — you'll upload it in the next step.
+                                    <br>
+                                    <a class="text-decoration-none" data-bs-toggle="collapse" href="#revenueTipInstructionsStep4" role="button" aria-expanded="false">
+                                        Show me how <i class="bi bi-chevron-down small"></i>
+                                    </a>
+                                    <div class="collapse mt-2" id="revenueTipInstructionsStep4">
+                                        <ol class="mb-2 small">
+                                            <li>Go to <a href="https://msxinsights.microsoft.com/User/report/47b95fcd-1857-47f2-9c4b-8413a508ae00?reportTab=ReportSection146fc780baf4c55d7158" target="_blank">SME&C ACR Service Level Subscription Details SL4 - WW</a>
+                                                <br><span class="text-muted">Or go to <a href="https://aka.ms/msxi" target="_blank">aka.ms/msxi</a> and search for the report name</span></li>
+                                            <li>Scroll to <strong>"ACR Details by Quarter / Month"</strong></li>
+                                            <li>Under Choose Fields (left), check <strong>"ServiceLevel4"</strong></li>
+                                            <li>In Filters (right), find <strong>ServiceCompGrouping</strong> and select your buckets</li>
+                                            <li>Right-click the header → <strong>Expand to next level</strong> (repeat twice)</li>
+                                            <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
+                                            <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
+                                        </ol>
+                                        <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush — these instructions are also shown in Step 5.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 5: Revenue & Finish -->
+                    <div class="onboarding-step d-none" id="onboardingStep5">
+                        <h6 class="mb-3"><i class="bi bi-graph-up text-primary"></i> One More Thing: Revenue Data</h6>
+                        <p>Importing revenue data powers the Revenue Analyzer — trend charts, service breakdowns, and growth tracking for your accounts. It takes about 5 minutes.</p>
+                        
+                        <div class="card mb-3 border-primary">
+                            <div class="card-body" id="importRevenueCard">
+                                <h6 class="card-title"><i class="bi bi-file-earmark-spreadsheet text-success"></i> How to get your revenue CSV:</h6>
+                                <ol class="mb-3">
+                                    <li>Go to <a href="https://msxinsights.microsoft.com/User/report/47b95fcd-1857-47f2-9c4b-8413a508ae00?reportTab=ReportSection146fc780baf4c55d7158" target="_blank">SME&C ACR Service Level Subscription Details SL4 - WW</a>
+                                        <br><span class="text-muted small">Or go to <a href="https://aka.ms/msxi" target="_blank">aka.ms/msxi</a> and search for the report name</span></li>
+                                    <li>Scroll to <strong>"ACR Details by Quarter / Month"</strong></li>
+                                    <li>Under Choose Fields (left), check <strong>"ServiceLevel4"</strong></li>
+                                    <li>In Filters (right), find <strong>ServiceCompGrouping</strong> and select your buckets</li>
+                                    <li>Right-click the header → <strong>Expand to next level</strong> (repeat twice)</li>
+                                    <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
+                                    <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
+                                </ol>
+
+                                <!-- Initial state: Upload button -->
+                                <div id="importRevenueInitial" class="text-center">
+                                    <div id="revenueIncompleteWarning" class="alert alert-warning py-2 mb-3 d-none">
+                                        <i class="bi bi-exclamation-triangle"></i> Your last revenue import didn't finish. Re-import to get complete data.
+                                    </div>
+                                    <input type="file" id="revenueFileInput" accept=".csv" class="d-none">
+                                    <button class="btn btn-primary btn-lg" id="onboardImportRevenue">
+                                        <i class="bi bi-upload"></i> Import Revenue CSV
+                                    </button>
+                                </div>
+
+                                <!-- Progress state -->
+                                <div id="importRevenueProgress" class="d-none">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                        <span id="importRevenueStatusText">Starting import...</span>
+                                    </div>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="importRevenueProgressBar" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    <div class="text-end small text-muted" id="importRevenueProgressPercent">0%</div>
+
+                                </div>
+
+                                <!-- Success state -->
+                                <div id="importRevenueSuccess" class="d-none text-center">
+                                    <i class="bi bi-check-circle-fill text-success fs-3"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-success">Revenue imported!</p>
+                                    <div id="importRevenueSummary" class="small text-muted"></div>
+                                </div>
+
+                                <!-- Error state -->
+                                <div id="importRevenueError" class="d-none text-center">
+                                    <i class="bi bi-x-circle-fill text-danger fs-3"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-danger" id="importRevenueErrorMsg">Import failed</p>
+                                    <button class="btn btn-outline-primary btn-sm mt-2" id="importRevenueRetry">
+                                        <i class="bi bi-arrow-clockwise"></i> Try Again
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <p class="small text-muted mb-0"><i class="bi bi-info-circle"></i> Optional — you can do this anytime from the Revenue Analyzer.</p>
+                    </div>
+
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" id="dismissWelcomeModal">
-                        Got it, thanks! <i class="bi bi-check-lg"></i>
-                    </button>
+                <div class="modal-footer d-flex justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="onboardSkipBtn">
+                            Skip setup - I'll do this later
+                        </button>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-secondary d-none" id="onboardBackBtn">
+                            <i class="bi bi-arrow-left"></i> Back
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary d-none" id="onboardSkipStepBtn">
+                            Skip <i class="bi bi-arrow-right"></i>
+                        </button>
+                        <button type="button" class="btn btn-primary" id="onboardNextBtn">
+                            Next <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -389,77 +817,867 @@
     <script defer>
         const htmlElement = document.documentElement;
         
-        // Welcome Modal - Show on first run
+        // Onboarding Wizard - Show on first run
         window.addEventListener('load', () => {
             const welcomeModal = document.getElementById('welcomeModal');
             if (welcomeModal && typeof bootstrap !== 'undefined') {
                 const modal = new bootstrap.Modal(welcomeModal);
-                
-                // Show modal with slight delay to ensure everything is ready
-                setTimeout(() => modal.show(), 100);
-                
-                // Dark mode toggle in welcome modal
-                const welcomeDarkModeToggle = document.getElementById('welcomeDarkModeToggle');
-                const welcomeDarkModeLabel = document.getElementById('welcomeDarkModeLabel');
-                
-                if (welcomeDarkModeToggle) {
-                    welcomeDarkModeToggle.addEventListener('change', async function() {
-                        const isDark = this.checked;
-                        
-                        // Update UI immediately
-                        htmlElement.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
-                        welcomeDarkModeLabel.textContent = isDark ? 'Dark Mode' : 'Light Mode';
-                        
-                        // Save preference to server
-                        try {
-                            await fetch('/api/preferences/dark-mode', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({ dark_mode: isDark })
-                            });
-                        } catch (error) {
-                            console.error('Failed to save dark mode preference:', error);
-                        }
-                    });
+
+                // --- Onboarding Wizard State ---
+                let currentStep = 1;
+                const totalSteps = 5;
+                let authCompleted = false;
+                // Pre-set import state from server-side data
+                let accountsImported = {{ 'true' if has_customers else 'false' }};
+                let milestonesImported = {{ 'true' if has_milestones else 'false' }};
+                let revenueImported = {{ 'true' if has_revenue else 'false' }};
+                const milestonesSyncState = '{{ milestones_sync_state }}';
+                const revenueSyncState = '{{ revenue_sync_state }}';
+                let authPollTimer = null;
+
+                const stepBadge = document.getElementById('onboardingStepBadge');
+                const progressBar = document.getElementById('onboardingProgress');
+                const nextBtn = document.getElementById('onboardNextBtn');
+                const backBtn = document.getElementById('onboardBackBtn');
+                const skipBtn = document.getElementById('onboardSkipBtn');
+
+                function showStep(step) {
+                    currentStep = step;
+                    // Hide all steps
+                    document.querySelectorAll('.onboarding-step').forEach(s => s.classList.add('d-none'));
+                    // Show current
+                    const el = document.getElementById('onboardingStep' + step);
+                    if (el) el.classList.remove('d-none');
+                    // Update badge and progress
+                    stepBadge.textContent = 'Step ' + step + ' of ' + totalSteps;
+                    progressBar.style.width = (step / totalSteps * 100) + '%';
+                    // Back button visibility
+                    if (step > 1) backBtn.classList.remove('d-none');
+                    else backBtn.classList.add('d-none');
+                    // Next button text
+                    if (step === totalSteps) {
+                        nextBtn.innerHTML = '<i class="bi bi-check-lg"></i> Finish';
+                    } else {
+                        nextBtn.innerHTML = 'Next <i class="bi bi-arrow-right"></i>';
+                    }
+                    // Update skip button text once core import is done
+                    if (step === totalSteps) {
+                        skipBtn.classList.add('d-none');
+                    } else if (step >= 4 && accountsImported) {
+                        skipBtn.classList.remove('d-none');
+                        skipBtn.textContent = 'Done - skip remaining steps';
+                    } else {
+                        skipBtn.classList.remove('d-none');
+                        skipBtn.textContent = 'Skip setup - I\'ll do this later';
+                    }
+                    // Show "already completed" state if navigating to a previously-done step
+                    if (step === 3 && accountsImported) {
+                        showImportAlreadyDone('importAccounts', 'Accounts already imported');
+                    }
+                    if (step === 4 && milestonesImported) {
+                        showImportAlreadyDone('importMilestones', 'Milestones already synced');
+                    }
+                    if (step === 5 && revenueImported) {
+                        showRevenueAlreadyDone();
+                    }
+                    // Disable next if step requires completion
+                    updateNextButton();
+                    // Auto-check auth status on step 2
+                    if (step === 2) checkExistingAuth();
                 }
-                
-                // Helper function to dismiss modal
-                async function dismissModal() {
+
+                function showImportAlreadyDone(prefix, message) {
+                    showImportState(prefix, 'Success');
+                    const summaryDiv = document.getElementById(prefix + 'Summary');
+                    if (summaryDiv && !summaryDiv.innerHTML.trim()) {
+                        summaryDiv.innerHTML = '<span class="text-muted">Previously imported — no action needed.</span>';
+                    }
+                    // Update the success heading
+                    const successDiv = document.getElementById(prefix + 'Success');
+                    const heading = successDiv ? successDiv.querySelector('.fw-bold') : null;
+                    if (heading && !heading.dataset.originalSet) {
+                        heading.textContent = message;
+                        heading.dataset.originalSet = '1';
+                    }
+                }
+
+                function showRevenueAlreadyDone() {
+                    showRevenueState('Success');
+                    const summaryDiv = document.getElementById('importRevenueSummary');
+                    if (summaryDiv && !summaryDiv.innerHTML.trim()) {
+                        summaryDiv.innerHTML = '<span class="text-muted">Previously imported — no action needed.</span>';
+                    }
+                    const heading = document.querySelector('#importRevenueSuccess .fw-bold');
+                    if (heading && !heading.dataset.originalSet) {
+                        heading.textContent = 'Revenue already imported';
+                        heading.dataset.originalSet = '1';
+                    }
+                }
+
+                function updateNextButton() {
+                    const skipStepBtn = document.getElementById('onboardSkipStepBtn');
+                    if (currentStep === 2 && !authCompleted) {
+                        nextBtn.disabled = true;
+                    } else if (currentStep === 3 && !accountsImported) {
+                        nextBtn.disabled = true;
+                    } else if (currentStep === 4 && !milestonesImported) {
+                        nextBtn.disabled = true;
+                    } else if (currentStep === 5 && !revenueImported) {
+                        nextBtn.disabled = true;
+                    } else {
+                        nextBtn.disabled = false;
+                    }
+                    // Show Skip button on step 4 (milestones) and step 5 (revenue) when not yet done
+                    if ((currentStep === 4 && !milestonesImported) || (currentStep === 5 && !revenueImported)) {
+                        skipStepBtn.classList.remove('d-none');
+                    } else {
+                        skipStepBtn.classList.add('d-none');
+                    }
+                }
+
+                // Determine the next step that still needs action
+                function nextIncompleteStep() {
+                    if (!accountsImported) return 3;
+                    if (!milestonesImported) return 4;
+                    return 5;  // Revenue is always the last stop
+                }
+
+                nextBtn.addEventListener('click', async () => {
+                    if (currentStep < totalSteps) {
+                        showStep(currentStep + 1);
+                    } else {
+                        // Finish — dismiss modal
+                        await dismissOnboarding();
+                        modal.hide();
+                        window.location.reload();
+                    }
+                });
+
+                backBtn.addEventListener('click', () => {
+                    if (currentStep > 1) showStep(currentStep - 1);
+                });
+
+                skipBtn.addEventListener('click', async () => {
+                    await dismissOnboarding();
+                    modal.hide();
+                    window.location.reload();
+                });
+
+                async function dismissOnboarding() {
                     try {
                         await fetch('/api/preferences/dismiss-welcome-modal', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            }
+                            headers: { 'Content-Type': 'application/json' }
                         });
-                    } catch (error) {
-                        console.error('Failed to dismiss welcome modal:', error);
+                    } catch (err) {
+                        console.error('Failed to dismiss onboarding:', err);
                     }
                 }
-                
-                // Dismiss welcome modal button
-                const dismissButton = document.getElementById('dismissWelcomeModal');
-                if (dismissButton) {
-                    dismissButton.addEventListener('click', async function() {
-                        await dismissModal();
+
+                // --- Step 1: Dark Mode Toggle ---
+                const onboardDarkToggle = document.getElementById('onboardDarkModeToggle');
+                if (onboardDarkToggle) {
+                    onboardDarkToggle.addEventListener('change', async function() {
+                        const isDark = this.checked;
+                        htmlElement.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+                        try {
+                            await fetch('/api/preferences/dark-mode', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ dark_mode: isDark })
+                            });
+                        } catch (err) {
+                            console.error('Failed to save dark mode:', err);
+                        }
+                    });
+                }
+
+                // --- Step 2: Authentication ---
+                async function checkExistingAuth() {
+                    try {
+                        // First check if we already have a CRM token cached
+                        const resp = await fetch('/api/msx/status');
+                        const data = await resp.json();
+                        if (data.authenticated) {
+                            authCompleted = true;
+                            showAuthState('authAlready');
+                            updateNextButton();
+                            // Auto-advance past completed steps
+                            setTimeout(() => {
+                                if (currentStep === 2) showStep(nextIncompleteStep());
+                            }, 2000);
+                            return;
+                        }
+                        // Then check if az CLI is logged in (even without cached token)
+                        const azResp = await fetch('/api/msx/az-status');
+                        const azData = await azResp.json();
+                        if (!azData.az_installed) {
+                            showAuthState('authNoCli');
+                        } else if (azData.logged_in) {
+                            // Logged in to az but no CRM token yet — complete the flow
+                            await completeAzLogin(azData.user_email);
+                        }
+                    } catch (err) {
+                        console.error('Failed to check auth status:', err);
+                    }
+                }
+
+                function showAuthState(stateId) {
+                    ['authInitial', 'authWaiting', 'authSuccess', 'authError', 'authNoCli', 'authAlready'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.classList.add('d-none');
+                    });
+                    document.getElementById(stateId).classList.remove('d-none');
+                }
+
+                const AUTH_POLL_TIMEOUT_MS = 20000; // 20 seconds
+                let authPollStartTime = null;
+                let authElapsedTimer = null;
+                let authLoginHandled = false; // prevent duplicate completeAzLogin calls
+
+                async function startAzLogin() {
+                    showAuthState('authWaiting');
+                    authLoginHandled = false;
+                    // Reset the waiting status text
+                    const statusEl = document.getElementById('authWaitingStatus');
+                    if (statusEl) statusEl.textContent = 'Waiting for sign-in to complete...';
+
+                    try {
+                        const resp = await fetch('/api/msx/az-login/start', { method: 'POST' });
+                        const data = await resp.json();
+                        if (data.error) {
+                            document.getElementById('authErrorMessage').textContent = data.error;
+                            showAuthState('authError');
+                            return;
+                        }
+                        // Start polling for login completion
+                        pollAzLoginStatus();
+                    } catch (err) {
+                        document.getElementById('authErrorMessage').textContent = 'Could not start sign-in';
+                        showAuthState('authError');
+                    }
+                }
+
+                function cancelAzLogin() {
+                    if (authPollTimer) { clearInterval(authPollTimer); authPollTimer = null; }
+                    if (authElapsedTimer) { clearInterval(authElapsedTimer); authElapsedTimer = null; }
+                    authLoginHandled = false;
+                    showAuthState('authInitial');
+                }
+
+                function pollAzLoginStatus() {
+                    if (authPollTimer) clearInterval(authPollTimer);
+                    if (authElapsedTimer) clearInterval(authElapsedTimer);
+                    authPollStartTime = Date.now();
+
+                    // Update elapsed time display every second
+                    const statusEl = document.getElementById('authWaitingStatus');
+                    authElapsedTimer = setInterval(() => {
+                        const elapsed = Math.round((Date.now() - authPollStartTime) / 1000);
+                        if (statusEl) statusEl.textContent = 'Waiting for sign-in... (' + elapsed + 's)';
+                    }, 1000);
+
+                    // Poll az account show every 1.5s. If the user signed in
+                    // with the right Microsoft account, this picks it up in
+                    // ~3-5 seconds. If 15s passes, something went wrong.
+                    authPollTimer = setInterval(async () => {
+                        // Timeout check
+                        if (Date.now() - authPollStartTime > AUTH_POLL_TIMEOUT_MS) {
+                            clearInterval(authPollTimer); authPollTimer = null;
+                            clearInterval(authElapsedTimer); authElapsedTimer = null;
+                            document.getElementById('authErrorMessage').textContent =
+                                'Authentication timed out';
+                            showAuthState('authError');
+                            return;
+                        }
+                        // Guard: skip if we already handled a successful login
+                        if (authLoginHandled) return;
+                        try {
+                            const resp = await fetch('/api/msx/az-status');
+                            const data = await resp.json();
+                            if (authLoginHandled) return; // re-check after await
+                            if (data.logged_in) {
+                                authLoginHandled = true;
+                                clearInterval(authPollTimer); authPollTimer = null;
+                                clearInterval(authElapsedTimer); authElapsedTimer = null;
+                                await completeAzLogin(data.user_email);
+                            }
+                        } catch (err) {
+                            console.error('Auth poll error:', err);
+                        }
+                    }, 1500);
+                }
+
+                async function completeAzLogin(userEmail) {
+                    // Show a brief "Connecting..." state while we grab the CRM token
+                    const statusEl = document.getElementById('authWaitingStatus');
+                    if (statusEl) statusEl.textContent = 'Connecting to MSX...';
+                    showAuthState('authWaiting');
+                    try {
+                        // Tell backend to set subscription + refresh CRM token
+                        const resp = await fetch('/api/msx/az-login/complete', { method: 'POST' });
+                        const data = await resp.json();
+                        if (data.success) {
+                            authCompleted = true;
+                            showAuthState('authSuccess');
+                            const emailEl = document.getElementById('authUserEmail');
+                            const email = userEmail || data.user_email;
+                            if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
+                            updateNextButton();
+                            // Auto-advance past completed steps
+                            setTimeout(() => {
+                                if (currentStep === 2) showStep(nextIncompleteStep());
+                            }, 2000);
+                        } else {
+                            document.getElementById('authErrorMessage').textContent = data.error || 'Failed to get CRM token';
+                            showAuthState('authError');
+                        }
+                    } catch (err) {
+                        document.getElementById('authErrorMessage').textContent = 'Failed to complete sign-in';
+                        showAuthState('authError');
+                    }
+                }
+
+                document.getElementById('onboardStartAuth').addEventListener('click', startAzLogin);
+                document.getElementById('authRetry').addEventListener('click', startAzLogin);
+                document.getElementById('authCancelBtn').addEventListener('click', cancelAzLogin);
+                const retryNoCliBtn = document.getElementById('authRetryNoCli');
+                if (retryNoCliBtn) retryNoCliBtn.addEventListener('click', checkExistingAuth);
+
+                // --- Step 3: Import Accounts ---
+                function showImportState(prefix, stateId) {
+                    ['Initial', 'Progress', 'Success', 'Error'].forEach(s => {
+                        document.getElementById(prefix + s).classList.add('d-none');
+                    });
+                    document.getElementById(prefix + stateId).classList.remove('d-none');
+                    // Show brainrot toggle in card during progress, hide otherwise
+                    if (stateId === 'Progress') {
+                        if (window.showBrainrotInCard) window.showBrainrotInCard(prefix + 'Card');
+                    } else {
+                        if (window.hideBrainrotToggle) window.hideBrainrotToggle();
+                    }
+                }
+
+                async function importAccounts() {
+                    showImportState('importAccounts', 'Progress');
+                    const logDiv = document.getElementById('importAccountsLog');
+                    const statusText = document.getElementById('importAccountsStatusText');
+                    const progressBar = document.getElementById('importAccountsProgressBar');
+                    const progressPercent = document.getElementById('importAccountsProgressPercent');
+                    logDiv.innerHTML = '';
+                    statusText.textContent = 'Starting import...';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+
+                    // Warn user if they try to leave during import
+                    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+                    window.addEventListener('beforeunload', warnOnLeave);
+
+                    try {
+                        const resp = await fetch('/api/msx/import-stream');
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
+                        const reader = resp.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        let finalSummary = null;
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop();
+                            for (const line of lines) {
+                                if (!line.startsWith('data: ')) continue;
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+
+                                    if (data.error) {
+                                        throw new Error(data.error);
+                                    }
+
+                                    if (data.message) {
+                                        statusText.textContent = data.message;
+                                        logDiv.innerHTML += '<div>' + data.message + '</div>';
+                                        logDiv.scrollTop = logDiv.scrollHeight;
+                                    }
+
+                                    if (data.progress !== undefined) {
+                                        progressBar.style.width = data.progress + '%';
+                                        progressPercent.textContent = data.progress + '%';
+                                    }
+
+                                    if (data.complete && data.summary) {
+                                        finalSummary = data.summary;
+                                    }
+                                } catch (parseErr) {
+                                    if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
+                                }
+                            }
+                        }
+
+                        accountsImported = true;
+                        const summaryDiv = document.getElementById('importAccountsSummary');
+                        if (finalSummary) {
+                            const s = finalSummary;
+                            summaryDiv.innerHTML =
+                                '<ul class="list-unstyled mb-0">' +
+                                '<li><i class="bi bi-people-fill text-primary"></i> PODs: ' + (s.pods_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-geo-alt text-info"></i> Territories: ' + (s.territories_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-person text-primary"></i> Sellers: ' + (s.sellers_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-person-gear text-secondary"></i> Solution Engineers: ' + (s.solution_engineers_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-building text-success"></i> Customers: ' + (s.customers_created || 0) + ' created, ' + (s.customers_skipped || 0) + ' skipped</li>' +
+                                '</ul>';
+                        }
+                        showImportState('importAccounts', 'Success');
+                        updateNextButton();
+                    } catch (err) {
+                        const msg = err.message || 'Connection error during import';
+                        document.getElementById('importAccountsErrorMsg').textContent = msg.charAt(0).toUpperCase() + msg.slice(1);
+                        showImportState('importAccounts', 'Error');
+                    } finally {
+                        window.removeEventListener('beforeunload', warnOnLeave);
+                    }
+                }
+
+                document.getElementById('onboardImportAccounts').addEventListener('click', importAccounts);
+                document.getElementById('importAccountsRetry').addEventListener('click', importAccounts);
+
+                // --- Step 4: Import Milestones ---
+                // The milestone sync endpoint uses named SSE events:
+                //   event: start\ndata: {"total": N}
+                //   event: progress\ndata: {"current":1, "total":N, "customer":"...", "status":"ok"}
+                //   event: complete\ndata: {"synced":N, "created":N, ...}
+                // We need to parse both the 'event:' and 'data:' lines.
+                async function importMilestones() {
+                    showImportState('importMilestones', 'Progress');
+                    const logDiv = document.getElementById('importMilestonesLog');
+                    const statusText = document.getElementById('importMilestonesStatusText');
+                    const progressBar = document.getElementById('importMilestonesProgressBar');
+                    const progressPercent = document.getElementById('importMilestonesProgressPercent');
+                    logDiv.innerHTML = '';
+                    statusText.textContent = 'Starting sync...';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+
+                    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+                    window.addEventListener('beforeunload', warnOnLeave);
+
+                    try {
+                        const resp = await fetch('/api/milestone-tracker/sync', {
+                            method: 'POST',
+                            headers: { 'Accept': 'text/event-stream' }
+                        });
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
+                        const reader = resp.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        let completeSummary = null;
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            buffer += decoder.decode(value, { stream: true });
+
+                            // SSE events are separated by double newlines
+                            const blocks = buffer.split('\n\n');
+                            buffer = blocks.pop(); // keep incomplete block
+
+                            for (const block of blocks) {
+                                if (!block.trim()) continue;
+                                let eventType = '';
+                                let eventData = null;
+                                for (const line of block.split('\n')) {
+                                    if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+                                    else if (line.startsWith('data: ')) {
+                                        try { eventData = JSON.parse(line.slice(6)); } catch(e) {}
+                                    }
+                                }
+                                if (!eventData) continue;
+
+                                if (eventType === 'start') {
+                                    statusText.textContent = 'Syncing ' + (eventData.total || 0) + ' customers...';
+                                } else if (eventType === 'progress') {
+                                    const pct = eventData.total > 0 ? Math.round(eventData.current / eventData.total * 100) : 0;
+                                    progressBar.style.width = pct + '%';
+                                    progressPercent.textContent = eventData.current + ' / ' + eventData.total;
+                                    const icon = eventData.status === 'ok'
+                                        ? '<i class="bi bi-check-circle text-success"></i>'
+                                        : '<i class="bi bi-x-circle text-danger"></i>';
+                                    statusText.textContent = eventData.customer || ('Customer ' + eventData.current);
+                                    logDiv.innerHTML += '<div>' + icon + ' ' + (eventData.customer || '') +
+                                        (eventData.created ? ' (+' + eventData.created + ' created' + (eventData.updated ? ', ' + eventData.updated + ' updated' : '') + ')' : '') +
+                                        (eventData.error ? ' — ' + eventData.error : '') + '</div>';
+                                    logDiv.scrollTop = logDiv.scrollHeight;
+                                } else if (eventType === 'complete') {
+                                    completeSummary = eventData;
+                                } else if (eventType === 'error') {
+                                    throw new Error(eventData.message || eventData.error || 'Sync failed');
+                                }
+                            }
+                        }
+
+                        milestonesImported = true;
+                        const summaryDiv = document.getElementById('importMilestonesSummary');
+                        if (completeSummary) {
+                            const cs = completeSummary;
+                            summaryDiv.innerHTML =
+                                '<ul class="list-unstyled mb-0">' +
+                                '<li>' + (cs.synced || 0) + ' customers synced' + (cs.failed ? ', ' + cs.failed + ' failed' : '') + '</li>' +
+                                '<li>' + (cs.created || 0) + ' milestones created, ' + (cs.updated || 0) + ' updated' +
+                                    (cs.deactivated ? ', ' + cs.deactivated + ' deactivated' : '') + '</li>' +
+                                (cs.duration ? '<li>Completed in ' + cs.duration + 's</li>' : '') +
+                                '</ul>';
+                        }
+                        showImportState('importMilestones', 'Success');
+                        updateNextButton();
+                    } catch (err) {
+                        const mMsg = err.message || 'Connection error during sync';
+                        document.getElementById('importMilestonesErrorMsg').textContent = mMsg.charAt(0).toUpperCase() + mMsg.slice(1);
+                        showImportState('importMilestones', 'Error');
+                    } finally {
+                        window.removeEventListener('beforeunload', warnOnLeave);
+                    }
+                }
+
+                document.getElementById('onboardImportMilestones').addEventListener('click', importMilestones);
+                document.getElementById('importMilestonesRetry').addEventListener('click', importMilestones);
+                document.getElementById('onboardSkipStepBtn').addEventListener('click', async () => {
+                    if (currentStep >= totalSteps) {
+                        // Last step — dismiss the wizard
+                        await dismissOnboarding();
                         modal.hide();
+                        window.location.reload();
+                    } else {
+                        showStep(currentStep + 1);
+                    }
+                });
+
+                // --- Step 5: Import Revenue ---
+                function showRevenueState(stateId) {
+                    ['Initial', 'Progress', 'Success', 'Error'].forEach(s => {
+                        document.getElementById('importRevenue' + s).classList.add('d-none');
                     });
+                    document.getElementById('importRevenue' + stateId).classList.remove('d-none');
+                    // Show brainrot toggle in card during progress, hide otherwise
+                    if (stateId === 'Progress') {
+                        if (window.showBrainrotInCard) window.showBrainrotInCard('importRevenueCard');
+                    } else {
+                        if (window.hideBrainrotToggle) window.hideBrainrotToggle();
+                    }
                 }
-                
-                // Go to Data Management link - dismiss modal before navigating
-                const dataManagementLink = document.getElementById('goToDataManagement');
-                if (dataManagementLink) {
-                    dataManagementLink.addEventListener('click', async function(e) {
-                        e.preventDefault();
-                        await dismissModal();
-                        // Navigate after dismissing
-                        window.location.href = this.href;
-                    });
+
+                async function importRevenue(file) {
+                    showRevenueState('Progress');
+                    const statusText = document.getElementById('importRevenueStatusText');
+                    const progressBar = document.getElementById('importRevenueProgressBar');
+                    const progressPercent = document.getElementById('importRevenueProgressPercent');
+                    statusText.textContent = 'Starting import...';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+
+                    function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
+                    window.addEventListener('beforeunload', warnOnLeave);
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('run_analysis', 'on');
+
+                        const resp = await fetch('/api/revenue/import', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
+                        const reader = resp.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        let finalResult = null;
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop();
+                            for (const line of lines) {
+                                if (!line.startsWith('data: ')) continue;
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    if (data.error) throw new Error(data.error);
+                                    if (data.message) {
+                                        statusText.textContent = data.message;
+                                    }
+                                    // When analysis phase starts, reset the progress bar
+                                    if (data.analysis_started) {
+                                        progressBar.style.width = '0%';
+                                        progressPercent.textContent = '0%';
+                                    }
+                                    if (data.progress !== undefined) {
+                                        progressBar.style.width = data.progress + '%';
+                                        progressPercent.textContent = data.progress + '%';
+                                    }
+                                    if (data.result) finalResult = data.result;
+                                } catch (parseErr) {
+                                    if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
+                                }
+                            }
+                        }
+
+                        revenueImported = true;
+                        const summaryDiv = document.getElementById('importRevenueSummary');
+                        if (finalResult) {
+                            summaryDiv.innerHTML =
+                                '<ul class="list-unstyled mb-0">' +
+                                '<li>' + (finalResult.records_created || 0) + ' records created</li>' +
+                                '<li>' + (finalResult.records_updated || 0) + ' records updated</li>' +
+                                '<li>' + (finalResult.new_months || 0) + ' new months added</li>' +
+                                '</ul>';
+                        }
+                        showRevenueState('Success');
+                        updateNextButton();
+                    } catch (err) {
+                        const msg = err.message || 'Connection error during import';
+                        document.getElementById('importRevenueErrorMsg').textContent = msg.charAt(0).toUpperCase() + msg.slice(1);
+                        showRevenueState('Error');
+                    } finally {
+                        window.removeEventListener('beforeunload', warnOnLeave);
+                    }
                 }
+
+                const revenueFileInput = document.getElementById('revenueFileInput');
+                document.getElementById('onboardImportRevenue').addEventListener('click', () => revenueFileInput.click());
+                revenueFileInput.addEventListener('change', function() {
+                    if (this.files[0]) importRevenue(this.files[0]);
+                    this.value = '';
+                });
+                document.getElementById('importRevenueRetry').addEventListener('click', () => revenueFileInput.click());
+
+                // --- Wizard Initialization: detect progress and resume at correct step ---
+                async function initWizard() {
+                    let startStep = 1;
+
+                    // If user already has data, check auth and skip completed steps
+                    if (accountsImported || milestonesImported || revenueImported) {
+                        try {
+                            const resp = await fetch('/api/msx/status');
+                            const data = await resp.json();
+                            if (data.authenticated) {
+                                authCompleted = true;
+                            }
+                        } catch (err) {
+                            // Auth check failed — fall through to step 1 or 2
+                        }
+
+                        if (authCompleted && accountsImported && milestonesImported) {
+                            startStep = 5;
+                        } else if (authCompleted && accountsImported) {
+                            startStep = 4;
+                        } else if (accountsImported) {
+                            // Data exists but auth expired — re-auth first
+                            startStep = 2;
+                        }
+                    }
+
+                    // Show the correct step, then reveal the modal
+                    showStep(startStep);
+
+                    // Show warnings for incomplete syncs
+                    if (milestonesSyncState === 'incomplete' || milestonesSyncState === 'failed') {
+                        document.getElementById('milestonesIncompleteWarning').classList.remove('d-none');
+                    }
+                    if (revenueSyncState === 'incomplete' || revenueSyncState === 'failed') {
+                        document.getElementById('revenueIncompleteWarning').classList.remove('d-none');
+                    }
+
+                    modal.show();
+                }
+
+                initWizard();
             }
         });
+
+        // --- Brainrot Mode (always available, not just in wizard) ---
+        (function() {
+            const brainrotToggleWrap = document.createElement('div');
+            brainrotToggleWrap.className = 'brainrot-card-toggle d-none';
+            brainrotToggleWrap.id = 'brainrotToggleWrap';
+            brainrotToggleWrap.innerHTML =
+                '<input class="form-check-input" type="checkbox" id="brainrotCheck">' +
+                '<label class="form-check-label small" for="brainrotCheck">brainrot mode</label>';
+            const brainrotCheck = brainrotToggleWrap.querySelector('#brainrotCheck');
+            let brainrotPanel = null;
+            let brainrotCycleTimer = null;
+
+            // Curated brainrot GIFs — Giphy embeds (no ads, auto-loop, silent)
+            const brainrotGifs = [
+                // Satisfying cutting / soap / squishy / food
+                'Ggqa1eltvGXwk',       // squishy cutting
+                'ddvkYSGBpv6Tu',        // peach satisfying smooth
+                '7JC6PAr1eyX8bBwhgV',   // bath satisfying oddly
+                'RMcfvm6Dr2ZUY',        // kebab satisfying
+                'CchLXtUXWkQt7lSzcn',   // italian cooking satisfying
+                'dvIvdqxGRIA6yJnhwm',   // satisfying cake icing
+                'du4D0b0HWgxGg',        // donut satisfying
+                'oz4jYoMA0IFTgvmPXL',   // honey satisfying
+                // Paint / color mixing
+                'UVkAW5zSme7i4roUe6',   // 3d purple paint mixing
+                'PH8gHFw2YJPaM',        // palette knife paint satisfying
+                'inScTO4CPVdWo',         // oil paint spreading satisfying
+                '10Qns2AX4mBgGs',       // rainbow paint explosion
+                // Oddly satisfying factory / machines / robots
+                'YkyuofFW1ymBTKeC0n',   // robot automate cutting
+                'PEnjVFMUIWnmT9p5d9',   // mechanical machine loop
+                'rzufqXSfH7BVbtudEe',   // 3d rubber duck loop
+                '1REgzzR10TfAA',        // hydraulic press mango
+                't9JeSmafQHPfa',        // hydraulic press bolt
+                'TEtzmzX4Zo23ctsMYm',   // jelly jello 3d animation
+                // Slime / sensory
+                '3ohzdYAuE6OAyZtPr2',   // satisfying slime
+                'fV8mxOti6Vt5f8xXev',   // sloomoo slime satisfying
+                'rAeYDYIafXdF6',        // sugar slow motion satisfying
+                // Mesmerizing loops / 3d art
+                'elzCnIQAjQMWA',        // ripple waveform loop
+                'cZ1zUsJbDW2we4vAfm',   // mood satisfying perfect loops
+                'Yh0qLwfpAogL9vVxhL',   // minecraft geometric loop
+                'L007un2lhMaNBfp22o',   // infinite loop domino
+                'IMhR575YVNiSlWOo4t',   // 3d gear loop
+                '6Nh0MSV3umQOBYHuvT',   // water ball ocean loop
+                'NvQnaWzhNk3xrrtzj5',   // satisfying interior design 3d
+                'xThtajUUInjWOZksYo',   // satisfying loop philiplueck
+                'RFYFVA4XFDgL5GSLDp',   // art satisfying glitch loop
+                '3ov9jDJSnYG7ADBbOM',   // mesmerizing rainbow hypnotic
+                '9AXvu1JYGPrSU',        // brain satisfying
+                'C3yix2SZvRBu0',        // satisfying tank
+                '64a8WohDzng42rDYc3',   // satisfying oddly
+            ];
+
+            let shuffledQueue = [];
+            function shuffleBrainrotQueue() {
+                // Fisher-Yates shuffle of all indices
+                shuffledQueue = brainrotGifs.map((_, i) => i);
+                for (let i = shuffledQueue.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [shuffledQueue[i], shuffledQueue[j]] = [shuffledQueue[j], shuffledQueue[i]];
+                }
+            }
+            function pickBrainrotGif() {
+                if (shuffledQueue.length === 0) shuffleBrainrotQueue();
+                const idx = shuffledQueue.pop();
+                return 'https://media.giphy.com/media/' + brainrotGifs[idx] + '/giphy.gif';
+            }
+
+            function createBrainrotPanel() {
+                if (brainrotPanel) return brainrotPanel;
+                brainrotPanel = document.createElement('div');
+                brainrotPanel.className = 'brainrot-panel d-none';
+                brainrotPanel.innerHTML =
+                    '<button class="brainrot-close" title="Close">&times;</button>' +
+                    '<img src="" alt="" loading="lazy">';
+                document.body.appendChild(brainrotPanel);
+                brainrotPanel.querySelector('.brainrot-close').addEventListener('click', () => {
+                    window.setBrainrot(false);
+                });
+                return brainrotPanel;
+            }
+
+            function cycleBrainrot() {
+                if (!brainrotPanel || brainrotPanel.classList.contains('d-none')) return;
+                const img = brainrotPanel.querySelector('img');
+                if (img) img.src = pickBrainrotGif();
+            }
+
+            function showBrainrotPanel() {
+                shuffleBrainrotQueue(); // fresh random order each session
+                const panel = createBrainrotPanel();
+                const img = panel.querySelector('img');
+                if (img) img.src = pickBrainrotGif();
+                panel.classList.remove('d-none');
+                if (brainrotCycleTimer) clearInterval(brainrotCycleTimer);
+                brainrotCycleTimer = setInterval(cycleBrainrot, 12000);
+            }
+
+            function hideBrainrotPanel() {
+                if (brainrotCycleTimer) { clearInterval(brainrotCycleTimer); brainrotCycleTimer = null; }
+                if (brainrotPanel) {
+                    brainrotPanel.classList.add('d-none');
+                    const img = brainrotPanel.querySelector('img');
+                    if (img) img.src = '';
+                }
+            }
+
+            function isBrainrotOn() {
+                return localStorage.getItem('brainrot') === '1';
+            }
+
+            function setBrainrot(on) {
+                localStorage.setItem('brainrot', on ? '1' : '0');
+                brainrotCheck.checked = on;
+                // Also sync any page-specific brainrot checkboxes (e.g., milestone tracker)
+                document.querySelectorAll('[id$="BrainrotCheck"]').forEach(cb => { cb.checked = on; });
+                if (on) {
+                    brainrotToggleWrap.classList.add('brainrot-active');
+                } else {
+                    brainrotToggleWrap.classList.remove('brainrot-active');
+                    hideBrainrotPanel();
+                }
+            }
+
+            function showBrainrotInCard(cardId) {
+                const card = document.getElementById(cardId);
+                if (card) {
+                    card.style.position = 'relative';
+                    card.appendChild(brainrotToggleWrap);
+                    brainrotToggleWrap.classList.remove('d-none');
+                }
+                // If brainrot is already on, show the panel immediately
+                if (isBrainrotOn()) showBrainrotPanel();
+            }
+
+            function hideBrainrotToggle() {
+                brainrotToggleWrap.classList.add('d-none');
+                hideBrainrotPanel();
+            }
+
+            // Expose globally for all pages
+            window.showBrainrotInCard = showBrainrotInCard;
+            window.hideBrainrotToggle = hideBrainrotToggle;
+            window.setBrainrot = setBrainrot;
+            window.isBrainrotOn = isBrainrotOn;
+            window.showBrainrotPanel = showBrainrotPanel;
+            window.hideBrainrotPanel = hideBrainrotPanel;
+
+            // Init from localStorage — only restore checkbox state, don't show panel
+            if (localStorage.getItem('brainrot') === '1') {
+                brainrotCheck.checked = true;
+                brainrotToggleWrap.classList.add('brainrot-active');
+                document.querySelectorAll('[id$="BrainrotCheck"]').forEach(cb => { cb.checked = true; });
+            }
+
+            brainrotCheck.addEventListener('change', () => {
+                setBrainrot(brainrotCheck.checked);
+                // If turning on while a sync card is showing the toggle, show panel
+                if (brainrotCheck.checked && !brainrotToggleWrap.classList.contains('d-none')) {
+                    showBrainrotPanel();
+                }
+            });
+        })();
+
+        // Re-run Setup Wizard button
+        const rerunBtn = document.getElementById('rerunSetupBtn');
+        if (rerunBtn) {
+            rerunBtn.addEventListener('click', async () => {
+                try {
+                    await fetch('/api/preferences/reset-onboarding', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    window.location.reload();
+                } catch (err) {
+                    console.error('Failed to reset onboarding:', err);
+                }
+            });
+        }
         
         // Dark Mode Toggle (only if it exists in menu)
         const darkModeToggle = document.getElementById('darkModeToggle');

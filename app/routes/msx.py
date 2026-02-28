@@ -21,6 +21,11 @@ from app.services.msx_auth import (
     start_device_code_flow,
     get_device_code_status,
     cancel_device_code_flow,
+    get_az_cli_status,
+    start_az_login,
+    get_az_login_process_status,
+    set_subscription,
+    az_logout,
 )
 from app.services.msx_api import (
     test_connection,
@@ -162,6 +167,82 @@ def device_code_cancel():
     """Cancel any active device code flow."""
     cancel_device_code_flow()
     return jsonify({"success": True, "message": "Device code flow cancelled"})
+
+
+# -----------------------------------------------------------------------------
+# Browser-based az login flow
+# -----------------------------------------------------------------------------
+
+@msx_bp.route('/az-status')
+def az_cli_status():
+    """Check Azure CLI install & login status (no CRM token needed).
+
+    Returns az_installed, logged_in, user_email, message.
+    """
+    return jsonify(get_az_cli_status())
+
+
+@msx_bp.route('/az-login/start', methods=['POST'])
+def az_login_start():
+    """Launch ``az login --tenant ...`` in a visible console window.
+
+    The frontend should poll ``/api/msx/az-status`` afterwards to
+    detect when the user completes sign-in.
+    """
+    result = start_az_login()
+
+    # If already logged in, also set subscription and grab a CRM token
+    if result.get("success"):
+        status = get_az_cli_status()
+        if status.get("logged_in"):
+            set_subscription()
+            refresh_token()
+
+    return jsonify(result)
+
+
+@msx_bp.route('/az-logout', methods=['POST'])
+def az_logout_endpoint():
+    """Sign out of Azure CLI (used when wrong tenant detected)."""
+    return jsonify(az_logout())
+
+
+@msx_bp.route('/az-login/status')
+def az_login_status():
+    """Poll the az login process status (instant, no subprocess calls).
+
+    Returns running, exit_code, elapsed_seconds so the frontend can
+    detect success/failure immediately when the process exits.
+    """
+    return jsonify(get_az_login_process_status())
+
+
+@msx_bp.route('/az-login/complete', methods=['POST'])
+def az_login_complete():
+    """Called by the frontend once polling detects a successful login.
+
+    Sets the subscription and refreshes the CRM token so subsequent
+    API calls work immediately.
+    """
+    status = get_az_cli_status()
+    if not status.get("logged_in"):
+        return jsonify({"success": False, "error": "Not logged in yet"}), 400
+
+    set_subscription()
+    token_ok = refresh_token()
+    auth = get_msx_auth_status()
+
+    # Serialise datetimes
+    if auth.get("expires_on"):
+        auth["expires_on"] = auth["expires_on"].isoformat()
+    if auth.get("last_refresh"):
+        auth["last_refresh"] = auth["last_refresh"].isoformat()
+
+    return jsonify({
+        "success": token_ok,
+        "user_email": status.get("user_email"),
+        "auth_status": auth,
+    })
 
 
 # -----------------------------------------------------------------------------
@@ -683,24 +764,50 @@ def import_stream():
                 "role": role
             }) + "\n\n"
             
-            # 2. Batch query all accounts (much faster than individual queries!)
+            # 2. Batch query all accounts — inline the loop so we can
+            #    yield SSE progress after each batch in real time.
+            BATCH_SIZE = 15
+            accounts_raw = {}
+            total_batches = (len(account_ids) + BATCH_SIZE - 1) // BATCH_SIZE
+
             yield "data: " + json.dumps({
-                "message": f"Batch querying {len(account_ids)} accounts...",
+                "message": f"Querying {len(account_ids)} accounts ({total_batches} batches)...",
                 "progress": 2
             }) + "\n\n"
-            
-            batch_result = batch_query_accounts(account_ids)
-            if not batch_result.get("success"):
-                yield "data: " + json.dumps({"error": f"Failed to query accounts: {batch_result.get('error')}"}) + "\n\n"
+
+            for batch_num, i in enumerate(range(0, len(account_ids), BATCH_SIZE), start=1):
+                batch = account_ids[i:i + BATCH_SIZE]
+                filter_parts = [f"accountid eq {aid}" for aid in batch]
+                filter_query = " or ".join(filter_parts)
+                result = query_entity(
+                    "accounts",
+                    select=["accountid", "name", "msp_mstopparentid",
+                            "_territoryid_value", "msp_verticalcode",
+                            "msp_verticalcategorycode"],
+                    filter_query=filter_query,
+                    top=BATCH_SIZE + 5,
+                )
+                if result.get("success"):
+                    for rec in result.get("records", []):
+                        acct_id = rec.get("accountid")
+                        if acct_id:
+                            accounts_raw[acct_id] = rec
+                pct = 2 + int((batch_num / total_batches) * 10)  # 2-12%
+                yield "data: " + json.dumps({
+                    "message": f"Querying accounts... batch {batch_num}/{total_batches} ({len(accounts_raw)} fetched)",
+                    "progress": pct
+                }) + "\n\n"
+
+            if not accounts_raw:
+                yield "data: " + json.dumps({"error": "Failed to query any accounts"}) + "\n\n"
                 return
-            
-            accounts_raw = batch_result.get("accounts", {})
+
             yield "data: " + json.dumps({
                 "message": f"Retrieved {len(accounts_raw)} accounts. Getting territory details...",
-                "progress": 5
+                "progress": 13
             }) + "\n\n"
             
-            # 3. Collect unique territory IDs and batch query them
+            # 3. Collect unique territory IDs and batch query them inline
             territory_ids = set()
             for acct in accounts_raw.values():
                 terr_id = acct.get("_territoryid_value")
@@ -709,18 +816,39 @@ def import_stream():
             
             territories_raw = {}
             if territory_ids:
+                unique_terr = list(territory_ids)
+                terr_batches = (len(unique_terr) + BATCH_SIZE - 1) // BATCH_SIZE
+
                 yield "data: " + json.dumps({
-                    "message": f"Batch querying {len(territory_ids)} territories...",
-                    "progress": 7
+                    "message": f"Querying {len(unique_terr)} territories ({terr_batches} batches)...",
+                    "progress": 14
                 }) + "\n\n"
-                
-                terr_result = batch_query_territories(list(territory_ids))
-                if terr_result.get("success"):
-                    territories_raw = terr_result.get("territories", {})
+
+                for batch_num, i in enumerate(range(0, len(unique_terr), BATCH_SIZE), start=1):
+                    batch = unique_terr[i:i + BATCH_SIZE]
+                    filter_parts = [f"territoryid eq {tid}" for tid in batch]
+                    filter_query = " or ".join(filter_parts)
+                    result = query_entity(
+                        "territories",
+                        select=["territoryid", "name", "msp_ownerid",
+                                "msp_salesunitname", "msp_accountteamunitname"],
+                        filter_query=filter_query,
+                        top=BATCH_SIZE + 5,
+                    )
+                    if result.get("success"):
+                        for rec in result.get("records", []):
+                            terr_id = rec.get("territoryid")
+                            if terr_id:
+                                territories_raw[terr_id] = rec
+                    pct = 14 + int((batch_num / terr_batches) * 6)  # 14-20%
+                    yield "data: " + json.dumps({
+                        "message": f"Querying territories... batch {batch_num}/{terr_batches} ({len(territories_raw)} fetched)",
+                        "progress": pct
+                    }) + "\n\n"
             
             yield "data: " + json.dumps({
                 "message": f"Processing account data...",
-                "progress": 10
+                "progress": 21
             }) + "\n\n"
             
             # 4. Process all accounts and build data structures
@@ -794,7 +922,7 @@ def import_stream():
             
             yield "data: " + json.dumps({
                 "message": f"Found {len(accounts_data)} accounts, {len(territories_seen)} territories, {len(pod_accounts)} PODs",
-                "progress": 12
+                "progress": 22
             }) + "\n\n"
             
             # 5. Batch query all account teams for sellers and SEs
@@ -807,11 +935,11 @@ def import_stream():
             
             yield "data: " + json.dumps({
                 "message": f"Fetching sellers and SEs ({total_batches} batches)...",
-                "progress": 15
+                "progress": 25
             }) + "\n\n"
             
             # Run batch_query_account_teams but show incremental progress
-            # Progress spans 15-85% during this phase
+            # Progress spans 25-85% during this phase
             account_sellers = {}
             sellers_seen = {}
             account_ses = {}
@@ -821,7 +949,7 @@ def import_stream():
                 batch_num = batch_idx // batch_size + 1
                 
                 # Update progress
-                progress = 15 + int((batch_num / total_batches) * 70)  # 15-85%
+                progress = 25 + int((batch_num / total_batches) * 60)  # 25-85%
                 if batch_num % 5 == 0 or batch_num == 1:  # Update every 5 batches
                     yield "data: " + json.dumps({
                         "message": f"Querying teams batch {batch_num}/{total_batches}...",

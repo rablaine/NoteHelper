@@ -252,8 +252,10 @@ def milestone_tracker():
     to pull fresh data from MSX.
     """
     from app.services.milestone_sync import get_milestone_tracker_data
+    from app.models import SyncStatus
     
     tracker_data = get_milestone_tracker_data()
+    sync_status = SyncStatus.get_status('milestones')
     return render_template(
         'milestone_tracker.html',
         milestones=tracker_data["milestones"],
@@ -262,6 +264,7 @@ def milestone_tracker():
         sellers=tracker_data["sellers"],
         areas=tracker_data["areas"],
         quarters=tracker_data["quarters"],
+        sync_status=sync_status,
     )
 
 

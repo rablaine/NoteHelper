@@ -32,8 +32,6 @@ def run_migrations(db):
     inspector = inspect(db.engine)
     existing_tables = inspector.get_table_names()
     
-    print("Running idempotent migrations...")
-    
     # =========================================================================
     # Add new migrations below this line
     # =========================================================================
@@ -56,11 +54,14 @@ def run_migrations(db):
     # Migration: Make call_log_id nullable on msx_tasks (tasks can be created from milestone view)
     _migrate_msx_tasks_nullable_call_log(db, inspector)
     
+    # Migration: Create sync_status table for tracking sync completion
+    _migrate_sync_status_table(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
     
-    print("Migrations complete!")
+    print("Database schema up to date.")
 
 
 def _add_column_if_not_exists(db, inspector, table: str, column: str, column_def: str):
@@ -83,8 +84,6 @@ def _add_column_if_not_exists(db, inspector, table: str, column: str, column_def
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}"))
             conn.commit()
         print(f"  Added column '{column}' to '{table}'")
-    else:
-        print(f"  Column '{column}' already exists in '{table}' - skipping")
 
 
 def _add_index_if_not_exists(db, inspector, table: str, index_name: str, columns: list):
@@ -108,8 +107,6 @@ def _add_index_if_not_exists(db, inspector, table: str, index_name: str, columns
             conn.execute(text(f"CREATE INDEX {index_name} ON {table} ({cols})"))
             conn.commit()
         print(f"  Added index '{index_name}' on '{table}'")
-    else:
-        print(f"  Index '{index_name}' already exists - skipping")
 
 
 def _table_exists(inspector, table: str) -> bool:
@@ -162,8 +159,6 @@ def _migrate_milestones_for_msx(db, inspector):
                 """))
                 conn.commit()
             print("    Recreated milestones table with MSX schema")
-        else:
-            print("  Milestones already migrated for MSX - skipping")
     
     # Create msx_tasks table if it doesn't exist
     if not _table_exists(inspector, 'msx_tasks'):
@@ -187,10 +182,8 @@ def _migrate_milestones_for_msx(db, inspector):
             """))
             conn.commit()
         print("    Created msx_tasks table")
-    else:
-        print("  msx_tasks table already exists - skipping")
-
-
+    
+    
 def _migrate_call_date_to_datetime(db, inspector):
     """
     Upgrade call_date column from Date to DateTime for meeting timestamps.
@@ -215,7 +208,6 @@ def _migrate_call_date_to_datetime(db, inspector):
     
     # If it's already DATETIME, skip
     if 'DATETIME' in col_type:
-        print("  call_date is already DateTime - skipping")
         return
     
     print("  Upgrading call_date from Date to DateTime...")
@@ -287,7 +279,6 @@ def _migrate_milestone_tracker_fields(db, inspector):
     New columns: due_date, dollar_value, workload, monthly_usage, last_synced_at
     """
     if not _table_exists(inspector, 'milestones'):
-        print("  Milestones table does not exist - skipping tracker fields")
         return
     
     tracker_columns = [
@@ -318,7 +309,6 @@ def _migrate_msx_tasks_due_date(db, inspector):
     Stores the scheduledend value from MSX (Dynamics 365 task due date).
     """
     if not _table_exists(inspector, 'msx_tasks'):
-        print("  msx_tasks table does not exist - skipping due_date migration")
         return
     
     _add_column_if_not_exists(db, inspector, 'msx_tasks', 'due_date', 'DATETIME')
@@ -350,8 +340,6 @@ def _migrate_opportunities_table(db, inspector):
             """))
             conn.commit()
         print("    Created opportunities table")
-    else:
-        print("  Opportunities table already exists - skipping")
     
     # Add opportunity_id FK to milestones
     if _table_exists(inspector, 'milestones'):
@@ -374,7 +362,6 @@ def _migrate_msx_tasks_nullable_call_log(db, inspector):
     so we rebuild the table if call_log_id is currently NOT NULL.
     """
     if not _table_exists(inspector, 'msx_tasks'):
-        print("  msx_tasks table does not exist - skipping nullable call_log migration")
         return
     
     # Check if call_log_id is currently NOT NULL
@@ -415,5 +402,29 @@ def _migrate_msx_tasks_nullable_call_log(db, inspector):
             conn.execute(text("DROP TABLE msx_tasks_old"))
             conn.commit()
         print("    Made call_log_id nullable on msx_tasks")
-    else:
-        print("  msx_tasks.call_log_id already nullable - skipping")
+
+
+def _migrate_sync_status_table(db, inspector):
+    """
+    Create sync_status table if it doesn't exist.
+    
+    This table tracks sync start/completion times so the onboarding wizard
+    can distinguish between a completed sync and an interrupted one.
+    db.create_all() handles table creation for new installs;
+    this migration handles existing databases.
+    """
+    if not _table_exists(inspector, 'sync_status'):
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE sync_status (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sync_type VARCHAR(50) NOT NULL UNIQUE,
+                    started_at DATETIME,
+                    completed_at DATETIME,
+                    success BOOLEAN,
+                    items_synced INTEGER,
+                    details TEXT
+                )
+            """))
+            conn.commit()
+        print("  Created sync_status table")

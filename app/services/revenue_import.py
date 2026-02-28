@@ -32,7 +32,8 @@ except ImportError:
     HAS_PANDAS = False
 
 from app.models import (
-    db, RevenueImport, CustomerRevenueData, ProductRevenueData, Customer
+    db, RevenueImport, CustomerRevenueData, ProductRevenueData, Customer,
+    SyncStatus
 )
 
 
@@ -514,6 +515,8 @@ def import_revenue_csv(
     Returns:
         RevenueImport record with import stats
     """
+    SyncStatus.mark_started('revenue_import')
+
     # Load and process CSV
     df = load_csv(file_content, filename)
     df, month_cols, month_to_col_idx = process_csv(df)
@@ -666,6 +669,13 @@ def import_revenue_csv(
     import_record.new_months_added = len(new_months)
     
     db.session.commit()
+
+    total_records = import_record.records_created + import_record.records_updated
+    SyncStatus.mark_completed(
+        'revenue_import', success=True,
+        items_synced=total_records,
+        details=f'{import_record.records_created} created, {import_record.records_updated} updated'
+    )
     
     return import_record
 
@@ -689,6 +699,7 @@ def import_revenue_csv_streaming(
     Yields:
         Progress dicts: {"message": "..."} or {"error": "..."} or {"complete": True, "result": RevenueImport}
     """
+    SyncStatus.mark_started('revenue_import')
     yield {"message": "Reading CSV file..."}
     
     # Load and process CSV
@@ -859,6 +870,13 @@ def import_revenue_csv_streaming(
     import_record.new_months_added = len(new_months)
     
     db.session.commit()
+
+    total_records = import_record.records_created + import_record.records_updated
+    SyncStatus.mark_completed(
+        'revenue_import', success=True,
+        items_synced=total_records,
+        details=f'{import_record.records_created} created, {import_record.records_updated} updated'
+    )
     
     yield {"message": f"Import complete: {import_record.records_created} created, {import_record.records_updated} updated", "progress": 100}
     yield {"complete": True, "result": import_record}

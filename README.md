@@ -8,6 +8,7 @@ A single-user note-taking application for Azure technical sellers to capture and
 
 - **Python 3.13+** (the launcher can install this for you)
 - **Azure CLI** (optional — required for MSX and AI features; the launcher can install this too)
+- **VPN connection** — required for MSX integration (account imports, milestones)
 - Git
 
 ### Quick Start
@@ -70,19 +71,17 @@ python run.py
 
 ### Initial Setup (First Run)
 
-After the server is running, you need to connect to MSX and import your data:
+When you first launch NoteHelper, a **guided setup wizard** walks you through connecting your data:
 
-1. **Authenticate with Azure:** Run `az login` in your terminal to sign in with your Microsoft account.
+1. **Welcome** — quick overview of NoteHelper and what it does
+2. **Authenticate with Azure** — the wizard checks for an existing `az login` session and prompts you to authenticate if needed. This is required for MSX integration (accounts, milestones).
+3. **Import Accounts** — pulls your customer accounts from MSX with one click
+4. **Import Milestones** — syncs milestone data for your accounts from MSX
+5. **Import Revenue Data (optional)** — import a revenue CSV from the ACR Service Level Subscription report to power the Revenue Analyzer (trend charts, service breakdowns, growth tracking)
 
-2. **Refresh your token:** In the app, click the **Admin** menu (top-right) → **Admin Panel** → **Refresh Token** and then **Test Token** to verify the connection is working.
+You can skip steps and come back later — the wizard remembers your progress. Once dismissed, you can re-run it from the **Setup Wizard** button in the navigation bar (appears when no accounts are loaded).
 
-3. **Import accounts:** In the app, go to **Admin Panel** → **Import My Accounts**. This pulls in your customer accounts.
-
-4. **Import milestones:** From the Admin Panel, run **Import Milestones** to pull in your milestone data.
-
-5. **Import revenue history:** Go to **Revenue Analyzer** and import revenue data for your accounts.
-
-Once these steps are complete, you're all set — your customer accounts, milestones, and revenue history are loaded and ready to go.
+All of these imports can also be run independently from Admin Panel and Revenue Analyzer after initial setup.
 
 ## Running Tests
 

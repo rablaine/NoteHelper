@@ -15,7 +15,7 @@ import os
 import re
 
 from app.models import (db, CallLog, Customer, Seller, Territory, Topic, POD, SolutionEngineer, 
-                        Vertical, UserPreference, User)
+                        Vertical, UserPreference, User, Milestone, CustomerRevenueData, SyncStatus)
 
 # Create blueprint
 main_bp = Blueprint('main', __name__)
@@ -88,9 +88,6 @@ def get_seller_color(seller_id: int, use_colors: bool = True) -> str:
 @main_bp.route('/')
 def index():
     """Home page showing recent activity and stats."""
-    # Check if this is a first-time user
-    show_first_time_modal = session.pop('show_first_time_modal', False)
-    
     # Eager load relationships for recent calls to avoid N+1 queries
     recent_calls = CallLog.query.options(
         db.joinedload(CallLog.customer).joinedload(Customer.seller),
@@ -105,7 +102,7 @@ def index():
         'sellers': Seller.query.count(),
         'topics': Topic.query.count()
     }
-    return render_template('index.html', recent_calls=recent_calls, stats=stats, show_first_time_modal=show_first_time_modal)
+    return render_template('index.html', recent_calls=recent_calls, stats=stats)
 
 
 @main_bp.route('/api/call-logs/calendar')
@@ -1757,6 +1754,19 @@ def dismiss_welcome_modal():
     return jsonify({'first_run_modal_dismissed': True}), 200
 
 
+@main_bp.route('/api/preferences/reset-onboarding', methods=['POST'])
+def reset_onboarding():
+    """Reset the onboarding wizard so it shows again on next page load."""
+    user_id = g.user.id if g.user.is_authenticated else 1
+    
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if pref:
+        pref.first_run_modal_dismissed = False
+        db.session.commit()
+    
+    return jsonify({'first_run_modal_dismissed': False}), 200
+
+
 # =============================================================================
 # Context Processor
 # =============================================================================
@@ -1770,6 +1780,11 @@ def inject_preferences():
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
     colored_sellers = pref.colored_sellers if pref else True
     first_run_modal_dismissed = pref.first_run_modal_dismissed if pref else False
+    has_customers = Customer.query.first() is not None
+    has_milestones = SyncStatus.is_complete('milestones')
+    has_revenue = SyncStatus.is_complete('revenue_import')
+    milestones_sync_state = SyncStatus.get_status('milestones')['state']
+    revenue_sync_state = SyncStatus.get_status('revenue_import')['state']
     
     # Get pending link requests count
     pending_link_requests_count = 0
@@ -1786,6 +1801,11 @@ def inject_preferences():
         topic_sort_by_calls=topic_sort_by_calls,
         colored_sellers=colored_sellers,
         first_run_modal_dismissed=first_run_modal_dismissed,
+        has_customers=has_customers,
+        has_milestones=has_milestones,
+        has_revenue=has_revenue,
+        milestones_sync_state=milestones_sync_state,
+        revenue_sync_state=revenue_sync_state,
         get_seller_color=get_seller_color_with_pref,
         pending_link_requests_count=pending_link_requests_count
     )
