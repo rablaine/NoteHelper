@@ -75,9 +75,11 @@ class TestOnboardingWizardDisplay:
         assert 'onboardImportMilestones' in html
         assert 'importMilestonesProgressBar' in html
 
-        # Step 5: Revenue & Finish
-        assert 'Revenue Data' in html
-        assert 'onboardGoToRevenue' in html
+        # Step 5: Revenue & Finish (inline upload)
+        assert 'One More Thing: Revenue Data' in html
+        assert 'onboardImportRevenue' in html
+        assert 'revenueFileInput' in html
+        assert 'importRevenueProgress' in html
 
     def test_onboarding_has_skip_button(self, client, app):
         """Verify the skip button is present."""
@@ -473,21 +475,32 @@ class TestOnboardingAuthUiElements:
         assert 'devicelogin' not in html
 
     def test_step2_has_retry_buttons(self, client, app):
-        """Step 2 should have retry, cancel, and wrong-tenant retry buttons."""
+        """Step 2 should have retry, cancel buttons."""
         response = client.get('/')
         html = response.data.decode('utf-8')
         assert 'id="authRetry"' in html
         assert 'id="authRetryNoCli"' in html
         assert 'id="authCancelBtn"' in html
-        assert 'id="authRetryWrongTenant"' in html
 
-    def test_step2_has_wrong_tenant_state(self, client, app):
-        """Step 2 should have the authWrongTenant state div."""
+    def test_step2_no_wrong_tenant_state(self, client, app):
+        """Step 2 should NOT have the authWrongTenant state (simplified auth)."""
         response = client.get('/')
         html = response.data.decode('utf-8')
-        assert 'id="authWrongTenant"' in html
-        assert 'Wrong Account' in html
+        assert 'id="authWrongTenant"' not in html
+        assert 'id="authRetryWrongTenant"' not in html
+
+    def test_step2_has_corporate_account_hint(self, client, app):
+        """Step 2 should remind users to select their Microsoft corporate account."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
         assert 'Microsoft corporate account' in html
+        assert 'authentication will fail' in html
+
+    def test_step2_has_20s_timeout(self, client, app):
+        """Step 2 JS should use a 20-second auth timeout."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'AUTH_POLL_TIMEOUT_MS = 20000' in html
 
 
 class TestAzLogoutEndpoint:
@@ -617,3 +630,215 @@ class TestImportUiConsistency:
         # The old broken pattern was: evt.type === 'progress'
         assert "evt.type === 'progress'" not in html
         assert "evt.type === 'complete'" not in html
+
+
+class TestWizardResumeLogic:
+    """Tests for wizard step-skip logic when user has existing data."""
+
+    def test_has_milestones_in_template_context(self, client, app):
+        """Template context should include has_milestones flag."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # With no milestones, the JS var should be false
+        assert 'let milestonesImported = false;' in html
+
+    def test_has_milestones_true_when_milestones_exist(self, client, app):
+        """has_milestones should be true when milestone sync completed successfully."""
+        with app.app_context():
+            from app.models import db, Milestone, Customer, User, SyncStatus
+            user = User.query.first()
+            customer = Customer(name='Test Corp', tpid=999999, user_id=user.id)
+            db.session.add(customer)
+            db.session.flush()
+            milestone = Milestone(
+                customer_id=customer.id,
+                url='https://example.com/milestone',
+                user_id=user.id
+            )
+            db.session.add(milestone)
+            db.session.commit()
+
+            # Mark milestone sync as completed (required by SyncStatus check)
+            SyncStatus.mark_started('milestones')
+            SyncStatus.mark_completed('milestones', success=True, items_synced=1)
+
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'let milestonesImported = true;' in html
+
+        # Clean up
+        with app.app_context():
+            from app.models import db, Milestone, Customer, SyncStatus
+            db.session.query(Milestone).delete()
+            db.session.query(Customer).filter_by(name='Test Corp').delete()
+            db.session.query(SyncStatus).delete()
+            db.session.commit()
+
+    def test_has_customers_pre_sets_accounts_imported(self, client, app):
+        """When customers exist in DB, accountsImported should be pre-set to true."""
+        with app.app_context():
+            from app.models import db, Customer, User
+            user = User.query.first()
+            customer = Customer(name='Existing Corp', tpid=888888, user_id=user.id)
+            db.session.add(customer)
+            db.session.commit()
+
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'let accountsImported = true;' in html
+
+        # Clean up
+        with app.app_context():
+            from app.models import db, Customer
+            db.session.query(Customer).filter_by(name='Existing Corp').delete()
+            db.session.commit()
+
+    def test_wizard_has_init_function(self, client, app):
+        """Wizard should have async initWizard function for resume detection."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'async function initWizard()' in html
+        assert 'initWizard();' in html
+
+    def test_wizard_has_next_incomplete_step_helper(self, client, app):
+        """Wizard should have nextIncompleteStep helper for smart step skipping."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'function nextIncompleteStep()' in html
+
+    def test_wizard_shows_already_done_state_for_accounts(self, client, app):
+        """Step 3 should show 'already imported' state when accounts exist."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # The showImportAlreadyDone function should exist
+        assert 'showImportAlreadyDone' in html
+        assert 'Accounts already imported' in html
+
+    def test_wizard_shows_already_done_state_for_milestones(self, client, app):
+        """Step 4 should show 'already synced' state when milestones exist."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'Milestones already synced' in html
+
+    def test_fresh_user_starts_at_step_1(self, client, app):
+        """With no existing data, wizard JS initializes accountsImported = false."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'let accountsImported = false;' in html
+        assert 'let milestonesImported = false;' in html
+
+
+class TestWizardOptionalSteps:
+    """Tests for optional step skip functionality."""
+
+    def test_step4_has_optional_hint(self, client, app):
+        """Step 4 should tell user milestones are optional."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'Optional' in html
+        assert 'Milestone Tracker' in html
+
+    def test_step4_has_skip_button_in_footer(self, client, app):
+        """Footer should have a Skip button for step 4."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="onboardSkipStepBtn"' in html
+
+    def test_step4_skip_button_visibility_logic(self, client, app):
+        """Skip button should only show on step 4 when milestones not imported."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'currentStep === 4 && !milestonesImported' in html
+
+    def test_milestones_required_for_next_button(self, client, app):
+        """Step 4 Next button should be gated on milestonesImported."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert "currentStep === 4 && !milestonesImported" in html
+
+    def test_skip_button_disabled_after_import(self, client, app):
+        """Skip button should hide when milestones are imported."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # The logic hides skip when milestones imported (else branch adds d-none)
+        assert "skipStepBtn.classList.add('d-none')" in html
+
+    def test_footer_skip_btn_updates_text_after_accounts(self, client, app):
+        """Footer skip button text should change after accounts are imported."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'Done' in html
+        assert 'skip remaining steps' in html
+
+    def test_step5_inline_revenue_upload(self, client, app):
+        """Step 5 should have inline revenue CSV upload (not a link to another page)."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # Should have inline upload button (btn-primary btn-lg)
+        assert 'btn btn-primary btn-lg' in html
+        assert 'Import Revenue CSV' in html
+        # Hidden file input for CSV
+        assert 'revenueFileInput' in html
+        assert 'accept=".csv"' in html
+        # Progress, success, and error states
+        assert 'importRevenueProgress' in html
+        assert 'importRevenueSuccess' in html
+        assert 'importRevenueError' in html
+        # Should NOT link to separate page
+        assert 'onboardGoToRevenue' not in html
+        # Should NOT have the old "You're all set" hero section
+        assert "You're all set!" not in html
+        # Optional hint text
+        assert 'Revenue Analyzer' in html
+        # Card should have a primary border to stand out
+        assert 'border-primary' in html
+
+    def test_step4_has_vpn_warning(self, client, app):
+        """Step 4 should have the VPN required warning."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # There should be VPN warnings (step 3 and step 4)
+        assert html.count('VPN required.') >= 2
+
+    def test_step4_has_revenue_tip(self, client, app):
+        """Step 4 should have the revenue export tip."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'id="revenueTipInstructionsStep4"' in html
+
+    def test_step5_skip_button_visible_in_js(self, client, app):
+        """Skip step button should appear on step 5 when revenue not imported (JS logic)."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # The JS logic should show skipStepBtn on step 5
+        assert 'currentStep === 5 && !revenueImported' in html
+
+    def test_step5_finish_gated_on_revenue(self, client, app):
+        """Finish button should be disabled until revenue is imported (JS logic)."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # updateNextButton should gate step 5 on revenueImported
+        assert 'currentStep === 5 && !revenueImported' in html
+        assert 'nextBtn.disabled = true' in html
+
+    def test_revenue_state_var_present(self, client, app):
+        """revenueImported JS variable should be initialized from server data."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # No revenue data in test DB, so should be false
+        assert 'let revenueImported = false;' in html
+
+    def test_dark_mode_toggle_has_cursor_pointer(self, client, app):
+        """Dark mode toggle in step 1 should have cursor: pointer to look clickable."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        assert 'cursor: pointer;' in html
+        # Should also have the toggle-enhancing CSS
+        assert '#onboardDarkModeToggle:not(:checked)' in html
+
+    def test_step5_skip_dismisses_on_last_step(self, client, app):
+        """Skip step on step 5 should dismiss the wizard (JS calls dismissOnboarding)."""
+        response = client.get('/')
+        html = response.data.decode('utf-8')
+        # The skipStepBtn handler should dismiss when on the last step
+        assert 'currentStep >= totalSteps' in html

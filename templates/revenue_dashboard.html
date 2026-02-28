@@ -3,6 +3,56 @@
 
 {% block content %}
 <div class="container-fluid py-4">
+    {% if import_status and import_status.state == 'incomplete' %}
+    <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <div>
+            <strong>Last revenue import didn't finish.</strong>
+            Your revenue data may be incomplete. <a href="{{ url_for('revenue.revenue_import') }}" class="alert-link">Re-import your data</a> to get a full sync.
+            {% if import_status.started_at %}
+                <span class="text-muted small">(Started {{ import_status.started_at.strftime('%b %d at %I:%M %p') }})</span>
+            {% endif %}
+        </div>
+    </div>
+    {% elif import_status and import_status.state == 'failed' %}
+    <div class="alert alert-danger d-flex align-items-center mb-3" role="alert">
+        <i class="bi bi-x-circle-fill me-2"></i>
+        <div>
+            <strong>Last revenue import failed.</strong>
+            <a href="{{ url_for('revenue.revenue_import') }}" class="alert-link">Re-import your data</a> to get accurate results.
+            {% if import_status.details %}
+                <span class="text-muted small">({{ import_status.details }})</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% if analysis_status and analysis_status.state == 'incomplete' %}
+    <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <div>
+            <strong>Last revenue analysis didn't finish.</strong>
+            Some customers may not have been analyzed.
+            <form action="{{ url_for('revenue.revenue_analyze') }}" method="post" class="d-inline">
+                <button type="submit" class="btn btn-link alert-link p-0 align-baseline">Re-run analysis</button>
+            </form>
+            to complete it.
+        </div>
+    </div>
+    {% elif analysis_status and analysis_status.state == 'failed' %}
+    <div class="alert alert-danger d-flex align-items-center mb-3" role="alert">
+        <i class="bi bi-x-circle-fill me-2"></i>
+        <div>
+            <strong>Last revenue analysis failed.</strong>
+            <form action="{{ url_for('revenue.revenue_analyze') }}" method="post" class="d-inline">
+                <button type="submit" class="btn btn-link alert-link p-0 align-baseline">Re-run analysis</button>
+            </form>
+            to try again.
+            {% if analysis_status.details %}
+                <span class="text-muted small">({{ analysis_status.details }})</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
     <div class="row mb-4">
         <div class="col">
             <h1><i class="bi bi-currency-dollar"></i> Revenue Alerts</h1>

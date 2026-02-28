@@ -967,3 +967,114 @@ class RevenueEngagement(db.Model):
     
     def __repr__(self) -> str:
         return f'<RevenueEngagement {self.id} for analysis {self.analysis_id}: {self.status}>'
+
+
+# =============================================================================
+# Sync Status Tracking
+# =============================================================================
+
+class SyncStatus(db.Model):
+    """Tracks sync start/completion times to detect interrupted syncs.
+    
+    A sync is considered successfully completed only when completed_at >= started_at
+    and success is True. If the user reloads mid-sync, started_at will be set but
+    completed_at will be null, correctly indicating the sync didn't finish.
+    """
+    __tablename__ = 'sync_status'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    sync_type = db.Column(db.String(50), unique=True, nullable=False)  # 'milestones', 'accounts', etc.
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    success = db.Column(db.Boolean, nullable=True)
+    items_synced = db.Column(db.Integer, nullable=True)
+    details = db.Column(db.Text, nullable=True)  # JSON string for extra stats
+    
+    @classmethod
+    def is_complete(cls, sync_type: str) -> bool:
+        """Check if the given sync type has completed successfully."""
+        status = cls.query.filter_by(sync_type=sync_type).first()
+        if not status:
+            return False
+        return (
+            status.success is True
+            and status.completed_at is not None
+            and status.started_at is not None
+            and status.completed_at >= status.started_at
+        )
+
+    @classmethod
+    def get_status(cls, sync_type: str) -> dict:
+        """Get detailed status info for a sync type.
+
+        Returns:
+            Dict with keys:
+                state: 'never_run' | 'in_progress' | 'failed' | 'incomplete' | 'complete'
+                started_at: datetime or None
+                completed_at: datetime or None
+                items_synced: int or None
+                details: str or None
+        """
+        status = cls.query.filter_by(sync_type=sync_type).first()
+        if not status or status.started_at is None:
+            return {'state': 'never_run', 'started_at': None,
+                    'completed_at': None, 'items_synced': None, 'details': None}
+
+        base = {
+            'started_at': status.started_at,
+            'completed_at': status.completed_at,
+            'items_synced': status.items_synced,
+            'details': status.details,
+        }
+
+        # Started but never completed — interrupted / in progress
+        if status.completed_at is None:
+            base['state'] = 'incomplete'
+            return base
+
+        # Completed but failed
+        if not status.success:
+            base['state'] = 'failed'
+            return base
+
+        # Completed successfully
+        if status.completed_at >= status.started_at:
+            base['state'] = 'complete'
+            return base
+
+        # Edge case: completed_at < started_at (shouldn't happen)
+        base['state'] = 'incomplete'
+        return base
+    
+    @classmethod
+    def mark_started(cls, sync_type: str) -> 'SyncStatus':
+        """Mark a sync as started (clears previous completion)."""
+        status = cls.query.filter_by(sync_type=sync_type).first()
+        if not status:
+            status = cls(sync_type=sync_type)
+            db.session.add(status)
+        status.started_at = utc_now()
+        status.completed_at = None
+        status.success = None
+        status.items_synced = None
+        status.details = None
+        db.session.commit()
+        return status
+    
+    @classmethod
+    def mark_completed(cls, sync_type: str, success: bool,
+                       items_synced: int = None, details: str = None) -> 'SyncStatus':
+        """Mark a sync as completed."""
+        status = cls.query.filter_by(sync_type=sync_type).first()
+        if not status:
+            status = cls(sync_type=sync_type, started_at=utc_now())
+            db.session.add(status)
+        status.completed_at = utc_now()
+        status.success = success
+        status.items_synced = items_synced
+        status.details = details
+        db.session.commit()
+        return status
+    
+    def __repr__(self) -> str:
+        return f'<SyncStatus {self.sync_type} success={self.success}>'

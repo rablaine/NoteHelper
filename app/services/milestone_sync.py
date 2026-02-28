@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Generator
 
-from app.models import db, Customer, Milestone, Opportunity, User
+from app.models import db, Customer, Milestone, Opportunity, User, SyncStatus
 from app.services.msx_api import (
     extract_account_id_from_url,
     get_milestones_by_account,
@@ -71,6 +71,9 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
         results["errors"].append("No customers with MSX account links found.")
         return results
     
+    # Mark sync as started so interrupted syncs are detectable
+    SyncStatus.mark_started('milestones')
+
     logger.info(f"Starting milestone sync for {len(customers)} customers")
     
     for customer in customers:
@@ -111,6 +114,18 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
         f"{results['milestones_updated']} updated"
     )
     
+    SyncStatus.mark_completed(
+        'milestones',
+        success=results['success'],
+        items_synced=results['milestones_created'] + results['milestones_updated'],
+        details=json.dumps({
+            'synced': results['customers_synced'],
+            'failed': results['customers_failed'],
+            'created': results['milestones_created'],
+            'updated': results['milestones_updated'],
+        }),
+    )
+    
     return results
 
 
@@ -148,6 +163,9 @@ def sync_all_customer_milestones_stream(
             'message': 'No customers with MSX account links found.',
         })
         return
+
+    # Mark sync as started so interrupted syncs are detectable
+    SyncStatus.mark_started('milestones')
 
     yield _sse_event('start', {'total': total})
 
@@ -202,8 +220,17 @@ def sync_all_customer_milestones_stream(
     # Update team membership flags (one extra API call)
     _update_team_memberships()
 
+    sync_success = synced > 0 or failed == 0
+    SyncStatus.mark_completed(
+        'milestones',
+        success=sync_success,
+        items_synced=total_created + total_updated,
+        details=json.dumps({'synced': synced, 'failed': failed, 'created': total_created,
+                            'updated': total_updated, 'deactivated': total_deactivated}),
+    )
+
     yield _sse_event('complete', {
-        'success': synced > 0 or failed == 0,
+        'success': sync_success,
         'total': total,
         'synced': synced,
         'failed': failed,

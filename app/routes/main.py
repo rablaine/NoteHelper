@@ -15,7 +15,7 @@ import os
 import re
 
 from app.models import (db, CallLog, Customer, Seller, Territory, Topic, POD, SolutionEngineer, 
-                        Vertical, UserPreference, User)
+                        Vertical, UserPreference, User, Milestone, CustomerRevenueData, SyncStatus)
 
 # Create blueprint
 main_bp = Blueprint('main', __name__)
@@ -1781,6 +1781,10 @@ def inject_preferences():
     colored_sellers = pref.colored_sellers if pref else True
     first_run_modal_dismissed = pref.first_run_modal_dismissed if pref else False
     has_customers = Customer.query.first() is not None
+    has_milestones = SyncStatus.is_complete('milestones')
+    has_revenue = SyncStatus.is_complete('revenue_import')
+    milestones_sync_state = SyncStatus.get_status('milestones')['state']
+    revenue_sync_state = SyncStatus.get_status('revenue_import')['state']
     
     # Get pending link requests count
     pending_link_requests_count = 0
@@ -1798,6 +1802,10 @@ def inject_preferences():
         colored_sellers=colored_sellers,
         first_run_modal_dismissed=first_run_modal_dismissed,
         has_customers=has_customers,
+        has_milestones=has_milestones,
+        has_revenue=has_revenue,
+        milestones_sync_state=milestones_sync_state,
+        revenue_sync_state=revenue_sync_state,
         get_seller_color=get_seller_color_with_pref,
         pending_link_requests_count=pending_link_requests_count
     )

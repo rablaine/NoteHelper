@@ -11,7 +11,7 @@ from io import StringIO
 
 from app.models import (
     db, RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis, 
-    RevenueConfig, RevenueEngagement, Customer, Seller
+    RevenueConfig, RevenueEngagement, Customer, Seller, SyncStatus
 )
 from app.services.revenue_import import (
     import_revenue_csv, get_import_history, get_months_in_database,
@@ -23,8 +23,8 @@ from app.services.revenue_import import (
     RevenueImportError
 )
 from app.services.revenue_analysis import (
-    run_analysis_for_all, get_actionable_analyses, get_seller_alerts,
-    AnalysisConfig
+    run_analysis_for_all, run_analysis_streaming, get_actionable_analyses,
+    get_seller_alerts, AnalysisConfig
 )
 
 # Create blueprint
@@ -58,13 +58,19 @@ def revenue_dashboard():
     latest_import = RevenueImport.query.order_by(RevenueImport.imported_at.desc()).first()
     months_data = get_months_in_database()
     
+    # Get sync status for warning banners
+    import_status = SyncStatus.get_status('revenue_import')
+    analysis_status = SyncStatus.get_status('revenue_analysis')
+    
     return render_template(
         'revenue_dashboard.html',
         analyses=analyses,
         category_counts=category_counts,
         sellers_with_alerts=sellers_with_alerts,
         latest_import=latest_import,
-        months_data=months_data
+        months_data=months_data,
+        import_status=import_status,
+        analysis_status=analysis_status,
     )
 
 
@@ -122,11 +128,22 @@ def revenue_import_stream():
             
             # Run analysis if requested
             if run_analysis:
-                yield "data: " + json.dumps({"message": "Running analysis on imported data..."}) + "\n\n"
-                analysis_stats = run_analysis_for_all(user_id=user_id)
-                yield "data: " + json.dumps({
-                    "message": f"Analysis complete: {analysis_stats['analyzed']} customers, {analysis_stats['actionable']} need attention"
-                }) + "\n\n"
+                yield "data: " + json.dumps({"message": "Analyzing revenue trends...", "analysis_started": True}) + "\n\n"
+                
+                analysis_stats = None
+                for update in run_analysis_streaming(user_id=user_id):
+                    if update.get('complete'):
+                        analysis_stats = update['stats']
+                    else:
+                        yield "data: " + json.dumps({
+                            "message": f"Analyzing customer {update['current']} of {update['total']}...",
+                            "progress": update['progress']
+                        }) + "\n\n"
+                
+                if analysis_stats:
+                    yield "data: " + json.dumps({
+                        "message": f"Analysis complete: {analysis_stats['analyzed']} customers, {analysis_stats['actionable']} need attention"
+                    }) + "\n\n"
             
             # Send final result
             yield "data: " + json.dumps({
@@ -138,8 +155,10 @@ def revenue_import_stream():
             }) + "\n\n"
             
         except RevenueImportError as e:
+            SyncStatus.mark_completed('revenue_import', success=False, details=str(e))
             yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
         except Exception as e:
+            SyncStatus.mark_completed('revenue_import', success=False, details=str(e))
             yield "data: " + json.dumps({"error": f"Unexpected error: {str(e)}"}) + "\n\n"
     
     return Response(

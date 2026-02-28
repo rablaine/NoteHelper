@@ -3,6 +3,29 @@
 {% block title %}Milestone Tracker - NoteHelper{% endblock %}
 
 {% block content %}
+{% if sync_status and sync_status.state == 'incomplete' %}
+<div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <div>
+        <strong>Last milestone sync didn't finish.</strong>
+        Your milestone data may be incomplete. Click "Sync from MSX" to run a full sync.
+        {% if sync_status.started_at %}
+            <span class="text-muted small">(Started {{ sync_status.started_at.strftime('%b %d at %I:%M %p') }})</span>
+        {% endif %}
+    </div>
+</div>
+{% elif sync_status and sync_status.state == 'failed' %}
+<div class="alert alert-danger d-flex align-items-center mb-3" role="alert">
+    <i class="bi bi-x-circle-fill me-2"></i>
+    <div>
+        <strong>Last milestone sync failed.</strong>
+        Your milestone data may be incomplete or outdated. Click "Sync from MSX" to try again.
+        {% if sync_status.details %}
+            <span class="text-muted small">({{ sync_status.details }})</span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 class="mb-0"><i class="bi bi-flag-fill text-success"></i> Milestone Tracker</h1>
@@ -63,7 +86,11 @@
 </div>
 
 <!-- Sync Progress Alert (hidden by default) -->
-<div id="syncAlert" class="alert d-none mb-4" role="alert">
+<div id="syncAlert" class="alert d-none mb-4" role="alert" style="position: relative;">
+    <div id="syncBrainrotToggle" class="brainrot-card-toggle d-none">
+        <input type="checkbox" id="syncBrainrotCheck">
+        <label for="syncBrainrotCheck" class="small">brainrot mode</label>
+    </div>
     <div id="syncMessage"></div>
     <div id="syncProgressWrap" class="d-none mt-2">
         <div class="progress" style="height: 22px;">
@@ -323,6 +350,14 @@ function syncMilestones() {
     // Show progress alert
     alertEl.className = 'alert alert-info mb-4';
     msg.innerHTML = '<i class="bi bi-hourglass-split"></i> Connecting to MSX...';
+
+    // Show brainrot toggle
+    const brainrotToggle = document.getElementById('syncBrainrotToggle');
+    if (brainrotToggle) brainrotToggle.classList.remove('d-none');
+    // If brainrot is already enabled, show the panel
+    if (window.isBrainrotOn && window.isBrainrotOn() && window.showBrainrotPanel) {
+        window.showBrainrotPanel();
+    }
     progressWrap.classList.add('d-none');
 
     // Use EventSource-style fetch for SSE
@@ -383,6 +418,9 @@ function syncMilestones() {
                 btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync from MSX';
 
                 if (data.success) {
+                    const brToggle = document.getElementById('syncBrainrotToggle');
+                    if (brToggle) brToggle.classList.add('d-none');
+                    if (window.setBrainrot) window.setBrainrot(false);
                     alertEl.className = 'alert alert-success mb-4';
                     let parts = [];
                     if (data.created > 0) parts.push(`${data.created} new`);
@@ -398,6 +436,9 @@ function syncMilestones() {
                     }
                     setTimeout(() => window.location.reload(), 2500);
                 } else {
+                    const brToggle2 = document.getElementById('syncBrainrotToggle');
+                    if (brToggle2) brToggle2.classList.add('d-none');
+                    if (window.setBrainrot) window.setBrainrot(false);
                     alertEl.className = 'alert alert-danger mb-4';
                     let errorMsg = data.errors ? data.errors.join('; ') : 'Unknown error';
                     msg.innerHTML = `<i class="bi bi-x-circle-fill"></i> Sync failed: ${errorMsg}`;
@@ -419,6 +460,9 @@ function syncMilestones() {
         btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync from MSX';
         alertEl.className = 'alert alert-danger mb-4';
         msg.innerHTML = `<i class="bi bi-x-circle-fill"></i> Sync error: ${error.message}`;
+        const brToggle3 = document.getElementById('syncBrainrotToggle');
+        if (brToggle3) brToggle3.classList.add('d-none');
+        if (window.setBrainrot) window.setBrainrot(false);
     });
 }
 
@@ -580,5 +624,24 @@ function updateSortIndicators() {
             : 'bi bi-sort-down text-primary small';
     }
 }
+
+// --- Wire up brainrot checkbox for milestone sync ---
+(function() {
+    const cb = document.getElementById('syncBrainrotCheck');
+    if (!cb) return;
+    // Restore state from localStorage
+    if (localStorage.getItem('brainrot') === '1') {
+        cb.checked = true;
+    }
+    cb.addEventListener('change', function() {
+        if (window.setBrainrot) window.setBrainrot(this.checked);
+        // Show/hide panel when toggling during an active sync
+        if (this.checked && window.showBrainrotPanel) {
+            window.showBrainrotPanel();
+        } else if (!this.checked && window.hideBrainrotPanel) {
+            window.hideBrainrotPanel();
+        }
+    });
+})();
 </script>
 {% endblock %}
