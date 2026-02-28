@@ -7,6 +7,15 @@ import os
 from datetime import datetime, timezone
 
 
+@pytest.fixture(autouse=True)
+def _clear_vpn_state():
+    """Reset VPN blocked state before every test to prevent cross-test leaks."""
+    from app.services.msx_auth import clear_vpn_block
+    clear_vpn_block()
+    yield
+    clear_vpn_block()
+
+
 @pytest.fixture(scope='session')
 def app():
     """Create application for testing with isolated database."""

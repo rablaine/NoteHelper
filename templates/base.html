@@ -1213,7 +1213,7 @@
 
                                     if (data.error) {
                                         // Show VPN banner if this is an IP-blocked error
-                                        if (window.isVpnBlocked && window.isVpnBlocked(data.error)) {
+                                        if (data.vpn_blocked || (window.isVpnBlocked && window.isVpnBlocked(data.error))) {
                                             window.showVpnBanner();
                                         }
                                         throw new Error(data.error);
@@ -1340,6 +1340,10 @@
                                     if (eventData.error && window.isVpnBlocked && window.isVpnBlocked(eventData.error)) {
                                         window.showVpnBanner();
                                     }
+                                } else if (eventType === 'vpn_blocked') {
+                                    // VPN block — show banner and treat as fatal
+                                    if (window.showVpnBanner) window.showVpnBanner();
+                                    throw new Error(eventData.message || 'IP address is blocked — connect to VPN and retry.');
                                 } else if (eventType === 'complete') {
                                     completeSummary = eventData;
                                 } else if (eventType === 'error') {

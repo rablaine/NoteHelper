@@ -847,7 +847,11 @@ def import_stream():
             
             init_result = scan_init()
             if not init_result.get("success"):
-                yield "data: " + json.dumps({"error": init_result.get("error", "Failed to initialize scan")}) + "\n\n"
+                error_msg = init_result.get("error", "Failed to initialize scan")
+                if init_result.get("vpn_blocked") or is_vpn_blocked():
+                    yield "data: " + json.dumps({"error": error_msg, "vpn_blocked": True}) + "\n\n"
+                else:
+                    yield "data: " + json.dumps({"error": error_msg}) + "\n\n"
                 return
             
             account_ids = init_result.get("account_ids", [])
@@ -873,6 +877,11 @@ def import_stream():
             }) + "\n\n"
 
             for batch_num, i in enumerate(range(0, len(account_ids), BATCH_SIZE), start=1):
+                # Bail early on VPN block
+                if is_vpn_blocked():
+                    yield "data: " + json.dumps({"error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}) + "\n\n"
+                    return
+
                 batch = account_ids[i:i + BATCH_SIZE]
                 filter_parts = [f"accountid eq {aid}" for aid in batch]
                 filter_query = " or ".join(filter_parts)

@@ -465,6 +465,18 @@ function syncMilestones() {
                         window.showVpnBanner();
                     }
                 }
+            } else if (type === 'vpn_blocked') {
+                // VPN block detected — show banner and stop the progress display
+                if (window.showVpnBanner) window.showVpnBanner();
+                window.removeEventListener('beforeunload', warnOnLeave);
+                progressBar.classList.remove('progress-bar-animated');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync from MSX';
+                alertEl.className = 'alert alert-danger mb-4';
+                msg.innerHTML = '<i class="bi bi-shield-exclamation"></i> ' +
+                    '<strong>VPN Required:</strong> ' + (data.message || 'IP address is blocked.') +
+                    (data.skipped ? ' (' + data.skipped + ' customers skipped)' : '');
+                detail.innerHTML = '';
             } else if (type === 'complete') {
                 window.removeEventListener('beforeunload', warnOnLeave);
                 progressBar.classList.remove('progress-bar-animated');

@@ -379,6 +379,8 @@ def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Di
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
             return {"success": False, "error": "Access denied. You may not have permission to query accounts."}
         else:
             return {
@@ -650,6 +652,8 @@ def get_milestones_by_account(
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
             return {"success": False, "error": "Access denied. You may not have permission to query milestones."}
         else:
             return {
@@ -1269,6 +1273,8 @@ def create_task(
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
             return {"success": False, "error": "Access denied. You may not have permission to create tasks."}
         else:
             return {
@@ -1347,6 +1353,10 @@ def query_entity(
             }
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
+            return {"success": False, "error": "Access denied."}
         elif response.status_code == 404:
             return {"success": False, "error": f"Entity '{entity_name}' not found."}
         else:
@@ -1384,6 +1394,8 @@ def query_next_page(next_link: str) -> Dict[str, Any]:
                 "records": records,
                 "next_link": new_next_link
             }
+        elif response.status_code == 403 and is_vpn_blocked():
+            return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
         else:
             return {
                 "success": False,
