@@ -518,6 +518,9 @@ class Opportunity(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
+    # Team membership
+    on_deal_team = db.Column(db.Boolean, default=False, nullable=False, server_default='0')  # Am I on the opportunity deal team?
+    
     # Relationships
     customer = db.relationship('Customer', backref=db.backref('opportunities', lazy='dynamic'))
     milestones = db.relationship('Milestone', back_populates='opportunity', lazy='dynamic')

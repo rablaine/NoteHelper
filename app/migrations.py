@@ -57,6 +57,9 @@ def run_migrations(db):
     # Migration: Create sync_status table for tracking sync completion
     _migrate_sync_status_table(db, inspector)
     
+    # Migration: Add on_deal_team column to opportunities table
+    _migrate_opportunities_deal_team(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -428,3 +431,12 @@ def _migrate_sync_status_table(db, inspector):
             """))
             conn.commit()
         print("  Created sync_status table")
+
+
+def _migrate_opportunities_deal_team(db, inspector):
+    """Add on_deal_team column to opportunities table."""
+    if 'opportunities' in inspector.get_table_names():
+        _add_column_if_not_exists(
+            db, inspector, 'opportunities', 'on_deal_team',
+            'BOOLEAN NOT NULL DEFAULT 0'
+        )

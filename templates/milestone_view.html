@@ -102,6 +102,18 @@
                     <span>{{ milestone.last_synced_at.strftime('%b %d, %Y %I:%M %p') }}</span>
                 </li>
                 {% endif %}
+                {% if milestone.msx_milestone_id %}
+                <li class="list-group-item d-flex justify-content-between align-items-center" id="milestoneTeamRow">
+                    <span class="text-muted">Milestone Team</span>
+                    {% if milestone.on_my_team %}
+                    <span class="badge bg-success"><i class="bi bi-people-fill"></i> On Team</span>
+                    {% else %}
+                    <button class="btn btn-outline-primary btn-sm" id="joinMilestoneTeamBtn" onclick="joinMilestoneTeam({{ milestone.id }})">
+                        <i class="bi bi-person-plus"></i> Join Team
+                    </button>
+                    {% endif %}
+                </li>
+                {% endif %}
                 <li class="list-group-item d-flex justify-content-between">
                     <span class="text-muted">Created</span>
                     <span>{{ milestone.created_at.strftime('%b %d, %Y') }}</span>
@@ -278,6 +290,37 @@
 {% if milestone.msx_milestone_id %}
 <script>
 let taskCategories = [];
+
+async function joinMilestoneTeam(milestoneId) {
+    const btn = document.getElementById('joinMilestoneTeamBtn');
+    if (!btn) return;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.disabled = true;
+    try {
+        const resp = await fetch('/api/msx/join-milestone-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ milestone_id: milestoneId })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            const row = document.getElementById('milestoneTeamRow');
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-success';
+            badge.innerHTML = '<i class="bi bi-people-fill"></i> On Team';
+            btn.replaceWith(badge);
+        } else {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            alert('Failed to join team: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert('Failed to join team: ' + err.message);
+    }
+}
 
 function getTomorrowDate() {
     const d = new Date();
