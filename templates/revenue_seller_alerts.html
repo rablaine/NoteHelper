@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ seller_name }} - Revenue Alerts - NoteHelper{% endblock %}
+{% block title %}{{ seller_name }} - Revenue Analyzer - NoteHelper{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -7,7 +7,7 @@
         <div class="col">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Alerts</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('revenue.revenue_dashboard') }}">Revenue Analyzer</a></li>
                     <li class="breadcrumb-item active">{{ seller_name }}</li>
                 </ol>
             </nav>

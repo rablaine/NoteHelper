@@ -190,7 +190,7 @@ def revenue_analyze():
 
 @revenue_bp.route('/revenue/seller/<seller_name>')
 def revenue_seller_view(seller_name: str):
-    """View revenue alerts for a specific seller."""
+    """View revenue analysis for a specific seller."""
     # Get alerts for this seller
     alerts = get_seller_alerts(seller_name)
     
@@ -297,7 +297,7 @@ def revenue_seller_export(seller_name: str):
         output.getvalue(),
         mimetype='text/csv',
         headers={
-            'Content-Disposition': f'attachment; filename={seller_name}_revenue_alerts.csv'
+            'Content-Disposition': f'attachment; filename={seller_name}_revenue_analysis.csv'
         }
     )
 

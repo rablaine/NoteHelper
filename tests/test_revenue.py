@@ -284,7 +284,7 @@ class TestRevenueRoutes:
         """Test dashboard with no data."""
         response = client.get('/revenue')
         assert response.status_code == 200
-        assert b'Revenue Alerts' in response.data
+        assert b'Revenue Analyzer' in response.data
     
     def test_revenue_import_page(self, client):
         """Test import page loads."""
@@ -305,7 +305,7 @@ class TestRevenueRoutes:
         assert b'Engagement History' in response.data
     
     def test_seller_view_with_revenue_alerts(self, app, client, test_user):
-        """Test seller page renders correctly when revenue alerts exist."""
+        """Test seller page renders correctly when revenue analysis exists."""
         from app.models import Seller, Customer, RevenueAnalysis
         
         with app.app_context():
@@ -336,10 +336,10 @@ class TestRevenueRoutes:
             db.session.add(analysis)
             db.session.commit()
             
-            # Now test the seller page loads with revenue alerts
+            # Now test the seller page loads with revenue analysis
             response = client.get(f'/seller/{seller.id}')
             assert response.status_code == 200
-            assert b'Revenue Alerts' in response.data
+            assert b'Revenue Analyzer' in response.data
     
     def test_customer_view_with_revenue_analysis(self, app, client, test_user):
         """Test customer page renders correctly when revenue analysis exists."""
@@ -370,7 +370,7 @@ class TestRevenueRoutes:
             # Test customer page loads with revenue card
             response = client.get(f'/customer/{customer.id}')
             assert response.status_code == 200
-            assert b'Revenue Alerts' in response.data
+            assert b'Revenue Analyzer' in response.data
 
 
 class TestDatabaseAnalysis:
