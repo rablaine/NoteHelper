@@ -294,9 +294,6 @@
     <style>
         /* Brainrot mode - barely visible toggle in card corner */
         .brainrot-card-toggle {
-            position: absolute !important;
-            top: 6px;
-            right: 8px;
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -304,6 +301,12 @@
             padding: 0;
             margin: 0;
             min-height: auto;
+        }
+        /* Pin to top-right of a position:relative parent */
+        .brainrot-pos-top-right {
+            position: absolute;
+            top: 6px;
+            right: 8px;
         }
         .brainrot-card-toggle input,
         .brainrot-card-toggle label {
@@ -370,7 +373,8 @@
             opacity: 1;
             background: rgba(220,53,69,0.9);
         }
-        .brainrot-panel img {
+        .brainrot-panel img,
+        .brainrot-panel video {
             width: 100%;
             max-height: 480px;
             object-fit: contain;
@@ -579,7 +583,7 @@
                                             <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
                                             <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
                                         </ol>
-                                        <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush — these instructions are also shown in Step 5.</p>
+                                        <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush, these instructions are also shown in Steps 4 and 5.</p>
                                     </div>
                                 </div>
                             </div>
@@ -661,7 +665,7 @@
                                             <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
                                             <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
                                         </ol>
-                                        <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush — these instructions are also shown in Step 5.</p>
+                                        <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush, these instructions are also shown in Step 5.</p>
                                     </div>
                                 </div>
                             </div>
@@ -1500,7 +1504,7 @@
         // --- Brainrot Mode (always available, not just in wizard) ---
         (function() {
             const brainrotToggleWrap = document.createElement('div');
-            brainrotToggleWrap.className = 'brainrot-card-toggle d-none';
+            brainrotToggleWrap.className = 'brainrot-card-toggle brainrot-pos-top-right d-none';
             brainrotToggleWrap.id = 'brainrotToggleWrap';
             brainrotToggleWrap.innerHTML =
                 '<input class="form-check-input" type="checkbox" id="brainrotCheck">' +
@@ -1509,47 +1513,51 @@
             let brainrotPanel = null;
             let brainrotCycleTimer = null;
 
-            // Curated brainrot GIFs — Giphy embeds (no ads, auto-loop, silent)
+            // Curated brainrot media — satisfying GIFs and MP4s (no ads, auto-loop, silent)
             const brainrotGifs = [
-                // Satisfying cutting / soap / squishy / food
-                'Ggqa1eltvGXwk',       // squishy cutting
-                'ddvkYSGBpv6Tu',        // peach satisfying smooth
-                '7JC6PAr1eyX8bBwhgV',   // bath satisfying oddly
-                'RMcfvm6Dr2ZUY',        // kebab satisfying
-                'CchLXtUXWkQt7lSzcn',   // italian cooking satisfying
-                'dvIvdqxGRIA6yJnhwm',   // satisfying cake icing
-                'du4D0b0HWgxGg',        // donut satisfying
-                'oz4jYoMA0IFTgvmPXL',   // honey satisfying
-                // Paint / color mixing
-                'UVkAW5zSme7i4roUe6',   // 3d purple paint mixing
-                'PH8gHFw2YJPaM',        // palette knife paint satisfying
-                'inScTO4CPVdWo',         // oil paint spreading satisfying
-                '10Qns2AX4mBgGs',       // rainbow paint explosion
-                // Oddly satisfying factory / machines / robots
-                'YkyuofFW1ymBTKeC0n',   // robot automate cutting
-                'PEnjVFMUIWnmT9p5d9',   // mechanical machine loop
-                'rzufqXSfH7BVbtudEe',   // 3d rubber duck loop
-                '1REgzzR10TfAA',        // hydraulic press mango
-                't9JeSmafQHPfa',        // hydraulic press bolt
-                'TEtzmzX4Zo23ctsMYm',   // jelly jello 3d animation
-                // Slime / sensory
-                '3ohzdYAuE6OAyZtPr2',   // satisfying slime
-                'fV8mxOti6Vt5f8xXev',   // sloomoo slime satisfying
-                'rAeYDYIafXdF6',        // sugar slow motion satisfying
-                // Mesmerizing loops / 3d art
-                'elzCnIQAjQMWA',        // ripple waveform loop
-                'cZ1zUsJbDW2we4vAfm',   // mood satisfying perfect loops
-                'Yh0qLwfpAogL9vVxhL',   // minecraft geometric loop
-                'L007un2lhMaNBfp22o',   // infinite loop domino
-                'IMhR575YVNiSlWOo4t',   // 3d gear loop
-                '6Nh0MSV3umQOBYHuvT',   // water ball ocean loop
-                'NvQnaWzhNk3xrrtzj5',   // satisfying interior design 3d
-                'xThtajUUInjWOZksYo',   // satisfying loop philiplueck
-                'RFYFVA4XFDgL5GSLDp',   // art satisfying glitch loop
-                '3ov9jDJSnYG7ADBbOM',   // mesmerizing rainbow hypnotic
-                '9AXvu1JYGPrSU',        // brain satisfying
-                'C3yix2SZvRBu0',        // satisfying tank
-                '64a8WohDzng42rDYc3',   // satisfying oddly
+                'https://media.giphy.com/media/Ggqa1eltvGXwk/giphy.gif',
+                'https://media.giphy.com/media/7JC6PAr1eyX8bBwhgV/giphy.gif',
+                'https://media.giphy.com/media/dvIvdqxGRIA6yJnhwm/giphy.gif',
+                'https://media.giphy.com/media/du4D0b0HWgxGg/giphy.gif',
+                'https://media.giphy.com/media/oz4jYoMA0IFTgvmPXL/giphy.gif',
+                'https://media.giphy.com/media/UVkAW5zSme7i4roUe6/giphy.gif',
+                'https://media.giphy.com/media/PH8gHFw2YJPaM/giphy.gif',
+                'https://media.giphy.com/media/inScTO4CPVdWo/giphy.gif',
+                'https://media.giphy.com/media/10Qns2AX4mBgGs/giphy.gif',
+                'https://media.giphy.com/media/rzufqXSfH7BVbtudEe/giphy.gif',
+                'https://media.giphy.com/media/1REgzzR10TfAA/giphy.gif',
+                'https://media.giphy.com/media/TEtzmzX4Zo23ctsMYm/giphy.gif',
+                'https://media.giphy.com/media/rAeYDYIafXdF6/giphy.gif',
+                'https://media.giphy.com/media/elzCnIQAjQMWA/giphy.gif',
+                'https://media.giphy.com/media/cZ1zUsJbDW2we4vAfm/giphy.gif',
+                'https://media.giphy.com/media/Yh0qLwfpAogL9vVxhL/giphy.gif',
+                'https://media.giphy.com/media/L007un2lhMaNBfp22o/giphy.gif',
+                'https://media.giphy.com/media/6Nh0MSV3umQOBYHuvT/giphy.gif',
+                'https://media.giphy.com/media/xThtajUUInjWOZksYo/giphy.gif',
+                'https://media.giphy.com/media/RFYFVA4XFDgL5GSLDp/giphy.gif',
+                'https://media.giphy.com/media/3ov9jDJSnYG7ADBbOM/giphy.gif',
+                'https://media.giphy.com/media/C3yix2SZvRBu0/giphy.gif',
+                'https://media.giphy.com/media/64a8WohDzng42rDYc3/giphy.gif',
+                'https://media.giphy.com/media/loLGiUxdy3rRjcUWAf/giphy.gif',
+                'https://media.giphy.com/media/26n08WnCiKbJ4l2Ffv/giphy.gif',
+                'https://media.giphy.com/media/Fr5LA2RCQbnVp74CxH/giphy.gif',
+                'https://media.giphy.com/media/fYShjUkJAXW1YO6cNA/giphy.gif',
+                'https://media.tenor.com/-WBM9x9220oAAAPo/satisfying-animation-blender.mp4',
+                'https://media1.tenor.com/m/xVza9Smg4mwAAAAC/satisfied-soap.gif',
+                'https://media1.tenor.com/m/HPW7862ORS8AAAAC/xuxi.gif',
+                'https://media.tenor.com/rzOLcnoIG_UAAAPo/slicing-satisfying.mp4',
+                'https://media1.tenor.com/m/qexNxg5MPIMAAAAd/satisfying-loop.gif',
+                'https://media.tenor.com/yegNE3sfPZoAAAPo/tape-ball-satisfying-cutting-tiktok-tape-ball.mp4',
+                'https://media.tenor.com/sJkZknI4_CAAAAPo/satisfied-satisfying.mp4',
+                'https://media.tenor.com/PhD5VRnDFHkAAAPo/slicing-satisfying.mp4',
+                'https://media.tenor.com/gMPC9x_ctg4AAAPo/slicing-satisfying.mp4',
+                'https://media1.tenor.com/m/RvM44T1aojYAAAAC/slime-colorful.gif',
+                'https://media.tenor.com/Iv0kXfSNOy8AAAPo/slicing-satisfying.mp4',
+                'https://media.tenor.com/emYU3uAb4pIAAAPo/slicing-satisfying.mp4',
+                'https://media.tenor.com/rU51A48PrXwAAAPo/slicing-satisfying.mp4',
+                'https://media.tenor.com/d8q09D-9V5gAAAPo/food-ice-cream.mp4',
+                'https://media.tenor.com/hryzNuX8Q1EAAAAj/happy-happy-cat-happy-happy-happy-cat.gif',
+                'https://media.tenor.com/SsAN5PU7OawAAAAj/oia-uia.gif',
             ];
 
             let shuffledQueue = [];
@@ -1564,16 +1572,40 @@
             function pickBrainrotGif() {
                 if (shuffledQueue.length === 0) shuffleBrainrotQueue();
                 const idx = shuffledQueue.pop();
-                return 'https://media.giphy.com/media/' + brainrotGifs[idx] + '/giphy.gif';
+                return brainrotGifs[idx];
+            }
+
+            function isVideoUrl(url) {
+                return /\.mp4(\?|$)/i.test(url);
+            }
+
+            function setBrainrotMedia(panel, url) {
+                // Remove existing media element
+                const old = panel.querySelector('img, video');
+                if (old) old.remove();
+                if (isVideoUrl(url)) {
+                    const vid = document.createElement('video');
+                    vid.src = url;
+                    vid.autoplay = true;
+                    vid.loop = true;
+                    vid.muted = true;
+                    vid.playsInline = true;
+                    vid.setAttribute('loading', 'lazy');
+                    panel.appendChild(vid);
+                } else {
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.alt = '';
+                    img.loading = 'lazy';
+                    panel.appendChild(img);
+                }
             }
 
             function createBrainrotPanel() {
                 if (brainrotPanel) return brainrotPanel;
                 brainrotPanel = document.createElement('div');
                 brainrotPanel.className = 'brainrot-panel d-none';
-                brainrotPanel.innerHTML =
-                    '<button class="brainrot-close" title="Close">&times;</button>' +
-                    '<img src="" alt="" loading="lazy">';
+                brainrotPanel.innerHTML = '<button class="brainrot-close" title="Close">&times;</button>';
                 document.body.appendChild(brainrotPanel);
                 brainrotPanel.querySelector('.brainrot-close').addEventListener('click', () => {
                     window.setBrainrot(false);
@@ -1583,26 +1615,23 @@
 
             function cycleBrainrot() {
                 if (!brainrotPanel || brainrotPanel.classList.contains('d-none')) return;
-                const img = brainrotPanel.querySelector('img');
-                if (img) img.src = pickBrainrotGif();
+                setBrainrotMedia(brainrotPanel, pickBrainrotGif());
             }
 
             function showBrainrotPanel() {
-                shuffleBrainrotQueue(); // fresh random order each session
                 const panel = createBrainrotPanel();
-                const img = panel.querySelector('img');
-                if (img) img.src = pickBrainrotGif();
+                setBrainrotMedia(panel, pickBrainrotGif());
                 panel.classList.remove('d-none');
                 if (brainrotCycleTimer) clearInterval(brainrotCycleTimer);
-                brainrotCycleTimer = setInterval(cycleBrainrot, 12000);
+                brainrotCycleTimer = setInterval(cycleBrainrot, 7000);
             }
 
             function hideBrainrotPanel() {
                 if (brainrotCycleTimer) { clearInterval(brainrotCycleTimer); brainrotCycleTimer = null; }
                 if (brainrotPanel) {
                     brainrotPanel.classList.add('d-none');
-                    const img = brainrotPanel.querySelector('img');
-                    if (img) img.src = '';
+                    const el = brainrotPanel.querySelector('img, video');
+                    if (el) el.remove();
                 }
             }
 

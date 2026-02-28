@@ -418,6 +418,7 @@
                 <div id="meetingImportLoading" class="text-center py-4">
                     <div class="spinner-border text-primary" role="status"></div>
                     <p class="mt-2">Loading meetings for this date...</p>
+                    <small class="text-muted">This can take up to a minute</small>
                 </div>
                 
                 <div id="meetingImportError" class="alert alert-danger" style="display: none;">
@@ -440,7 +441,7 @@
                 
                 <div id="meetingSummaryLoading" class="text-center py-4" style="display: none;">
                     <div class="spinner-border text-success" role="status"></div>
-                    <p class="mt-2">Generating 250-word summary...</p>
+                    <p class="mt-2">Generating meeting summary...</p>
                     <small class="text-muted">This may take up to 2 minutes for long transcripts</small>
                 </div>
                 
@@ -462,7 +463,11 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer d-flex">
+                <div id="meetingBrainrotToggle" class="brainrot-card-toggle d-none me-auto">
+                    <input type="checkbox" id="meetingBrainrotCheck">
+                    <label for="meetingBrainrotCheck" class="small">brainrot mode</label>
+                </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-success" id="importSelectedMeetingBtn" onclick="importSelectedMeeting()" disabled>
                     <i class="bi bi-download"></i> Import Summary
@@ -2048,8 +2053,8 @@ function discardDraft() {
         if (createdTaskCatName) createdTaskCatName.value = '';
         if (createdTaskIsHok) createdTaskIsHok.value = '';
         
-        // Redirect back to call logs list
-        window.location.href = '{{ url_for("call_logs.call_logs_list") }}';
+        // Redirect back to home page
+        window.location.href = '{{ url_for("main.index") }}';
     }
 }
 
@@ -2122,6 +2127,17 @@ document.addEventListener('DOMContentLoaded', function() {
             if (promptTextarea) {
                 promptTextarea.value = defaultWorkiqPrompt;
             }
+        });
+    }
+    
+    // Wire up meeting import brainrot checkbox
+    var meetingBrCb = document.getElementById('meetingBrainrotCheck');
+    if (meetingBrCb) {
+        if (localStorage.getItem('brainrot') === '1') meetingBrCb.checked = true;
+        meetingBrCb.addEventListener('change', function() {
+            if (window.setBrainrot) window.setBrainrot(this.checked);
+            if (this.checked && window.showBrainrotPanel) window.showBrainrotPanel();
+            else if (!this.checked && window.hideBrainrotPanel) window.hideBrainrotPanel();
         });
     }
 });
@@ -2484,6 +2500,12 @@ function openMeetingImport() {
     // Initialize modal if needed
     if (!meetingImportModal) {
         meetingImportModal = new bootstrap.Modal(document.getElementById('meetingImportModal'));
+        // Hide brainrot when modal closes (any path: cancel, X, import)
+        document.getElementById('meetingImportModal').addEventListener('hidden.bs.modal', function() {
+            var brToggle = document.getElementById('meetingBrainrotToggle');
+            if (brToggle) brToggle.classList.add('d-none');
+            if (window.hideBrainrotPanel) window.hideBrainrotPanel();
+        });
     }
     
     // Reset state
@@ -2499,6 +2521,13 @@ function openMeetingImport() {
     
     // Show modal
     meetingImportModal.show();
+    
+    // Show brainrot toggle while loading
+    var brToggle = document.getElementById('meetingBrainrotToggle');
+    if (brToggle) brToggle.classList.remove('d-none');
+    if (window.isBrainrotOn && window.isBrainrotOn() && window.showBrainrotPanel) {
+        window.showBrainrotPanel();
+    }
     
     // Get date and customer name
     var dateStr = document.getElementById('call_date').value;
@@ -2525,6 +2554,10 @@ function openMeetingImport() {
         .then(response => response.json())
         .then(data => {
             document.getElementById('meetingImportLoading').style.display = 'none';
+            // Hide brainrot when loading finishes - don't distract during meeting selection
+            var brToggle = document.getElementById('meetingBrainrotToggle');
+            if (brToggle) brToggle.classList.add('d-none');
+            if (window.hideBrainrotPanel) window.hideBrainrotPanel();
             
             if (data.error) {
                 showMeetingError(data.error);
@@ -2552,6 +2585,10 @@ function showMeetingError(message) {
     document.getElementById('meetingImportLoading').style.display = 'none';
     document.getElementById('meetingImportError').style.display = 'block';
     document.getElementById('meetingImportErrorText').textContent = message;
+    // Hide brainrot on error too
+    var brToggle = document.getElementById('meetingBrainrotToggle');
+    if (brToggle) brToggle.classList.add('d-none');
+    if (window.hideBrainrotPanel) window.hideBrainrotPanel();
 }
 
 function renderMeetingList(meetings, autoSelectedIndex, autoSelectedReason) {
@@ -2664,6 +2701,13 @@ function importSelectedMeeting() {
     document.getElementById('meetingPromptSection').style.display = 'none';
     document.getElementById('meetingSummaryLoading').style.display = 'block';
     document.getElementById('importSelectedMeetingBtn').disabled = true;
+    
+    // Re-show brainrot toggle during summary generation
+    var brToggle = document.getElementById('meetingBrainrotToggle');
+    if (brToggle) brToggle.classList.remove('d-none');
+    if (window.isBrainrotOn && window.isBrainrotOn() && window.showBrainrotPanel) {
+        window.showBrainrotPanel();
+    }
     
     // Fetch summary with timeout
     var url = '/api/meetings/summary?title=' + encodeURIComponent(meeting.title);

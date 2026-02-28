@@ -18,9 +18,14 @@ logger = logging.getLogger(__name__)
 # Users can customize this in Settings. Use {title} and {date} as placeholders.
 DEFAULT_SUMMARY_PROMPT = (
     'Summarize the meeting called {title} {date} in approximately 250 words. '
-    'Include key discussion points, technologies mentioned, and any action items. '
-    'Also suggest a short task title (under 10 words) and a brief 1-2 sentence task description '
-    'that captures the main follow-up action from this meeting. '
+    'Include key discussion points, technologies mentioned, and any action items.'
+)
+
+# Task suggestion suffix - always appended server-side after the user's prompt.
+# Not user-editable so it can't be accidentally broken.
+_TASK_PROMPT_SUFFIX = (
+    ' Also suggest a short task title (under 10 words) and a brief 1-2 sentence '
+    'task description that captures the main follow-up action from this meeting. '
     'Format the task suggestion on separate lines starting with TASK_TITLE: and TASK_DESCRIPTION:'
 )
 
@@ -451,6 +456,9 @@ def get_meeting_summary(meeting_title: str, date_str: str = None,
         # If custom prompt has bad placeholders, fall back to default
         logger.warning(f"Custom prompt had invalid placeholders, using default")
         question = DEFAULT_SUMMARY_PROMPT.format(title=clean_title, date=date_context)
+    
+    # Always append task suggestion instructions (not user-editable)
+    question += _TASK_PROMPT_SUFFIX
     
     try:
         response = query_workiq(question, timeout=120)
