@@ -2297,7 +2297,15 @@ function proceedWithMeeting(meeting, dateStr) {
                 quill.root.innerHTML = content;
             }
             
-            // Step 3: AI analysis (topics + task)
+            // Store task suggestion from WorkIQ for milestone selection
+            if (data.task_subject || data.task_description) {
+                pendingTaskSuggestion = {
+                    subject: data.task_subject || '',
+                    description: data.task_description || ''
+                };
+            }
+            
+            // Step 3: AI analysis (topic tagging)
             setAutoFillStep(3, 'loading');
             analyzeCallWithAI(data.summary, meeting.title);
         })
@@ -2324,21 +2332,13 @@ function analyzeCallWithAI(summary, meetingTitle) {
             console.warn('AI analysis failed:', data.error);
             // Continue anyway - not a blocker
         } else {
-            // Add topics
+            // Add topics (task fields are filled by selectMilestone from WorkIQ suggestion)
             if (data.topics && data.topics.length > 0) {
                 data.topics.forEach(function(topic) {
                     if (!isTopicSelected(topic.id)) {
                         addTopic(topic.id, topic.name);
                     }
                 });
-            }
-            
-            // Fill task fields
-            if (data.task_title) {
-                document.getElementById('task_subject').value = data.task_title;
-            }
-            if (data.task_description) {
-                document.getElementById('task_description').value = data.task_description;
             }
         }
         

@@ -353,11 +353,12 @@ Which milestone best matches what was discussed in the call?"""
 @ai_bp.route('/api/ai/analyze-call', methods=['POST'])
 def api_ai_analyze_call():
     """
-    Analyze call notes to extract topics and generate task title/description.
-    This is the first AI call in the auto-fill flow.
+    Analyze call notes to extract and auto-tag topics.
+    This is the AI call in the auto-fill flow for topic matching.
+    Task title/description come from WorkIQ, not OpenAI.
     
     Takes: call_notes (str)
-    Returns: topics (list), task_title (str ~5 words), task_description (str ~30 words)
+    Returns: topics (list of {id, name})
     """
     
     # Check if AI features are enabled
@@ -374,21 +375,18 @@ def api_ai_analyze_call():
         return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
     
     system_prompt = """You are an expert at analyzing Azure customer call notes.
-Extract key technologies discussed and generate a concise task summary.
+Extract the key technologies and concepts discussed.
 
 Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
 {
-  "topics": ["Topic 1", "Topic 2", "Topic 3"],
-  "task_title": "5-word task title here",
-  "task_description": "About 30 words describing the customer discussion and next steps. Include key technologies and action items mentioned."
+  "topics": ["Topic 1", "Topic 2", "Topic 3"]
 }
 
 Guidelines:
 - topics: List 2-5 Azure/Microsoft technologies or concepts discussed (e.g., "Azure Kubernetes Service", "Cost Optimization", "Data Migration")
-- task_title: 5ish words, action-oriented (e.g., "AKS POC follow-up with Contoso")
-- task_description: ~30 words summarizing the call and next steps"""
+- Focus on specific, actionable technology areas rather than generic terms"""
     
-    user_prompt = f"""Analyze these call notes and extract topics and task info:
+    user_prompt = f"""Analyze these call notes and extract the key topics/technologies discussed:
 
 {call_notes[:3000]}"""
     
@@ -400,7 +398,7 @@ Guidelines:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=300,
+            max_tokens=200,
             model=deployment_name
         )
         
@@ -462,9 +460,7 @@ Guidelines:
         
         return jsonify({
             'success': True,
-            'topics': topic_ids,
-            'task_title': result.get('task_title', ''),
-            'task_description': result.get('task_description', '')
+            'topics': topic_ids
         })
         
     except json.JSONDecodeError as e:
