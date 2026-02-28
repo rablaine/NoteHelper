@@ -40,7 +40,7 @@
                 <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
                     <i class="bi bi-check-circle text-success"></i> Draft saved
                 </div>
-                {% if not call_log %}
+                {% if not call_log and ai_enabled %}
                 <button type="button" class="btn btn-success" id="autoFillBtn" onclick="startAutoFill()" title="Auto-fill from meeting transcript">
                     <i class="bi bi-magic"></i> Auto-fill
                 </button>
@@ -1319,6 +1319,20 @@ function selectMilestone(milestone) {
         dueDateInput.value = new Date().toISOString().split('T')[0];
     }
     
+    // Pre-fill task fields from meeting import suggestion (if available)
+    if (typeof pendingTaskSuggestion !== 'undefined' && pendingTaskSuggestion) {
+        var taskSubjectEl = document.getElementById('task_subject');
+        var taskDescEl = document.getElementById('task_description');
+        if (taskSubjectEl && !taskSubjectEl.value && pendingTaskSuggestion.subject) {
+            taskSubjectEl.value = pendingTaskSuggestion.subject;
+        }
+        if (taskDescEl && !taskDescEl.value && pendingTaskSuggestion.description) {
+            taskDescEl.value = pendingTaskSuggestion.description;
+        }
+        // Clear pending suggestion after applying
+        pendingTaskSuggestion = null;
+    }
+    
     // Clear search
     milestoneSearch.value = '';
     milestoneDropdown.style.display = 'none';
@@ -2090,6 +2104,7 @@ var meetingImportModal = null;
 var selectedMeetingIndex = null;
 var loadedMeetings = [];
 var autoFillAborted = false;
+var pendingTaskSuggestion = null;  // Stores task title/description from meeting import
 
 // WorkIQ prompt customization
 var userWorkiqPrompt = {{ (workiq_prompt or default_workiq_prompt)|tojson }};
@@ -2717,6 +2732,14 @@ function importSelectedMeeting() {
             // Auto-suggest topics if any technologies were identified
             if (data.topics && data.topics.length > 0) {
                 autoSuggestTopics(data.topics);
+            }
+            
+            // Store task suggestion for when milestone is selected
+            if (data.task_subject || data.task_description) {
+                pendingTaskSuggestion = {
+                    subject: data.task_subject || '',
+                    description: data.task_description || ''
+                };
             }
             
             // Close modal

@@ -146,6 +146,46 @@ if %ERRORLEVEL% neq 0 (
     )
 )
 
+REM -- Check Node.js (optional — needed for WorkIQ meeting import) -----------
+where node >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo [WARNING] Node.js not found.
+    echo.
+    echo           Node.js 18+ is required for WorkIQ meeting import
+    echo           ^(Import from Meeting, Auto-fill^). NoteHelper will
+    echo           still run, but meeting import features won't work.
+    echo.
+    if "!HAS_WINGET!"=="1" (
+        set /p "INSTALL_NODE=          Install Node.js automatically? (Y/N): "
+        if /i "!INSTALL_NODE!"=="Y" (
+            echo.
+            echo [SETUP] Installing Node.js LTS via winget...
+            winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+            if !ERRORLEVEL! neq 0 (
+                echo [ERROR] Node.js installation failed.
+                echo         Install manually from: https://nodejs.org/
+                echo.
+            ) else (
+                echo [OK] Node.js installed.
+                echo     Note: You may need to restart this window for 'node' to be available.
+                echo.
+            )
+        ) else (
+            echo.
+            echo           You can install it later from: https://nodejs.org/
+            echo           Meeting import features won't work until Node.js is installed.
+            echo.
+        )
+    ) else (
+        echo           Install it from: https://nodejs.org/
+        echo           Meeting import features won't work until Node.js is installed.
+        echo.
+    )
+) else (
+    for /f "delims=" %%V in ('node -v') do echo [OK] Node.js %%V found.
+)
+
 REM -- Create venv if missing -------------------------------------------------
 if not exist "venv\Scripts\activate.bat" (
     echo [SETUP] Creating virtual environment...

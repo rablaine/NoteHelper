@@ -575,6 +575,8 @@ def api_get_meeting_summary():
             'summary': result.get('summary', ''),
             'topics': result.get('topics', []),
             'action_items': result.get('action_items', []),
+            'task_subject': result.get('task_subject', ''),
+            'task_description': result.get('task_description', ''),
             'success': True
         })
     except Exception as e:
