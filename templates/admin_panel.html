@@ -466,6 +466,19 @@ async function loadMsxStatus() {
         const response = await fetch('/api/msx/status');
         const data = await response.json();
         
+        if (data.vpn_blocked) {
+            statusDiv.innerHTML = `
+                <div class="d-flex align-items-center gap-2 text-danger">
+                    <i class="bi bi-shield-exclamation fs-4"></i>
+                    <div>
+                        <strong>VPN Required</strong><br>
+                        <small>IP address blocked — connect to VPN and use the banner above to retry</small>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
         if (data.authenticated) {
             statusDiv.innerHTML = `
                 <div class="d-flex align-items-center gap-2 text-success">
@@ -529,6 +542,15 @@ async function checkAdminAuth() {
     try {
         const resp = await fetch('/api/msx/status');
         const data = await resp.json();
+
+        // If VPN is blocked, show error instead of auto-completing login
+        if (data.vpn_blocked) {
+            showAdminAuthState('adminAuthError');
+            const errEl = document.getElementById('adminAuthErrorMsg');
+            if (errEl) errEl.textContent = 'VPN required — connect to corpnet first.';
+            return;
+        }
+
         if (data.authenticated) {
             showAdminAuthState('adminAuthSuccess');
             return;

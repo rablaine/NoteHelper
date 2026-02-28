@@ -1017,6 +1017,15 @@
                         // First check if we already have a CRM token cached
                         const resp = await fetch('/api/msx/status');
                         const data = await resp.json();
+
+                        // If VPN is blocked, skip auth — token would be useless
+                        if (data.vpn_blocked) {
+                            showAuthState('authError');
+                            const errEl = document.getElementById('authErrorMsg');
+                            if (errEl) errEl.textContent = 'VPN required — connect to corpnet first, then retry.';
+                            return;
+                        }
+
                         if (data.authenticated) {
                             authCompleted = true;
                             showAuthState('authAlready');
