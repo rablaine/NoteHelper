@@ -863,9 +863,13 @@
                         nextBtn.innerHTML = 'Next <i class="bi bi-arrow-right"></i>';
                     }
                     // Update skip button text once core import is done
-                    if (step >= 4 && accountsImported) {
+                    if (step === totalSteps) {
+                        skipBtn.classList.add('d-none');
+                    } else if (step >= 4 && accountsImported) {
+                        skipBtn.classList.remove('d-none');
                         skipBtn.textContent = 'Done - skip remaining steps';
                     } else {
+                        skipBtn.classList.remove('d-none');
                         skipBtn.textContent = 'Skip setup - I\'ll do this later';
                     }
                     // Show "already completed" state if navigating to a previously-done step
