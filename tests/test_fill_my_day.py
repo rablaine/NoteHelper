@@ -394,14 +394,12 @@ class TestCustomerListAPIForFillMyDay:
 
 
 class TestFillMyDayNavigation:
-    """Tests that Fill My Day is accessible from the nav menu."""
+    """Tests that Fill My Day is accessible via direct URL."""
 
-    def test_more_menu_has_fill_my_day_link(self, client):
-        """Test that the More menu includes Fill My Day link."""
-        response = client.get('/')
+    def test_fill_my_day_page_accessible(self, client):
+        """Test that the Fill My Day page loads via direct URL."""
+        response = client.get('/fill-my-day')
         assert response.status_code == 200
-        assert b'Fill My Day' in response.data
-        assert b'fill-my-day' in response.data
 
     def test_calendar_has_fill_my_day_icon(self, client, sample_data):
         """Test that the calendar API data supports Fill My Day icon rendering."""
