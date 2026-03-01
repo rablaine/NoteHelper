@@ -236,14 +236,47 @@ class TestVpnStatusEndpoints:
 
     @patch('app.services.msx_api.test_connection')
     def test_vpn_check_still_blocked(self, mock_test, client):
-        """POST /api/msx/vpn-check should report failure when still blocked."""
+        """POST /api/msx/vpn-check should report 403 when still blocked."""
         set_vpn_blocked("blocked")
         mock_test.return_value = {"success": False, "error": "IP address is blocked"}
         resp = client.post('/api/msx/vpn-check')
-        assert resp.status_code == 200
+        assert resp.status_code == 403  # after_request promotes vpn_blocked responses to 403
         data = resp.get_json()
         assert data["success"] is False
         assert is_vpn_blocked() is True
+
+    @patch('app.routes.msx.get_milestones_by_account')
+    @patch('app.routes.msx.extract_account_id_from_url', return_value='00000000-0000-0000-0000-000000000001')
+    def test_after_request_promotes_vpn_blocked_to_403(self, mock_extract, mock_milestones, client):
+        """MSX routes returning 200 with vpn_blocked should become 403."""
+        mock_milestones.return_value = {
+            "success": False,
+            "error": "IP address is blocked — connect to VPN and retry.",
+            "vpn_blocked": True,
+        }
+        # Create a customer with a TPID URL so the route reaches get_milestones_by_account
+        from app.models import Customer, User, db
+        test_user = User.query.first()
+        customer = Customer(
+            name="VPN Test Co",
+            tpid=12345,
+            tpid_url="https://microsoftsales.crm.dynamics.com/main.aspx?id=00000000-0000-0000-0000-000000000001",
+            user_id=test_user.id,
+        )
+        db.session.add(customer)
+        db.session.commit()
+
+        resp = client.get(f'/api/msx/milestones-for-customer/{customer.id}')
+        assert resp.status_code == 403
+        data = resp.get_json()
+        assert data["vpn_blocked"] is True
+
+    def test_after_request_does_not_affect_normal_responses(self, client):
+        """Normal 200 responses without vpn_blocked should stay 200."""
+        resp = client.get('/api/msx/task-categories')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
 
 
 class TestBackgroundRefreshVpnSkip:

@@ -1963,6 +1963,16 @@
                             window.showVpnBanner();
                         }
                     } catch (e) { /* ignore parse errors */ }
+                } else if (response.ok) {
+                    // Belt-and-suspenders: also check JSON body for vpn_blocked flag
+                    // (catches cases where route returns 200 with error in body)
+                    try {
+                        const clone = response.clone();
+                        const json = await clone.json();
+                        if (json && json.vpn_blocked) {
+                            window.showVpnBanner();
+                        }
+                    } catch (e) { /* not JSON or parse error — ignore */ }
                 }
             }
             return response;

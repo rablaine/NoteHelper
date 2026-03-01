@@ -63,6 +63,25 @@ logger = logging.getLogger(__name__)
 msx_bp = Blueprint('msx', __name__, url_prefix='/api/msx')
 
 
+@msx_bp.after_request
+def set_vpn_blocked_status(response):
+    """Return 403 status on JSON responses that indicate VPN/IP block.
+
+    This ensures the global fetch interceptor in base.html can detect
+    VPN blocks from any MSX endpoint, even when the route handler
+    returns a 200 with an error in the JSON body.
+    """
+    if response.content_type and 'application/json' in response.content_type:
+        if response.status_code == 200:
+            try:
+                data = json.loads(response.get_data(as_text=True))
+                if data and data.get('vpn_blocked'):
+                    response.status_code = 403
+            except Exception:
+                pass
+    return response
+
+
 @msx_bp.route('/status')
 def auth_status():
     """Get current MSX authentication status."""
