@@ -320,16 +320,6 @@
                             </button>
                         </div>
                     </div>
-                    <hr>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <h6><i class="bi bi-trash"></i> Clear All Data</h6>
-                            <p class="small text-danger mb-2">Deletes ALL data from ALL users</p>
-                            <button class="btn btn-sm btn-danger" id="clearAllDataBtn">
-                                <i class="bi bi-trash"></i> Clear Everything
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -338,33 +328,6 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-
-// Clear All Data
-document.getElementById('clearAllDataBtn').addEventListener('click', function() {
-    const confirmation = prompt('⚠️ WARNING: This will delete ALL data from ALL users!\n\nType "DELETE ALL DATA" to confirm:');
-    if (confirmation === 'DELETE ALL DATA') {
-        fetch('/api/data-management/clear', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('All data has been cleared successfully.');
-                location.reload();
-            } else {
-                alert('Error: ' + data.error);
-            }
-        })
-        .catch(error => {
-            alert('Error: ' + error);
-        });
-    } else if (confirmation !== null) {
-        alert('Confirmation text did not match. Operation cancelled.');
-    }
-});
 
 // Clear Revenue Data
 document.getElementById('clearRevenueBtn').addEventListener('click', function() {

@@ -8,7 +8,7 @@ from app.models import (
     db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
     RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
     RevenueConfig, RevenueEngagement, Milestone, Opportunity, MsxTask,
-    call_logs_milestones, utc_now
+    SyncStatus, call_logs_milestones, utc_now
 )
 
 # Create blueprint
@@ -81,6 +81,9 @@ def api_clear_revenue_data():
         deleted['bucket_records'] = CustomerRevenueData.query.delete()
         deleted['imports'] = RevenueImport.query.delete()
         deleted['configs'] = RevenueConfig.query.delete()
+        # Reset sync statuses so wizard/UI returns to clean state
+        SyncStatus.reset('revenue_import')
+        SyncStatus.reset('revenue_analysis')
         db.session.commit()
         total = sum(deleted.values())
         return jsonify({
@@ -105,6 +108,8 @@ def api_clear_milestone_data():
         deleted['tasks'] = MsxTask.query.delete()
         deleted['milestones'] = Milestone.query.delete()
         deleted['opportunities'] = Opportunity.query.delete()
+        # Reset sync status so wizard/UI returns to clean state
+        SyncStatus.reset('milestones')
         db.session.commit()
         total = sum(deleted.values())
         return jsonify({

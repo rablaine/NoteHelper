@@ -332,9 +332,9 @@ def start_token_refresh_job(interval_seconds: int = 300):
                         if remaining < 600:  # Less than 10 minutes
                             logger.info("MSX token expiring soon, refreshing...")
                             refresh_token()
-                    else:
-                        # No token cached, try to get one
-                        refresh_token()
+                    # If no token cached, don't auto-acquire. The user must
+                    # explicitly sign in via the wizard first. Once they do,
+                    # expires_on gets set and the background job keeps it alive.
                     
             except Exception as e:
                 logger.error(f"Error in MSX token refresh job: {e}")

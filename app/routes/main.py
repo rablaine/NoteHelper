@@ -8,8 +8,8 @@ from sqlalchemy import func, extract
 import calendar as cal
 import json
 
-from app.models import (db, CallLog, Customer, Seller, Territory, Topic, POD, SolutionEngineer,
-                        Vertical, UserPreference, User, SyncStatus)
+from app.models import (db, CallLog, Customer, Seller, Territory, Topic,
+                        UserPreference, User, SyncStatus)
 
 # Create blueprint
 main_bp = Blueprint('main', __name__)
@@ -410,41 +410,6 @@ def analytics():
                          customers_needing_attention=customers_needing_attention,
                          seller_activity=seller_activity,
                          weekly_calls=weekly_calls)
-
-
-# =============================================================================
-# Data Management API Routes (Admin only)
-# =============================================================================
-
-@main_bp.route('/api/data-management/clear', methods=['POST'])
-def data_management_clear():
-    """Clear all data from the database."""
-    try:
-        # Delete in correct order to handle foreign key constraints
-        # Delete association tables first
-        db.session.execute(db.text('DELETE FROM call_logs_topics'))
-        db.session.execute(db.text('DELETE FROM customers_verticals'))
-        db.session.execute(db.text('DELETE FROM sellers_territories'))
-        db.session.execute(db.text('DELETE FROM solution_engineers_pods'))
-        
-        # Delete dependent tables
-        CallLog.query.delete()
-        Customer.query.delete()
-        Topic.query.delete()
-        Vertical.query.delete()
-        SolutionEngineer.query.delete()
-        Seller.query.delete()
-        
-        # Delete parent tables
-        Territory.query.delete()
-        POD.query.delete()
-        
-        db.session.commit()
-        return jsonify({'success': True}), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
 
 
 
