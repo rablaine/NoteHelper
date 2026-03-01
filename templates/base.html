@@ -13,6 +13,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     
+    <!-- Driver.js for guided product tour -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css">
+    
     <style>
         /* Dark mode custom styles */
         [data-bs-theme="dark"] {
@@ -202,22 +205,27 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
+                    <li class="nav-item" id="navCustomers">
                         <a class="nav-link" href="{{ url_for('customers.customers_list') }}">
                             <i class="bi bi-building"></i> Customers
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item" id="navSellers">
                         <a class="nav-link" href="{{ url_for('sellers.sellers_list') }}">
                             <i class="bi bi-people"></i> Sellers
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item" id="navPods">
+                        <a class="nav-link" href="{{ url_for('pods.pods_list') }}">
+                            <i class="bi bi-diagram-3"></i> PODs
+                        </a>
+                    </li>
+                    <li class="nav-item" id="navMilestones">
                         <a class="nav-link" href="{{ url_for('milestones.milestone_tracker') }}">
                             <i class="bi bi-flag-fill"></i> Milestones
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item" id="navRevenue">
                         <a class="nav-link" href="{{ url_for('revenue.revenue_dashboard') }}">
                             <i class="bi bi-currency-dollar"></i> Revenue
                         </a>
@@ -234,7 +242,6 @@
                             <li><a class="dropdown-item" href="{{ url_for('main.analytics') }}"><i class="bi bi-graph-up"></i> Analytics</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('territories.territories_list') }}"><i class="bi bi-geo-alt"></i> Territories</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('pods.pods_list') }}"><i class="bi bi-diagram-3"></i> PODs</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('solution_engineers.solution_engineers_list') }}"><i class="bi bi-tools"></i> Solution Engineers</a></li>
                         </ul>
                     </li>
@@ -245,10 +252,10 @@
                         <i class="bi bi-rocket-takeoff"></i> Setup Wizard
                     </button>
                     {% endif %}
-                    <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#quickCustomerLookupModal" title="Quick customer lookup">
+                    <button class="btn btn-outline-light" id="navQuickLookup" data-bs-toggle="modal" data-bs-target="#quickCustomerLookupModal" title="Quick customer lookup">
                         <i class="bi bi-building"></i>
                     </button>
-                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#quickCallLogModal">
+                    <button class="btn btn-success" id="navNewCallLog" data-bs-toggle="modal" data-bs-target="#quickCallLogModal">
                         <i class="bi bi-plus-circle"></i> New Call Log
                     </button>
                     <div class="dropdown">
@@ -853,6 +860,8 @@
 
     <!-- Bootstrap 5 JS Bundle - Deferred for faster page load -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+    <!-- Driver.js for guided product tour -->
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js" defer></script>
     
     <!-- Dark Mode and Colored Sellers Toggle Scripts -->
     <script defer>
@@ -1020,6 +1029,11 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' }
                         });
+                        // Only trigger guided tour if it hasn't been completed (DB-backed flag)
+                        var tourCompleted = {{ 'true' if guided_tour_completed else 'false' }};
+                        if (!tourCompleted) {
+                            localStorage.setItem('notehelper_start_tour', '1');
+                        }
                     } catch (err) {
                         console.error('Failed to dismiss onboarding:', err);
                     }
@@ -2202,6 +2216,105 @@
             if (data.blocked) window.showVpnBanner();
         }).catch(() => {});
     })();
+    </script>
+
+    <!-- Guided Product Tour (triggered once after first wizard dismissal) -->
+    <script defer>
+    window.addEventListener('load', function() {
+        if (localStorage.getItem('notehelper_start_tour') !== '1') return;
+        if (typeof driver === 'undefined') return;
+        localStorage.removeItem('notehelper_start_tour');
+
+        // Small delay so the page is fully rendered
+        setTimeout(function() {
+            const tourDriver = driver.js.driver({
+                showProgress: true,
+                animate: true,
+                overlayColor: 'rgba(0, 0, 0, 0.65)',
+                popoverClass: 'notehelper-tour',
+                nextBtnText: 'Next',
+                prevBtnText: 'Back',
+                doneBtnText: 'Got it!',
+                onDestroyStarted: function() {
+                    // Mark tour as completed in localStorage and database
+                    localStorage.setItem('notehelper_tour_completed', '1');
+                    fetch('/api/preferences/guided-tour-complete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    }).catch(function(err) {
+                        console.error('Failed to save tour completion:', err);
+                    });
+                    tourDriver.destroy();
+                },
+                steps: [
+                    {
+                        element: '#navCustomers',
+                        popover: {
+                            title: 'Customers',
+                            description: 'See all your customers in one place. You can group by seller to quickly find who owns what.',
+                            side: 'bottom',
+                            align: 'start'
+                        }
+                    },
+                    {
+                        element: '#navSellers',
+                        popover: {
+                            title: 'Sellers',
+                            description: 'View all your sellers and access their profile page -- the central hub for each seller\'s customers and activity.',
+                            side: 'bottom',
+                            align: 'start'
+                        }
+                    },
+                    {
+                        element: '#navPods',
+                        popover: {
+                            title: 'PODs',
+                            description: 'See your POD(s) including sellers, territories, and SEs along with their roles.',
+                            side: 'bottom',
+                            align: 'start'
+                        }
+                    },
+                    {
+                        element: '#navMilestones',
+                        popover: {
+                            title: 'Milestone Tracker',
+                            description: 'Import and audit your milestones here. Shout out <a href="https://aka.ms/easymsx" target="_blank">aka.ms/easymsx</a>',
+                            side: 'bottom',
+                            align: 'start'
+                        }
+                    },
+                    {
+                        element: '#navRevenue',
+                        popover: {
+                            title: 'Revenue Analyzer',
+                            description: 'Import your customers\' revenue data to auto-identify trends and actionable signals in the data.',
+                            side: 'bottom',
+                            align: 'start'
+                        }
+                    },
+                    {
+                        element: '#navQuickLookup',
+                        popover: {
+                            title: 'Quick Customer Lookup',
+                            description: 'Quickly navigate to a specific customer\'s page with text search.',
+                            side: 'bottom',
+                            align: 'end'
+                        }
+                    },
+                    {
+                        element: '#navNewCallLog',
+                        popover: {
+                            title: 'New Call Log',
+                            description: 'Create a new call log. Prompts for the customer name and can pull data from WorkIQ.',
+                            side: 'bottom',
+                            align: 'end'
+                        }
+                    }
+                ]
+            });
+            tourDriver.drive();
+        }, 500);
+    });
     </script>
 </body>
 </html>

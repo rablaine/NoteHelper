@@ -63,6 +63,9 @@ def run_migrations(db):
     # Migration: Add workiq_summary_prompt to user_preferences
     _migrate_workiq_summary_prompt(db, inspector)
     
+    # Migration: Add guided_tour_completed to user_preferences
+    _migrate_guided_tour_completed(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -451,4 +454,13 @@ def _migrate_workiq_summary_prompt(db, inspector):
         _add_column_if_not_exists(
             db, inspector, 'user_preferences', 'workiq_summary_prompt',
             'TEXT'
+        )
+
+
+def _migrate_guided_tour_completed(db, inspector):
+    """Add guided_tour_completed column to user_preferences table."""
+    if 'user_preferences' in inspector.get_table_names():
+        _add_column_if_not_exists(
+            db, inspector, 'user_preferences', 'guided_tour_completed',
+            'BOOLEAN NOT NULL DEFAULT 0'
         )

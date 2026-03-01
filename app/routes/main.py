@@ -650,6 +650,24 @@ def dismiss_welcome_modal():
     return jsonify({'first_run_modal_dismissed': True}), 200
 
 
+
+
+@main_bp.route('/api/preferences/guided-tour-complete', methods=['POST'])
+def guided_tour_complete():
+    """Mark the guided product tour as completed."""
+    user_id = g.user.id if g.user.is_authenticated else 1
+    
+    pref = UserPreference.query.filter_by(user_id=user_id).first()
+    if not pref:
+        pref = UserPreference(user_id=user_id, guided_tour_completed=True)
+        db.session.add(pref)
+    else:
+        pref.guided_tour_completed = True
+    
+    db.session.commit()
+    return jsonify({'guided_tour_completed': True}), 200
+
+
 @main_bp.route('/api/preferences/reset-onboarding', methods=['POST'])
 def reset_onboarding():
     """Reset the onboarding wizard so it shows again on next page load."""
@@ -695,6 +713,7 @@ def inject_preferences():
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
     colored_sellers = pref.colored_sellers if pref else True
     first_run_modal_dismissed = pref.first_run_modal_dismissed if pref else False
+    guided_tour_completed = pref.guided_tour_completed if pref else False
     has_customers = Customer.query.first() is not None
     has_milestones = SyncStatus.is_complete('milestones')
     has_revenue = SyncStatus.is_complete('revenue_import')
@@ -716,6 +735,7 @@ def inject_preferences():
         topic_sort_by_calls=topic_sort_by_calls,
         colored_sellers=colored_sellers,
         first_run_modal_dismissed=first_run_modal_dismissed,
+        guided_tour_completed=guided_tour_completed,
         has_customers=has_customers,
         has_milestones=has_milestones,
         has_revenue=has_revenue,

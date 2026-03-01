@@ -673,6 +673,7 @@ class UserPreference(db.Model):
     colored_sellers = db.Column(db.Boolean, default=True, nullable=False)  # False = grey sellers, True = colored sellers
     show_customers_without_calls = db.Column(db.Boolean, default=True, nullable=False)  # False = hide customers with no calls, True = show all customers
     first_run_modal_dismissed = db.Column(db.Boolean, default=False, nullable=False)  # Track if welcome modal has been dismissed
+    guided_tour_completed = db.Column(db.Boolean, default=False, nullable=False)  # Track if product tour has been shown
     workiq_summary_prompt = db.Column(db.Text, nullable=True)  # Custom WorkIQ meeting summary prompt (null = use default)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
