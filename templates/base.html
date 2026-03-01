@@ -553,8 +553,8 @@
 
                     <!-- STEP 3: Import Accounts -->
                     <div class="onboarding-step d-none" id="onboardingStep3">
-                        <h6 class="mb-3"><i class="bi bi-building text-primary"></i> Import Your Accounts</h6>
-                        <p>We'll import your customer accounts, territories, sellers, and POD members from MSX. This usually takes 1-3 minutes.</p>
+                        <h6 class="mb-3"><i class="bi bi-building text-primary"></i> Import Your Accounts <span class="text-muted fw-normal">(~3 min)</span></h6>
+                        <p>We'll import your customer accounts, territories, sellers, and POD members from MSX.</p>
                         
                         <p class="small text-muted mb-3"><i class="bi bi-shield-lock me-1"></i>Requires VPN. If you get disconnected, just reconnect and retry.</p>
                         
@@ -627,7 +627,7 @@
 
                     <!-- STEP 4: Import Milestones -->
                     <div class="onboarding-step d-none" id="onboardingStep4">
-                        <h6 class="mb-3"><i class="bi bi-flag text-primary"></i> Import Milestones</h6>
+                        <h6 class="mb-3"><i class="bi bi-flag text-primary"></i> Import Milestones <span class="text-muted fw-normal">(~6 min)</span></h6>
                         <p>Now let's pull in your milestone data from MSX. This syncs milestone status for all your accounts.</p>
                         
                         <p class="small text-muted mb-3"><i class="bi bi-shield-lock me-1"></i>Requires VPN. If you get disconnected, just reconnect and retry.</p>
@@ -704,8 +704,8 @@
 
                     <!-- STEP 5: Revenue & Finish -->
                     <div class="onboarding-step d-none" id="onboardingStep5">
-                        <h6 class="mb-3"><i class="bi bi-graph-up text-primary"></i> One More Thing: Revenue Data</h6>
-                        <p>Importing revenue data powers the Revenue Analyzer — trend charts, service breakdowns, and growth tracking for your accounts. It takes about 5 minutes.</p>
+                        <h6 class="mb-3"><i class="bi bi-graph-up text-primary"></i> One More Thing: Revenue Data <span class="text-muted fw-normal">(~1 min)</span></h6>
+                        <p>Importing revenue data powers the Revenue Analyzer — trend charts, service breakdowns, and growth tracking for your accounts.</p>
                         
                         <div class="card mb-3 border-primary">
                             <div class="card-body" id="importRevenueCard">
@@ -917,12 +917,15 @@
                     // Show "already completed" state if navigating to a previously-done step
                     if (step === 3 && accountsImported) {
                         showImportAlreadyDone('importAccounts', 'Accounts already imported');
+                        setWizardProgress(55);
                     }
                     if (step === 4 && milestonesImported) {
                         showImportAlreadyDone('importMilestones', 'Milestones already synced');
+                        setWizardProgress(90);
                     }
                     if (step === 5 && revenueImported) {
                         showRevenueAlreadyDone();
+                        setWizardProgress(100);
                     }
                     // Disable next if step requires completion
                     updateNextButton();
@@ -1396,6 +1399,7 @@
                                 '<li><i class="bi bi-person text-primary"></i> Sellers: ' + (s.sellers_created || 0) + ' created</li>' +
                                 '<li><i class="bi bi-person-gear text-secondary"></i> Solution Engineers: ' + (s.solution_engineers_created || 0) + ' created</li>' +
                                 '<li><i class="bi bi-building text-success"></i> Customers: ' + (s.customers_created || 0) + ' created, ' + (s.customers_skipped || 0) + ' skipped</li>' +
+                                (s.duration ? '<li>Completed in ' + s.duration + 's</li>' : '') +
                                 '</ul>';
                         }
                         showImportState('importAccounts', 'Success');
@@ -1629,6 +1633,7 @@
                                 '<li>' + (finalResult.records_created || 0) + ' records created</li>' +
                                 '<li>' + (finalResult.records_updated || 0) + ' records updated</li>' +
                                 '<li>' + (finalResult.new_months || 0) + ' new months added</li>' +
+                                (finalResult.duration ? '<li>Completed in ' + finalResult.duration + 's</li>' : '') +
                                 '</ul>';
                         }
                         showRevenueState('Success');

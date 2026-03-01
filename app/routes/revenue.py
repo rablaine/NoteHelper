@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.utils import secure_filename
 import csv
 import json
+import time
 import tempfile
 from io import StringIO
 
@@ -114,6 +115,7 @@ def revenue_import_stream():
     def generate():
         """Generator for streaming progress updates."""
         try:
+            import_start_time = time.time()
             # Stream import progress
             import_result = None
             for progress in import_revenue_csv_streaming(content, filename, user_id):
@@ -150,7 +152,8 @@ def revenue_import_stream():
                 "result": {
                     "records_created": import_result.records_created,
                     "records_updated": import_result.records_updated,
-                    "new_months": import_result.new_months_added
+                    "new_months": import_result.new_months_added,
+                    "duration": round(time.time() - import_start_time, 1),
                 }
             }) + "\n\n"
             
