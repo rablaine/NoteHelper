@@ -291,9 +291,26 @@
 <script>
 let taskCategories = [];
 
+// Disable join-team button when VPN is blocked
+fetch('/api/msx/vpn-status').then(r => r.json()).then(data => {
+    if (data.blocked) {
+        const btn = document.getElementById('joinMilestoneTeamBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.replace('btn-outline-primary', 'btn-outline-secondary');
+            btn.title = 'VPN required — connect to corpnet first';
+        }
+    }
+}).catch(() => {});
+
 async function joinMilestoneTeam(milestoneId) {
     const btn = document.getElementById('joinMilestoneTeamBtn');
     if (!btn) return;
+    // Pre-flight VPN check
+    if (window.isVpnBlocked && window.isVpnBlocked()) {
+        window.showVpnBanner();
+        return;
+    }
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
     btn.disabled = true;

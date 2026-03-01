@@ -476,6 +476,13 @@ async function loadMsxStatus() {
                     </div>
                 </div>
             `;
+            // Disable import button when off VPN
+            const importBtn = document.getElementById('importFromMsxBtn');
+            if (importBtn) {
+                importBtn.disabled = true;
+                importBtn.classList.replace('btn-primary', 'btn-secondary');
+                importBtn.title = 'VPN required — connect to corpnet first';
+            }
             return;
         }
 
@@ -793,6 +800,11 @@ document.getElementById('exportCallLogsCsvBtn').addEventListener('click', functi
 
 // MSX Import Accounts (SSE streaming)
 document.getElementById('importFromMsxBtn').addEventListener('click', async function() {
+    // Pre-flight VPN check
+    if (window.isVpnBlocked && window.isVpnBlocked()) {
+        window.showVpnBanner();
+        return;
+    }
     const btn = this;
     const progressDiv = document.getElementById('msxImportProgress');
     const resultsDiv = document.getElementById('msxImportResults');

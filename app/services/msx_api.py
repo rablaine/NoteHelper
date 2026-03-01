@@ -789,6 +789,10 @@ def get_opportunity(opportunity_id: str) -> Dict[str, Any]:
         
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
+            return {"success": False, "error": "Access denied. You may not have permission to view this opportunity."}
         elif response.status_code == 404:
             return {"success": False, "error": "Opportunity not found in MSX."}
         else:
@@ -874,6 +878,8 @@ def add_opportunity_comment(
                 "success": True,
                 "comment_count": len(current_comments),
             }
+        elif patch_response.status_code == 403 and is_vpn_blocked():
+            return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
         else:
             return {
                 "success": False,
@@ -931,6 +937,8 @@ def get_my_milestone_team_ids() -> Dict[str, Any]:
         )
         response = _msx_request('GET', url)
         if response.status_code != 200:
+            if response.status_code == 403 and is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True, "milestone_ids": set()}
             return {
                 "success": False,
                 "error": f"HTTP {response.status_code}: {response.text[:200]}",
@@ -1018,6 +1026,8 @@ def get_my_deal_team_ids() -> Dict[str, Any]:
         )
         response = _msx_request('GET', url)
         if response.status_code != 200:
+            if response.status_code == 403 and is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True, "opportunity_ids": set()}
             return {
                 "success": False,
                 "error": f"HTTP {response.status_code}: {response.text[:200]}",

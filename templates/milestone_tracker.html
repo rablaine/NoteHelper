@@ -348,7 +348,25 @@
 // =============================================================================
 // Join Milestone Team (inline tracker)
 // =============================================================================
+// Disable join-team buttons when VPN is blocked
+fetch('/api/msx/vpn-status').then(r => r.json()).then(data => {
+    if (data.blocked) {
+        document.querySelectorAll('.btn-outline-primary[onclick*="joinTrackerTeam"]').forEach(btn => {
+            btn.disabled = true;
+            btn.classList.replace('btn-outline-primary', 'btn-outline-secondary');
+            btn.title = 'VPN required \u2014 connect to corpnet first';
+        });
+    }
+}).catch(() => {});
+
 async function joinTrackerTeam(btn, milestoneId) {
+    // Pre-flight VPN check
+    if (window.isVpnBlocked && window.isVpnBlocked()) {
+        window.showVpnBanner();
+        return;
+    }
+    // Confirmation dialog
+    if (!confirm('Join the milestone team in MSX? This will add you to the access team for this milestone.')) return;
     const origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
