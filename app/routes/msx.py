@@ -10,6 +10,7 @@ Provides API endpoints for MSX (Dynamics 365) integration:
 """
 
 import json
+import time
 from flask import Blueprint, jsonify, request, Response, g, current_app
 import logging
 
@@ -859,6 +860,7 @@ def import_stream():
             # This matches how the app handles single-user mode
             user_id = 1
             
+            import_start_time = time.time()
             yield "data: " + json.dumps({"message": "Starting MSX import..."}) + "\n\n"
             
             # 1. Initialize - get all account IDs
@@ -1366,6 +1368,7 @@ def import_stream():
                     "verticals_created": verticals_created,
                     "customers_created": customers_created,
                     "customers_skipped": customers_skipped,
+                    "duration": round(time.time() - import_start_time, 1),
                 }
             }) + "\n\n"
             
