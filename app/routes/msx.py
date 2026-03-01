@@ -70,16 +70,12 @@ def set_vpn_blocked_status(response):
     This ensures the global fetch interceptor in base.html can detect
     VPN blocks from any MSX endpoint, even when the route handler
     returns a 200 with an error in the JSON body.
-
-    Only promotes responses where success=False (actual errors), not
-    informational endpoints like /status or /vpn-status that merely
-    report the current VPN state.
     """
     if response.content_type and 'application/json' in response.content_type:
         if response.status_code == 200:
             try:
                 data = json.loads(response.get_data(as_text=True))
-                if data and data.get('vpn_blocked') and data.get('success') is False:
+                if data and data.get('vpn_blocked'):
                     response.status_code = 403
             except Exception:
                 pass

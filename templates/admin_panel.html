@@ -339,10 +339,15 @@
                     <!-- Delete Operations -->
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <h6><i class="bi bi-trash"></i> Clear All Data</h6>
-                            <p class="small text-danger mb-2">Deletes ALL data from ALL users</p>
-                            <button class="btn btn-sm btn-danger" id="clearAllDataBtn">
-                                <i class="bi bi-trash"></i> Clear Everything
+                            <h6><i class="bi bi-flag"></i> Delete Milestone & Opportunity Data</h6>
+                            <p class="small text-muted mb-1">
+                                <strong>{{ stats.total_milestones }}</strong> milestones,
+                                <strong>{{ stats.total_opportunities }}</strong> opportunities,
+                                <strong>{{ stats.total_msx_tasks }}</strong> tasks
+                            </p>
+                            <p class="small text-muted mb-2">Delete all milestone and opportunity data to re-sync from MSX.</p>
+                            <button class="btn btn-sm btn-danger" id="clearMilestonesBtn">
+                                <i class="bi bi-trash"></i> Delete Milestone Data
                             </button>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -355,6 +360,16 @@
                             <p class="small text-muted mb-2">Delete all revenue data to re-import with updated matching.</p>
                             <button class="btn btn-sm btn-danger" id="clearRevenueBtn">
                                 <i class="bi bi-trash"></i> Delete Revenue Data
+                            </button>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="bi bi-trash"></i> Clear All Data</h6>
+                            <p class="small text-danger mb-2">Deletes ALL data from ALL users</p>
+                            <button class="btn btn-sm btn-danger" id="clearAllDataBtn">
+                                <i class="bi bi-trash"></i> Clear Everything
                             </button>
                         </div>
                     </div>
@@ -399,6 +414,31 @@ document.getElementById('clearRevenueBtn').addEventListener('click', function() 
     const confirmation = prompt('This will delete all revenue data (records, analyses, imports).\n\nType "DELETE REVENUE" to confirm:');
     if (confirmation === 'DELETE REVENUE') {
         fetch('/api/admin/clear-revenue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+    } else if (confirmation !== null) {
+        alert('Confirmation text did not match. Operation cancelled.');
+    }
+});
+
+// Clear Milestone & Opportunity Data
+document.getElementById('clearMilestonesBtn').addEventListener('click', function() {
+    const confirmation = prompt('This will delete all milestones, opportunities, and tasks.\n\nType "DELETE MILESTONES" to confirm:');
+    if (confirmation === 'DELETE MILESTONES') {
+        fetch('/api/admin/clear-milestones', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         })

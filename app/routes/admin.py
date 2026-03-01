@@ -7,7 +7,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.models import (
     db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
     RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
-    RevenueConfig, RevenueEngagement, utc_now
+    RevenueConfig, RevenueEngagement, Milestone, Opportunity, MsxTask,
+    call_logs_milestones, utc_now
 )
 
 # Create blueprint
@@ -30,7 +31,10 @@ def admin_panel():
         'total_call_logs': CallLog.query.count(),
         'total_revenue_records': CustomerRevenueData.query.count() + ProductRevenueData.query.count(),
         'total_revenue_analyses': RevenueAnalysis.query.count(),
-        'total_revenue_imports': RevenueImport.query.count()
+        'total_revenue_imports': RevenueImport.query.count(),
+        'total_milestones': Milestone.query.count(),
+        'total_opportunities': Opportunity.query.count(),
+        'total_msx_tasks': MsxTask.query.count()
     }
     
     # AI configuration status
@@ -82,6 +86,30 @@ def api_clear_revenue_data():
         return jsonify({
             'success': True,
             'message': f'Deleted {total} revenue records.',
+            'details': deleted
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/clear-milestones', methods=['POST'])
+def api_clear_milestone_data():
+    """Delete all milestone and opportunity data (milestones, opportunities, tasks, associations)."""
+    try:
+        deleted = {}
+        # Clear associations first (FK constraints)
+        deleted['call_log_links'] = db.session.execute(
+            call_logs_milestones.delete()
+        ).rowcount
+        deleted['tasks'] = MsxTask.query.delete()
+        deleted['milestones'] = Milestone.query.delete()
+        deleted['opportunities'] = Opportunity.query.delete()
+        db.session.commit()
+        total = sum(deleted.values())
+        return jsonify({
+            'success': True,
+            'message': f'Deleted {total} milestone/opportunity records.',
             'details': deleted
         })
     except Exception as e:

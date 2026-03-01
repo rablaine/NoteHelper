@@ -798,7 +798,7 @@ class TestWizardOptionalSteps:
         response = client.get('/')
         html = response.data.decode('utf-8')
         # There should be VPN warnings (step 3 and step 4)
-        assert html.count('Requires VPN.') >= 2
+        assert html.count('VPN required.') >= 2
 
     def test_step4_has_revenue_tip(self, client, app):
         """Step 4 should have the revenue export tip."""
