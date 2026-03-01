@@ -7,7 +7,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from app.models import (
     db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
     RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
-    RevenueConfig, RevenueEngagement, utc_now
+    RevenueConfig, RevenueEngagement, Milestone, Opportunity, MsxTask,
+    SyncStatus, call_logs_milestones, utc_now
 )
 
 # Create blueprint
@@ -30,7 +31,10 @@ def admin_panel():
         'total_call_logs': CallLog.query.count(),
         'total_revenue_records': CustomerRevenueData.query.count() + ProductRevenueData.query.count(),
         'total_revenue_analyses': RevenueAnalysis.query.count(),
-        'total_revenue_imports': RevenueImport.query.count()
+        'total_revenue_imports': RevenueImport.query.count(),
+        'total_milestones': Milestone.query.count(),
+        'total_opportunities': Opportunity.query.count(),
+        'total_msx_tasks': MsxTask.query.count()
     }
     
     # AI configuration status
@@ -77,11 +81,40 @@ def api_clear_revenue_data():
         deleted['bucket_records'] = CustomerRevenueData.query.delete()
         deleted['imports'] = RevenueImport.query.delete()
         deleted['configs'] = RevenueConfig.query.delete()
+        # Reset sync statuses so wizard/UI returns to clean state
+        SyncStatus.reset('revenue_import')
+        SyncStatus.reset('revenue_analysis')
         db.session.commit()
         total = sum(deleted.values())
         return jsonify({
             'success': True,
             'message': f'Deleted {total} revenue records.',
+            'details': deleted
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/clear-milestones', methods=['POST'])
+def api_clear_milestone_data():
+    """Delete all milestone and opportunity data (milestones, opportunities, tasks, associations)."""
+    try:
+        deleted = {}
+        # Clear associations first (FK constraints)
+        deleted['call_log_links'] = db.session.execute(
+            call_logs_milestones.delete()
+        ).rowcount
+        deleted['tasks'] = MsxTask.query.delete()
+        deleted['milestones'] = Milestone.query.delete()
+        deleted['opportunities'] = Opportunity.query.delete()
+        # Reset sync status so wizard/UI returns to clean state
+        SyncStatus.reset('milestones')
+        db.session.commit()
+        total = sum(deleted.values())
+        return jsonify({
+            'success': True,
+            'message': f'Deleted {total} milestone/opportunity records.',
             'details': deleted
         })
     except Exception as e:

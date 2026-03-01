@@ -106,6 +106,15 @@
         try {
             const resp = await fetch('/api/msx/status');
             const data = await resp.json();
+
+            // If VPN is blocked, don't show auth banner at all —
+            // the global VPN banner in base.html handles this.
+            // Re-authenticating would just get a token that can't reach MSX.
+            if (data.vpn_blocked) {
+                hideBanner();
+                return;
+            }
+
             if (data.authenticated) {
                 hideBanner();
                 return;

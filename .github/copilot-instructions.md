@@ -309,7 +309,6 @@ pytest --cov=app tests/  # with coverage
 - Search and filter notes by multiple criteria
 - Associate notes with customer accounts
 - Track who created each note and when
-- Data import/export for backup and migration (JSON and CSV formats)
 - User preferences (dark mode, view options)
 - Clickable UI elements throughout for improved navigation
 

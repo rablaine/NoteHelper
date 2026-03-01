@@ -13,9 +13,16 @@ import logging
 from datetime import datetime as dt, timezone as tz
 from typing import Optional, Dict, Any, List, Callable
 
-from app.services.msx_auth import get_msx_token, refresh_token, CRM_BASE_URL
+from app.services.msx_auth import (
+    get_msx_token, refresh_token, CRM_BASE_URL,
+    is_vpn_blocked, set_vpn_blocked, clear_vpn_block,
+)
 
 logger = logging.getLogger(__name__)
+
+# Error code / message patterns for IP-blocked responses
+IP_BLOCKED_CODE = "0x80095ffe"
+IP_BLOCKED_MESSAGE = "IP address is blocked"
 
 # MSX app ID for account URLs
 MSX_APP_ID = "fe0c3504-3700-e911-a849-000d3a10b7cc"
@@ -90,6 +97,16 @@ def _msx_request(
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
     
+    def _is_ip_blocked(resp):
+        """Check if a response indicates IP-based blocking (off-VPN)."""
+        if resp.status_code != 403:
+            return False
+        try:
+            body = resp.text
+            return IP_BLOCKED_CODE in body or IP_BLOCKED_MESSAGE in body
+        except Exception:
+            return False
+    
     # Retry loop for transient failures (timeouts, connection errors)
     last_exception = None
     for attempt in range(MAX_RETRIES):
@@ -113,7 +130,8 @@ def _msx_request(
                 raise
     
     # Check for auth failures that might be due to stale token
-    if response.status_code in (401, 403) and retry_on_auth_failure:
+    # Skip token-refresh retry if it's an IP block — fresh token won't help
+    if response.status_code in (401, 403) and retry_on_auth_failure and not _is_ip_blocked(response):
         logger.info(f"Got {response.status_code} from MSX, forcing token refresh and retrying...")
         
         # Force token refresh
@@ -150,6 +168,16 @@ def _msx_request(
         
         if response.status_code in (401, 403):
             logger.warning(f"Still got {response.status_code} after token refresh - likely a real permission issue")
+    
+    # --- VPN / IP-blocked detection ---
+    if _is_ip_blocked(response):
+        set_vpn_blocked("MSX rejected request — IP address not on corpnet/VPN.")
+        return response
+    
+    # If we got a successful response and VPN was previously blocked, clear it
+    if response.ok and is_vpn_blocked():
+        logger.info("MSX request succeeded — clearing VPN block state")
+        clear_vpn_block()
     
     return response
 
@@ -351,6 +379,8 @@ def lookup_account_by_tpid(tpid: str, customer_name: Optional[str] = None) -> Di
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
             return {"success": False, "error": "Access denied. You may not have permission to query accounts."}
         else:
             return {
@@ -622,6 +652,8 @@ def get_milestones_by_account(
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
             return {"success": False, "error": "Access denied. You may not have permission to query milestones."}
         else:
             return {
@@ -757,6 +789,10 @@ def get_opportunity(opportunity_id: str) -> Dict[str, Any]:
         
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
+            return {"success": False, "error": "Access denied. You may not have permission to view this opportunity."}
         elif response.status_code == 404:
             return {"success": False, "error": "Opportunity not found in MSX."}
         else:
@@ -842,6 +878,8 @@ def add_opportunity_comment(
                 "success": True,
                 "comment_count": len(current_comments),
             }
+        elif patch_response.status_code == 403 and is_vpn_blocked():
+            return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
         else:
             return {
                 "success": False,
@@ -899,6 +937,8 @@ def get_my_milestone_team_ids() -> Dict[str, Any]:
         )
         response = _msx_request('GET', url)
         if response.status_code != 200:
+            if response.status_code == 403 and is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True, "milestone_ids": set()}
             return {
                 "success": False,
                 "error": f"HTTP {response.status_code}: {response.text[:200]}",
@@ -986,6 +1026,8 @@ def get_my_deal_team_ids() -> Dict[str, Any]:
         )
         response = _msx_request('GET', url)
         if response.status_code != 200:
+            if response.status_code == 403 and is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True, "opportunity_ids": set()}
             return {
                 "success": False,
                 "error": f"HTTP {response.status_code}: {response.text[:200]}",
@@ -1241,6 +1283,8 @@ def create_task(
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
             return {"success": False, "error": "Access denied. You may not have permission to create tasks."}
         else:
             return {
@@ -1319,6 +1363,10 @@ def query_entity(
             }
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
+            return {"success": False, "error": "Access denied."}
         elif response.status_code == 404:
             return {"success": False, "error": f"Entity '{entity_name}' not found."}
         else:
@@ -1356,6 +1404,8 @@ def query_next_page(next_link: str) -> Dict[str, Any]:
                 "records": records,
                 "next_link": new_next_link
             }
+        elif response.status_code == 403 and is_vpn_blocked():
+            return {"success": False, "error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}
         else:
             return {
                 "success": False,

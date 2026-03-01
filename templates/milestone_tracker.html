@@ -335,7 +335,7 @@
         Click <strong>Sync from MSX</strong> to pull milestones for your customers,
         or make sure your customers have MSX account links (TPID URLs).
     </p>
-    <button class="btn btn-primary" onclick="syncMilestones()">
+    <button id="syncBtnEmpty" class="btn btn-primary" onclick="syncMilestones()">
         <i class="bi bi-arrow-repeat"></i> Sync from MSX
     </button>
 </div>
@@ -348,7 +348,25 @@
 // =============================================================================
 // Join Milestone Team (inline tracker)
 // =============================================================================
+// Disable join-team buttons when VPN is blocked
+fetch('/api/msx/vpn-status').then(r => r.json()).then(data => {
+    if (data.blocked) {
+        document.querySelectorAll('.btn-outline-primary[onclick*="joinTrackerTeam"]').forEach(btn => {
+            btn.disabled = true;
+            btn.classList.replace('btn-outline-primary', 'btn-outline-secondary');
+            btn.title = 'VPN required \u2014 connect to corpnet first';
+        });
+    }
+}).catch(() => {});
+
 async function joinTrackerTeam(btn, milestoneId) {
+    // Pre-flight VPN check
+    if (window.isVpnBlocked && window.isVpnBlocked()) {
+        window.showVpnBanner();
+        return;
+    }
+    // Confirmation dialog
+    if (!confirm('Join the milestone team in MSX? This will add you to the access team for this milestone.')) return;
     const origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
@@ -385,6 +403,7 @@ async function joinTrackerTeam(btn, milestoneId) {
 // =============================================================================
 function syncMilestones() {
     const btn = document.getElementById('syncBtn');
+    const btnEmpty = document.getElementById('syncBtnEmpty');
     const alertEl = document.getElementById('syncAlert');
     const msg = document.getElementById('syncMessage');
     const progressWrap = document.getElementById('syncProgressWrap');
@@ -395,9 +414,16 @@ function syncMilestones() {
     function warnOnLeave(e) { e.preventDefault(); e.returnValue = ''; }
     window.addEventListener('beforeunload', warnOnLeave);
 
-    // Disable button, show spinner
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing...';
+    // Disable both sync buttons so user can't double-trigger
+    const syncingHtml = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing...';
+    if (btn) { btn.disabled = true; btn.innerHTML = syncingHtml; }
+    if (btnEmpty) { btnEmpty.disabled = true; btnEmpty.innerHTML = syncingHtml; }
+
+    function restoreButtons() {
+        const originalHtml = '<i class="bi bi-arrow-repeat"></i> Sync from MSX';
+        if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
+        if (btnEmpty) { btnEmpty.disabled = false; btnEmpty.innerHTML = originalHtml; }
+    }
 
     // Show progress alert
     alertEl.className = 'alert alert-info mb-4';
@@ -460,14 +486,28 @@ function syncMilestones() {
                     detail.innerHTML = info;
                 } else {
                     detail.innerHTML = `<i class="bi bi-x-circle text-danger"></i> ${data.customer}: ${data.error}`;
+                    // Show VPN banner if error indicates IP block
+                    if (data.error && window.isVpnBlocked && window.isVpnBlocked(data.error)) {
+                        window.showVpnBanner();
+                    }
                 }
+            } else if (type === 'vpn_blocked') {
+                // VPN block detected — show banner and stop the progress display
+                if (window.showVpnBanner) window.showVpnBanner();
+                window.removeEventListener('beforeunload', warnOnLeave);
+                progressBar.classList.remove('progress-bar-animated');
+                restoreButtons();
+                alertEl.className = 'alert alert-danger mb-4';
+                msg.innerHTML = '<i class="bi bi-shield-exclamation"></i> ' +
+                    '<strong>VPN Required:</strong> ' + (data.message || 'IP address is blocked.') +
+                    (data.skipped ? ' (' + data.skipped + ' customers skipped)' : '');
+                detail.innerHTML = '';
             } else if (type === 'complete') {
                 window.removeEventListener('beforeunload', warnOnLeave);
                 progressBar.classList.remove('progress-bar-animated');
                 progressBar.style.width = '100%';
                 progressBar.textContent = '100%';
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync from MSX';
+                restoreButtons();
 
                 if (data.success) {
                     const brToggle = document.getElementById('syncBrainrotToggle');
@@ -508,8 +548,7 @@ function syncMilestones() {
         return pump();
     }).catch(error => {
         window.removeEventListener('beforeunload', warnOnLeave);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync from MSX';
+        restoreButtons();
         alertEl.className = 'alert alert-danger mb-4';
         msg.innerHTML = `<i class="bi bi-x-circle-fill"></i> Sync error: ${error.message}`;
         const brToggle3 = document.getElementById('syncBrainrotToggle');

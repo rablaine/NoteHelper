@@ -245,24 +245,6 @@
             </div>
         </div>
 
-        <!-- Export Call Logs -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-download"></i> Export Call Logs</h5>
-            </div>
-            <div class="card-body">
-                <p class="text-muted small mb-2">Export your call logs with enriched data for backup or analysis.</p>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-success" id="exportCallLogsJsonBtn">
-                        <i class="bi bi-file-earmark-code"></i> JSON
-                    </button>
-                    <button class="btn btn-success" id="exportCallLogsCsvBtn">
-                        <i class="bi bi-file-earmark-spreadsheet"></i> CSV
-                    </button>
-                </div>
-            </div>
-        </div>
-
         <!-- Setup Wizard -->
         {% set setup_complete = has_customers and has_milestones and has_revenue %}
         <div class="card mb-4">
@@ -311,38 +293,18 @@
             </div>
             <div class="collapse" id="dangerZoneCollapse">
                 <div class="card-body">
-                    <!-- System Backup & Restore -->
-                    <div class="row mb-4">
-                        <div class="col-md-6 mb-3">
-                            <h6><i class="bi bi-download"></i> System Backup (Export)</h6>
-                            <div class="d-flex gap-2">
-                                <a href="{{ url_for('main.export_full_json') }}" class="btn btn-sm btn-primary">
-                                    <i class="bi bi-filetype-json"></i> JSON
-                                </a>
-                                <a href="{{ url_for('main.export_full_csv') }}" class="btn btn-sm btn-info">
-                                    <i class="bi bi-filetype-csv"></i> CSV
-                                </a>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <h6><i class="bi bi-upload"></i> System Restore (Import)</h6>
-                            <form id="importJsonForm" enctype="multipart/form-data">
-                                <input type="file" class="form-control form-control-sm mb-2" id="importJsonFile" accept=".json" required>
-                                <button type="submit" class="btn btn-sm btn-warning">
-                                    <i class="bi bi-upload"></i> Restore Backup
-                                </button>
-                            </form>
-                            <div id="importJsonResult" class="mt-2"></div>
-                        </div>
-                    </div>
-                    <hr>
                     <!-- Delete Operations -->
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <h6><i class="bi bi-trash"></i> Clear All Data</h6>
-                            <p class="small text-danger mb-2">Deletes ALL data from ALL users</p>
-                            <button class="btn btn-sm btn-danger" id="clearAllDataBtn">
-                                <i class="bi bi-trash"></i> Clear Everything
+                            <h6><i class="bi bi-flag"></i> Delete Milestone & Opportunity Data</h6>
+                            <p class="small text-muted mb-1">
+                                <strong>{{ stats.total_milestones }}</strong> milestones,
+                                <strong>{{ stats.total_opportunities }}</strong> opportunities,
+                                <strong>{{ stats.total_msx_tasks }}</strong> tasks
+                            </p>
+                            <p class="small text-muted mb-2">Delete all milestone and opportunity data to re-sync from MSX.</p>
+                            <button class="btn btn-sm btn-danger" id="clearMilestonesBtn">
+                                <i class="bi bi-trash"></i> Delete Milestone Data
                             </button>
                         </div>
                         <div class="col-md-6 mb-3">
@@ -366,33 +328,6 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-
-// Clear All Data
-document.getElementById('clearAllDataBtn').addEventListener('click', function() {
-    const confirmation = prompt('⚠️ WARNING: This will delete ALL data from ALL users!\n\nType "DELETE ALL DATA" to confirm:');
-    if (confirmation === 'DELETE ALL DATA') {
-        fetch('/api/data-management/clear', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('All data has been cleared successfully.');
-                location.reload();
-            } else {
-                alert('Error: ' + data.error);
-            }
-        })
-        .catch(error => {
-            alert('Error: ' + error);
-        });
-    } else if (confirmation !== null) {
-        alert('Confirmation text did not match. Operation cancelled.');
-    }
-});
 
 // Clear Revenue Data
 document.getElementById('clearRevenueBtn').addEventListener('click', function() {
@@ -419,43 +354,28 @@ document.getElementById('clearRevenueBtn').addEventListener('click', function() 
     }
 });
 
-// JSON Import
-document.getElementById('importJsonForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const fileInput = document.getElementById('importJsonFile');
-    const resultDiv = document.getElementById('importJsonResult');
-    
-    if (!fileInput.files[0]) {
-        resultDiv.innerHTML = '<div class="alert alert-danger mt-2">Please select a file</div>';
-        return;
-    }
-    
-    if (!confirm('⚠️ WARNING: This will import data and may create duplicate entries if not cleared first.\n\nAre you sure you want to proceed?')) {
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    
-    resultDiv.innerHTML = '<div class="alert alert-info">Importing... <div class="spinner-border spinner-border-sm ms-2"></div></div>';
-    
-    try {
-        const response = await fetch('/api/data-management/import/json', {
+// Clear Milestone & Opportunity Data
+document.getElementById('clearMilestonesBtn').addEventListener('click', function() {
+    const confirmation = prompt('This will delete all milestones, opportunities, and tasks.\n\nType "DELETE MILESTONES" to confirm:');
+    if (confirmation === 'DELETE MILESTONES') {
+        fetch('/api/admin/clear-milestones', {
             method: 'POST',
-            body: formData
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
         });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            resultDiv.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle"></i> ${data.message}</div>`;
-            fileInput.value = '';
-        } else {
-            resultDiv.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ${data.error}</div>`;
-        }
-    } catch (error) {
-        resultDiv.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> Import failed: ${error.message}</div>`;
+    } else if (confirmation !== null) {
+        alert('Confirmation text did not match. Operation cancelled.');
     }
 });
 
@@ -466,6 +386,26 @@ async function loadMsxStatus() {
         const response = await fetch('/api/msx/status');
         const data = await response.json();
         
+        if (data.vpn_blocked) {
+            statusDiv.innerHTML = `
+                <div class="d-flex align-items-center gap-2 text-danger">
+                    <i class="bi bi-shield-exclamation fs-4"></i>
+                    <div>
+                        <strong>VPN Required</strong><br>
+                        <small>IP address blocked — connect to VPN and use the banner above to retry</small>
+                    </div>
+                </div>
+            `;
+            // Disable import button when off VPN
+            const importBtn = document.getElementById('importFromMsxBtn');
+            if (importBtn) {
+                importBtn.disabled = true;
+                importBtn.classList.replace('btn-primary', 'btn-secondary');
+                importBtn.title = 'VPN required — connect to corpnet first';
+            }
+            return;
+        }
+
         if (data.authenticated) {
             statusDiv.innerHTML = `
                 <div class="d-flex align-items-center gap-2 text-success">
@@ -529,6 +469,15 @@ async function checkAdminAuth() {
     try {
         const resp = await fetch('/api/msx/status');
         const data = await resp.json();
+
+        // If VPN is blocked, show error instead of auto-completing login
+        if (data.vpn_blocked) {
+            showAdminAuthState('adminAuthError');
+            const errEl = document.getElementById('adminAuthErrorMsg');
+            if (errEl) errEl.textContent = 'VPN required — connect to corpnet first.';
+            return;
+        }
+
         if (data.authenticated) {
             showAdminAuthState('adminAuthSuccess');
             return;
@@ -761,16 +710,13 @@ if (aiTestBtn) {
     });
 }
 
-// Export Call Logs
-document.getElementById('exportCallLogsJsonBtn').addEventListener('click', function() {
-    window.location.href = '/api/data-management/export/call-logs-json';
-});
-document.getElementById('exportCallLogsCsvBtn').addEventListener('click', function() {
-    window.location.href = '/api/data-management/export/call-logs-csv';
-});
-
 // MSX Import Accounts (SSE streaming)
 document.getElementById('importFromMsxBtn').addEventListener('click', async function() {
+    // Pre-flight VPN check
+    if (window.isVpnBlocked && window.isVpnBlocked()) {
+        window.showVpnBanner();
+        return;
+    }
     const btn = this;
     const progressDiv = document.getElementById('msxImportProgress');
     const resultsDiv = document.getElementById('msxImportResults');

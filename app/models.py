@@ -1051,6 +1051,12 @@ class SyncStatus(db.Model):
         return base
     
     @classmethod
+    def reset(cls, sync_type: str) -> None:
+        """Delete sync status for the given type, returning it to 'never_run' state."""
+        cls.query.filter_by(sync_type=sync_type).delete()
+        db.session.flush()
+
+    @classmethod
     def mark_started(cls, sync_type: str) -> 'SyncStatus':
         """Mark a sync as started (clears previous completion)."""
         status = cls.query.filter_by(sync_type=sync_type).first()

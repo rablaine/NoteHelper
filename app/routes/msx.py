@@ -26,6 +26,9 @@ from app.services.msx_auth import (
     get_az_login_process_status,
     set_subscription,
     az_logout,
+    is_vpn_blocked,
+    get_vpn_state,
+    check_vpn_recovery,
 )
 from app.services.msx_api import (
     test_connection,
@@ -58,6 +61,25 @@ from app.models import Customer, Milestone, Territory, Seller, POD, SolutionEngi
 logger = logging.getLogger(__name__)
 
 msx_bp = Blueprint('msx', __name__, url_prefix='/api/msx')
+
+
+@msx_bp.after_request
+def set_vpn_blocked_status(response):
+    """Return 403 status on JSON responses that indicate VPN/IP block.
+
+    This ensures the global fetch interceptor in base.html can detect
+    VPN blocks from any MSX endpoint, even when the route handler
+    returns a 200 with an error in the JSON body.
+    """
+    if response.content_type and 'application/json' in response.content_type:
+        if response.status_code == 200:
+            try:
+                data = json.loads(response.get_data(as_text=True))
+                if data and data.get('vpn_blocked'):
+                    response.status_code = 403
+            except Exception:
+                pass
+    return response
 
 
 @msx_bp.route('/status')
@@ -97,6 +119,24 @@ def clear():
     """Clear cached MSX tokens."""
     clear_token_cache()
     return jsonify({"success": True, "message": "Token cache cleared"})
+
+
+@msx_bp.route('/vpn-status')
+def vpn_status():
+    """Get current VPN blocked state."""
+    state = get_vpn_state()
+    if state.get("blocked_at"):
+        state["blocked_at"] = state["blocked_at"].isoformat()
+    if state.get("last_check"):
+        state["last_check"] = state["last_check"].isoformat()
+    return jsonify(state)
+
+
+@msx_bp.route('/vpn-check', methods=['POST'])
+def vpn_check():
+    """User says they're back on VPN — test MSX and clear block if OK."""
+    result = check_vpn_recovery()
+    return jsonify(result)
 
 
 @msx_bp.route('/test')
@@ -826,7 +866,11 @@ def import_stream():
             
             init_result = scan_init()
             if not init_result.get("success"):
-                yield "data: " + json.dumps({"error": init_result.get("error", "Failed to initialize scan")}) + "\n\n"
+                error_msg = init_result.get("error", "Failed to initialize scan")
+                if init_result.get("vpn_blocked") or is_vpn_blocked():
+                    yield "data: " + json.dumps({"error": error_msg, "vpn_blocked": True}) + "\n\n"
+                else:
+                    yield "data: " + json.dumps({"error": error_msg}) + "\n\n"
                 return
             
             account_ids = init_result.get("account_ids", [])
@@ -852,6 +896,11 @@ def import_stream():
             }) + "\n\n"
 
             for batch_num, i in enumerate(range(0, len(account_ids), BATCH_SIZE), start=1):
+                # Bail early on VPN block
+                if is_vpn_blocked():
+                    yield "data: " + json.dumps({"error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}) + "\n\n"
+                    return
+
                 batch = account_ids[i:i + BATCH_SIZE]
                 filter_parts = [f"accountid eq {aid}" for aid in batch]
                 filter_query = " or ".join(filter_parts)

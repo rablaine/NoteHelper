@@ -89,7 +89,7 @@ def seller_view(id):
     # Check if seller can be deleted (no associated customers)
     can_delete = len(seller.customers) == 0
     
-    # Get revenue alerts for this seller's customers
+    # Get revenue analysis for this seller's customers
     from app.services.revenue_analysis import get_seller_alerts
     revenue_alerts = get_seller_alerts(seller.name)
     

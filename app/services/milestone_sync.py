@@ -17,6 +17,7 @@ from app.services.msx_api import (
     get_my_milestone_team_ids,
     build_milestone_url,
 )
+from app.services.msx_auth import is_vpn_blocked
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,11 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
     logger.info(f"Starting milestone sync for {len(customers)} customers")
     
     for customer in customers:
+        # Bail early if VPN block was detected during this sync
+        if is_vpn_blocked():
+            results["errors"].append("VPN/IP block detected — remaining customers skipped.")
+            break
+
         try:
             customer_result = sync_customer_milestones(customer, user_id)
             
@@ -178,6 +184,18 @@ def sync_all_customer_milestones_stream(
 
     for i, customer in enumerate(customers, 1):
         name = customer.get_display_name()
+
+        # Bail early if VPN block was detected during this sync
+        if is_vpn_blocked():
+            remaining = total - i + 1
+            yield _sse_event('vpn_blocked', {
+                'message': 'IP address is blocked — connect to VPN and retry.',
+                'skipped': remaining,
+            })
+            errors.append("VPN/IP block detected — remaining customers skipped.")
+            failed += remaining
+            break
+
         try:
             result = sync_customer_milestones(customer, user_id)
             if result['success']:

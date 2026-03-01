@@ -32,11 +32,13 @@ def opportunity_view(id: int):
     # Fetch fresh opportunity data from MSX
     msx_data = None
     msx_error = None
+    vpn_blocked = False
     msx_result = get_opportunity(opportunity.msx_opportunity_id)
     if msx_result.get("success"):
         msx_data = msx_result["opportunity"]
     else:
         msx_error = msx_result.get("error", "Could not fetch from MSX")
+        vpn_blocked = msx_result.get("vpn_blocked", False)
     
     return render_template(
         'opportunity_view.html',
@@ -44,6 +46,7 @@ def opportunity_view(id: int):
         milestones=milestones,
         msx_data=msx_data,
         msx_error=msx_error,
+        vpn_blocked=vpn_blocked,
     )
 
 
