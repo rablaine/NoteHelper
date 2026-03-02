@@ -276,6 +276,10 @@ def api_sync_milestones():
     Streams real-time progress events as each customer is synced.
     Falls back to JSON response if Accept header doesn't include event-stream.
     """
+    from app.models import Customer
+    if Customer.query.first() is None:
+        return jsonify({'success': False, 'error': 'Import accounts first'}), 400
+
     from app.services.milestone_sync import (
         sync_all_customer_milestones,
         sync_all_customer_milestones_stream,
