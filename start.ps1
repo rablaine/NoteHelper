@@ -45,10 +45,13 @@ function Install-WithWinget {
         if ($response -eq 'Y' -or $response -eq 'y') {
             Write-Host ""
             Write-Host "  [SETUP] Installing $Name via winget..." -ForegroundColor Yellow
-            winget install $PackageId --accept-package-agreements --accept-source-agreements
+            winget install $PackageId --source winget --accept-package-agreements --accept-source-agreements
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  [OK] $Name installed." -ForegroundColor Green
-                Write-Host "        You may need to close and reopen this window for it to take effect." -ForegroundColor Gray
+                # Refresh PATH so the current session can find the new binary
+                $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+                $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+                $env:Path = "$machinePath;$userPath"
                 return $true
             } else {
                 Write-Host "  [ERROR] Installation failed." -ForegroundColor Red
@@ -197,29 +200,43 @@ Write-Host "  ==========" -ForegroundColor Cyan
 Write-Host ""
 
 # -- Step 1: Check Python -----------------------------------------------------
+function Test-PythonOk {
+    try {
+        $ver = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+        if ($ver) {
+            $parts = $ver.Split('.')
+            if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 13) {
+                return $ver
+            }
+        }
+    } catch {}
+    return $null
+}
+
 $pythonOk = $false
-try {
-    $pyVersion = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
-    if ($pyVersion) {
-        $parts = $pyVersion.Split('.')
-        if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 13) {
+$pyVersion = Test-PythonOk
+if ($pyVersion) {
+    Write-Host "  [OK] Python $pyVersion" -ForegroundColor Green
+    $pythonOk = $true
+} else {
+    if ($pyVersion -eq $null) {
+        Write-Host "  [ERROR] Python not found." -ForegroundColor Red
+    } else {
+        Write-Host "  [ERROR] Python found, but 3.13+ is required." -ForegroundColor Red
+    }
+    Write-Host ""
+    $installed = Install-WithWinget -Name "Python 3.14" -PackageId "Python.Python.3.14" -ManualUrl "https://www.python.org/downloads/"
+    if ($installed) {
+        # Re-check with refreshed PATH
+        $pyVersion = Test-PythonOk
+        if ($pyVersion) {
             Write-Host "  [OK] Python $pyVersion" -ForegroundColor Green
             $pythonOk = $true
-        } else {
-            Write-Host "  [ERROR] Python $pyVersion found, but 3.13+ is required." -ForegroundColor Red
-            Write-Host ""
-            Install-WithWinget -Name "Python 3.13" -PackageId "Python.Python.3.13" -ManualUrl "https://www.python.org/downloads/"
         }
     }
-} catch {}
+}
 
 if (-not $pythonOk) {
-    if (-not $pyVersion) {
-        Write-Host "  [ERROR] Python not found." -ForegroundColor Red
-        Write-Host ""
-        Install-WithWinget -Name "Python 3.13" -PackageId "Python.Python.3.13" -ManualUrl "https://www.python.org/downloads/"
-        Write-Host "         Make sure 'Add Python to PATH' is checked during install." -ForegroundColor Yellow
-    }
     Pause-WithMessage "Press any key to close..." "Red"
     exit 1
 }
@@ -253,8 +270,12 @@ if ($hasAz) {
     Write-Host "            Required for MSX imports, milestone sync, and AI features." -ForegroundColor Gray
     Write-Host ""
     Install-WithWinget -Name "Azure CLI" -PackageId "Microsoft.AzureCLI" -ManualUrl "https://aka.ms/installazurecliwindows"
-    Write-Host "            NoteHelper will still run, but Azure features won't work." -ForegroundColor Gray
-    Write-Host ""
+    # Re-check after potential install
+    try { if (Get-Command az -ErrorAction SilentlyContinue) { $hasAz = $true } } catch {}
+    if (-not $hasAz) {
+        Write-Host "            NoteHelper will still run, but Azure features won't work." -ForegroundColor Gray
+        Write-Host ""
+    }
 }
 
 # -- Step 4: Check Node.js (optional) -----------------------------------------
@@ -268,8 +289,12 @@ if ($hasNode) {
     Write-Host "            Required for WorkIQ meeting import (auto-fill from meetings)." -ForegroundColor Gray
     Write-Host ""
     Install-WithWinget -Name "Node.js LTS" -PackageId "OpenJS.NodeJS.LTS" -ManualUrl "https://nodejs.org/"
-    Write-Host "            NoteHelper will still run, but meeting import won't work." -ForegroundColor Gray
-    Write-Host ""
+    # Re-check after potential install
+    try { if (Get-Command node -ErrorAction SilentlyContinue) { $hasNode = $true } } catch {}
+    if (-not $hasNode) {
+        Write-Host "            NoteHelper will still run, but meeting import won't work." -ForegroundColor Gray
+        Write-Host ""
+    }
 }
 
 # -- Step 5: Create venv if missing -------------------------------------------
