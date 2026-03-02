@@ -8,7 +8,7 @@ from app.models import (
     db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
     RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
     RevenueConfig, RevenueEngagement, Milestone, Opportunity, MsxTask,
-    SyncStatus, call_logs_milestones, utc_now
+    SyncStatus, UserPreference, call_logs_milestones, utc_now
 )
 
 # Create blueprint
@@ -171,4 +171,71 @@ def api_admin_ai_config_test():
     except Exception as e:
         error_msg = str(e)
         return jsonify({'success': False, 'error': f'Connection failed: {error_msg}'}), 400
+
+
+@admin_bp.route('/api/admin/update-check', methods=['GET'])
+def api_update_check():
+    """Check for available updates and return current state."""
+    from app.services.update_checker import get_update_state, check_for_updates
+    
+    # If force refresh requested, run the check now
+    if request.args.get('refresh') == '1':
+        state = check_for_updates()
+    else:
+        state = get_update_state()
+    
+    # Include dismissed commit from user prefs
+    pref = UserPreference.query.first()
+    dismissed = pref.dismissed_update_commit if pref else None
+    
+    # Update is "new" (show badge) if available and not dismissed for this remote commit
+    state['dismissed'] = dismissed == state.get('remote_commit')
+    state['show_badge'] = state.get('available', False) and not state['dismissed']
+    
+    return jsonify(state)
+
+
+@admin_bp.route('/api/admin/update-dismiss', methods=['POST'])
+def api_update_dismiss():
+    """Dismiss the current update notification."""
+    from app.services.update_checker import get_update_state
+    
+    state = get_update_state()
+    remote_commit = state.get('remote_commit')
+    
+    if not remote_commit:
+        return jsonify({'error': 'No update to dismiss'}), 400
+    
+    pref = UserPreference.query.first()
+    if pref:
+        pref.dismissed_update_commit = remote_commit
+        db.session.commit()
+    
+    return jsonify({'dismissed': True, 'commit': remote_commit})
+
+
+@admin_bp.route('/api/admin/deploy', methods=['POST'])
+def api_deploy():
+    """Launch start.ps1 -Force as a detached process. The server will restart."""
+    import os
+    import subprocess
+    
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    start_script = os.path.join(repo_root, 'start.ps1')
+    
+    if not os.path.exists(start_script):
+        return jsonify({'error': 'start.ps1 not found'}), 404
+    
+    try:
+        # Launch start.ps1 -Force as a detached process
+        # It will stop this server, pull updates, and restart it
+        subprocess.Popen(
+            ['powershell', '-ExecutionPolicy', 'Bypass', '-File', start_script, '-Force'],
+            cwd=repo_root,
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True
+        )
+        return jsonify({'deploying': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 

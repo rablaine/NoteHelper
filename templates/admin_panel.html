@@ -3,6 +3,10 @@
 {% block title %}Admin Panel - NoteHelper{% endblock %}
 
 {% block content %}
+<style>
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
 <div class="row">
     <div class="col-12">
         <h1 class="mb-4"><i class="bi bi-shield-lock"></i> Admin Panel</h1>
@@ -49,6 +53,25 @@
                             <h3>{{ stats.total_pods }}</h3>
                             <small class="text-muted">PODs</small>
                         </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Update Check -->
+        <div class="card mb-4" id="updateCheckCard">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cloud-download"></i> Updates</h5>
+            </div>
+            <div class="card-body">
+                <div id="updateCheckContent">
+                    <div class="d-flex align-items-center gap-3">
+                        <div id="updateStatus" class="flex-grow-1">
+                            <span class="text-muted">Checking for updates...</span>
+                        </div>
+                        <button class="btn btn-outline-secondary btn-sm" id="updateCheckBtn" onclick="checkForUpdates(true)">
+                            <i class="bi bi-arrow-clockwise"></i> Check Now
+                        </button>
                     </div>
                 </div>
             </div>
@@ -841,6 +864,146 @@ if (dangerHeader) {
 }
 
 }); // end DOMContentLoaded
+
+// Update Check (outside DOMContentLoaded so inline onclick handlers can access these)
+function checkForUpdates(refresh) {
+    const statusEl = document.getElementById('updateStatus');
+    const btn = document.getElementById('updateCheckBtn');
+    
+    if (refresh) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Checking...';
+        statusEl.innerHTML = '<span class="text-muted">Checking for updates...</span>';
+    }
+    
+    const url = '/api/admin/update-check' + (refresh ? '?refresh=1' : '');
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Check Now';
+            
+            if (data.error === 'git_not_found') {
+                statusEl.innerHTML = '<span class="text-muted"><i class="bi bi-info-circle"></i> Git not available -- update checking requires Git</span>';
+                return;
+            }
+            
+            if (data.error) {
+                statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Could not check for updates</span>';
+                return;
+            }
+            
+            if (!data.last_checked) {
+                statusEl.innerHTML = '<span class="text-muted">Update check has not run yet. Click "Check Now" to check.</span>';
+                return;
+            }
+            
+            if (data.available) {
+                statusEl.innerHTML = `
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-success"><i class="bi bi-cloud-download"></i> Update Available</span>
+                        <span>${data.commits_behind} new commit${data.commits_behind !== 1 ? 's' : ''} available</span>
+                    </div>
+                    <div class="mt-2 small text-muted">
+                        Current: <code>${data.local_commit}</code> &rarr; Latest: <code>${data.remote_commit}</code>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2">
+                        <button class="btn btn-success btn-sm" onclick="deployUpdate()"><i class="bi bi-cloud-download"></i> Deploy Update</button>
+                        ${!data.dismissed ? '<button class="btn btn-outline-secondary btn-sm" onclick="dismissUpdate()"><i class="bi bi-bell-slash"></i> Dismiss</button>' : ''}
+                    </div>
+                `;
+            } else {
+                statusEl.innerHTML = `
+                    <span class="text-success"><i class="bi bi-check-circle"></i> You're on the latest version</span>
+                    <span class="text-muted small ms-2">(${data.local_commit})</span>
+                `;
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Check Now';
+            statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Failed to check for updates</span>';
+        });
+}
+
+function dismissUpdate() {
+    fetch('/api/admin/update-dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(() => {
+        // Remove the badge from the navbar if present
+        const badge = document.getElementById('updateBadge');
+        if (badge) badge.remove();
+        // Refresh the update status display
+        checkForUpdates(false);
+    })
+    .catch(() => {});
+}
+
+function deployUpdate() {
+    const statusEl = document.getElementById('updateStatus');
+    statusEl.innerHTML = `
+        <div class="text-center py-2">
+            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+            <strong>Deploying update...</strong>
+            <div class="mt-2 small text-muted">The server will restart. This page will automatically refresh when it's back.</div>
+        </div>
+    `;
+
+    fetch('/api/admin/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.deploying) {
+            statusEl.innerHTML = `
+                <div class="text-center py-2">
+                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                    <strong>Deploy started!</strong>
+                    <div class="mt-2 small text-muted">Waiting for the server to restart...</div>
+                </div>
+            `;
+            // Wait a few seconds before polling so the server has time to go down
+            setTimeout(() => {
+                let attempts = 0;
+                const maxAttempts = 60;  // ~2 minutes
+                const poll = setInterval(() => {
+                    attempts++;
+                    fetch('/api/admin/update-check', { signal: AbortSignal.timeout(2000) })
+                        .then(r => r.json())
+                        .then(() => {
+                            clearInterval(poll);
+                            window.location.reload();
+                        })
+                        .catch(() => {
+                            if (attempts >= maxAttempts) {
+                                clearInterval(poll);
+                                statusEl.innerHTML = `
+                                    <div class="text-warning">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        Deploy started but the server hasn't come back yet. Try refreshing manually.
+                                    </div>
+                                `;
+                            }
+                        });
+                }, 2000);
+            }, 5000);  // 5 second delay before polling
+        } else {
+            statusEl.innerHTML = `<div class="text-danger"><i class="bi bi-x-circle"></i> ${data.error || 'Deploy failed.'}</div>`;
+        }
+    })
+    .catch(() => {
+        statusEl.innerHTML = `<div class="text-danger"><i class="bi bi-x-circle"></i> Could not reach the server to start deploy.</div>`;
+    });
+}
+
+// Check on page load (uses cached state, no git fetch)
+document.addEventListener('DOMContentLoaded', function() {
+    checkForUpdates(false);
+});
 </script>
 {% endblock %}
 

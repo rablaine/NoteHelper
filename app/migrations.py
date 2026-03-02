@@ -66,6 +66,9 @@ def run_migrations(db):
     # Migration: Add guided_tour_completed to user_preferences
     _migrate_guided_tour_completed(db, inspector)
     
+    # Migration: Add dismissed_update_commit to user_preferences
+    _migrate_dismissed_update_commit(db, inspector)
+    
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -463,4 +466,13 @@ def _migrate_guided_tour_completed(db, inspector):
         _add_column_if_not_exists(
             db, inspector, 'user_preferences', 'guided_tour_completed',
             'BOOLEAN NOT NULL DEFAULT 0'
+        )
+
+
+def _migrate_dismissed_update_commit(db, inspector):
+    """Add dismissed_update_commit column to user_preferences table."""
+    if 'user_preferences' in inspector.get_table_names():
+        _add_column_if_not_exists(
+            db, inspector, 'user_preferences', 'dismissed_update_commit',
+            'VARCHAR(7)'
         )

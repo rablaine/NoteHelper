@@ -22,7 +22,7 @@ openai==2.24.0
 azure-identity==1.25.2
 
 # Production Server
-gunicorn==25.1.0
+waitress
 
 # HTML Parsing (for tests)
 beautifulsoup4==4.14.3

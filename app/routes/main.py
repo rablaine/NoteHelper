@@ -729,6 +729,19 @@ def inject_preferences():
     def get_seller_color_with_pref(seller_id: int) -> str:
         return get_seller_color(seller_id, use_colors=True)
     
+    # Check for available updates (lightweight -- reads cached state, no git calls)
+    update_available = False
+    try:
+        from app.services.update_checker import get_update_state
+        update_state = get_update_state()
+        dismissed = pref.dismissed_update_commit if pref else None
+        update_available = (
+            update_state.get('available', False)
+            and dismissed != update_state.get('remote_commit')
+        )
+    except Exception:
+        pass
+    
     return dict(
         dark_mode=dark_mode, 
         customer_view_grouped=customer_view_grouped, 
@@ -742,6 +755,7 @@ def inject_preferences():
         milestones_sync_state=milestones_sync_state,
         revenue_sync_state=revenue_sync_state,
         get_seller_color=get_seller_color_with_pref,
-        pending_link_requests_count=pending_link_requests_count
+        pending_link_requests_count=pending_link_requests_count,
+        update_available=update_available,
     )
 

@@ -96,6 +96,48 @@ pytest
 pytest --cov=app tests/  # with coverage
 ```
 
+## Starting & Deploying
+
+NoteHelper uses a single smart script (`start.ps1`) that handles everything: first-run setup, starting the server, checking for updates, and deploying new versions.
+
+### Quick start
+
+Double-click `start.bat`. On first run it will:
+1. Check for Python 3.13+
+2. Create a virtual environment and install dependencies
+3. Create `.env` from `.env.example` with a generated secret key
+4. Start the server using [Waitress](https://docs.pylonsproject.org/projects/waitress/) on the port from `.env`
+
+On subsequent runs, it checks for updates from GitHub and applies them automatically before starting.
+
+### Deploying updates
+
+Double-click `deploy.bat` (runs with admin elevation) or use the **Deploy** button in the Admin Panel. This runs the full deploy cycle:
+
+1. Stops the running server
+2. **Backs up your database** to `data/notehelper_backup_YYYY-MM-DD_HHMMSS.db`
+3. Pulls the latest code from GitHub
+4. Installs any new/updated dependencies
+5. Runs database migrations
+6. Restarts the server
+
+If anything fails, it restarts the server with the previous code.
+
+You can also run it from PowerShell:
+
+```powershell
+.\start.ps1          # Smart mode: bootstrap, update, or start as needed
+.\start.ps1 -Force   # Full deploy cycle regardless of state
+```
+
+### Script files
+
+| File | Purpose |
+|------|---------|
+| `start.bat` | Double-click launcher for users (calls `start.ps1`) |
+| `start.ps1` | The brain - handles setup, updates, and server management |
+| `deploy.bat` | Admin-elevated shortcut that runs `start.ps1 -Force` |
+
 ## AI Features (Optional)
 
 NoteHelper can use Azure OpenAI to auto-suggest topics, match milestones, and auto-fill task descriptions. This requires an Azure OpenAI resource and a service principal for authentication.
