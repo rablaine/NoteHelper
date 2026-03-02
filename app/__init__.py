@@ -128,4 +128,8 @@ def create_app():
     from app.services.scheduled_sync import start_scheduled_sync
     start_scheduled_sync(app)
     
+    # Start background update checker (checks GitHub every 12 hours)
+    from app.services.update_checker import start_update_checker
+    start_update_checker(interval_seconds=43200)
+    
     return app

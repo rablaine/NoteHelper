@@ -1,0 +1,383 @@
+# NoteHelper - Start & Deploy Script
+# Handles first-run setup, starting the server, and deploying updates.
+#
+# Usage:
+#   .\start.ps1          Normal start (bootstrap if needed, update if available)
+#   .\start.ps1 -Force   Full deploy cycle (stop, backup, pull, install, migrate, restart)
+#
+# Entry points:
+#   start.bat             Double-click launcher for users (calls this script)
+#   deploy.bat            Admin-elevated deploy shortcut (calls this script with -Force)
+#   Admin Panel button    Web UI deploy (calls this script with -Force, detached)
+
+param(
+    [switch]$Force  # Force full deploy cycle regardless of current state
+)
+
+$RepoRoot = $PSScriptRoot
+Set-Location $RepoRoot
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+# Check if winget is available
+$HasWinget = $false
+try { if (Get-Command winget -ErrorAction SilentlyContinue) { $HasWinget = $true } } catch {}
+
+# Pause for interactive use (skipped when -Force for non-interactive deploys)
+function Pause-WithMessage {
+    param([string]$Message = "Press any key to close...", [string]$Color = "Gray")
+    if ($Force) { return }
+    Write-Host "`n$Message" -ForegroundColor $Color
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+
+# Prompt to install something via winget (skipped when -Force)
+function Install-WithWinget {
+    param(
+        [string]$Name,
+        [string]$PackageId,
+        [string]$ManualUrl
+    )
+    if ($Force) { return $false }
+    if ($HasWinget) {
+        $response = Read-Host "         Install $Name automatically via winget? (Y/N)"
+        if ($response -eq 'Y' -or $response -eq 'y') {
+            Write-Host ""
+            Write-Host "  [SETUP] Installing $Name via winget..." -ForegroundColor Yellow
+            winget install $PackageId --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  [OK] $Name installed." -ForegroundColor Green
+                Write-Host "        You may need to close and reopen this window for it to take effect." -ForegroundColor Gray
+                return $true
+            } else {
+                Write-Host "  [ERROR] Installation failed." -ForegroundColor Red
+            }
+        }
+    }
+    if ($ManualUrl) {
+        Write-Host "         Install manually from: $ManualUrl" -ForegroundColor Yellow
+    }
+    return $false
+}
+
+# Read .env file into a hashtable
+function Read-EnvFile {
+    $config = @{}
+    $envFile = Join-Path $RepoRoot '.env'
+    if (Test-Path $envFile) {
+        Get-Content $envFile | ForEach-Object {
+            if ($_ -match '^\s*([^#][^=]+?)\s*=\s*(.+?)\s*$') {
+                $config[$Matches[1]] = $Matches[2]
+            }
+        }
+    }
+    return $config
+}
+
+# Check if something is listening on a port
+function Test-ServerRunning {
+    param([int]$Port)
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    return $null -ne $conn
+}
+
+# Kill whatever is listening on a port
+function Stop-Server {
+    param([int]$Port)
+    Write-Host "  Stopping server on port $Port..." -ForegroundColor Yellow
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($conn) {
+        Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+}
+
+# Start waitress in a hidden window (no lingering console)
+function Start-Server {
+    param([int]$Port)
+    $waitress = Join-Path $RepoRoot 'venv\Scripts\waitress-serve.exe'
+    $serverArgs = @('--host=0.0.0.0', "--port=$Port", '--call', 'app:create_app')
+
+    Write-Host "  Starting server on port $Port..." -ForegroundColor Yellow
+    Start-Process -FilePath $waitress -ArgumentList $serverArgs -WorkingDirectory $RepoRoot -WindowStyle Hidden
+    Start-Sleep -Seconds 3
+    if (Test-ServerRunning -Port $Port) {
+        Write-Host "  [OK] Server running at http://localhost:$Port" -ForegroundColor Green
+    } else {
+        Write-Host "  Server may still be starting..." -ForegroundColor Yellow
+    }
+}
+
+# Backup the database
+function Backup-Database {
+    $dbFile = Join-Path $RepoRoot 'data\notehelper.db'
+    if (Test-Path $dbFile) {
+        $timestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
+        $backupFile = Join-Path $RepoRoot "data\notehelper_backup_$timestamp.db"
+        Copy-Item $dbFile $backupFile
+        Write-Host "  [OK] Database backed up." -ForegroundColor Green
+    }
+}
+
+# Pull latest from git (handles stashing dirty files)
+function Pull-Updates {
+    $dirty = git status --porcelain
+    if ($dirty) {
+        Write-Host "  Stashing local changes..." -ForegroundColor Gray
+        git stash --quiet 2>$null
+    }
+
+    Write-Host "  Pulling latest changes..." -ForegroundColor Yellow
+    $pullOutput = git pull origin main 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [ERROR] git pull failed!" -ForegroundColor Red
+        Write-Host "  $pullOutput" -ForegroundColor Red
+        if ($dirty) { git stash pop --quiet 2>$null }
+        return $false
+    }
+    Write-Host "  $pullOutput"
+
+    if ($dirty) {
+        git stash pop --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  Stashed changes conflict with upstream - dropped." -ForegroundColor Yellow
+            git stash drop --quiet 2>$null
+        }
+    }
+    return $true
+}
+
+# Install/update pip dependencies
+function Install-Dependencies {
+    Write-Host "  Installing dependencies..." -ForegroundColor Yellow
+    & (Join-Path $RepoRoot 'venv\Scripts\pip.exe') install -r (Join-Path $RepoRoot 'requirements.txt') --quiet 2>$null
+    return $LASTEXITCODE -eq 0
+}
+
+# Run database migrations
+function Run-Migrations {
+    Write-Host "  Running migrations..." -ForegroundColor Yellow
+    & (Join-Path $RepoRoot 'venv\Scripts\python.exe') -c "from app import create_app, db; from app.migrations import run_migrations; app = create_app(); app.app_context().push(); run_migrations(db)"
+    return $LASTEXITCODE -eq 0
+}
+
+# ==============================================================================
+# Main
+# ==============================================================================
+
+Write-Host ""
+Write-Host "  NoteHelper" -ForegroundColor Cyan
+Write-Host "  ==========" -ForegroundColor Cyan
+Write-Host ""
+
+# -- Step 1: Check Python -----------------------------------------------------
+$pythonOk = $false
+try {
+    $pyVersion = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+    if ($pyVersion) {
+        $parts = $pyVersion.Split('.')
+        if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 13) {
+            Write-Host "  [OK] Python $pyVersion" -ForegroundColor Green
+            $pythonOk = $true
+        } else {
+            Write-Host "  [ERROR] Python $pyVersion found, but 3.13+ is required." -ForegroundColor Red
+            Write-Host ""
+            Install-WithWinget -Name "Python 3.13" -PackageId "Python.Python.3.13" -ManualUrl "https://www.python.org/downloads/"
+        }
+    }
+} catch {}
+
+if (-not $pythonOk) {
+    if (-not $pyVersion) {
+        Write-Host "  [ERROR] Python not found." -ForegroundColor Red
+        Write-Host ""
+        Install-WithWinget -Name "Python 3.13" -PackageId "Python.Python.3.13" -ManualUrl "https://www.python.org/downloads/"
+        Write-Host "         Make sure 'Add Python to PATH' is checked during install." -ForegroundColor Yellow
+    }
+    Pause-WithMessage "Press any key to close..." "Red"
+    exit 1
+}
+
+# -- Step 2: Check Azure CLI (optional) ---------------------------------------
+$hasAz = $false
+try { if (Get-Command az -ErrorAction SilentlyContinue) { $hasAz = $true } } catch {}
+if ($hasAz) {
+    Write-Host "  [OK] Azure CLI found." -ForegroundColor Green
+} else {
+    Write-Host "  [WARNING] Azure CLI (az) not found." -ForegroundColor Yellow
+    Write-Host "            Required for MSX imports, milestone sync, and AI features." -ForegroundColor Gray
+    Write-Host ""
+    Install-WithWinget -Name "Azure CLI" -PackageId "Microsoft.AzureCLI" -ManualUrl "https://aka.ms/installazurecliwindows"
+    Write-Host "            NoteHelper will still run, but Azure features won't work." -ForegroundColor Gray
+    Write-Host ""
+}
+
+# -- Step 3: Check Node.js (optional) -----------------------------------------
+$hasNode = $false
+try { if (Get-Command node -ErrorAction SilentlyContinue) { $hasNode = $true } } catch {}
+if ($hasNode) {
+    $nodeVersion = & node -v 2>$null
+    Write-Host "  [OK] Node.js $nodeVersion" -ForegroundColor Green
+} else {
+    Write-Host "  [WARNING] Node.js not found." -ForegroundColor Yellow
+    Write-Host "            Required for WorkIQ meeting import (auto-fill from meetings)." -ForegroundColor Gray
+    Write-Host ""
+    Install-WithWinget -Name "Node.js LTS" -PackageId "OpenJS.NodeJS.LTS" -ManualUrl "https://nodejs.org/"
+    Write-Host "            NoteHelper will still run, but meeting import won't work." -ForegroundColor Gray
+    Write-Host ""
+}
+
+# -- Step 4: Create venv if missing -------------------------------------------
+if (-not (Test-Path (Join-Path $RepoRoot 'venv\Scripts\python.exe'))) {
+    Write-Host "  [SETUP] Creating virtual environment..." -ForegroundColor Yellow
+    & python -m venv (Join-Path $RepoRoot 'venv')
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [ERROR] Failed to create virtual environment." -ForegroundColor Red
+        Pause-WithMessage "Press any key to close..." "Red"
+        exit 1
+    }
+    Write-Host "  [OK] Virtual environment created." -ForegroundColor Green
+} else {
+    Write-Host "  [OK] Virtual environment found." -ForegroundColor Green
+}
+
+# -- Step 5: Install dependencies ---------------------------------------------
+if (-not (Install-Dependencies)) {
+    Write-Host "  [ERROR] Failed to install dependencies." -ForegroundColor Red
+    Pause-WithMessage "Press any key to close..." "Red"
+    exit 1
+}
+Write-Host "  [OK] Dependencies installed." -ForegroundColor Green
+
+# -- Step 6: Create .env if missing -------------------------------------------
+$envFile = Join-Path $RepoRoot '.env'
+if (-not (Test-Path $envFile)) {
+    $exampleFile = Join-Path $RepoRoot '.env.example'
+    if (Test-Path $exampleFile) {
+        Write-Host "  [SETUP] Creating .env from .env.example..." -ForegroundColor Yellow
+        Copy-Item $exampleFile $envFile
+        # Generate a random SECRET_KEY
+        $secretKey = & (Join-Path $RepoRoot 'venv\Scripts\python.exe') -c "import secrets; print(secrets.token_hex(32))"
+        $content = Get-Content $envFile -Raw
+        $content = $content.Replace('your-secret-key-here-change-in-production', $secretKey)
+        Set-Content $envFile $content -NoNewline
+        Write-Host "  [OK] .env created with generated SECRET_KEY." -ForegroundColor Green
+        Write-Host "        Edit .env to add Azure credentials if needed." -ForegroundColor Gray
+    } else {
+        Write-Host "  [WARNING] No .env.example found. Create .env manually." -ForegroundColor Yellow
+    }
+}
+
+# -- Step 7: Read config ------------------------------------------------------
+$envConfig = Read-EnvFile
+$Port = if ($envConfig['PORT']) { [int]$envConfig['PORT'] } else { 5000 }
+Write-Host "  [OK] Port: $Port" -ForegroundColor Green
+
+# -- Step 8: Check current state -----------------------------------------------
+$serverRunning = Test-ServerRunning -Port $Port
+
+# -- Step 9: Check for git updates --------------------------------------------
+$hasUpdates = $false
+$hasGit = $false
+try {
+    git rev-parse --git-dir 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $hasGit = $true }
+} catch {}
+
+if ($hasGit) {
+    Write-Host "  Checking for updates..." -ForegroundColor Gray
+    git fetch origin main --quiet 2>$null
+    $localCommit = git rev-parse HEAD 2>$null
+    $remoteCommit = git rev-parse origin/main 2>$null
+    if ($localCommit -and $remoteCommit -and $localCommit -ne $remoteCommit) {
+        $hasUpdates = $true
+        $behindCount = git rev-list --count HEAD..origin/main 2>$null
+        Write-Host "  [UPDATE] $behindCount commit(s) behind origin/main" -ForegroundColor Yellow
+    } else {
+        Write-Host "  [OK] Up to date." -ForegroundColor Green
+    }
+} else {
+    Write-Host "  [INFO] Not a git repo - update checking disabled." -ForegroundColor Gray
+}
+
+# ==============================================================================
+# Decision Logic
+# ==============================================================================
+
+# -Force: Full deploy cycle (used by deploy.bat and admin panel button)
+if ($Force) {
+    Write-Host ""
+    Write-Host "  Deploying..." -ForegroundColor Cyan
+
+    if ($serverRunning) { Stop-Server -Port $Port }
+    Backup-Database
+
+    if ($hasGit) {
+        if (-not (Pull-Updates)) {
+            Write-Host "  Restarting server with current code..." -ForegroundColor Yellow
+            Start-Server -Port $Port
+            Pause-WithMessage "DEPLOY FAILED - press any key to close..." "Red"
+            exit 1
+        }
+    }
+
+    if (-not (Install-Dependencies)) {
+        Write-Host "  [ERROR] pip install failed!" -ForegroundColor Red
+        Start-Server -Port $Port
+        Pause-WithMessage "DEPLOY FAILED - press any key to close..." "Red"
+        exit 1
+    }
+
+    if (-not (Run-Migrations)) {
+        Write-Host "  [ERROR] Migrations failed!" -ForegroundColor Red
+        Start-Server -Port $Port
+        Pause-WithMessage "DEPLOY FAILED - press any key to close..." "Red"
+        exit 1
+    }
+
+    Start-Server -Port $Port
+    Write-Host ""
+    Write-Host "  Deploy complete!" -ForegroundColor Green
+    Pause-WithMessage "Press any key to close..."
+    exit 0
+}
+
+# Smart mode: do whatever makes sense
+
+if ($serverRunning -and -not $hasUpdates) {
+    Write-Host ""
+    Write-Host "  Server is already running on port $Port and up to date." -ForegroundColor Green
+    Pause-WithMessage "Press any key to close..."
+    exit 0
+}
+
+if ($hasUpdates) {
+    Write-Host ""
+    Write-Host "  Applying updates..." -ForegroundColor Cyan
+
+    if ($serverRunning) { Stop-Server -Port $Port }
+    Backup-Database
+
+    if (-not (Pull-Updates)) {
+        Write-Host "  Starting server with current code..." -ForegroundColor Yellow
+        Start-Server -Port $Port
+        Pause-WithMessage "UPDATE FAILED - press any key to close..." "Red"
+        exit 1
+    }
+
+    if (-not (Install-Dependencies)) {
+        Write-Host "  [ERROR] pip install failed!" -ForegroundColor Red
+    }
+
+    if (-not (Run-Migrations)) {
+        Write-Host "  [ERROR] Migrations failed!" -ForegroundColor Red
+    }
+}
+
+# Start server
+Start-Server -Port $Port
+Write-Host ""
+Write-Host "  NoteHelper is running! You can close this window." -ForegroundColor Green
+Pause-WithMessage "Press any key to close..."
