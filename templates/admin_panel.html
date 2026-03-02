@@ -83,81 +83,78 @@
                 <h5 class="mb-0"><i class="bi bi-link-45deg"></i> MSX Integration</h5>
             </div>
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6 d-flex flex-column">
-                        <h6>Authentication Status</h6>
-                        <div id="msxAuthStatus" class="p-3 rounded border mb-3">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="spinner-border spinner-border-sm" role="status"></div>
-                                <span>Checking...</span>
-                            </div>
-                        </div>
-                        <div class="mt-auto">
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-sm btn-primary" id="msxRefreshBtn">
-                                    <i class="bi bi-arrow-clockwise"></i> Refresh Token
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-success" id="msxTestBtn">
-                                    <i class="bi bi-lightning"></i> Test Connection
-                                </button>
-                            </div>
-                        </div>
-                        <div id="msxTestResult" class="mt-3"></div>
+                <!-- Auth Status Row -->
+                <div id="msxAuthStatus" class="d-inline-flex align-items-center gap-2 p-2 px-3 rounded border mb-3">
+                    <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
+                    <span class="text-muted">Checking connection...</span>
+                </div>
+                
+                <!-- Action buttons (shown when connected) -->
+                <div id="msxConnectedActions" class="d-none">
+                    <div class="d-flex gap-2 mb-3">
+                        <button type="button" class="btn btn-sm btn-primary" id="msxRefreshBtn">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh Token
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success" id="msxTestBtn">
+                            <i class="bi bi-lightning"></i> Test Connection
+                        </button>
                     </div>
-                    <div class="col-md-6">
-                        <h6>Sign In</h6>
-                        <div id="adminAuthCard">
-                            <!-- Initial state -->
-                            <div id="adminAuthInitial">
-                                <p class="small text-muted mb-2">Click below to sign in via Azure CLI. A browser window will open.</p>
-                                <p class="small text-muted mb-3"><i class="bi bi-info-circle"></i> Make sure you select your <strong>Microsoft corporate account</strong>.</p>
-                                <button class="btn btn-primary" id="adminStartAuthBtn">
-                                    <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
-                                </button>
+                    <div id="msxTestResult"></div>
+                </div>
+
+                <!-- Sign In section (shown when NOT connected) -->
+                <div id="msxSignInSection" class="d-none">
+                    <div id="adminAuthCard">
+                        <!-- Initial state -->
+                        <div id="adminAuthInitial">
+                            <p class="small text-muted mb-2">Click below to sign in via Azure CLI. A browser window will open.</p>
+                            <p class="small text-muted mb-3"><i class="bi bi-info-circle"></i> Make sure you select your <strong>Microsoft corporate account</strong>.</p>
+                            <button class="btn btn-primary" id="adminStartAuthBtn">
+                                <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
+                            </button>
+                        </div>
+                        <!-- Waiting state -->
+                        <div id="adminAuthWaiting" class="d-none">
+                            <p class="small text-primary fw-bold mb-2">A browser window should open for sign-in.</p>
+                            <p class="small mb-2">Select your <strong>Microsoft corporate account</strong>. This will update automatically.</p>
+                            <div class="mb-2">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                <span class="text-muted ms-2 small" id="adminAuthWaitingStatus">Waiting for sign-in to complete...</span>
                             </div>
-                            <!-- Waiting state -->
-                            <div id="adminAuthWaiting" class="d-none">
-                                <p class="small text-primary fw-bold mb-2">A browser window should open for sign-in.</p>
-                                <p class="small mb-2">Select your <strong>Microsoft corporate account</strong>. This will update automatically.</p>
-                                <div class="mb-2">
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                                    <span class="text-muted ms-2 small" id="adminAuthWaitingStatus">Waiting for sign-in to complete...</span>
+                            <button class="btn btn-outline-secondary btn-sm" id="adminAuthCancelBtn">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </button>
+                        </div>
+                        <!-- Success state -->
+                        <div id="adminAuthSuccess" class="d-none">
+                            <div class="d-flex align-items-center gap-2 text-success mb-2">
+                                <i class="bi bi-check-circle-fill fs-4"></i>
+                                <div>
+                                    <strong>Connected to MSX!</strong><br>
+                                    <small class="text-muted" id="adminAuthEmail"></small>
                                 </div>
-                                <button class="btn btn-outline-secondary btn-sm" id="adminAuthCancelBtn">
-                                    <i class="bi bi-x-circle"></i> Cancel
-                                </button>
                             </div>
-                            <!-- Success state -->
-                            <div id="adminAuthSuccess" class="d-none">
-                                <div class="d-flex align-items-center gap-2 text-success mb-2">
-                                    <i class="bi bi-check-circle-fill fs-4"></i>
-                                    <div>
-                                        <strong>Connected to MSX!</strong><br>
-                                        <small class="text-muted" id="adminAuthEmail"></small>
-                                    </div>
+                        </div>
+                        <!-- Error state -->
+                        <div id="adminAuthError" class="d-none">
+                            <div class="d-flex align-items-center gap-2 text-warning mb-2">
+                                <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+                                <div>
+                                    <strong id="adminAuthErrorMsg">Authentication failed</strong><br>
+                                    <small class="text-muted">Make sure you selected your Microsoft corporate account.</small>
                                 </div>
                             </div>
-                            <!-- Error state -->
-                            <div id="adminAuthError" class="d-none">
-                                <div class="d-flex align-items-center gap-2 text-warning mb-2">
-                                    <i class="bi bi-exclamation-triangle-fill fs-4"></i>
-                                    <div>
-                                        <strong id="adminAuthErrorMsg">Authentication failed</strong><br>
-                                        <small class="text-muted">Make sure you selected your Microsoft corporate account.</small>
-                                    </div>
-                                </div>
-                                <button class="btn btn-primary btn-sm" id="adminAuthRetryBtn">
-                                    <i class="bi bi-arrow-clockwise"></i> Try Again
-                                </button>
-                            </div>
-                            <!-- No CLI state -->
-                            <div id="adminAuthNoCli" class="d-none">
-                                <div class="d-flex align-items-center gap-2 text-danger mb-2">
-                                    <i class="bi bi-exclamation-triangle-fill fs-4"></i>
-                                    <div>
-                                        <strong>Azure CLI not installed</strong><br>
-                                        <small>Install from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then reload.</small>
-                                    </div>
+                            <button class="btn btn-primary btn-sm" id="adminAuthRetryBtn">
+                                <i class="bi bi-arrow-clockwise"></i> Try Again
+                            </button>
+                        </div>
+                        <!-- No CLI state -->
+                        <div id="adminAuthNoCli" class="d-none">
+                            <div class="d-flex align-items-center gap-2 text-danger mb-2">
+                                <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+                                <div>
+                                    <strong>Azure CLI not installed</strong><br>
+                                    <small>Install from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then reload.</small>
                                 </div>
                             </div>
                         </div>
@@ -402,73 +399,140 @@ document.getElementById('clearMilestonesBtn').addEventListener('click', function
     }
 });
 
-// MSX Integration - Load status on page load
-async function loadMsxStatus() {
+// MSX Integration - Update the status badge display
+function updateMsxStatusDisplay(state, detail) {
     const statusDiv = document.getElementById('msxAuthStatus');
+    const connectedActions = document.getElementById('msxConnectedActions');
+    const signInSection = document.getElementById('msxSignInSection');
+
+    if (state === 'checking') {
+        statusDiv.className = 'd-inline-flex align-items-center gap-2 p-2 px-3 rounded border mb-3';
+        statusDiv.innerHTML = `
+            <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
+            <span class="text-muted">${detail || 'Checking connection...'}</span>
+        `;
+        connectedActions.classList.add('d-none');
+        signInSection.classList.add('d-none');
+    } else if (state === 'connected') {
+        statusDiv.className = 'd-inline-flex align-items-center gap-2 p-2 px-3 rounded border border-success mb-3';
+        statusDiv.innerHTML = `
+            <i class="bi bi-check-circle-fill fs-5 text-success"></i>
+            <div>
+                <strong class="text-success">Connected</strong><br>
+                <small class="text-muted">${detail || ''}</small>
+            </div>
+        `;
+        connectedActions.classList.remove('d-none');
+        signInSection.classList.add('d-none');
+    } else if (state === 'vpn') {
+        statusDiv.className = 'd-inline-flex align-items-center gap-2 p-2 px-3 rounded border mb-3';
+        statusDiv.innerHTML = `
+            <i class="bi bi-shield-exclamation fs-5 text-danger"></i>
+            <div>
+                <strong class="text-danger">VPN Required</strong><br>
+                <small class="text-muted">Your IP address is blocked - connect to VPN and try again</small>
+                <div class="mt-2">
+                    <button id="msxCardVpnRetry" class="btn btn-sm btn-outline-warning" onclick="retryVpnFromCard(this)">
+                        <i class="bi bi-arrow-repeat"></i> Reconnect
+                    </button>
+                    <span id="msxCardVpnStatus" class="small ms-2"></span>
+                </div>
+            </div>
+        `;
+        connectedActions.classList.add('d-none');
+        signInSection.classList.add('d-none');
+        if (window.showVpnBanner) window.showVpnBanner();
+        const importBtn = document.getElementById('importFromMsxBtn');
+        if (importBtn) {
+            importBtn.disabled = true;
+            importBtn.classList.replace('btn-primary', 'btn-secondary');
+            importBtn.title = 'VPN required - connect to corpnet first';
+        }
+    } else if (state === 'disconnected') {
+        statusDiv.className = 'd-inline-flex align-items-center gap-2 p-2 px-3 rounded border mb-3';
+        statusDiv.innerHTML = `
+            <i class="bi bi-x-circle-fill fs-5 text-danger"></i>
+            <div>
+                <strong class="text-danger">Not Connected</strong><br>
+                <small class="text-muted">${detail || 'Not authenticated'}</small>
+            </div>
+        `;
+        connectedActions.classList.add('d-none');
+        signInSection.classList.remove('d-none');
+    } else if (state === 'error') {
+        statusDiv.className = 'd-inline-flex align-items-center gap-2 p-2 px-3 rounded border mb-3';
+        statusDiv.innerHTML = `
+            <i class="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
+            <div>
+                <strong class="text-warning">Error</strong><br>
+                <small class="text-muted">${detail || 'Could not check status'}</small>
+            </div>
+        `;
+        connectedActions.classList.add('d-none');
+        signInSection.classList.remove('d-none');
+    }
+}
+
+// MSX Integration - Load status on page load
+// This is the single entry point: check token, try auto-acquiring if needed,
+// only show "Not Connected" if everything fails.
+async function loadMsxStatus() {
     try {
         const response = await fetch('/api/msx/status');
         const data = await response.json();
-        
+
         if (data.vpn_blocked) {
-            statusDiv.innerHTML = `
-                <div class="d-flex align-items-center gap-2 text-danger">
-                    <i class="bi bi-shield-exclamation fs-4"></i>
-                    <div>
-                        <strong>VPN Required</strong><br>
-                        <small>IP address blocked — connect to VPN and use the banner above to retry</small>
-                    </div>
-                </div>
-            `;
-            // Disable import button when off VPN
-            const importBtn = document.getElementById('importFromMsxBtn');
-            if (importBtn) {
-                importBtn.disabled = true;
-                importBtn.classList.replace('btn-primary', 'btn-secondary');
-                importBtn.title = 'VPN required — connect to corpnet first';
-            }
+            updateMsxStatusDisplay('vpn');
             return;
         }
 
         if (data.authenticated) {
-            statusDiv.innerHTML = `
-                <div class="d-flex align-items-center gap-2 text-success">
-                    <i class="bi bi-check-circle-fill fs-4"></i>
-                    <div>
-                        <strong>Connected</strong><br>
-                        <small class="text-muted">Token expires in ${data.expires_in_minutes} minutes</small>
-                    </div>
-                </div>
-            `;
-            // Show success state in auth card
-            showAdminAuthState('adminAuthSuccess');
-        } else {
-            let errorMsg = data.error || 'Not authenticated';
-            // Make common errors more user-friendly
-            if (errorMsg.includes('az login')) {
-                errorMsg = 'Not signed in — click Sign In to Azure';
-            } else if (errorMsg.includes('not installed')) {
-                errorMsg = 'Azure CLI not installed';
+            // Show connected, but verify we can actually reach MSX in the background
+            updateMsxStatusDisplay('connected', `Token expires in ${data.expires_in_minutes} minutes`);
+
+            // Quick connectivity check - if VPN is off, the token is useless
+            try {
+                const testResp = await fetch('/api/msx/test');
+                const testData = await testResp.json();
+                if (testData.vpn_blocked) {
+                    updateMsxStatusDisplay('vpn');
+                } else if (!testData.success) {
+                    updateMsxStatusDisplay('connected', `Token expires in ${data.expires_in_minutes} minutes (connection issue)`);
+                }
+            } catch (e) {
+                // Network error - likely VPN is off
+                updateMsxStatusDisplay('vpn');
             }
-            statusDiv.innerHTML = `
-                <div class="d-flex align-items-center gap-2 text-danger">
-                    <i class="bi bi-x-circle-fill fs-4"></i>
-                    <div>
-                        <strong>Not Connected</strong><br>
-                        <small>${errorMsg}</small>
-                    </div>
-                </div>
-            `;
+            return;
         }
+
+        // Not authenticated yet -- but don't show "Not Connected" immediately.
+        // Check if Azure CLI is logged in and can auto-acquire a token.
+        updateMsxStatusDisplay('checking', 'Acquiring token...');
+
+        const azResp = await fetch('/api/msx/az-status');
+        const azData = await azResp.json();
+
+        if (!azData.az_installed) {
+            updateMsxStatusDisplay('disconnected', 'Azure CLI not installed');
+            showAdminAuthState('adminAuthNoCli');
+            return;
+        }
+
+        if (azData.logged_in) {
+            // Az CLI is logged in -- try to complete login (acquire MSX token)
+            await completeAdminLogin(azData.user_email, true);
+            return;
+        }
+
+        // Az CLI not logged in -- now we can confidently say "Not Connected"
+        let errorMsg = data.error || 'Not authenticated';
+        if (errorMsg.includes('az login')) {
+            errorMsg = 'Not signed in -- click Sign In to Azure below';
+        }
+        updateMsxStatusDisplay('disconnected', errorMsg);
     } catch (err) {
-        statusDiv.innerHTML = `
-            <div class="d-flex align-items-center gap-2 text-warning">
-                <i class="bi bi-exclamation-triangle-fill fs-4"></i>
-                <div>
-                    <strong>Error</strong><br>
-                    <small>Could not check status</small>
-                </div>
-            </div>
-        `;
+        updateMsxStatusDisplay('error', 'Could not check status');
     }
 }
 
@@ -486,6 +550,12 @@ function showAdminAuthState(stateId) {
         document.getElementById(id).classList.add('d-none');
     });
     document.getElementById(stateId).classList.remove('d-none');
+    
+    // When auth succeeds, switch to connected view and refresh status
+    if (stateId === 'adminAuthSuccess') {
+        document.getElementById('msxSignInSection').classList.add('d-none');
+        loadMsxStatus();  // Refresh the status bar and show connected actions
+    }
 }
 
 async function checkAdminAuth() {
@@ -497,7 +567,7 @@ async function checkAdminAuth() {
         if (data.vpn_blocked) {
             showAdminAuthState('adminAuthError');
             const errEl = document.getElementById('adminAuthErrorMsg');
-            if (errEl) errEl.textContent = 'VPN required — connect to corpnet first.';
+            if (errEl) errEl.textContent = 'VPN required - connect to corpnet first.';
             return;
         }
 
@@ -583,28 +653,42 @@ function pollAdminLoginStatus() {
     }, ADMIN_POLL_INTERVAL);
 }
 
-async function completeAdminLogin(userEmail) {
-    const statusEl = document.getElementById('adminAuthWaitingStatus');
-    if (statusEl) statusEl.textContent = 'Connecting to MSX...';
-    showAdminAuthState('adminAuthWaiting');
+async function completeAdminLogin(userEmail, silent) {
+    if (!silent) {
+        const statusEl = document.getElementById('adminAuthWaitingStatus');
+        if (statusEl) statusEl.textContent = 'Connecting to MSX...';
+        showAdminAuthState('adminAuthWaiting');
+    } else {
+        updateMsxStatusDisplay('checking', 'Connecting to MSX...');
+    }
     try {
         const resp = await fetch('/api/msx/az-login/complete', { method: 'POST' });
         const data = await resp.json();
         if (data.success) {
-            showAdminAuthState('adminAuthSuccess');
-            const emailEl = document.getElementById('adminAuthEmail');
-            const email = userEmail || data.user_email;
-            if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
-            // Refresh the status panel too
+            if (!silent) {
+                showAdminAuthState('adminAuthSuccess');
+                const emailEl = document.getElementById('adminAuthEmail');
+                const email = userEmail || data.user_email;
+                if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
+            }
+            // Refresh the status panel
             loadMsxStatus();
         } else {
-            document.getElementById('adminAuthErrorMsg').textContent =
-                data.error || 'Failed to get CRM token';
-            showAdminAuthState('adminAuthError');
+            if (!silent) {
+                document.getElementById('adminAuthErrorMsg').textContent =
+                    data.error || 'Failed to get CRM token';
+                showAdminAuthState('adminAuthError');
+            } else {
+                updateMsxStatusDisplay('disconnected', data.error || 'Failed to get CRM token');
+            }
         }
     } catch (err) {
-        document.getElementById('adminAuthErrorMsg').textContent = 'Failed to complete sign-in';
-        showAdminAuthState('adminAuthError');
+        if (!silent) {
+            document.getElementById('adminAuthErrorMsg').textContent = 'Failed to complete sign-in';
+            showAdminAuthState('adminAuthError');
+        } else {
+            updateMsxStatusDisplay('disconnected', 'Failed to complete sign-in');
+        }
     }
 }
 
@@ -651,6 +735,7 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
                     <small>User ID: ${data.user_id}</small>
                 </div>
             `;
+            if (window.hideVpnBanner) window.hideVpnBanner();
             loadMsxStatus();
         } else {
             resultDiv.innerHTML = `
@@ -659,6 +744,10 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
                     <small>${data.error}</small>
                 </div>
             `;
+            // Trigger VPN banner if IP-blocked
+            if (data.vpn_blocked && window.showVpnBanner) {
+                window.showVpnBanner();
+            }
         }
     } catch (err) {
         resultDiv.innerHTML = `
@@ -675,7 +764,6 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
 
 // Load MSX status and auth state on page load
 loadMsxStatus();
-checkAdminAuth();
 
 // Setup Wizard - Re-run
 document.getElementById('adminRerunWizardBtn').addEventListener('click', async function() {
@@ -864,6 +952,34 @@ if (dangerHeader) {
 }
 
 }); // end DOMContentLoaded
+
+// Retry VPN connection from the MSX Integration card (outside DOMContentLoaded for inline onclick)
+async function retryVpnFromCard(btn) {
+    const statusEl = document.getElementById('msxCardVpnStatus');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking...';
+    if (statusEl) statusEl.textContent = '';
+
+    try {
+        const resp = await fetch('/api/msx/vpn-check', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            btn.innerHTML = '<i class="bi bi-check-circle"></i> Connected!';
+            btn.className = 'btn btn-sm btn-success';
+            if (statusEl) { statusEl.textContent = data.message; statusEl.className = 'small ms-2 text-success'; }
+            if (window.hideVpnBanner) window.hideVpnBanner();
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Reconnect';
+            btn.disabled = false;
+            if (statusEl) { statusEl.textContent = data.message || 'Still blocked.'; statusEl.className = 'small ms-2 text-warning'; }
+        }
+    } catch (err) {
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Reconnect';
+        btn.disabled = false;
+        if (statusEl) { statusEl.textContent = 'Network error'; statusEl.className = 'small ms-2 text-warning'; }
+    }
+}
 
 // Update Check (outside DOMContentLoaded so inline onclick handlers can access these)
 function checkForUpdates(refresh) {
