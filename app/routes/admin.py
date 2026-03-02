@@ -227,10 +227,13 @@ def api_deploy():
         return jsonify({'error': 'start.ps1 not found'}), 404
     
     try:
-        # Launch start.ps1 -Force as a detached process
-        # It will stop this server, pull updates, and restart it
+        # Launch start.ps1 -Force with admin elevation via -Verb RunAs
+        # This triggers a UAC prompt, which is required for port 80
         subprocess.Popen(
-            ['powershell', '-ExecutionPolicy', 'Bypass', '-File', start_script, '-Force'],
+            [
+                'powershell', '-ExecutionPolicy', 'Bypass', '-Command',
+                f'Start-Process powershell -ArgumentList \'-ExecutionPolicy Bypass -File "{start_script}" -Force\' -Verb RunAs'
+            ],
             cwd=repo_root,
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
             close_fds=True
