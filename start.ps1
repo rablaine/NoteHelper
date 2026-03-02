@@ -152,8 +152,41 @@ function Pull-Updates {
 # Install/update pip dependencies
 function Install-Dependencies {
     Write-Host "  Installing dependencies..." -ForegroundColor Yellow
-    & (Join-Path $RepoRoot 'venv\Scripts\pip.exe') install -r (Join-Path $RepoRoot 'requirements.txt') --quiet 2>$null
-    return $LASTEXITCODE -eq 0
+    $pipExe = Join-Path $RepoRoot 'venv\Scripts\pip.exe'
+    $reqFile = Join-Path $RepoRoot 'requirements.txt'
+
+    # Stream pip output line by line, showing package names as they install
+    $process = Start-Process -FilePath $pipExe `
+        -ArgumentList "install -r `"$reqFile`" --progress-bar off" `
+        -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\pip_out.txt" -RedirectStandardError "$env:TEMP\pip_err.txt"
+
+    # Show a spinner while pip runs
+    $spinChars = @('|', '/', '-', '\')
+    $i = 0
+    while (-not $process.HasExited) {
+        Write-Host "`r  Installing dependencies... $($spinChars[$i % 4])" -NoNewline -ForegroundColor Yellow
+        $i++
+        Start-Sleep -Milliseconds 250
+    }
+    Write-Host "`r  Installing dependencies...  " -NoNewline  # clear spinner
+
+    if ($process.ExitCode -eq 0) {
+        # Count what was actually installed (not "already satisfied")
+        $output = Get-Content "$env:TEMP\pip_out.txt" -ErrorAction SilentlyContinue
+        $installed = $output | Where-Object { $_ -match '^Successfully installed' }
+        if ($installed) {
+            Write-Host ""
+            Write-Host "  $installed" -ForegroundColor Gray
+        } else {
+            Write-Host ""
+        }
+        return $true
+    } else {
+        Write-Host ""
+        $errOutput = Get-Content "$env:TEMP\pip_err.txt" -ErrorAction SilentlyContinue
+        if ($errOutput) { $errOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red } }
+        return $false
+    }
 }
 
 # Run database migrations
