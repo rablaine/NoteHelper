@@ -165,6 +165,7 @@ function Pull-Updates {
 # Install/update pip dependencies
 function Install-Dependencies {
     Write-Host "  Installing dependencies..." -ForegroundColor Yellow
+    Write-Host "  (First run may take a minute or two)" -ForegroundColor Gray
     $pipExe = Join-Path $RepoRoot 'venv\Scripts\pip.exe'
     $reqFile = Join-Path $RepoRoot 'requirements.txt'
 
