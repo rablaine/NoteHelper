@@ -1024,7 +1024,7 @@ function checkForUpdates(refresh) {
                         Current: <code>${data.local_commit}</code> &rarr; Latest: <code>${data.remote_commit}</code>
                     </div>
                     <div class="mt-3 alert alert-info mb-0 py-2">
-                        <i class="bi bi-terminal"></i> To update, run <strong>deploy.bat</strong> from the NoteHelper folder (as Administrator).
+                        <i class="bi bi-terminal"></i> To update, double-click <strong>deploy.bat</strong> in the NoteHelper folder. If the server runs on a low port, you may see a UAC prompt.
                         ${!data.dismissed ? '<button class="btn btn-outline-secondary btn-sm ms-2" onclick="dismissUpdate()"><i class="bi bi-bell-slash"></i> Dismiss</button>' : ''}
                     </div>
                 `;
