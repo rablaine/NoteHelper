@@ -7,8 +7,7 @@
 #
 # Entry points:
 #   start.bat             Double-click launcher for users (calls this script)
-#   deploy.bat            Admin-elevated deploy shortcut (calls this script with -Force)
-#   Admin Panel button    Web UI deploy (calls this script with -Force, detached)
+#   deploy.bat            Admin-elevated deploy (calls this script with -Force)
 
 param(
     [switch]$Force  # Force full deploy cycle regardless of current state
@@ -83,14 +82,28 @@ function Test-ServerRunning {
     return $null -ne $conn
 }
 
-# Kill whatever is listening on a port
+# Kill whatever is listening on a port (and its process tree)
 function Stop-Server {
     param([int]$Port)
     Write-Host "  Stopping server on port $Port..." -ForegroundColor Yellow
-    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if ($conn) {
-        Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
+    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($conns) {
+        $procIds = @($conns | Select-Object -ExpandProperty OwningProcess -Unique)
+        foreach ($p in $procIds) {
+            # Kill the process and any children (waitress workers)
+            Get-CimInstance Win32_Process -Filter "ParentProcessId=$p" -ErrorAction SilentlyContinue |
+                ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
+        }
+        # Wait and verify the port is free
+        $retries = 0
+        while ($retries -lt 5) {
+            Start-Sleep -Seconds 1
+            $still = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+            if (-not $still) { return }
+            $still | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+            $retries++
+        }
     }
 }
 
@@ -155,41 +168,13 @@ function Install-Dependencies {
     $pipExe = Join-Path $RepoRoot 'venv\Scripts\pip.exe'
     $reqFile = Join-Path $RepoRoot 'requirements.txt'
 
-    # Run pip in a background job so we can show a spinner
-    $job = Start-Job -ScriptBlock {
-        param($pip, $req)
-        & $pip install -r $req 2>&1
-    } -ArgumentList $pipExe, $reqFile
+    # Run pip directly with --quiet. Suppress stderr (2>$null) because pip
+    # writes [notice] upgrade nags there.
+    & $pipExe install -r $reqFile --quiet 2>$null
 
-    # Show a spinner while pip runs
-    $spinChars = @('|', '/', '-', '\')
-    $i = 0
-    while ($job.State -eq 'Running') {
-        Write-Host "`r  Installing dependencies... $($spinChars[$i % 4])" -NoNewline -ForegroundColor Yellow
-        $i++
-        Start-Sleep -Milliseconds 250
-    }
-    Write-Host "`r  Installing dependencies...  " -NoNewline  # clear spinner
-
-    $output = Receive-Job $job
-    $exitCode = if ($job.State -eq 'Completed' -and $job.ChildJobs[0].JobStateInfo.State -ne 'Failed') { 0 } else { 1 }
-    Remove-Job $job -Force
-
-    # Check if pip output contains errors (pip returns 0 even with notices)
-    $errorLines = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] -and $_.ToString() -notmatch '^\[notice\]' }
-    $successLine = $output | Where-Object { $_ -match '^Successfully installed' }
-
-    if ($errorLines) {
-        Write-Host ""
-        $errorLines | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  pip exited with code $LASTEXITCODE" -ForegroundColor Red
         return $false
-    }
-
-    if ($successLine) {
-        Write-Host ""
-        Write-Host "  $successLine" -ForegroundColor Gray
-    } else {
-        Write-Host ""
     }
     return $true
 }
