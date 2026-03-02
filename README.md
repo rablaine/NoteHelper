@@ -112,7 +112,7 @@ On subsequent runs, it checks for updates from GitHub and applies them automatic
 
 ### Deploying updates
 
-Double-click `deploy.bat` (runs with admin elevation) or use the **Deploy** button in the Admin Panel. This runs the full deploy cycle:
+Double-click `deploy.bat` to deploy. This runs the full deploy cycle:
 
 1. Stops the running server
 2. **Backs up your database** to `data/notehelper_backup_YYYY-MM-DD_HHMMSS.db`
@@ -133,10 +133,12 @@ You can also run it from PowerShell:
 ### Script files
 
 | File | Purpose |
-|------|---------|
-| `start.bat` | Double-click launcher for users (calls `start.ps1`) |
+|------|---------|  
+| `start.bat` | Double-click launcher (calls `start.ps1`) |
 | `start.ps1` | The brain - handles setup, updates, and server management |
-| `deploy.bat` | Admin-elevated shortcut that runs `start.ps1 -Force` |
+| `deploy.bat` | Deploy shortcut that runs `start.ps1 -Force` |
+
+> **Admin elevation:** Both batch files automatically request admin (UAC prompt) only when `PORT` in `.env` is below 1024 (e.g. port 80). For higher ports like 8080, they run without elevation.
 
 ## AI Features (Optional)
 
