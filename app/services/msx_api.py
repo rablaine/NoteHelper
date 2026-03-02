@@ -206,10 +206,14 @@ def test_connection() -> Dict[str, Any]:
         elif response.status_code == 401:
             return {"success": False, "error": "Not authenticated. Run 'az login' first."}
         else:
-            return {
+            result: Dict[str, Any] = {
                 "success": False,
                 "error": f"HTTP {response.status_code}: {response.text[:200]}"
             }
+            if is_vpn_blocked():
+                result["error"] = "IP address is blocked - connect to VPN and retry."
+                result["vpn_blocked"] = True
+            return result
             
     except requests.exceptions.Timeout:
         return {"success": False, "error": "Request timed out. Check VPN connection."}
