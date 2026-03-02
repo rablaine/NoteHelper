@@ -155,38 +155,43 @@ function Install-Dependencies {
     $pipExe = Join-Path $RepoRoot 'venv\Scripts\pip.exe'
     $reqFile = Join-Path $RepoRoot 'requirements.txt'
 
-    # Stream pip output line by line, showing package names as they install
-    $process = Start-Process -FilePath $pipExe `
-        -ArgumentList "install -r `"$reqFile`" --progress-bar off" `
-        -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\pip_out.txt" -RedirectStandardError "$env:TEMP\pip_err.txt"
+    # Run pip in a background job so we can show a spinner
+    $job = Start-Job -ScriptBlock {
+        param($pip, $req)
+        & $pip install -r $req 2>&1
+    } -ArgumentList $pipExe, $reqFile
 
     # Show a spinner while pip runs
     $spinChars = @('|', '/', '-', '\')
     $i = 0
-    while (-not $process.HasExited) {
+    while ($job.State -eq 'Running') {
         Write-Host "`r  Installing dependencies... $($spinChars[$i % 4])" -NoNewline -ForegroundColor Yellow
         $i++
         Start-Sleep -Milliseconds 250
     }
     Write-Host "`r  Installing dependencies...  " -NoNewline  # clear spinner
 
-    if ($process.ExitCode -eq 0) {
-        # Count what was actually installed (not "already satisfied")
-        $output = Get-Content "$env:TEMP\pip_out.txt" -ErrorAction SilentlyContinue
-        $installed = $output | Where-Object { $_ -match '^Successfully installed' }
-        if ($installed) {
-            Write-Host ""
-            Write-Host "  $installed" -ForegroundColor Gray
-        } else {
-            Write-Host ""
-        }
-        return $true
-    } else {
+    $output = Receive-Job $job
+    $exitCode = if ($job.State -eq 'Completed' -and $job.ChildJobs[0].JobStateInfo.State -ne 'Failed') { 0 } else { 1 }
+    Remove-Job $job -Force
+
+    # Check if pip output contains errors (pip returns 0 even with notices)
+    $errorLines = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] -and $_.ToString() -notmatch '^\[notice\]' }
+    $successLine = $output | Where-Object { $_ -match '^Successfully installed' }
+
+    if ($errorLines) {
         Write-Host ""
-        $errOutput = Get-Content "$env:TEMP\pip_err.txt" -ErrorAction SilentlyContinue
-        if ($errOutput) { $errOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Red } }
+        $errorLines | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
         return $false
     }
+
+    if ($successLine) {
+        Write-Host ""
+        Write-Host "  $successLine" -ForegroundColor Gray
+    } else {
+        Write-Host ""
+    }
+    return $true
 }
 
 # Run database migrations
