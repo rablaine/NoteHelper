@@ -1023,10 +1023,9 @@ function checkForUpdates(refresh) {
                     <div class="mt-2 small text-muted">
                         Current: <code>${data.local_commit}</code> &rarr; Latest: <code>${data.remote_commit}</code>
                     </div>
-                    <div class="mt-3 d-flex align-items-center gap-2">
-                        <button class="btn btn-success btn-sm" onclick="deployUpdate()"><i class="bi bi-cloud-download"></i> Deploy Update</button>
-                        <button class="btn btn-outline-secondary btn-sm ms-1" onclick="viewDeployLog()" title="View deploy log"><i class="bi bi-file-text"></i></button>
-                        ${!data.dismissed ? '<button class="btn btn-outline-secondary btn-sm" onclick="dismissUpdate()"><i class="bi bi-bell-slash"></i> Dismiss</button>' : ''}
+                    <div class="mt-3 alert alert-info mb-0 py-2">
+                        <i class="bi bi-terminal"></i> To update, run <strong>deploy.bat</strong> from the NoteHelper folder (as Administrator).
+                        ${!data.dismissed ? '<button class="btn btn-outline-secondary btn-sm ms-2" onclick="dismissUpdate()"><i class="bi bi-bell-slash"></i> Dismiss</button>' : ''}
                     </div>
                 `;
             } else {
@@ -1057,89 +1056,6 @@ function dismissUpdate() {
         checkForUpdates(false);
     })
     .catch(() => {});
-}
-
-function deployUpdate() {
-    const statusEl = document.getElementById('updateStatus');
-    statusEl.innerHTML = `
-        <div class="text-center py-2">
-            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-            <strong>Deploying update...</strong>
-            <div class="mt-2 small text-muted">The server will restart. This page will automatically refresh when it's back.</div>
-        </div>
-    `;
-
-    fetch('/api/admin/deploy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.deploying) {
-            statusEl.innerHTML = `
-                <div class="text-center py-2">
-                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                    <strong>Deploy started!</strong>
-                    <div class="mt-2 small text-muted">Waiting for the server to restart...</div>
-                </div>
-            `;
-            // Wait a few seconds before polling so the server has time to go down
-            setTimeout(() => {
-                let attempts = 0;
-                const maxAttempts = 60;  // ~2 minutes
-                const poll = setInterval(() => {
-                    attempts++;
-                    fetch('/api/admin/update-check', { signal: AbortSignal.timeout(2000) })
-                        .then(r => r.json())
-                        .then(() => {
-                            clearInterval(poll);
-                            window.location.reload();
-                        })
-                        .catch(() => {
-                            if (attempts >= maxAttempts) {
-                                clearInterval(poll);
-                                statusEl.innerHTML = `
-                                    <div class="text-warning">
-                                        <i class="bi bi-exclamation-triangle"></i>
-                                        Deploy started but the server hasn't come back yet.
-                                        <a href="#" onclick="viewDeployLog(); return false;">View deploy log</a> or try refreshing manually.
-                                    </div>
-                                `;
-                            }
-                        });
-                }, 2000);
-            }, 5000);  // 5 second delay before polling
-        } else {
-            statusEl.innerHTML = `<div class="text-danger"><i class="bi bi-x-circle"></i> ${data.error || 'Deploy failed.'}</div>`;
-        }
-    })
-    .catch(() => {
-        statusEl.innerHTML = `<div class="text-danger"><i class="bi bi-x-circle"></i> Could not reach the server to start deploy.</div>`;
-    });
-}
-
-function viewDeployLog() {
-    const statusEl = document.getElementById('updateStatus');
-    fetch('/api/admin/deploy-log')
-        .then(r => r.json())
-        .then(data => {
-            if (!data.exists) {
-                statusEl.innerHTML = '<div class="text-muted small">No deploy log found.</div>';
-                return;
-            }
-            statusEl.innerHTML = `
-                <div class="mt-2">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <small class="text-muted">Last deploy: ${data.modified}</small>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="checkForUpdates(false)"><i class="bi bi-x"></i> Close</button>
-                    </div>
-                    <pre class="bg-dark text-light p-2 rounded small" style="max-height: 300px; overflow-y: auto; white-space: pre-wrap;">${data.log.replace(/</g, '&lt;')}</pre>
-                </div>
-            `;
-        })
-        .catch(() => {
-            statusEl.innerHTML = '<div class="text-danger small">Could not load deploy log.</div>';
-        });
 }
 
 // Check on page load (uses cached state, no git fetch)
