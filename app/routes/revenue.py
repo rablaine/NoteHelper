@@ -97,6 +97,10 @@ def revenue_import():
 @revenue_bp.route('/api/revenue/import', methods=['POST'])
 def revenue_import_stream():
     """Import revenue CSV with streaming progress updates."""
+    from app.models import Customer
+    if Customer.query.first() is None:
+        return jsonify({'error': 'Import accounts first'}), 400
+
     if 'file' not in request.files:
         return jsonify({'error': 'No file selected'}), 400
     
@@ -177,6 +181,11 @@ def revenue_import_stream():
 @revenue_bp.route('/revenue/analyze', methods=['POST'])
 def revenue_analyze():
     """Re-run analysis on all revenue data."""
+    from app.models import Customer
+    if Customer.query.first() is None:
+        flash('Import accounts first before running analysis.', 'warning')
+        return redirect(url_for('revenue.revenue_dashboard'))
+
     try:
         stats = run_analysis_for_all(user_id=g.user.id)
         flash(
