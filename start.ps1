@@ -233,7 +233,26 @@ if (-not $pythonOk) {
     exit 1
 }
 
-# -- Step 2: Check Azure CLI (optional) ---------------------------------------
+# -- Step 2: Check Git ---------------------------------------------------------
+$hasGit = $false
+try { if (Get-Command git -ErrorAction SilentlyContinue) { $hasGit = $true } } catch {}
+if ($hasGit) {
+    $gitVersion = & git --version 2>$null
+    Write-Host "  [OK] $gitVersion" -ForegroundColor Green
+} else {
+    Write-Host "  [WARNING] Git not found." -ForegroundColor Yellow
+    Write-Host "            Required for deploying updates." -ForegroundColor Gray
+    Write-Host ""
+    Install-WithWinget -Name "Git" -PackageId "Git.Git" -ManualUrl "https://git-scm.com/downloads"
+    # Re-check after potential install
+    try { if (Get-Command git -ErrorAction SilentlyContinue) { $hasGit = $true } } catch {}
+    if (-not $hasGit) {
+        Write-Host "            NoteHelper will still run, but you won't be able to pull updates." -ForegroundColor Gray
+        Write-Host ""
+    }
+}
+
+# -- Step 3: Check Azure CLI (optional) ---------------------------------------
 $hasAz = $false
 try { if (Get-Command az -ErrorAction SilentlyContinue) { $hasAz = $true } } catch {}
 if ($hasAz) {
@@ -247,7 +266,7 @@ if ($hasAz) {
     Write-Host ""
 }
 
-# -- Step 3: Check Node.js (optional) -----------------------------------------
+# -- Step 4: Check Node.js (optional) -----------------------------------------
 $hasNode = $false
 try { if (Get-Command node -ErrorAction SilentlyContinue) { $hasNode = $true } } catch {}
 if ($hasNode) {
@@ -262,7 +281,7 @@ if ($hasNode) {
     Write-Host ""
 }
 
-# -- Step 4: Create venv if missing -------------------------------------------
+# -- Step 5: Create venv if missing -------------------------------------------
 if (-not (Test-Path (Join-Path $RepoRoot 'venv\Scripts\python.exe'))) {
     Write-Host "  [SETUP] Creating virtual environment..." -ForegroundColor Yellow
     & python -m venv (Join-Path $RepoRoot 'venv')
@@ -276,7 +295,7 @@ if (-not (Test-Path (Join-Path $RepoRoot 'venv\Scripts\python.exe'))) {
     Write-Host "  [OK] Virtual environment found." -ForegroundColor Green
 }
 
-# -- Step 5: Install dependencies ---------------------------------------------
+# -- Step 6: Install dependencies ---------------------------------------------
 if (-not (Install-Dependencies)) {
     Write-Host "  [ERROR] Failed to install dependencies." -ForegroundColor Red
     Pause-WithMessage "Press any key to close..." "Red"
@@ -284,7 +303,7 @@ if (-not (Install-Dependencies)) {
 }
 Write-Host "  [OK] Dependencies installed." -ForegroundColor Green
 
-# -- Step 6: Create .env if missing -------------------------------------------
+# -- Step 7: Create .env if missing -------------------------------------------
 $envFile = Join-Path $RepoRoot '.env'
 if (-not (Test-Path $envFile)) {
     $exampleFile = Join-Path $RepoRoot '.env.example'
@@ -303,23 +322,27 @@ if (-not (Test-Path $envFile)) {
     }
 }
 
-# -- Step 7: Read config ------------------------------------------------------
+# -- Step 8: Read config ------------------------------------------------------
 $envConfig = Read-EnvFile
 $Port = if ($envConfig['PORT']) { [int]$envConfig['PORT'] } else { 5000 }
 Write-Host "  [OK] Port: $Port" -ForegroundColor Green
 
-# -- Step 8: Check current state -----------------------------------------------
+# -- Step 9: Check current state -----------------------------------------------
 $serverRunning = Test-ServerRunning -Port $Port
 
-# -- Step 9: Check for git updates --------------------------------------------
+# -- Step 10: Check for git updates -------------------------------------------
 $hasUpdates = $false
-$hasGit = $false
-try {
-    git rev-parse --git-dir 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { $hasGit = $true }
-} catch {}
 
+# Only check for updates if git is installed AND this is a git repo
+$isGitRepo = $false
 if ($hasGit) {
+    try {
+        git rev-parse --git-dir 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $isGitRepo = $true }
+    } catch {}
+}
+
+if ($isGitRepo) {
     Write-Host "  Checking for updates..." -ForegroundColor Gray
     git fetch origin main --quiet 2>$null
     $localCommit = git rev-parse HEAD 2>$null
@@ -332,7 +355,7 @@ if ($hasGit) {
         Write-Host "  [OK] Up to date." -ForegroundColor Green
     }
 } else {
-    Write-Host "  [INFO] Not a git repo - update checking disabled." -ForegroundColor Gray
+    Write-Host "  [INFO] Git not available - update checking disabled." -ForegroundColor Gray
 }
 
 # ==============================================================================
@@ -347,7 +370,7 @@ if ($Force) {
     if ($serverRunning) { Stop-Server -Port $Port }
     Backup-Database
 
-    if ($hasGit) {
+    if ($isGitRepo) {
         if (-not (Pull-Updates)) {
             Write-Host "  Restarting server with current code..." -ForegroundColor Yellow
             Start-Server -Port $Port

@@ -222,17 +222,24 @@ def api_deploy():
     
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     start_script = os.path.join(repo_root, 'start.ps1')
+    data_dir = os.path.join(repo_root, 'data')
+    log_file = os.path.join(data_dir, 'deploy.log')
     
     if not os.path.exists(start_script):
         return jsonify({'error': 'start.ps1 not found'}), 404
     
+    # Ensure data directory exists for the log file
+    os.makedirs(data_dir, exist_ok=True)
+    
     try:
-        # Launch start.ps1 -Force with admin elevation via -Verb RunAs
-        # This triggers a UAC prompt, which is required for port 80
+        # Launch start.ps1 -Force as a detached process with output logged.
+        # The server is already running elevated (started via deploy.bat),
+        # so the child inherits elevation -- no -Verb RunAs needed.
+        # Use PowerShell -Command with *> to capture ALL output streams to a log file.
         subprocess.Popen(
             [
                 'powershell', '-ExecutionPolicy', 'Bypass', '-Command',
-                f'Start-Process powershell -ArgumentList \'-ExecutionPolicy Bypass -File "{start_script}" -Force\' -Verb RunAs'
+                f'& "{start_script}" -Force *> "{log_file}"'
             ],
             cwd=repo_root,
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
@@ -241,4 +248,26 @@ def api_deploy():
         return jsonify({'deploying': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/deploy-log')
+def api_deploy_log():
+    """Read the deploy log file for debugging."""
+    import os
+    
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    log_file = os.path.join(repo_root, 'data', 'deploy.log')
+    
+    if not os.path.exists(log_file):
+        return jsonify({'log': 'No deploy log found.', 'exists': False})
+    
+    try:
+        mtime = os.path.getmtime(log_file)
+        from datetime import datetime
+        modified = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+        return jsonify({'log': content, 'exists': True, 'modified': modified})
+    except Exception as e:
+        return jsonify({'log': f'Error reading log: {e}', 'exists': False})
 

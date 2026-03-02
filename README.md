@@ -7,10 +7,10 @@ A single-user note-taking application for Azure technical sellers to capture and
 ### Prerequisites
 
 - **Python 3.13+** (the launcher can install this for you)
-- **Azure CLI** (optional — required for MSX and AI features; the launcher can install this too)
-- **Node.js 18+** (optional — required for WorkIQ meeting import; the launcher can install this too)
-- **VPN connection** — required for MSX integration (account imports, milestones)
-- **Git** (recommended but not required — you can also [download the repo as a ZIP](https://github.com/rablaine/NoteHelper/archive/refs/heads/main.zip) from GitHub)
+- **Git** (required for updates; the launcher can install this for you. Without it you can still [download the ZIP](https://github.com/rablaine/NoteHelper/archive/refs/heads/main.zip) to get started, but updates won't work)
+- **Azure CLI** (optional - required for MSX and AI features; the launcher can install this too)
+- **Node.js 18+** (optional - required for WorkIQ meeting import; the launcher can install this too)
+- **VPN connection** - required for MSX integration (account imports, milestones)
 
 ### Quick Start
 
