@@ -11,7 +11,7 @@ if exist .env (
 )
 
 if %PORT% LSS 1024 (
-    powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0start.ps1\" -Force' -Verb RunAs"
+    powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0scripts\server.ps1\" -Force' -Verb RunAs"
 ) else (
-    powershell -ExecutionPolicy Bypass -File "%~dp0start.ps1" -Force
+    powershell -ExecutionPolicy Bypass -File "%~dp0scripts\server.ps1" -Force
 )

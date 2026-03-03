@@ -1,22 +1,22 @@
-# NoteHelper - Start & Deploy Script
+# NoteHelper - Server Management Script
 # Handles first-run setup, starting the server, and deploying updates.
 #
 # Usage:
-#   .\start.ps1            Normal start (bootstrap if needed, update if available)
-#   .\start.ps1 -Force     Full deploy cycle (stop, backup, pull, install, migrate, restart)
-#   .\start.ps1 -StopOnly  Stop the running server and exit (skips all prereq checks)
+#   .\scripts\server.ps1            Normal start (bootstrap if needed, update if available)
+#   .\scripts\server.ps1 -Force     Full deploy cycle (stop, backup, pull, install, migrate, restart)
+#   .\scripts\server.ps1 -StopOnly  Stop the running server and exit (skips all prereq checks)
 #
 # Entry points:
-#   start.bat               Double-click launcher for users (calls this script)
+#   start.bat               Double-click launcher (calls this script)
 #   deploy.bat              Admin-elevated deploy (calls this script with -Force)
-#   stop.bat                Stop the server (calls this script with -StopOnly, elevates if needed)
+#   stop.bat                Stop the server (calls this script with -StopOnly)
 
 param(
     [switch]$Force,    # Force full deploy cycle regardless of current state
     [switch]$StopOnly  # Stop the running server and exit
 )
 
-$RepoRoot = $PSScriptRoot
+$RepoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $RepoRoot
 
 # ==============================================================================

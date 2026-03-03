@@ -100,7 +100,7 @@ pytest --cov=app tests/  # with coverage
 
 ## Starting & Deploying
 
-NoteHelper uses a single smart script (`start.ps1`) that handles everything: first-run setup, starting the server, checking for updates, and deploying new versions.
+NoteHelper uses a single smart script (`scripts/server.ps1`) that handles everything: first-run setup, starting the server, checking for updates, and deploying new versions.
 
 ### Quick start
 
@@ -128,17 +128,18 @@ If anything fails, it restarts the server with the previous code.
 You can also run it from PowerShell:
 
 ```powershell
-.\start.ps1          # Smart mode: bootstrap, update, or start as needed
-.\start.ps1 -Force   # Full deploy cycle regardless of state
+.\scripts\server.ps1          # Smart mode: bootstrap, update, or start as needed
+.\scripts\server.ps1 -Force   # Full deploy cycle regardless of state
 ```
 
 ### Script files
 
 | File | Purpose |
 |------|---------|  
-| `start.bat` | Double-click launcher (calls `start.ps1`) |
-| `start.ps1` | The brain - handles setup, updates, and server management |
-| `deploy.bat` | Deploy shortcut that runs `start.ps1 -Force` |
+| `start.bat` | Double-click launcher (calls `scripts/server.ps1`) |
+| `stop.bat` | Double-click to stop the server |
+| `deploy.bat` | Deploy shortcut that runs `scripts/server.ps1 -Force` |
+| `scripts/server.ps1` | The brain - handles setup, updates, and server management |
 
 > **Admin elevation:** Both batch files automatically request admin (UAC prompt) only when `PORT` in `.env` is below 1024 (e.g. port 80). For higher ports like 8080, they run without elevation.
 
