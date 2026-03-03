@@ -854,7 +854,15 @@ document.getElementById('importFromMsxBtn').addEventListener('click', async func
         const response = await fetch('/api/msx/import-stream');
         
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            // Try to extract a useful error message from the response body
+            let detail = '';
+            try {
+                const body = await response.json();
+                detail = body.error || body.message || '';
+            } catch (_) {
+                try { detail = (await response.text()).slice(0, 200); } catch (_) {}
+            }
+            throw new Error(detail || `HTTP ${response.status}: ${response.statusText}`);
         }
         
         const reader = response.body.getReader();

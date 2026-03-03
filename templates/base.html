@@ -1364,7 +1364,17 @@
 
                     try {
                         const resp = await fetch('/api/msx/import-stream');
-                        if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
+                        if (!resp.ok) {
+                            // Try to extract a useful error message from the response body
+                            let detail = '';
+                            try {
+                                const body = await resp.json();
+                                detail = body.error || body.message || '';
+                            } catch (_) {
+                                try { detail = (await resp.text()).slice(0, 200); } catch (_) {}
+                            }
+                            throw new Error(detail || ('HTTP ' + resp.status + ': ' + resp.statusText));
+                        }
                         const reader = resp.body.getReader();
                         const decoder = new TextDecoder();
                         let buffer = '';
@@ -1432,7 +1442,14 @@
                         updateNextButton();
                     } catch (err) {
                         const msg = err.message || 'Connection error during import';
-                        document.getElementById('importAccountsErrorMsg').textContent = msg.charAt(0).toUpperCase() + msg.slice(1);
+                        const errorEl = document.getElementById('importAccountsErrorMsg');
+                        errorEl.textContent = msg.charAt(0).toUpperCase() + msg.slice(1);
+                        // Show the log div in error state too (contains last progress messages)
+                        const logDiv = document.getElementById('importAccountsLog');
+                        if (logDiv && logDiv.innerHTML) {
+                            logDiv.style.maxHeight = '80px';
+                            document.getElementById('importAccountsError').appendChild(logDiv);
+                        }
                         showImportState('importAccounts', 'Error');
                     } finally {
                         window.removeEventListener('beforeunload', warnOnLeave);
