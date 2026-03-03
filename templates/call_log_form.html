@@ -2336,6 +2336,12 @@ function proceedWithMeeting(meeting, dateStr) {
         summaryUrl += '&date=' + encodeURIComponent(dateStr);
     }
     
+    // Include custom prompt if user has one configured
+    var promptEl = document.getElementById('meetingCustomPrompt');
+    if (promptEl && promptEl.value.trim()) {
+        summaryUrl += '&prompt=' + encodeURIComponent(promptEl.value.trim());
+    }
+    
     fetch(summaryUrl)
         .then(response => response.json())
         .then(data => {
