@@ -1442,7 +1442,14 @@
                         updateNextButton();
                     } catch (err) {
                         const msg = err.message || 'Connection error during import';
-                        document.getElementById('importAccountsErrorMsg').textContent = msg.charAt(0).toUpperCase() + msg.slice(1);
+                        const errorEl = document.getElementById('importAccountsErrorMsg');
+                        errorEl.textContent = msg.charAt(0).toUpperCase() + msg.slice(1);
+                        // Show the log div in error state too (contains last progress messages)
+                        const logDiv = document.getElementById('importAccountsLog');
+                        if (logDiv && logDiv.innerHTML) {
+                            logDiv.style.maxHeight = '80px';
+                            document.getElementById('importAccountsError').appendChild(logDiv);
+                        }
                         showImportState('importAccounts', 'Error');
                     } finally {
                         window.removeEventListener('beforeunload', warnOnLeave);

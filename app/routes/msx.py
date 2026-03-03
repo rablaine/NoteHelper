@@ -16,6 +16,7 @@ import logging
 
 from app.services.msx_auth import (
     get_msx_auth_status,
+    get_msx_token,
     refresh_token,
     clear_token_cache,
     start_token_refresh_job,
@@ -881,15 +882,38 @@ def import_stream():
     
     Creates: PODs, Territories, Sellers, SEs, Verticals, Customers
     """
-    # Capture app context before generator (SSE generators lose request context)
+    # --- Pre-flight checks (run in normal request context) ---
+    # These return clear JSON errors BEFORE starting the SSE stream
+    # so the frontend gets an HTTP error instead of a broken stream.
     try:
         app = current_app._get_current_object()
     except Exception as e:
         logger.exception("Failed to get app object for import-stream")
         return jsonify({"error": f"Server error: {e}"}), 500
+
+    # Check MSX auth is working (token available)
+    token = get_msx_token()
+    if not token:
+        logger.warning("import-stream: No MSX token available")
+        return jsonify({
+            "error": "Not authenticated with MSX. Complete Step 2 (Sign in with Azure) first.",
+            "auth_required": True,
+        }), 401
+
+    # Quick DB sanity check (can we query the User table?)
+    try:
+        user_check = db.session.execute(db.text("SELECT id FROM users LIMIT 1")).fetchone()
+        if not user_check:
+            return jsonify({
+                "error": "Database not initialized. No user record found.",
+            }), 500
+    except Exception as e:
+        logger.exception("import-stream: Database check failed")
+        return jsonify({"error": f"Database error: {e}"}), 500
     
     def generate():
         ctx = None
+        phase = "initializing"
         try:
             # Push app context for database operations in SSE generator
             ctx = app.app_context()
@@ -903,6 +927,7 @@ def import_stream():
             import_start_time = time.time()
             yield "data: " + json.dumps({"message": "Starting MSX import..."}) + "\n\n"
             
+            phase = "fetching account assignments"
             # 1. Initialize - get all account IDs
             yield "data: " + json.dumps({"message": "Fetching your account assignments from MSX..."}) + "\n\n"
             
@@ -926,6 +951,7 @@ def import_stream():
                 "role": role
             }) + "\n\n"
             
+            phase = "querying accounts"
             # 2. Batch query all accounts — inline the loop so we can
             #    yield SSE progress after each batch in real time.
             BATCH_SIZE = 15
@@ -974,6 +1000,7 @@ def import_stream():
                 "progress": 13
             }) + "\n\n"
             
+            phase = "querying territories"
             # 3. Collect unique territory IDs and batch query them inline
             territory_ids = set()
             for acct in accounts_raw.values():
@@ -1018,6 +1045,7 @@ def import_stream():
                 "progress": 21
             }) + "\n\n"
             
+            phase = "processing account data"
             # 4. Process all accounts and build data structures
             accounts_data = []  # List of account details
             pod_accounts = {}  # pod_name -> [account_ids] for team lookup
@@ -1092,6 +1120,7 @@ def import_stream():
                 "progress": 22
             }) + "\n\n"
             
+            phase = "querying sellers and SEs"
             # 5. Batch query all account teams for sellers and SEs
             # Uses server-side filtering: Corporate + Cloud & AI*, batched by 3 accounts
             # (3 accounts × ~22 Cloud & AI records = ~66, safely under 100 limit)
@@ -1161,6 +1190,7 @@ def import_stream():
                 "progress": 86
             }) + "\n\n"
             
+            phase = "creating database records"
             # 6. Create database entities
             yield "data: " + json.dumps({"message": "Creating PODs..."}) + "\n\n"
             
@@ -1423,8 +1453,11 @@ def import_stream():
                 db.session.rollback()
             except Exception:
                 pass  # Don't let rollback failure mask the real error
-            logger.exception("Error during MSX import stream")
-            yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
+            error_detail = f"[{type(e).__name__}] {e}"
+            logger.exception(f"Error during MSX import stream (phase: {phase}): {error_detail}")
+            yield "data: " + json.dumps({
+                "error": f"Import failed during '{phase}': {error_detail}"
+            }) + "\n\n"
         finally:
             if ctx is not None:
                 ctx.pop()
