@@ -1691,6 +1691,7 @@ function saveDraft() {
         })),
         milestone: milestoneData,
         task: taskData,
+        pendingTaskSuggestion: pendingTaskSuggestion || null,
         call_log_id: {% if call_log %}{{ call_log.id }}{% else %}null{% endif %},
         timestamp: Date.now()
     };
@@ -1777,6 +1778,11 @@ function restoreDraft() {
         if (draft.milestone) {
             selectedMilestoneData = draft.milestone;
             selectMilestone(draft.milestone);
+        }
+        
+        // Restore pending task suggestion (from meeting import, before milestone selected)
+        if (draft.pendingTaskSuggestion) {
+            pendingTaskSuggestion = draft.pendingTaskSuggestion;
         }
         
         // Restore task form data
