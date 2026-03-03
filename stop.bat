@@ -10,10 +10,8 @@ if exist .env (
     )
 )
 
-set "STOP_CMD=-ExecutionPolicy Bypass -Command \"$p=Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue; if($p){$p|ForEach-Object{Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue};Write-Host '  Server on port %PORT% stopped.' -ForegroundColor Green}else{Write-Host '  No server running on port %PORT%.' -ForegroundColor Yellow};Start-Sleep -Seconds 1\""
-
 if %PORT% LSS 1024 (
-    powershell -Command "Start-Process powershell -ArgumentList '%STOP_CMD%' -Verb RunAs"
+    powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0start.ps1\" -StopOnly' -Verb RunAs"
 ) else (
-    powershell %STOP_CMD%
+    powershell -ExecutionPolicy Bypass -File "%~dp0start.ps1" -StopOnly
 )

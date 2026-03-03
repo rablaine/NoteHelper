@@ -2,16 +2,18 @@
 # Handles first-run setup, starting the server, and deploying updates.
 #
 # Usage:
-#   .\start.ps1          Normal start (bootstrap if needed, update if available)
-#   .\start.ps1 -Force   Full deploy cycle (stop, backup, pull, install, migrate, restart)
+#   .\start.ps1            Normal start (bootstrap if needed, update if available)
+#   .\start.ps1 -Force     Full deploy cycle (stop, backup, pull, install, migrate, restart)
+#   .\start.ps1 -StopOnly  Stop the running server and exit (skips all prereq checks)
 #
 # Entry points:
-#   start.bat             Double-click launcher for users (calls this script)
-#   deploy.bat            Admin-elevated deploy (calls this script with -Force)
-#   stop.bat              Stop the server (self-contained, no dependency on start.ps1)
+#   start.bat               Double-click launcher for users (calls this script)
+#   deploy.bat              Admin-elevated deploy (calls this script with -Force)
+#   stop.bat                Stop the server (calls this script with -StopOnly, elevates if needed)
 
 param(
-    [switch]$Force  # Force full deploy cycle regardless of current state
+    [switch]$Force,    # Force full deploy cycle regardless of current state
+    [switch]$StopOnly  # Stop the running server and exit
 )
 
 $RepoRoot = $PSScriptRoot
@@ -199,6 +201,25 @@ Write-Host ""
 Write-Host "  NoteHelper" -ForegroundColor Cyan
 Write-Host "  ==========" -ForegroundColor Cyan
 Write-Host ""
+
+# -StopOnly: Read port from .env, stop the server, and exit immediately.
+# Skips all prereq checks (Python, Git, venv, etc.) for instant execution.
+if ($StopOnly) {
+    $envConfig = Read-EnvFile
+    $Port = if ($envConfig['PORT']) { [int]$envConfig['PORT'] } else { 5000 }
+    if (Test-ServerRunning -Port $Port) {
+        Stop-Server -Port $Port
+        if (-not (Test-ServerRunning -Port $Port)) {
+            Write-Host "  [OK] Server on port $Port stopped." -ForegroundColor Green
+        } else {
+            Write-Host "  [ERROR] Failed to stop server on port $Port." -ForegroundColor Red
+        }
+    } else {
+        Write-Host "  No server running on port $Port." -ForegroundColor Yellow
+    }
+    Start-Sleep -Seconds 1
+    exit 0
+}
 
 # -- Step 1: Check Python -----------------------------------------------------
 function Test-PythonOk {
