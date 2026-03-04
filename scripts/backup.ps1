@@ -344,7 +344,7 @@ if ($Setup) {
         -WorkingDirectory $RepoRoot
 
     # Run daily at 2 AM
-    $trigger = New-ScheduledTaskTrigger -Daily -At '2:00AM'
+    $trigger = New-ScheduledTaskTrigger -Daily -At '11:00AM'
 
     # Run as current user, whether logged in or not
     $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
@@ -371,7 +371,7 @@ if ($Setup) {
         Save-BackupConfig $config
 
         Write-Host "  [OK] Scheduled task '$TaskName' registered." -ForegroundColor Green
-        Write-Host "       Runs daily at 2:00 AM." -ForegroundColor Gray
+        Write-Host "       Runs daily at 11:00 AM." -ForegroundColor Gray
     } catch {
         Write-Host "  [WARNING] Could not register scheduled task: $_" -ForegroundColor Yellow
         Write-Host "            You can still run backups manually with backup.bat" -ForegroundColor Gray
