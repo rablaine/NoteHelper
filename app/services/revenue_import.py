@@ -436,6 +436,18 @@ def process_csv(df: Any) -> tuple[Any, list[str], dict[str, int]]:
     month_row = df.iloc[0].tolist()
     metric_row = df.iloc[1].tolist() if len(df) > 1 else []
     
+    # Validate required columns exist in the header row
+    REQUIRED_COLUMNS = ['TPAccountName', 'ServiceCompGrouping', 'ServiceLevel4']
+    header_values = [str(v).strip() for v in metric_row[:10] if pd.notna(v)]
+    missing = [col for col in REQUIRED_COLUMNS if col not in header_values]
+    if missing:
+        raise RevenueImportError(
+            f"This doesn't look like the right CSV. "
+            f"Missing required columns: {', '.join(missing)}. "
+            f"Make sure you're exporting from the 'ACR Details by Quarter / Month' table "
+            f"with ServiceLevel4 checked under Choose Fields."
+        )
+    
     # Find where month columns start (look for FY pattern)
     month_start_idx = None
     for i, val in enumerate(month_row):
