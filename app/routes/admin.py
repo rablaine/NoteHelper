@@ -27,7 +27,7 @@ admin_bp = Blueprint('admin', __name__)
 def admin_panel():
     """Admin control panel for system-wide operations."""
     import os
-    from app.routes.ai import is_ai_enabled
+    import re
     
     # Get system-wide statistics
     stats = {
@@ -46,17 +46,48 @@ def admin_panel():
         'total_revenue_imports': RevenueImport.query.count(),
     }
     
-    # AI configuration status
-    ai_enabled = is_ai_enabled()
+    # AI configuration status -- validate that values look real, not placeholders
+    guid_pattern = re.compile(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE
+    )
+    placeholder_keywords = ('your-', 'example', 'placeholder', 'changeme', 'xxx')
+
+    def _is_real_value(val: str, require_guid: bool = False) -> bool:
+        """Check if an env var value looks real (not a placeholder)."""
+        if not val:
+            return False
+        val_lower = val.lower().strip()
+        if any(kw in val_lower for kw in placeholder_keywords):
+            return False
+        if require_guid and not guid_pattern.match(val.strip()):
+            return False
+        return True
+
+    raw_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', '')
+    raw_deployment = os.environ.get('AZURE_OPENAI_DEPLOYMENT', '')
+    raw_client_id = os.environ.get('AZURE_CLIENT_ID', '')
+    raw_client_secret = os.environ.get('AZURE_CLIENT_SECRET', '')
+    raw_tenant_id = os.environ.get('AZURE_TENANT_ID', '')
+
+    endpoint_ok = _is_real_value(raw_endpoint) and raw_endpoint.startswith('https://')
+    deployment_ok = _is_real_value(raw_deployment)
+    client_id_ok = _is_real_value(raw_client_id, require_guid=True)
+    client_secret_ok = _is_real_value(raw_client_secret)
+    tenant_id_ok = _is_real_value(raw_tenant_id, require_guid=True)
+
+    all_configured = all([
+        endpoint_ok, deployment_ok, client_id_ok, client_secret_ok, tenant_id_ok
+    ])
+
     ai_config = {
-        'enabled': ai_enabled,
-        'endpoint': os.environ.get('AZURE_OPENAI_ENDPOINT', ''),
-        'deployment': os.environ.get('AZURE_OPENAI_DEPLOYMENT', ''),
-        'has_credentials': bool(
-            os.environ.get('AZURE_CLIENT_ID')
-            and os.environ.get('AZURE_CLIENT_SECRET')
-            and os.environ.get('AZURE_TENANT_ID')
-        )
+        'endpoint': raw_endpoint,
+        'deployment': raw_deployment,
+        'endpoint_ok': endpoint_ok,
+        'deployment_ok': deployment_ok,
+        'client_id_ok': client_id_ok,
+        'client_secret_ok': client_secret_ok,
+        'tenant_id_ok': tenant_id_ok,
+        'all_configured': all_configured,
     }
     
     return render_template('admin_panel.html', stats=stats, ai_config=ai_config)
