@@ -95,60 +95,101 @@
                 </div>
             </div>
             <div class="col-md-6">
-                <!-- AI Integration (compact) -->
+                <!-- AI Integration -->
                 <div class="card h-100">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-stars"></i> AI Integration</h5>
                     </div>
                     <div class="card-body">
-                        {% if ai_config.enabled and ai_config.has_credentials %}
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="flex-grow-1">
-                                <i class="bi bi-check-circle-fill text-success"></i> Configured
-                                <span class="text-muted small ms-1">({{ ai_config.deployment }})</span>
-                            </div>
+                        <!-- Config checklist -->
+                        <table class="table table-sm table-borderless mb-2">
+                            <tbody>
+                                <tr>
+                                    <td class="ps-0" style="width: 24px;">
+                                        <i class="bi bi-{{ 'check-circle-fill text-success' if ai_config.endpoint_ok else 'x-circle-fill text-danger' }}"></i>
+                                    </td>
+                                    <td><code>AZURE_OPENAI_ENDPOINT</code></td>
+                                    <td class="text-end text-muted small">
+                                        {% if ai_config.endpoint_ok %}
+                                            {{ ai_config.endpoint | truncate(35, True) }}
+                                        {% elif ai_config.endpoint %}
+                                            <span class="text-danger">placeholder</span>
+                                        {% else %}
+                                            <span class="text-muted">not set</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-0">
+                                        <i class="bi bi-{{ 'check-circle-fill text-success' if ai_config.deployment_ok else 'x-circle-fill text-danger' }}"></i>
+                                    </td>
+                                    <td><code>AZURE_OPENAI_DEPLOYMENT</code></td>
+                                    <td class="text-end text-muted small">
+                                        {% if ai_config.deployment_ok %}
+                                            {{ ai_config.deployment }}
+                                        {% elif ai_config.deployment %}
+                                            <span class="text-danger">placeholder</span>
+                                        {% else %}
+                                            <span class="text-muted">not set</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-0">
+                                        <i class="bi bi-{{ 'check-circle-fill text-success' if ai_config.client_id_ok else 'x-circle-fill text-danger' }}"></i>
+                                    </td>
+                                    <td><code>AZURE_CLIENT_ID</code></td>
+                                    <td class="text-end text-muted small">
+                                        {% if ai_config.client_id_ok %}
+                                            <span class="text-success">set</span>
+                                        {% else %}
+                                            <span class="text-danger">{{ 'invalid' if ai_config.endpoint else 'not set' }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-0">
+                                        <i class="bi bi-{{ 'check-circle-fill text-success' if ai_config.client_secret_ok else 'x-circle-fill text-danger' }}"></i>
+                                    </td>
+                                    <td><code>AZURE_CLIENT_SECRET</code></td>
+                                    <td class="text-end text-muted small">
+                                        {% if ai_config.client_secret_ok %}
+                                            <span class="text-success">set</span>
+                                        {% else %}
+                                            <span class="text-danger">{{ 'invalid' if ai_config.endpoint else 'not set' }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-0">
+                                        <i class="bi bi-{{ 'check-circle-fill text-success' if ai_config.tenant_id_ok else 'x-circle-fill text-danger' }}"></i>
+                                    </td>
+                                    <td><code>AZURE_TENANT_ID</code></td>
+                                    <td class="text-end text-muted small">
+                                        {% if ai_config.tenant_id_ok %}
+                                            <span class="text-success">set</span>
+                                        {% else %}
+                                            <span class="text-danger">{{ 'invalid' if ai_config.endpoint else 'not set' }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="d-flex align-items-center justify-content-between">
+                            {% if ai_config.all_configured %}
                             <button class="btn btn-outline-success btn-sm" id="aiTestBtn">
-                                <i class="bi bi-lightning"></i> Test
+                                <i class="bi bi-lightning"></i> Test Connection
                             </button>
+                            {% else %}
+                            <span class="text-muted small">
+                                <a href="https://github.com/rablaine/NoteHelper#ai-features-optional" target="_blank">Setup guide</a>
+                            </span>
+                            <button class="btn btn-outline-secondary btn-sm" disabled>
+                                <i class="bi bi-lightning"></i> Test Connection
+                            </button>
+                            {% endif %}
                         </div>
                         <div id="aiTestResult" class="mt-2"></div>
-                        {% elif not ai_config.endpoint %}
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="flex-grow-1">
-                                <i class="bi bi-dash-circle text-muted"></i> <span class="text-muted">Not configured</span>
-                            </div>
-                            <button class="btn btn-outline-secondary btn-sm" disabled>
-                                <i class="bi bi-lightning"></i> Test
-                            </button>
-                        </div>
-                        <div class="mt-2">
-                            <span class="text-muted small">Set Azure OpenAI environment variables in <code>.env</code> to enable AI features. <a href="https://github.com/rablaine/NoteHelper#ai-features-optional" target="_blank">Setup guide</a></span>
-                        </div>
-                        {% elif not ai_config.has_credentials %}
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="flex-grow-1">
-                                <i class="bi bi-exclamation-triangle text-warning"></i> <span class="text-muted">Missing credentials</span>
-                            </div>
-                            <button class="btn btn-outline-secondary btn-sm" disabled>
-                                <i class="bi bi-lightning"></i> Test
-                            </button>
-                        </div>
-                        <div class="mt-2">
-                            <span class="text-muted small">Endpoint set but service principal credentials (<code>AZURE_CLIENT_ID</code>, <code>AZURE_CLIENT_SECRET</code>, <code>AZURE_TENANT_ID</code>) are missing. <a href="https://github.com/rablaine/NoteHelper#ai-features-optional" target="_blank">Setup guide</a></span>
-                        </div>
-                        {% elif not ai_config.deployment %}
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="flex-grow-1">
-                                <i class="bi bi-exclamation-triangle text-warning"></i> <span class="text-muted">Missing deployment</span>
-                            </div>
-                            <button class="btn btn-outline-secondary btn-sm" disabled>
-                                <i class="bi bi-lightning"></i> Test
-                            </button>
-                        </div>
-                        <div class="mt-2">
-                            <span class="text-muted small">Endpoint set but <code>AZURE_OPENAI_DEPLOYMENT</code> is missing. <a href="https://github.com/rablaine/NoteHelper#ai-features-optional" target="_blank">Setup guide</a></span>
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>
