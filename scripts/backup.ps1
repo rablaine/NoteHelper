@@ -200,7 +200,7 @@ function Remove-OldBackups {
     $weekGroups = $allFiles | Group-Object {
         $d = $_.LastWriteTime
         $cal = [System.Globalization.CultureInfo]::InvariantCulture.Calendar
-        $week = $cal.GetWeekOfYear($d, [System.Globalization.CalendarWeekRule]::Iso8601, [DayOfWeek]::Monday)
+        $week = $cal.GetWeekOfYear($d, [System.Globalization.CalendarWeekRule]::FirstFourDayWeek, [DayOfWeek]::Monday)
         "{0}-W{1:D2}" -f $d.Year, $week
     } | Select-Object -First $KeepWeekly
 
