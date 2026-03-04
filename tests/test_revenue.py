@@ -11,7 +11,7 @@ from app.models import (
 )
 from app.services.revenue_import import (
     parse_currency, fiscal_month_to_date, date_to_fiscal_month,
-    import_revenue_csv, RevenueImportError
+    import_revenue_csv, process_csv, RevenueImportError
 )
 from app.services.revenue_analysis import (
     compute_signals, categorize_customer, determine_action,
@@ -139,6 +139,33 @@ Some random content
         with app.app_context():
             with pytest.raises(RevenueImportError):
                 import_revenue_csv(csv_content, "bad.csv", test_user.id)
+
+    def test_import_missing_required_columns(self, app, test_user):
+        """Test that CSV missing required columns raises helpful error."""
+        import pandas as pd
+        from io import StringIO
+
+        # CSV with wrong column names (e.g., user exported wrong table)
+        bad_csv = "Month,SomeOtherCol,Metric1,FY26-Jul\nAccount,Group,Detail,$100"
+        df = pd.read_csv(StringIO(bad_csv), header=None)
+        with pytest.raises(RevenueImportError, match="Missing required columns"):
+            process_csv(df)
+
+    def test_import_valid_columns_pass_validation(self, app, test_user):
+        """Test that CSV with correct columns passes validation."""
+        import pandas as pd
+        from io import StringIO
+
+        # Minimal valid CSV structure
+        valid_csv = (
+            "FiscalMonth,,,FY26-Jul\n"
+            "TPAccountName,ServiceCompGrouping,ServiceLevel4,$ ACR\n"
+            "Contoso,Core DBs,Total,$1000"
+        )
+        df = pd.read_csv(StringIO(valid_csv), header=None)
+        result_df, months, month_map = process_csv(df)
+        assert 'TPAccountName' in result_df.columns
+        assert len(months) == 1
 
 
 class TestSignalComputation:

@@ -64,11 +64,12 @@
                     <ol>
                         <li>Go to <a href="https://msxinsights.microsoft.com/User/report/47b95fcd-1857-47f2-9c4b-8413a508ae00?reportTab=ReportSection146fc780baf4c55d7158" target="_blank">SME&C ACR Service Level Subscription Details SL4 - WW</a>
                             <br>Or go to <a href="https://aka.ms/msxi" target="_blank">https://aka.ms/msxi</a> and search for the report name</li>
+                        <li>(If bookmarked/customized) Click <strong>"My Report Bookmarks"</strong> in the top right corner and <strong>"Clear current view"</strong></li>
                         <li>Scroll down to the <strong>"ACR Details by Quarter / Month"</strong> section</li>
                         <li>Under Choose Fields (left), check <strong>"ServiceLevel4"</strong></li>
                         <li>In Filters (right side), find <strong>ServiceCompGrouping</strong> and select your buckets</li>
                         <li>Right-click the <strong>"ACR Details by Quarter / Month"</strong> header text → <strong>Expand to next level</strong></li>
-                        <li>Repeat step 5</li>
+                        <li>Repeat step 6</li>
                         <li>Top right <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
                         <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
                     </ol>
@@ -183,6 +184,7 @@ fileInput.addEventListener('change', async function() {
         let buffer = '';
         let finalResult = null;
         
+        let streamError = null;
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -197,7 +199,8 @@ fileInput.addEventListener('change', async function() {
                         const data = JSON.parse(line.slice(6));
                         
                         if (data.error) {
-                            throw new Error(data.error);
+                            streamError = data.error;
+                            break;
                         }
                         
                         if (data.message) {
@@ -218,6 +221,11 @@ fileInput.addEventListener('change', async function() {
                     }
                 }
             }
+            if (streamError) break;
+        }
+        
+        if (streamError) {
+            throw new Error(streamError);
         }
         
         importProgress.classList.add('d-none');
