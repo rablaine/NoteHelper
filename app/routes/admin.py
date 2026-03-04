@@ -10,7 +10,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash, jsonify, g
 
 from app.models import (
     db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
@@ -251,7 +251,8 @@ def _get_backup_config() -> dict:
     Returns:
         dict with backup config, or defaults if file missing/invalid.
     """
-    config_path = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent / 'data' / 'backup_config.json'
+    app_root = Path(current_app.root_path).parent
+    config_path = app_root / 'data' / 'backup_config.json'
     defaults = {
         'enabled': False,
         'onedrive_path': '',
@@ -262,7 +263,7 @@ def _get_backup_config() -> dict:
     }
     if config_path.exists():
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
             # Merge with defaults for missing keys
             for key, val in defaults.items():
@@ -276,9 +277,10 @@ def _get_backup_config() -> dict:
 
 def _save_backup_config(config: dict) -> None:
     """Save backup configuration to data/backup_config.json."""
-    config_path = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent / 'data' / 'backup_config.json'
+    app_root = Path(current_app.root_path).parent
+    config_path = app_root / 'data' / 'backup_config.json'
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, 'w') as f:
+    with open(config_path, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=2)
 
 
@@ -344,7 +346,8 @@ def api_backup_run():
             'error': 'Backups are not configured. Run backup.bat -Setup first.',
         }), 400
 
-    db_path = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent / 'data' / 'notehelper.db'
+    app_root = Path(current_app.root_path).parent
+    db_path = app_root / 'data' / 'notehelper.db'
     if not db_path.exists():
         return jsonify({'success': False, 'error': 'Database file not found.'}), 404
 
