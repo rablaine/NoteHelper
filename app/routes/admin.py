@@ -16,7 +16,7 @@ from app.models import (
     db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
     RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
     RevenueConfig, RevenueEngagement, Milestone, Opportunity, MsxTask,
-    SyncStatus, UserPreference, call_logs_milestones, utc_now
+    SolutionEngineer, SyncStatus, UserPreference, call_logs_milestones, utc_now
 )
 
 # Create blueprint
@@ -31,18 +31,19 @@ def admin_panel():
     
     # Get system-wide statistics
     stats = {
-        'total_pods': POD.query.count(),
-        'total_territories': Territory.query.count(),
-        'total_sellers': Seller.query.count(),
-        'total_customers': Customer.query.count(),
-        'total_topics': Topic.query.count(),
         'total_call_logs': CallLog.query.count(),
+        'total_customers': Customer.query.count(),
+        'total_sellers': Seller.query.count(),
+        'total_solution_engineers': SolutionEngineer.query.count(),
+        'total_territories': Territory.query.count(),
+        'total_pods': POD.query.count(),
+        'total_topics': Topic.query.count(),
+        'total_milestones': Milestone.query.count(),
+        'total_opportunities': Opportunity.query.count(),
+        'total_msx_tasks': MsxTask.query.count(),
         'total_revenue_records': CustomerRevenueData.query.count() + ProductRevenueData.query.count(),
         'total_revenue_analyses': RevenueAnalysis.query.count(),
         'total_revenue_imports': RevenueImport.query.count(),
-        'total_milestones': Milestone.query.count(),
-        'total_opportunities': Opportunity.query.count(),
-        'total_msx_tasks': MsxTask.query.count()
     }
     
     # AI configuration status
