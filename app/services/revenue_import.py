@@ -502,6 +502,50 @@ def process_csv(df: Any) -> tuple[Any, list[str], dict[str, int]]:
     return df, unique_months, month_to_col_idx
 
 
+def _build_revenue_lookups(month_dates_values):
+    """Pre-fetch existing revenue records into lookup dicts for bulk upsert.
+
+    Instead of issuing one SELECT per row (N+1 pattern), this loads all
+    existing records for the relevant months in two queries and indexes
+    them by their natural-key tuples for O(1) in-memory lookups.
+
+    Args:
+        month_dates_values: Collection of date objects to filter by.
+
+    Returns:
+        Tuple of (customer_rev_lookup, product_rev_lookup, existing_month_dates)
+        - customer_rev_lookup: dict mapping (customer_name, bucket, month_date)
+          to the CustomerRevenueData instance
+        - product_rev_lookup: dict mapping (customer_name, bucket, product,
+          month_date) to the ProductRevenueData instance
+        - existing_month_dates: set of month_date values already stored
+    """
+    dates_list = list(month_dates_values)
+
+    customer_records = CustomerRevenueData.query.filter(
+        CustomerRevenueData.month_date.in_(dates_list)
+    ).all()
+    customer_rev_lookup = {
+        (r.customer_name, r.bucket, r.month_date): r
+        for r in customer_records
+    }
+
+    product_records = ProductRevenueData.query.filter(
+        ProductRevenueData.month_date.in_(dates_list)
+    ).all()
+    product_rev_lookup = {
+        (r.customer_name, r.bucket, r.product, r.month_date): r
+        for r in product_records
+    }
+
+    existing_month_rows = db.session.query(
+        CustomerRevenueData.month_date
+    ).distinct().all()
+    existing_month_dates = {row[0] for row in existing_month_rows}
+
+    return customer_rev_lookup, product_rev_lookup, existing_month_dates
+
+
 def import_revenue_csv(
     file_content: bytes | str,
     filename: str,
@@ -570,6 +614,10 @@ def import_revenue_csv(
     # Build customer lookup (exact + prefix + acronym matching)
     exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
     
+    # Bulk pre-fetch existing revenue records (eliminates N+1 queries)
+    customer_rev_lookup, product_rev_lookup, existing_month_dates = \
+        _build_revenue_lookups(month_dates.values())
+    
     # Process each row
     for _, row in df.iterrows():
         customer_name = str(row['TPAccountName']).strip()
@@ -606,11 +654,8 @@ def import_revenue_csv(
             
             if is_bucket_total:
                 # Store in CustomerRevenueData (for analysis)
-                existing = CustomerRevenueData.query.filter_by(
-                    customer_name=customer_name,
-                    bucket=bucket,
-                    month_date=month_date
-                ).first()
+                crev_key = (customer_name, bucket, month_date)
+                existing = customer_rev_lookup.get(crev_key)
                 
                 if existing:
                     if existing.revenue != revenue:
@@ -634,24 +679,17 @@ def import_revenue_csv(
                         last_import_id=import_record.id
                     )
                     db.session.add(new_record)
+                    customer_rev_lookup[crev_key] = new_record
                     bucket_records_created += 1
                     
-                    # Track new months
-                    existing_months = db.session.query(
-                        CustomerRevenueData.month_date
-                    ).filter(
-                        CustomerRevenueData.month_date == month_date
-                    ).first()
-                    if not existing_months:
+                    # Track new months (from pre-fetched set)
+                    if month_date not in existing_month_dates:
                         new_months.add(month_date)
+                        existing_month_dates.add(month_date)
             else:
                 # Store in ProductRevenueData (for drill-down)
-                existing = ProductRevenueData.query.filter_by(
-                    customer_name=customer_name,
-                    bucket=bucket,
-                    product=product,
-                    month_date=month_date
-                ).first()
+                prev_key = (customer_name, bucket, product, month_date)
+                existing = product_rev_lookup.get(prev_key)
                 
                 if existing:
                     if existing.revenue != revenue:
@@ -673,6 +711,7 @@ def import_revenue_csv(
                         last_import_id=import_record.id
                     )
                     db.session.add(new_record)
+                    product_rev_lookup[prev_key] = new_record
                     product_records_created += 1
     
     # Update import stats
@@ -762,6 +801,11 @@ def import_revenue_csv_streaming(
     yield {"message": "Loading customer database..."}
     exact_lookup, cleaned_names, acronym_lookup = _build_customer_lookup()
     
+    # Bulk pre-fetch existing revenue records (eliminates N+1 queries)
+    yield {"message": "Pre-loading existing revenue records..."}
+    customer_rev_lookup, product_rev_lookup, existing_month_dates = \
+        _build_revenue_lookups(month_dates.values())
+    
     # Process rows with progress updates
     total_rows = len(df)
     last_progress = 0
@@ -807,11 +851,8 @@ def import_revenue_csv_streaming(
             is_bucket_total = (product.lower() == 'total' or product == '')
             
             if is_bucket_total:
-                existing = CustomerRevenueData.query.filter_by(
-                    customer_name=customer_name,
-                    bucket=bucket,
-                    month_date=month_date
-                ).first()
+                crev_key = (customer_name, bucket, month_date)
+                existing = customer_rev_lookup.get(crev_key)
                 
                 if existing:
                     if existing.revenue != revenue:
@@ -835,22 +876,15 @@ def import_revenue_csv_streaming(
                         last_import_id=import_record.id
                     )
                     db.session.add(new_record)
+                    customer_rev_lookup[crev_key] = new_record
                     bucket_records_created += 1
                     
-                    existing_months = db.session.query(
-                        CustomerRevenueData.month_date
-                    ).filter(
-                        CustomerRevenueData.month_date == month_date
-                    ).first()
-                    if not existing_months:
+                    if month_date not in existing_month_dates:
                         new_months.add(month_date)
+                        existing_month_dates.add(month_date)
             else:
-                existing = ProductRevenueData.query.filter_by(
-                    customer_name=customer_name,
-                    bucket=bucket,
-                    product=product,
-                    month_date=month_date
-                ).first()
+                prev_key = (customer_name, bucket, product, month_date)
+                existing = product_rev_lookup.get(prev_key)
                 
                 if existing:
                     if existing.revenue != revenue:
@@ -872,6 +906,7 @@ def import_revenue_csv_streaming(
                         last_import_id=import_record.id
                     )
                     db.session.add(new_record)
+                    product_rev_lookup[prev_key] = new_record
                     product_records_created += 1
     
     yield {"message": "Saving to database...", "progress": 95}

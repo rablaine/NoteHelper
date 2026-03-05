@@ -1499,17 +1499,19 @@
                                 if (eventType === 'start') {
                                     statusText.textContent = 'Syncing ' + (eventData.total || 0) + ' customers...';
                                 } else if (eventType === 'progress') {
-                                    const pct = eventData.total > 0 ? Math.round(eventData.current / eventData.total * 100) : 0;
+                                    const pct = eventData.progress != null
+                                        ? eventData.progress
+                                        : (eventData.total > 0 ? Math.round(eventData.current / eventData.total * 100) : 0);
                                     progressBar.style.width = pct + '%';
-                                    progressPercent.textContent = eventData.current + ' / ' + eventData.total;
-                                    const icon = eventData.status === 'ok'
-                                        ? '<i class="bi bi-check-circle text-success"></i>'
-                                        : '<i class="bi bi-x-circle text-danger"></i>';
+                                    progressPercent.textContent = pct + '%';
                                     statusText.textContent = eventData.customer || ('Customer ' + eventData.current);
-                                    logDiv.innerHTML += '<div>' + icon + ' ' + (eventData.customer || '') +
-                                        (eventData.created ? ' (+' + eventData.created + ' created' + (eventData.updated ? ', ' + eventData.updated + ' updated' : '') + ')' : '') +
-                                        (eventData.error ? ' — ' + eventData.error : '') + '</div>';
-                                    logDiv.scrollTop = logDiv.scrollHeight;
+                                    // Only log errors to the detail pane
+                                    if (eventData.status === 'error') {
+                                        logDiv.innerHTML += '<div><i class="bi bi-x-circle text-danger"></i> ' +
+                                            (eventData.customer || '') +
+                                            (eventData.error ? ' — ' + eventData.error : '') + '</div>';
+                                        logDiv.scrollTop = logDiv.scrollHeight;
+                                    }
                                     // Show VPN banner if a progress error indicates IP block
                                     if (eventData.error && window.isVpnBlocked && window.isVpnBlocked(eventData.error)) {
                                         window.showVpnBanner();
@@ -1535,6 +1537,7 @@
                                 '<li>' + (cs.synced || 0) + ' customers synced' + (cs.failed ? ', ' + cs.failed + ' failed' : '') + '</li>' +
                                 '<li>' + (cs.created || 0) + ' milestones created, ' + (cs.updated || 0) + ' updated' +
                                     (cs.deactivated ? ', ' + cs.deactivated + ' deactivated' : '') + '</li>' +
+                                (cs.opportunities_created ? '<li>' + cs.opportunities_created + ' opportunities created</li>' : '') +
                                 (cs.duration ? '<li>Completed in ' + cs.duration + 's</li>' : '') +
                                 '</ul>';
                         }

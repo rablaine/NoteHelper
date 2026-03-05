@@ -1226,6 +1226,7 @@ document.getElementById('importFromMsxBtn').addEventListener('click', async func
                                     <li>Solution Engineers: ${s.solution_engineers_created || 0} created</li>
                                     <li>Verticals: ${s.verticals_created || 0} created</li>
                                     <li>Customers: ${s.customers_created || 0} created, ${s.customers_skipped || 0} skipped</li>
+                                    ${s.duration ? '<li class="mt-1"><i class="bi bi-clock"></i> Completed in ' + s.duration + 's</li>' : ''}
                                 </ul>
                                 <a href="{{ url_for('customers.customers_list') }}" class="btn btn-sm btn-outline-primary mt-2">
                                     <i class="bi bi-people"></i> View Customers

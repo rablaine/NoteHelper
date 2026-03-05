@@ -2,13 +2,17 @@
 Milestone sync service for NoteHelper.
 
 Pulls active (uncommitted) milestones from MSX for all customers
-and upserts them into the local database. Designed to be triggered
-manually via button or on a schedule (e.g., 3 AM daily).
+and upserts them into the local database. Uses 3 concurrent workers
+for the MSX API query phase, then writes to the database sequentially.
 """
 import json
 import logging
+import math
+import queue
+import time as _time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Generator
+from typing import Dict, Any, List, Optional, Generator, Tuple
 
 from app.models import db, Customer, Milestone, Opportunity, User, SyncStatus
 from app.services.msx_api import (
@@ -23,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 # Active milestone statuses (uncommitted — the ones we're working to commit)
 ACTIVE_STATUSES = {'On Track', 'At Risk', 'Blocked'}
+
+# Number of concurrent workers for MSX API queries
+_MILESTONE_WORKERS = 3
 
 
 def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
@@ -57,6 +64,7 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
         "milestones_created": 0,
         "milestones_updated": 0,
         "milestones_deactivated": 0,
+        "opportunities_created": 0,
         "errors": [],
         "duration_seconds": 0,
     }
@@ -91,6 +99,9 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
                 results["milestones_created"] += customer_result["created"]
                 results["milestones_updated"] += customer_result["updated"]
                 results["milestones_deactivated"] += customer_result["deactivated"]
+                results["opportunities_created"] += customer_result.get(
+                    "opportunities_created", 0
+                )
             else:
                 results["customers_failed"] += 1
                 results["errors"].append(
@@ -135,22 +146,50 @@ def sync_all_customer_milestones(user_id: int) -> Dict[str, Any]:
     return results
 
 
+def _ms_fetch_worker(
+    tasks: List[tuple],
+    progress_q: queue.Queue,
+) -> None:
+    """
+    Worker thread: fetch milestones from MSX for a batch of customers.
+
+    Puts results onto progress_q as tuples of
+    ('fetched', cust_id, cust_name, msx_result) or
+    ('vpn', cust_id, cust_name, None).
+    Sends ('done', None, None, None) when finished.
+    """
+    for cust_id, cust_name, account_id in tasks:
+        if is_vpn_blocked():
+            progress_q.put(('vpn', cust_id, cust_name, None))
+            return
+        result = get_milestones_by_account(
+            account_id,
+            open_opportunities_only=True,
+            current_fy_only=True,
+        )
+        progress_q.put(('fetched', cust_id, cust_name, result))
+    progress_q.put(('done', None, None, None))
+
+
 def sync_all_customer_milestones_stream(
     user_id: int,
 ) -> Generator[str, None, None]:
     """
     Stream milestone sync progress as Server-Sent Events.
 
-    Yields SSE-formatted strings with progress updates per customer.
+    Uses 3 concurrent workers for the MSX API query phase, then writes
+    to the database sequentially.
+
     Event types:
         - start: total customer count
-        - progress: per-customer result
-        - complete: final summary
+        - progress: per-customer fetch/write result
+        - vpn_blocked: VPN block detected
+        - complete: final summary (includes opportunities_created)
 
     Args:
         user_id: The user ID to associate with new milestones.
     """
-    start_time = datetime.now(timezone.utc)
+    start_time = _time.time()
 
     customers = Customer.query.filter(
         Customer.tpid_url.isnot(None),
@@ -166,85 +205,163 @@ def sync_all_customer_milestones_stream(
             'failed': 0,
             'created': 0,
             'updated': 0,
+            'deactivated': 0,
+            'opportunities_created': 0,
             'message': 'No customers with MSX account links found.',
         })
         return
 
     # Mark sync as started so interrupted syncs are detectable
     SyncStatus.mark_started('milestones')
-
     yield _sse_event('start', {'total': total})
 
+    # -----------------------------------------------------------------
+    # Prep: extract account IDs (fast, main thread)
+    # -----------------------------------------------------------------
+    customer_tasks = []   # [(cust_id, cust_name, account_id), ...]
+    customer_map = {}     # cust_id -> Customer
+    skip_ids = set()      # customers where account_id extraction failed
+
+    for c in customers:
+        account_id = extract_account_id_from_url(c.tpid_url)
+        if account_id:
+            customer_tasks.append((c.id, c.get_display_name(), account_id))
+            customer_map[c.id] = c
+        else:
+            skip_ids.add(c.id)
+
+    # -----------------------------------------------------------------
+    # Phase 1: Parallel MSX queries (3 workers)
+    # -----------------------------------------------------------------
+    fetch_results = {}    # cust_id -> msx_result dict
+    progress_q = queue.Queue()
+    n_workers = min(_MILESTONE_WORKERS, len(customer_tasks)) if customer_tasks else 0
+    vpn_hit = False
+    fetched = 0
+
+    if n_workers > 0:
+        chunk_size = math.ceil(len(customer_tasks) / n_workers)
+        chunks = [
+            customer_tasks[i:i + chunk_size]
+            for i in range(0, len(customer_tasks), chunk_size)
+        ]
+        actual_workers = len(chunks)
+
+        with ThreadPoolExecutor(max_workers=actual_workers) as pool:
+            for chunk in chunks:
+                pool.submit(_ms_fetch_worker, chunk, progress_q)
+
+            done_count = 0
+            while done_count < actual_workers:
+                msg = progress_q.get()
+                evt, cust_id, cust_name, result = msg
+
+                if evt == 'vpn':
+                    vpn_hit = True
+                    remaining = total - fetched - len(skip_ids)
+                    yield _sse_event('vpn_blocked', {
+                        'message': 'IP address is blocked -- connect to VPN and retry.',
+                        'skipped': remaining,
+                    })
+                    break
+                elif evt == 'fetched':
+                    fetch_results[cust_id] = result
+                    fetched += 1
+                    pct = int((fetched / total) * 70)  # 0-70%
+                    yield _sse_event('progress', {
+                        'current': fetched,
+                        'total': total,
+                        'customer': cust_name,
+                        'status': 'fetching',
+                        'progress': pct,
+                    })
+                elif evt == 'done':
+                    done_count += 1
+
+    if vpn_hit:
+        SyncStatus.mark_completed(
+            'milestones', success=False, items_synced=0,
+            details=json.dumps({'error': 'VPN blocked'}),
+        )
+        return
+
+    # -----------------------------------------------------------------
+    # Phase 2: Sequential DB writes
+    # -----------------------------------------------------------------
     synced = 0
-    failed = 0
+    failed = len(skip_ids)
     total_created = 0
     total_updated = 0
     total_deactivated = 0
-    errors = []
+    total_opps_created = 0
+    errors: List[str] = []
 
-    for i, customer in enumerate(customers, 1):
-        name = customer.get_display_name()
+    write_count = len(customer_tasks)
+    for i, (cust_id, cust_name, _acct) in enumerate(customer_tasks, 1):
+        customer = customer_map[cust_id]
+        fetch_data = fetch_results.get(cust_id)
 
-        # Bail early if VPN block was detected during this sync
-        if is_vpn_blocked():
-            remaining = total - i + 1
-            yield _sse_event('vpn_blocked', {
-                'message': 'IP address is blocked — connect to VPN and retry.',
-                'skipped': remaining,
+        if not fetch_data or not fetch_data.get('success'):
+            failed += 1
+            err = fetch_data.get('error', 'Fetch failed') if fetch_data else 'No data'
+            errors.append(f"{cust_name}: {err}")
+            pct = 70 + int((i / write_count) * 25)  # 70-95%
+            yield _sse_event('progress', {
+                'current': fetched + i,
+                'total': total,
+                'customer': cust_name,
+                'status': 'error',
+                'error': err,
+                'progress': pct,
             })
-            errors.append("VPN/IP block detected — remaining customers skipped.")
-            failed += remaining
-            break
+            continue
 
         try:
-            result = sync_customer_milestones(customer, user_id)
-            if result['success']:
+            wr = _apply_customer_milestones(
+                customer, fetch_data.get('milestones', []), user_id
+            )
+            if wr['success']:
                 synced += 1
-                total_created += result['created']
-                total_updated += result['updated']
-                total_deactivated += result['deactivated']
+                total_created += wr['created']
+                total_updated += wr['updated']
+                total_deactivated += wr['deactivated']
+                total_opps_created += wr['opportunities_created']
+                pct = 70 + int((i / write_count) * 25)
                 yield _sse_event('progress', {
-                    'current': i,
+                    'current': fetched + i,
                     'total': total,
-                    'customer': name,
+                    'customer': cust_name,
                     'status': 'ok',
-                    'created': result['created'],
-                    'updated': result['updated'],
+                    'created': wr['created'],
+                    'updated': wr['updated'],
+                    'progress': pct,
                 })
             else:
                 failed += 1
-                errors.append(f"{name}: {result['error']}")
-                yield _sse_event('progress', {
-                    'current': i,
-                    'total': total,
-                    'customer': name,
-                    'status': 'error',
-                    'error': result['error'],
-                })
+                errors.append(f"{cust_name}: {wr['error']}")
         except Exception as e:
             failed += 1
-            errors.append(f"{name}: {str(e)}")
-            logger.exception(f"Error syncing milestones for customer {customer.id}")
-            yield _sse_event('progress', {
-                'current': i,
-                'total': total,
-                'customer': name,
-                'status': 'error',
-                'error': str(e),
-            })
+            errors.append(f"{cust_name}: {str(e)}")
+            logger.exception(f"Error saving milestones for customer {cust_id}")
 
-    duration = (datetime.now(timezone.utc) - start_time).total_seconds()
-
-    # Update team membership flags (one extra API call)
+    # -----------------------------------------------------------------
+    # Phase 3: Team membership update (one API call)
+    # -----------------------------------------------------------------
     _update_team_memberships()
 
+    duration = round(_time.time() - start_time, 1)
     sync_success = synced > 0 or failed == 0
+
     SyncStatus.mark_completed(
         'milestones',
         success=sync_success,
         items_synced=total_created + total_updated,
-        details=json.dumps({'synced': synced, 'failed': failed, 'created': total_created,
-                            'updated': total_updated, 'deactivated': total_deactivated}),
+        details=json.dumps({
+            'synced': synced, 'failed': failed,
+            'created': total_created, 'updated': total_updated,
+            'deactivated': total_deactivated,
+            'opportunities_created': total_opps_created,
+        }),
     )
 
     yield _sse_event('complete', {
@@ -255,7 +372,8 @@ def sync_all_customer_milestones_stream(
         'created': total_created,
         'updated': total_updated,
         'deactivated': total_deactivated,
-        'duration': round(duration, 1),
+        'opportunities_created': total_opps_created,
+        'duration': duration,
         'errors': errors[:5],
     })
 
@@ -286,84 +404,115 @@ def sync_customer_milestones(
         - created: int
         - updated: int
         - deactivated: int
+        - opportunities_created: int
         - error: str (if failed)
     """
-    result = {"success": False, "created": 0, "updated": 0, "deactivated": 0, "error": ""}
-    
-    # Extract account ID from the customer's tpid_url
+    fetch_result = _fetch_customer_milestones(customer)
+    if not fetch_result.get("success"):
+        return {
+            "success": False, "created": 0, "updated": 0,
+            "deactivated": 0, "opportunities_created": 0,
+            "error": fetch_result.get("error", "Unknown MSX error"),
+        }
+    return _apply_customer_milestones(
+        customer, fetch_result.get("milestones", []), user_id
+    )
+
+
+def _fetch_customer_milestones(customer: Customer) -> Dict[str, Any]:
+    """
+    Fetch milestones from MSX for a single customer (API only, no DB writes).
+
+    Args:
+        customer: The Customer model instance (needs tpid_url).
+
+    Returns:
+        Dict from get_milestones_by_account with success, milestones, error.
+    """
     account_id = extract_account_id_from_url(customer.tpid_url)
     if not account_id:
-        result["error"] = "Could not extract account ID from tpid_url"
-        return result
-    
-    # Fetch milestones from MSX — only from open opportunities and current
-    # fiscal year to exclude stale milestones
-    msx_result = get_milestones_by_account(
+        return {"success": False, "error": "Could not extract account ID from tpid_url"}
+    return get_milestones_by_account(
         account_id,
         open_opportunities_only=True,
         current_fy_only=True,
     )
-    if not msx_result.get("success"):
-        result["error"] = msx_result.get("error", "Unknown MSX error")
-        return result
-    
-    msx_milestones = msx_result.get("milestones", [])
+
+
+def _apply_customer_milestones(
+    customer: Customer,
+    msx_milestones: List[Dict[str, Any]],
+    user_id: int,
+) -> Dict[str, Any]:
+    """
+    Write pre-fetched milestone data to DB for a single customer.
+
+    Creates/updates milestones and opportunities, deactivates milestones
+    no longer returned by MSX.
+
+    Args:
+        customer: The Customer model instance.
+        msx_milestones: List of milestone dicts from MSX API.
+        user_id: The user ID to associate with new records.
+
+    Returns:
+        Dict with success, created, updated, deactivated,
+        opportunities_created, error.
+    """
+    result = {
+        "success": False, "created": 0, "updated": 0,
+        "deactivated": 0, "opportunities_created": 0, "error": "",
+    }
+
     now = datetime.now(timezone.utc)
-    
-    # Track which MSX milestone IDs we saw from MSX
     seen_msx_ids = set()
-    
+
     for msx_ms in msx_milestones:
         msx_id = msx_ms.get("id")
         if not msx_id:
             continue
-        
+
         seen_msx_ids.add(msx_id)
-        
-        # Parse due date if present
         due_date = _parse_msx_date(msx_ms.get("due_date"))
-        
+
         # Upsert the parent Opportunity if we have an opportunity GUID
-        opportunity = _upsert_opportunity(
+        opportunity, opp_is_new = _upsert_opportunity(
             msx_ms, customer.id, user_id
         )
-        
+        if opp_is_new:
+            result["opportunities_created"] += 1
+
         # Find existing milestone or create new one
         milestone = Milestone.query.filter_by(msx_milestone_id=msx_id).first()
-        
+
         if milestone:
-            # Update existing milestone with latest data from MSX
             _update_milestone_from_msx(milestone, msx_ms, customer.id, due_date, now)
             if opportunity:
                 milestone.opportunity_id = opportunity.id
             result["updated"] += 1
         else:
-            # Create new milestone
             milestone = _create_milestone_from_msx(
                 msx_ms, customer.id, user_id, due_date, now,
                 opportunity_id=opportunity.id if opportunity else None,
             )
             db.session.add(milestone)
             result["created"] += 1
-    
+
     # Deactivate milestones for this customer that are no longer in MSX
-    # (They may have been completed, cancelled, etc.)
     existing_milestones = Milestone.query.filter_by(customer_id=customer.id).filter(
         Milestone.msx_milestone_id.isnot(None),
         Milestone.msx_status.in_(ACTIVE_STATUSES),
     ).all()
-    
+
     for existing in existing_milestones:
         if existing.msx_milestone_id not in seen_msx_ids:
-            # Skip milestones linked to call logs — keep them visible
             if existing.call_logs:
                 existing.last_synced_at = now
                 continue
-            # This milestone wasn't returned by MSX — mark as potentially completed
             existing.msx_status = "Completed"
             existing.last_synced_at = now
             result["deactivated"] += 1
-    
+
     try:
         db.session.commit()
         result["success"] = True
@@ -429,7 +578,7 @@ def _upsert_opportunity(
     msx_data: Dict[str, Any],
     customer_id: int,
     user_id: int,
-) -> Optional[Opportunity]:
+) -> Tuple[Optional[Opportunity], bool]:
     """
     Upsert an Opportunity record from milestone data.
     
@@ -442,11 +591,11 @@ def _upsert_opportunity(
         user_id: The user ID for new records.
         
     Returns:
-        The Opportunity instance, or None if no opportunity GUID was provided.
+        Tuple of (Opportunity instance or None, True if newly created).
     """
     msx_opp_id = msx_data.get("msx_opportunity_id")
     if not msx_opp_id:
-        return None
+        return None, False
     
     opp_name = msx_data.get("opportunity_name", "Unknown Opportunity")
     
@@ -455,6 +604,7 @@ def _upsert_opportunity(
         # Update name in case it changed
         opportunity.name = opp_name or opportunity.name
         opportunity.customer_id = customer_id
+        return opportunity, False
     else:
         opportunity = Opportunity(
             msx_opportunity_id=msx_opp_id,
@@ -465,8 +615,7 @@ def _upsert_opportunity(
         db.session.add(opportunity)
         # Flush to get the ID assigned so we can FK to it
         db.session.flush()
-    
-    return opportunity
+        return opportunity, True
 
 
 def _parse_msx_date(date_str: Optional[str]) -> Optional[datetime]:

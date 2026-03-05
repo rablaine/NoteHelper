@@ -239,6 +239,7 @@ fileInput.addEventListener('change', async function() {
                         <li>Records created: ${finalResult.records_created}</li>
                         <li>Records updated: ${finalResult.records_updated}</li>
                         <li>New months added: ${finalResult.new_months || 0}</li>
+                        ${finalResult.duration ? '<li><i class="bi bi-clock"></i> Completed in ' + finalResult.duration + 's</li>' : ''}
                     </ul>
                     <a href="{{ url_for('revenue.revenue_dashboard') }}" class="btn btn-primary btn-sm">
                         <i class="bi bi-arrow-right"></i> View Dashboard

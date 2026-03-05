@@ -873,13 +873,40 @@ class TestSSESync:
             assert payload['success'] is True
             assert payload['count'] == 42
 
-    @patch('app.services.milestone_sync.sync_customer_milestones')
-    def test_stream_yields_start_progress_complete(self, mock_sync, app, sample_data):
+    @patch('app.services.milestone_sync._update_team_memberships')
+    @patch('app.services.milestone_sync.get_milestones_by_account')
+    def test_stream_yields_start_progress_complete(self, mock_get, mock_teams, app, sample_data):
         """Streaming sync should yield start, progress, and complete events."""
         import json
-        mock_sync.return_value = {
-            'success': True, 'created': 2, 'updated': 1, 'deactivated': 0, 'error': '',
+        # The parallel stream calls get_milestones_by_account from worker threads
+        mock_get.return_value = {
+            'success': True,
+            'milestones': [{
+                'id': 'stream-test-ms-1',
+                'name': 'Stream Test',
+                'number': '7-999',
+                'status': 'On Track',
+                'status_code': 861980000,
+                'msx_opportunity_id': None,
+                'opportunity_name': '',
+                'workload': '',
+                'monthly_usage': None,
+                'due_date': None,
+                'dollar_value': None,
+                'url': 'https://test.com',
+            }],
+            'count': 1,
         }
+        # Ensure at least one customer has a tpid_url
+        with app.app_context():
+            from app.models import db, Customer
+            customer = db.session.get(Customer, sample_data['customer1_id'])
+            customer.tpid_url = (
+                'https://microsoftsales.crm.dynamics.com/main.aspx'
+                '?appid=fe0c3504&pagetype=entityrecord&etn=account'
+                '&id=aaaabbbb-1111-2222-3333-444455556666'
+            )
+            db.session.commit()
 
         with app.app_context():
             from app.services.milestone_sync import sync_all_customer_milestones_stream
