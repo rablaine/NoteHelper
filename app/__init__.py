@@ -53,13 +53,15 @@ def create_app():
         # Run idempotent migrations (safe to run every startup)
         run_migrations(db)
         
-        # Create default user if none exists
-        user = User.query.first()
+        # Ensure the canonical single user (id=1) exists.
+        # This is a single-user system -- everything must use user_id=1.
+        user = db.session.get(User, 1)
         if not user:
             user = User(
+                id=1,
                 email='user@localhost',
                 name='Local User',
-                is_admin=True  # Single user has all permissions
+                is_admin=True,  # Single user has all permissions
             )
             db.session.add(user)
             db.session.commit()
@@ -75,8 +77,8 @@ def create_app():
         """Load single user and preferences into request context."""
         from app.models import User, UserPreference
         
-        # Get the single user
-        g.user = User.query.first()
+        # Always use the canonical single user (id=1)
+        g.user = db.session.get(User, 1)
         
         # Load preferences
         if g.user:
@@ -103,6 +105,7 @@ def create_app():
     from app.routes.msx import msx_bp
     from app.routes.opportunities import opportunities_bp
     from app.routes.connect_export import connect_export_bp
+    from app.routes.backup import backup_bp
     
     app.register_blueprint(admin_bp)
     app.register_blueprint(ai_bp)
@@ -120,6 +123,7 @@ def create_app():
     app.register_blueprint(msx_bp)
     app.register_blueprint(opportunities_bp)
     app.register_blueprint(connect_export_bp)
+    app.register_blueprint(backup_bp)
     
     # Start MSX token refresh job (background thread)
     # This keeps the az login token fresh for CRM API calls
@@ -145,5 +149,5 @@ def create_app():
     # Start background update checker (checks GitHub every 12 hours)
     from app.services.update_checker import start_update_checker
     start_update_checker(interval_seconds=43200)
-    
+
     return app

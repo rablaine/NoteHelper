@@ -281,14 +281,14 @@ class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     nickname = db.Column(db.String(200), nullable=True)
-    tpid = db.Column(db.BigInteger, nullable=False)
+    tpid = db.Column(db.BigInteger, nullable=False, unique=True)
     tpid_url = db.Column(db.String(500), nullable=True)
     notes = db.Column(db.Text, nullable=True)  # General notes for tracking opportunities/milestones
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
-    
+
     # Relationships
     seller = db.relationship('Seller', back_populates='customers')
     territory = db.relationship('Territory', back_populates='customers')

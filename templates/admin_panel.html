@@ -327,6 +327,87 @@
             </div>
         </div>
 
+        <!-- Call Log Backup -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-check"></i> Call Log Backup</h5>
+            </div>
+            <div class="card-body">
+                <div id="backupLoading">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
+                        <span class="text-muted">Loading...</span>
+                    </div>
+                </div>
+
+                <!-- Disabled state -->
+                <div id="backupDisabled" class="d-none">
+                    <p class="text-muted mb-2">Back up call logs as JSON files to OneDrive. Files are written on every save, organized by seller and named by TPID for easy disaster recovery.</p>
+
+                    <!-- Auto-detecting -->
+                    <div id="backupDetecting">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
+                            <span class="text-muted small">Detecting OneDrive...</span>
+                        </div>
+                    </div>
+
+                    <!-- OneDrive candidates (shown after detection) -->
+                    <div id="backupCandidates" class="d-none">
+                        <div id="backupCandidateList" class="mb-2"></div>
+                    </div>
+
+                    <!-- Manual path input (fallback) -->
+                    <div id="backupManualEntry" class="d-none mb-2">
+                        <label for="backupPathInput" class="form-label small text-muted mb-1">Backup folder path</label>
+                        <input type="text" id="backupPathInput" class="form-control form-control-sm"
+                               placeholder="C:\Users\you\OneDrive\NoteHelper_Backups">
+                    </div>
+
+                    <button id="backupEnableBtn" class="btn btn-primary btn-sm" onclick="enableBackup()">
+                        <i class="bi bi-shield-plus"></i> Enable Backup
+                    </button>
+                    <button id="backupManualToggle" class="btn btn-link btn-sm d-none" onclick="showManualBackupPath()">
+                        Enter path manually
+                    </button>
+                </div>
+
+                <!-- Enabled state -->
+                <div id="backupEnabled" class="d-none">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-check-circle-fill text-success"></i>
+                        <span>Backing up to <strong id="backupPath" class="text-break"></strong></span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="badge bg-info"><span id="backupFileCount">0</span> files</span>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-outline-primary btn-sm" onclick="backupAll()">
+                            <i class="bi bi-arrow-repeat"></i> Backup All Now
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="disableBackup()">
+                            <i class="bi bi-pause-circle"></i> Disable
+                        </button>
+                    </div>
+                    <!-- DR Restore -->
+                    <hr class="my-3"/>
+                    <details>
+                        <summary class="small text-muted" style="cursor:pointer;">
+                            <i class="bi bi-cloud-upload"></i> Disaster Recovery Restore
+                        </summary>
+                        <div class="mt-2">
+                            <p class="small text-muted mb-2">Paste a backup JSON file to restore call logs for a customer (matched by TPID).</p>
+                            <textarea id="restoreJson" class="form-control form-control-sm mb-2" rows="4" placeholder='Paste JSON backup here...'></textarea>
+                            <button class="btn btn-warning btn-sm" onclick="restoreFromBackup()">
+                                <i class="bi bi-cloud-upload"></i> Restore
+                            </button>
+                            <div id="restoreResult" class="mt-2 small"></div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+
         <!-- Setup Wizard (shown here when incomplete, moves to bottom when done) -->
         {% set setup_complete = has_customers and has_milestones and has_revenue %}
         {% if not setup_complete %}
@@ -1515,13 +1596,194 @@ function runBackupNow() {
         alert('Backup failed: ' + err.message);
     });
 }
+
+// =============================================================================
+// Call Log Backup
+// =============================================================================
+
+function loadBackupStatus() {
+    fetch('/api/backup/status')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('backupLoading').classList.add('d-none');
+            document.getElementById('backupEnabled').classList.add('d-none');
+            document.getElementById('backupDisabled').classList.add('d-none');
+
+            if (data.enabled) {
+                document.getElementById('backupEnabled').classList.remove('d-none');
+                document.getElementById('backupPath').textContent = data.backup_path;
+                document.getElementById('backupFileCount').textContent = data.file_count;
+            } else {
+                document.getElementById('backupDisabled').classList.remove('d-none');
+                detectOneDrive();
+            }
+        })
+        .catch(() => {
+            document.getElementById('backupLoading').innerHTML =
+                '<span class="text-muted small">Could not load backup status.</span>';
+        });
+}
+
+// Track the selected backup path from auto-detection
+let _selectedBackupPath = null;
+
+function detectOneDrive() {
+    fetch('/api/backup/detect-onedrive')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('backupDetecting').classList.add('d-none');
+            const candidates = data.candidates || [];
+            const autoPath = data.auto_path;
+
+            if (autoPath) {
+                // Auto-detected a single clear winner -- auto-enable
+                _selectedBackupPath = autoPath;
+                document.getElementById('backupCandidates').classList.remove('d-none');
+                document.getElementById('backupCandidateList').innerHTML =
+                    '<div class="d-flex align-items-center gap-2 mb-1">' +
+                    '<i class="bi bi-check-circle-fill text-success"></i>' +
+                    '<span class="small">Found: <strong>' + autoPath + '</strong></span>' +
+                    '</div>';
+                document.getElementById('backupManualToggle').classList.remove('d-none');
+            } else if (candidates.length > 0) {
+                // Multiple candidates -- let user pick
+                document.getElementById('backupCandidates').classList.remove('d-none');
+                let html = '<label class="form-label small text-muted mb-1">Select OneDrive folder</label>';
+                candidates.forEach(function(c, i) {
+                    const checked = i === 0 ? 'checked' : '';
+                    const badge = c.has_backups
+                        ? ' <span class="badge bg-success">has backups</span>'
+                        : '';
+                    html += '<div class="form-check">' +
+                        '<input class="form-check-input" type="radio" name="backupCandidate" ' +
+                        'id="backupCand' + i + '" value="' + c.suggested_path.replace(/\\/g, '\\\\') + '" ' + checked +
+                        ' onchange="_selectedBackupPath=this.value">' +
+                        '<label class="form-check-label small" for="backupCand' + i + '">' +
+                        c.suggested_path + badge +
+                        '<br><span class="text-muted" style="font-size:0.75rem">' + c.source + '</span>' +
+                        '</label></div>';
+                });
+                document.getElementById('backupCandidateList').innerHTML = html;
+                _selectedBackupPath = candidates[0].suggested_path;
+                document.getElementById('backupManualToggle').classList.remove('d-none');
+            } else {
+                // No OneDrive found -- show manual entry
+                showManualBackupPath();
+            }
+        })
+        .catch(() => {
+            document.getElementById('backupDetecting').classList.add('d-none');
+            showManualBackupPath();
+        });
+}
+
+function showManualBackupPath() {
+    _selectedBackupPath = null;
+    document.getElementById('backupCandidates').classList.add('d-none');
+    document.getElementById('backupManualEntry').classList.remove('d-none');
+    document.getElementById('backupManualToggle').classList.add('d-none');
+    document.getElementById('backupDetecting').classList.add('d-none');
+}
+
+function enableBackup() {
+    const path = _selectedBackupPath || (document.getElementById('backupPathInput') ? document.getElementById('backupPathInput').value.trim() : '');
+    if (!path) {
+        alert('Enter or select a backup folder path.');
+        return;
+    }
+    const btn = document.getElementById('backupEnableBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enabling...';
+    fetch('/api/backup/enable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backup_path: path }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-shield-plus"></i> Enable Backup';
+        if (data.success) {
+            loadBackupStatus();
+        } else {
+            alert('Failed: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-shield-plus"></i> Enable Backup';
+        alert('Error: ' + err.message);
+    });
+}
+
+function disableBackup() {
+    if (!confirm('Disable backup? Existing backup files will remain on disk.')) return;
+    fetch('/api/backup/disable', { method: 'POST' })
+        .then(r => r.json())
+        .then(() => loadBackupStatus());
+}
+
+function backupAll() {
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Backing up...';
+    fetch('/api/backup/backup-all', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Backup All Now';
+            if (data.success) {
+                alert('Backed up ' + data.backed_up + ' customers' + (data.failed ? ' (' + data.failed + ' failed)' : '') + '.');
+                loadBackupStatus();
+            } else {
+                alert('Failed: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Backup All Now';
+            alert('Error: ' + err.message);
+        });
+}
+
+function restoreFromBackup() {
+    const jsonText = document.getElementById('restoreJson').value.trim();
+    const resultEl = document.getElementById('restoreResult');
+    if (!jsonText) {
+        resultEl.innerHTML = '<span class="text-danger">Paste JSON backup first.</span>';
+        return;
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(jsonText);
+    } catch (e) {
+        resultEl.innerHTML = '<span class="text-danger">Invalid JSON.</span>';
+        return;
+    }
+    fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            resultEl.innerHTML =
+                '<span class="text-success">Restored ' + data.logs_created + ' call logs ' +
+                'for ' + data.customer_name + ' (' + data.logs_skipped + ' skipped/duplicates).</span>';
+        } else {
+            resultEl.innerHTML = '<span class="text-danger">' + data.error + '</span>';
+        }
+    })
+    .catch(err => {
+        resultEl.innerHTML = '<span class="text-danger">Error: ' + err.message + '</span>';
+    });
+}
+
+// Load backup status on page load
+document.addEventListener('DOMContentLoaded', loadBackupStatus);
 </script>
 {% endblock %}
-
-
-
-
-
 
 
 

@@ -84,6 +84,9 @@ def run_migrations(db):
     # Migration: Add ai_summary column to connect_exports
     _migrate_connect_exports_ai_summary(db, inspector)
 
+    # Migration: Enforce unique constraint on customers.tpid
+    _migrate_customer_tpid_unique(db, inspector)
+
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -553,3 +556,99 @@ def _migrate_connect_exports_ai_summary(db, inspector):
         _add_column_if_not_exists(
             db, inspector, 'connect_exports', 'ai_summary', 'TEXT'
         )
+
+
+def _migrate_customer_tpid_unique(db, inspector):
+    """Enforce a unique constraint on customers.tpid.
+
+    Before adding the constraint, remove duplicate rows (keeping the one
+    with the most call logs for each TPID).  This is idempotent -- if the
+    unique index already exists, we skip.
+    """
+    if 'customers' not in inspector.get_table_names():
+        return
+
+    # Check if a unique index on tpid already exists
+    indexes = inspector.get_indexes('customers')
+    for idx in indexes:
+        if idx.get('unique') and idx.get('column_names') == ['tpid']:
+            return  # Already migrated
+
+    # Also check unique constraints
+    uniques = inspector.get_unique_constraints('customers')
+    for uc in uniques:
+        if uc.get('column_names') == ['tpid']:
+            return  # Already migrated
+
+    print("  Migrating: enforcing unique constraint on customers.tpid")
+
+    # Step 1: deduplicate -- keep the row with the most call_logs per TPID
+    from sqlalchemy import text
+    dupes = db.session.execute(text("""
+        SELECT tpid, COUNT(*) AS cnt
+        FROM customers
+        GROUP BY tpid
+        HAVING COUNT(*) > 1
+    """)).fetchall()
+
+    removed = 0
+    for tpid_val, cnt in dupes:
+        rows = db.session.execute(text("""
+            SELECT c.id,
+                   (SELECT COUNT(*) FROM call_logs WHERE customer_id = c.id) AS log_count
+            FROM customers c
+            WHERE c.tpid = :tpid
+            ORDER BY log_count DESC, c.id ASC
+        """), {"tpid": tpid_val}).fetchall()
+
+        # Keep the first (most call logs, lowest id as tiebreaker)
+        keep_id = rows[0][0]
+        for row in rows[1:]:
+            delete_id = row[0]
+            # Re-parent any call logs from the duplicate to the keeper
+            db.session.execute(text(
+                "UPDATE call_logs SET customer_id = :keep WHERE customer_id = :dup"
+            ), {"keep": keep_id, "dup": delete_id})
+            # Re-parent milestones
+            db.session.execute(text(
+                "UPDATE milestones SET customer_id = :keep "
+                "WHERE customer_id = :dup"
+            ), {"keep": keep_id, "dup": delete_id})
+            # Re-parent opportunities
+            db.session.execute(text(
+                "UPDATE opportunities SET customer_id = :keep "
+                "WHERE customer_id = :dup"
+            ), {"keep": keep_id, "dup": delete_id})
+            # Re-parent revenue data
+            db.session.execute(text(
+                "UPDATE customer_revenue_data SET customer_id = :keep "
+                "WHERE customer_id = :dup"
+            ), {"keep": keep_id, "dup": delete_id})
+            # Re-parent revenue analysis
+            db.session.execute(text(
+                "UPDATE customer_revenue_analysis SET customer_id = :keep "
+                "WHERE customer_id = :dup"
+            ), {"keep": keep_id, "dup": delete_id})
+            # Remove M2M references (customers_verticals)
+            db.session.execute(text(
+                "DELETE FROM customers_verticals WHERE customer_id = :dup"
+            ), {"dup": delete_id})
+            # Delete the duplicate customer
+            db.session.execute(text(
+                "DELETE FROM customers WHERE id = :dup"
+            ), {"dup": delete_id})
+            removed += 1
+
+    if removed:
+        db.session.commit()
+        print(f"    Removed {removed} duplicate customer rows")
+
+    # Step 2: create the unique index
+    db.session.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_tpid ON customers (tpid)"
+    ))
+    db.session.commit()
+    print("    Created unique index: uq_customers_tpid")
+
+
+

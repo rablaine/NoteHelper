@@ -1,0 +1,827 @@
+"""
+Tests for the file-based call log backup system.
+
+Covers:
+- JSON config file (load_config / save_config)
+- backup.py service functions (_sanitize_folder_name, _customer_to_dict,
+  backup_customer, backup_all_customers, restore_from_backup)
+- backup routes (status, enable, disable, backup-all, restore)
+- call_logs.py integration hooks
+"""
+
+import json
+import os
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+
+from app.models import (
+    CallLog,
+    Customer,
+    Partner,
+    Seller,
+    Territory,
+    Topic,
+    User,
+    db,
+)
+from app.services.backup import (
+    _config_path,
+    _customer_to_dict,
+    _get_backup_root,
+    _sanitize_folder_name,
+    backup_all_customers,
+    backup_customer,
+    detect_onedrive_paths,
+    get_auto_detected_backup_path,
+    load_config,
+    restore_from_backup,
+    save_config,
+)
+
+
+# =========================================================================
+# Fixtures
+# =========================================================================
+
+@pytest.fixture
+def backup_dir():
+    """Create a temporary directory for backups and clean up after."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield tmpdir
+
+
+@pytest.fixture
+def backup_config(app, backup_dir, monkeypatch):
+    """Write an enabled JSON config pointing at the temp directory."""
+    cfg_file = Path(backup_dir) / "call_log_backup_config.json"
+    cfg_data = {"enabled": True, "backup_path": backup_dir}
+    cfg_file.write_text(json.dumps(cfg_data), encoding="utf-8")
+    monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+    yield cfg_data
+    # Cleanup: remove the config file
+    if cfg_file.exists():
+        cfg_file.unlink()
+
+
+@pytest.fixture
+def customer_with_logs(app):
+    """Create a customer with a seller, territory, call logs, topics, and partners."""
+    with app.app_context():
+        user = User.query.first()
+
+        territory = Territory(name="Backup Territory", user_id=user.id)
+        seller = Seller(
+            name="Backup Seller", alias="bseller", seller_type="Growth", user_id=user.id
+        )
+        db.session.add_all([territory, seller])
+        db.session.flush()
+
+        customer = Customer(
+            name="Backup Test Customer",
+            tpid=99999,
+            seller_id=seller.id,
+            territory_id=territory.id,
+            user_id=user.id,
+        )
+        db.session.add(customer)
+        db.session.flush()
+
+        topic = Topic(name="Backup Topic", user_id=user.id)
+        partner = Partner(name="Backup Partner", user_id=user.id)
+        db.session.add_all([topic, partner])
+        db.session.flush()
+
+        cl = CallLog(
+            customer_id=customer.id,
+            call_date=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+            content="Test call log for backup",
+            user_id=user.id,
+        )
+        cl.topics.append(topic)
+        cl.partners.append(partner)
+        db.session.add(cl)
+        db.session.commit()
+
+        ids = {
+            "customer_id": customer.id,
+            "seller_id": seller.id,
+            "territory_id": territory.id,
+            "topic_id": topic.id,
+            "partner_id": partner.id,
+            "call_log_id": cl.id,
+        }
+        yield ids
+
+        # Cleanup
+        for cl_obj in CallLog.query.filter_by(customer_id=ids["customer_id"]).all():
+            cl_obj.topics.clear()
+            cl_obj.partners.clear()
+        db.session.flush()
+        CallLog.query.filter_by(customer_id=ids["customer_id"]).delete()
+        Customer.query.filter_by(id=ids["customer_id"]).delete()
+        Topic.query.filter_by(id=ids["topic_id"]).delete()
+        Partner.query.filter_by(id=ids["partner_id"]).delete()
+        Seller.query.filter_by(id=ids["seller_id"]).delete()
+        Territory.query.filter_by(id=ids["territory_id"]).delete()
+        db.session.commit()
+
+
+# =========================================================================
+# _sanitize_folder_name
+# =========================================================================
+
+class TestSanitizeFolderName:
+    """Tests for _sanitize_folder_name utility."""
+
+    def test_plain_name(self):
+        assert _sanitize_folder_name("Alice Smith") == "Alice Smith"
+
+    def test_strips_invalid_characters(self):
+        assert _sanitize_folder_name('a<b>c:d"e/f\\g|h?i*j') == "a_b_c_d_e_f_g_h_i_j"
+
+    def test_collapses_whitespace(self):
+        assert _sanitize_folder_name("Too   many   spaces") == "Too many spaces"
+
+    def test_empty_string(self):
+        assert _sanitize_folder_name("") == "_unnamed"
+
+    def test_dot_only(self):
+        assert _sanitize_folder_name(".") == "_unnamed"
+        assert _sanitize_folder_name("..") == "_unnamed"
+
+
+# =========================================================================
+# _get_backup_root
+# =========================================================================
+
+class TestGetBackupRoot:
+    """Tests for _get_backup_root config lookup."""
+
+    def test_returns_none_when_no_config(self, app, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+        with app.app_context():
+            assert _get_backup_root() is None
+
+    def test_returns_path_when_enabled(self, app, backup_config, backup_dir):
+        with app.app_context():
+            root = _get_backup_root()
+            assert root is not None
+            assert root == backup_dir
+
+    def test_returns_none_when_disabled(self, app, backup_dir, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        cfg_file.write_text(json.dumps({"enabled": False, "backup_path": backup_dir}))
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+        with app.app_context():
+            assert _get_backup_root() is None
+
+
+# =========================================================================
+# _customer_to_dict
+# =========================================================================
+
+class TestCustomerToDict:
+    """Tests for customer serialization."""
+
+    def test_serializes_customer_and_call_logs(self, app, customer_with_logs):
+        with app.app_context():
+            customer = Customer.query.get(customer_with_logs["customer_id"])
+            result = _customer_to_dict(customer)
+
+            assert result["_notehelper_backup"] is True
+            assert result["_version"] == 2
+            assert "_exported_at" in result
+
+            cust = result["customer"]
+            assert cust["name"] == "Backup Test Customer"
+            assert cust["tpid"] == 99999
+            assert cust["seller_name"] == "Backup Seller"
+            assert cust["territory_name"] == "Backup Territory"
+
+            assert len(result["call_logs"]) == 1
+            cl = result["call_logs"][0]
+            assert cl["content"] == "Test call log for backup"
+            assert "Backup Topic" in cl["topics"]
+            assert "Backup Partner" in cl["partners"]
+
+    def test_handles_no_seller(self, app):
+        with app.app_context():
+            user = User.query.first()
+            customer = Customer(
+                name="No Seller Corp", tpid=77777, user_id=user.id
+            )
+            db.session.add(customer)
+            db.session.flush()
+
+            result = _customer_to_dict(customer)
+            assert result["customer"]["seller_name"] is None
+            assert result["call_logs"] == []
+
+            db.session.delete(customer)
+            db.session.commit()
+
+
+# =========================================================================
+# backup_customer
+# =========================================================================
+
+class TestBackupCustomer:
+    """Tests for single-customer backup."""
+
+    def test_writes_json_file(self, app, backup_config, customer_with_logs, backup_dir):
+        with app.app_context():
+            result = backup_customer(customer_with_logs["customer_id"])
+            assert result is True
+
+            filepath = os.path.join(backup_dir, "call_logs", "Backup Seller", "99999.json")
+            assert os.path.isfile(filepath)
+
+            with open(filepath, encoding="utf-8") as f:
+                data = json.load(f)
+            assert data["_notehelper_backup"] is True
+            assert data["customer"]["tpid"] == 99999
+
+    def test_returns_false_when_disabled(self, app, customer_with_logs, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+        with app.app_context():
+            result = backup_customer(customer_with_logs["customer_id"])
+            assert result is False
+
+    def test_returns_false_for_missing_customer(self, app, backup_config):
+        with app.app_context():
+            result = backup_customer(999999)
+            assert result is False
+
+    def test_unassigned_seller_folder(self, app, backup_config, backup_dir):
+        with app.app_context():
+            user = User.query.first()
+            customer = Customer(
+                name="Orphan Corp", tpid=55555, user_id=user.id
+            )
+            db.session.add(customer)
+            db.session.flush()
+            cl = CallLog(
+                customer_id=customer.id,
+                call_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
+                content="orphan log",
+                user_id=user.id,
+            )
+            db.session.add(cl)
+            db.session.commit()
+
+            result = backup_customer(customer.id)
+            assert result is True
+
+            filepath = os.path.join(backup_dir, "call_logs", "Unassigned", "55555.json")
+            assert os.path.isfile(filepath)
+
+            db.session.delete(cl)
+            db.session.delete(customer)
+            db.session.commit()
+
+    def test_overwrites_existing_file(self, app, backup_config, customer_with_logs, backup_dir):
+        """Backup should overwrite the previous version of the file."""
+        with app.app_context():
+            backup_customer(customer_with_logs["customer_id"])
+            filepath = os.path.join(backup_dir, "call_logs", "Backup Seller", "99999.json")
+            first_mtime = os.path.getmtime(filepath)
+
+            # Write again
+            backup_customer(customer_with_logs["customer_id"])
+            assert os.path.getmtime(filepath) >= first_mtime
+
+
+# =========================================================================
+# backup_all_customers
+# =========================================================================
+
+class TestBackupAllCustomers:
+    """Tests for bulk backup."""
+
+    def test_backs_up_all_customers_with_logs(self, app, backup_config, backup_dir):
+        with app.app_context():
+            user = User.query.first()
+            seller = Seller(
+                name="Bulk Seller", alias="bsell", seller_type="Growth", user_id=user.id
+            )
+            db.session.add(seller)
+            db.session.flush()
+
+            for i in range(3):
+                c = Customer(
+                    name=f"Bulk Cust {i}",
+                    tpid=80000 + i,
+                    seller_id=seller.id,
+                    user_id=user.id,
+                )
+                db.session.add(c)
+                db.session.flush()
+                cl = CallLog(
+                    customer_id=c.id,
+                    call_date=datetime(2025, 1, 1 + i, tzinfo=timezone.utc),
+                    content=f"Log {i}",
+                    user_id=user.id,
+                )
+                db.session.add(cl)
+            db.session.commit()
+
+            result = backup_all_customers()
+            assert result["backed_up"] >= 3
+            assert result["failed"] == 0
+
+            for i in range(3):
+                fp = os.path.join(backup_dir, "call_logs", "Bulk Seller", f"{80000 + i}.json")
+                assert os.path.isfile(fp)
+
+            # Cleanup
+            for c in Customer.query.filter_by(seller_id=seller.id).all():
+                CallLog.query.filter_by(customer_id=c.id).delete()
+            Customer.query.filter_by(seller_id=seller.id).delete()
+            db.session.delete(seller)
+            db.session.commit()
+
+    def test_returns_error_when_disabled(self, app, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+        with app.app_context():
+            result = backup_all_customers()
+            assert result["backed_up"] == 0
+            assert "error" in result
+
+
+# =========================================================================
+# restore_from_backup
+# =========================================================================
+
+class TestRestoreFromBackup:
+    """Tests for DR restore."""
+
+    def test_restores_call_logs_by_tpid(self, app):
+        with app.app_context():
+            from flask import g
+            user = User.query.first()
+            g.user = user
+
+            customer = Customer(name="Restore Corp", tpid=44444, user_id=user.id)
+            db.session.add(customer)
+            db.session.commit()
+
+            backup_data = {
+                "_notehelper_backup": True,
+                "_version": 2,
+                "customer": {
+                    "name": "Restore Corp",
+                    "tpid": 44444,
+                },
+                "call_logs": [
+                    {
+                        "call_date": "2025-06-01T10:00:00+00:00",
+                        "content": "Restored log 1",
+                        "topics": ["Restored Topic"],
+                        "partners": ["Restored Partner"],
+                    },
+                    {
+                        "call_date": "2025-06-02T10:00:00+00:00",
+                        "content": "Restored log 2",
+                        "topics": [],
+                        "partners": [],
+                    },
+                ],
+            }
+
+            result = restore_from_backup(backup_data)
+            assert result["success"] is True
+            assert result["logs_created"] == 2
+            assert result["logs_skipped"] == 0
+            assert result["customer_name"] == "Restore Corp"
+
+            logs = CallLog.query.filter_by(customer_id=customer.id).all()
+            assert len(logs) == 2
+
+            topic = Topic.query.filter_by(name="Restored Topic").first()
+            assert topic is not None
+
+            # Cleanup
+            for cl in logs:
+                cl.topics.clear()
+                cl.partners.clear()
+            db.session.flush()
+            CallLog.query.filter_by(customer_id=customer.id).delete()
+            db.session.delete(customer)
+            Topic.query.filter_by(name="Restored Topic").delete()
+            Partner.query.filter_by(name="Restored Partner").delete()
+            db.session.commit()
+
+    def test_skips_duplicate_dates(self, app):
+        with app.app_context():
+            from flask import g
+            user = User.query.first()
+            g.user = user
+            customer = Customer(name="Dup Corp", tpid=33333, user_id=user.id)
+            db.session.add(customer)
+            db.session.flush()
+
+            existing_cl = CallLog(
+                customer_id=customer.id,
+                call_date=datetime(2025, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
+                content="Already exists",
+                user_id=user.id,
+            )
+            db.session.add(existing_cl)
+            db.session.commit()
+
+            backup_data = {
+                "_notehelper_backup": True,
+                "_version": 2,
+                "customer": {"tpid": 33333},
+                "call_logs": [
+                    {
+                        "call_date": "2025-06-01T10:00:00+00:00",
+                        "content": "Duplicate",
+                        "topics": [],
+                        "partners": [],
+                    },
+                    {
+                        "call_date": "2025-06-02T10:00:00+00:00",
+                        "content": "New one",
+                        "topics": [],
+                        "partners": [],
+                    },
+                ],
+            }
+
+            result = restore_from_backup(backup_data)
+            assert result["success"] is True
+            assert result["logs_created"] == 1
+            assert result["logs_skipped"] == 1
+
+            # Cleanup
+            CallLog.query.filter_by(customer_id=customer.id).delete()
+            db.session.delete(customer)
+            db.session.commit()
+
+    def test_rejects_invalid_payload(self, app):
+        with app.app_context():
+            result = restore_from_backup({"random": "data"})
+            assert result["success"] is False
+
+    def test_rejects_missing_tpid(self, app):
+        with app.app_context():
+            result = restore_from_backup({"_notehelper_backup": True, "customer": {}})
+            assert result["success"] is False
+
+    def test_rejects_unknown_tpid(self, app):
+        with app.app_context():
+            result = restore_from_backup({
+                "_notehelper_backup": True,
+                "customer": {"tpid": 111111},
+                "call_logs": [],
+            })
+            assert result["success"] is False
+            assert "not found" in result["error"]
+
+
+# =========================================================================
+# Route tests
+# =========================================================================
+
+class TestBackupRoutes:
+    """Tests for backup API endpoints."""
+
+    def test_status_when_disabled(self, client, app, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+        resp = client.get("/api/backup/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["enabled"] is False
+
+    def test_enable_creates_config(self, client, app, backup_dir, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+
+        resp = client.post(
+            "/api/backup/enable",
+            json={"backup_path": backup_dir},
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["backup_path"] == backup_dir
+
+        resp2 = client.get("/api/backup/status")
+        assert resp2.get_json()["enabled"] is True
+
+    def test_enable_requires_path(self, client):
+        resp = client.post(
+            "/api/backup/enable",
+            json={"backup_path": ""},
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_disable(self, client, app, backup_dir, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        cfg_file.write_text(json.dumps({"enabled": True, "backup_path": backup_dir}))
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+
+        resp = client.post("/api/backup/disable")
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+
+        resp2 = client.get("/api/backup/status")
+        assert resp2.get_json()["enabled"] is False
+
+    def test_backup_all_when_disabled(self, client, app, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+        resp = client.post("/api/backup/backup-all")
+        assert resp.status_code == 400
+
+    def test_backup_all_success(self, client, app, backup_dir, sample_data, tmp_path, monkeypatch):
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        cfg_file.write_text(json.dumps({"enabled": True, "backup_path": backup_dir}))
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+
+        resp = client.post("/api/backup/backup-all")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["backed_up"] >= 1
+
+    def test_restore_endpoint(self, client, app):
+        with app.app_context():
+            user = User.query.first()
+            customer = Customer(name="API Restore", tpid=66666, user_id=user.id)
+            db.session.add(customer)
+            db.session.commit()
+            customer_id = customer.id
+
+        payload = {
+            "_notehelper_backup": True,
+            "_version": 2,
+            "customer": {"tpid": 66666},
+            "call_logs": [
+                {
+                    "call_date": "2025-07-01T10:00:00+00:00",
+                    "content": "Via API",
+                    "topics": [],
+                    "partners": [],
+                },
+            ],
+        }
+        resp = client.post(
+            "/api/backup/restore",
+            json=payload,
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["logs_created"] == 1
+
+        # Cleanup
+        with app.app_context():
+            CallLog.query.filter_by(customer_id=customer_id).delete()
+            Customer.query.filter_by(id=customer_id).delete()
+            db.session.commit()
+
+    def test_restore_invalid_json(self, client):
+        resp = client.post(
+            "/api/backup/restore",
+            data="not json",
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_restore_unknown_tpid_returns_404(self, client):
+        payload = {
+            "_notehelper_backup": True,
+            "customer": {"tpid": 999999},
+            "call_logs": [],
+        }
+        resp = client.post(
+            "/api/backup/restore",
+            json=payload,
+            content_type="application/json",
+        )
+        assert resp.status_code == 404
+
+    def test_status_counts_files(self, client, app, backup_dir, tmp_path, monkeypatch):
+        """Verify file_count reflects actual JSON files on disk."""
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        cfg_file.write_text(json.dumps({"enabled": True, "backup_path": backup_dir}))
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+
+        cl_dir = os.path.join(backup_dir, "call_logs", "Some Seller")
+        os.makedirs(cl_dir, exist_ok=True)
+        for i in range(3):
+            Path(os.path.join(cl_dir, f"{i}.json")).write_text("{}")
+
+        resp = client.get("/api/backup/status")
+        data = resp.get_json()
+        assert data["file_count"] == 3
+
+
+# =========================================================================
+# Integration: call_logs hooks trigger backup
+# =========================================================================
+
+class TestCallLogBackupHooks:
+    """Verify that call log CRUD triggers a backup write."""
+
+    def test_create_call_log_triggers_backup(self, client, app, backup_dir, sample_data, tmp_path, monkeypatch):
+        """Creating a call log should write a backup file."""
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        cfg_file.write_text(json.dumps({"enabled": True, "backup_path": backup_dir}))
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+
+        resp = client.post(
+            "/call-log/new",
+            data={
+                "customer_id": sample_data["customer1_id"],
+                "call_date": "2025-08-01",
+                "content": "Integration test log",
+            },
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+
+        # customer1 has tpid=1001 and seller=Alice Smith
+        filepath = os.path.join(backup_dir, "call_logs", "Alice Smith", "1001.json")
+        assert os.path.isfile(filepath), f"Expected backup at {filepath}"
+
+    def test_backup_not_written_when_disabled(self, client, app, backup_dir, sample_data, tmp_path, monkeypatch):
+        """No backup file when feature is off."""
+        cfg_file = tmp_path / "call_log_backup_config.json"
+        monkeypatch.setattr("app.services.backup._config_path", lambda: cfg_file)
+
+        client.post(
+            "/call-log/new",
+            data={
+                "customer_id": sample_data["customer1_id"],
+                "call_date": "2025-08-02",
+                "content": "Should not trigger backup",
+            },
+            follow_redirects=True,
+        )
+
+        cl_dir = os.path.join(backup_dir, "call_logs")
+        assert not os.path.exists(cl_dir)
+
+
+# =========================================================================
+# OneDrive auto-detection
+# =========================================================================
+
+class TestOneDriveDetection:
+    """Test OneDrive folder detection logic."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_registry(self, monkeypatch):
+        """Prevent real Windows registry from leaking into tests."""
+        def _no_reg(*args, **kwargs):
+            raise OSError("mocked - no registry")
+        monkeypatch.setattr("app.services.backup.winreg.OpenKey", _no_reg)
+
+    def test_detect_from_env_var(self, tmp_path, monkeypatch):
+        """OneDriveCommercial env var should be detected."""
+        od_path = str(tmp_path / "OneDrive - Corp")
+        os.makedirs(od_path)
+        monkeypatch.setenv("OneDriveCommercial", od_path)
+        monkeypatch.delenv("OneDrive", raising=False)
+        # Clear USERPROFILE to avoid other detections
+        monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
+
+        results = detect_onedrive_paths()
+        assert len(results) >= 1
+        assert results[0]["path"] == os.path.normpath(od_path)
+        assert results[0]["source"] == "OneDriveCommercial env var"
+        assert results[0]["has_backups"] is False
+
+    def test_detect_with_existing_backups_folder(self, tmp_path, monkeypatch):
+        """If NoteHelper_Backups exists, has_backups should be True."""
+        od_path = str(tmp_path / "OneDrive - Corp")
+        os.makedirs(os.path.join(od_path, "NoteHelper_Backups"))
+        monkeypatch.setenv("OneDriveCommercial", od_path)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
+
+        results = detect_onedrive_paths()
+        assert len(results) >= 1
+        assert results[0]["has_backups"] is True
+        assert results[0]["suggested_path"] == os.path.join(
+            os.path.normpath(od_path), "NoteHelper_Backups"
+        )
+
+    def test_detect_deduplicates(self, tmp_path, monkeypatch):
+        """Same path from multiple sources should only appear once."""
+        od_path = str(tmp_path / "OneDrive")
+        os.makedirs(od_path)
+        monkeypatch.setenv("OneDriveCommercial", od_path)
+        monkeypatch.setenv("OneDrive", od_path)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
+
+        results = detect_onedrive_paths()
+        paths = [r["path"] for r in results]
+        assert paths.count(os.path.normpath(od_path)) == 1
+
+    def test_detect_folder_scan(self, tmp_path, monkeypatch):
+        """Detects OneDrive* folders under USERPROFILE."""
+        monkeypatch.delenv("OneDriveCommercial", raising=False)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+        # Create a OneDrive folder in the temp "home"
+        od_path = tmp_path / "OneDrive - Microsoft"
+        od_path.mkdir()
+
+        results = detect_onedrive_paths()
+        paths = [r["path"] for r in results]
+        assert os.path.normpath(str(od_path)) in paths
+
+    def test_detect_returns_empty_when_nothing_found(self, tmp_path, monkeypatch):
+        """Returns empty list if no OneDrive found."""
+        monkeypatch.delenv("OneDriveCommercial", raising=False)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        # tmp_path has no OneDrive* folders
+
+        results = detect_onedrive_paths()
+        assert results == []
+
+    def test_auto_detected_path_with_single_match(self, tmp_path, monkeypatch):
+        """get_auto_detected_backup_path returns the path when one has backups."""
+        od_path = str(tmp_path / "OneDrive - Corp")
+        os.makedirs(os.path.join(od_path, "NoteHelper_Backups"))
+        monkeypatch.setenv("OneDriveCommercial", od_path)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
+
+        result = get_auto_detected_backup_path()
+        assert result == os.path.join(os.path.normpath(od_path), "NoteHelper_Backups")
+
+    def test_auto_detected_path_with_no_backups_folder(self, tmp_path, monkeypatch):
+        """Returns None when OneDrive exists but no NoteHelper_Backups subfolder."""
+        od_path = str(tmp_path / "OneDrive")
+        os.makedirs(od_path)
+        monkeypatch.setenv("OneDriveCommercial", od_path)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
+
+        result = get_auto_detected_backup_path()
+        assert result is None
+
+    def test_auto_detected_path_none_when_nothing(self, tmp_path, monkeypatch):
+        """Returns None when no OneDrive found at all."""
+        monkeypatch.delenv("OneDriveCommercial", raising=False)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+        result = get_auto_detected_backup_path()
+        assert result is None
+
+
+class TestDetectOneDriveRoute:
+    """Test the detect-onedrive API route."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_registry(self, monkeypatch):
+        """Prevent real Windows registry from leaking into tests."""
+        def _no_reg(*args, **kwargs):
+            raise OSError("mocked - no registry")
+        monkeypatch.setattr("app.services.backup.winreg.OpenKey", _no_reg)
+
+    def test_detect_route_returns_candidates(self, client, tmp_path, monkeypatch):
+        """The route returns detected candidates."""
+        od_path = str(tmp_path / "OneDrive - Corp")
+        os.makedirs(os.path.join(od_path, "NoteHelper_Backups"))
+        monkeypatch.setenv("OneDriveCommercial", od_path)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
+
+        resp = client.get("/api/backup/detect-onedrive")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "candidates" in data
+        assert "auto_path" in data
+        assert len(data["candidates"]) >= 1
+        assert data["auto_path"] is not None
+
+    def test_detect_route_no_onedrive(self, client, tmp_path, monkeypatch):
+        """The route returns empty when no OneDrive found."""
+        monkeypatch.delenv("OneDriveCommercial", raising=False)
+        monkeypatch.delenv("OneDrive", raising=False)
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+        resp = client.get("/api/backup/detect-onedrive")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["candidates"] == []
+        assert data["auto_path"] is None

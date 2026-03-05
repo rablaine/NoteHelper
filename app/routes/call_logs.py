@@ -8,6 +8,7 @@ import logging
 
 from app.models import db, CallLog, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask, UserPreference
 from app.services.msx_api import TASK_CATEGORIES
+from app.services.backup import backup_customer as _backup_customer
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,12 @@ def call_log_create():
             flash(f'Call log will be saved, but milestone/task failed: {e}', 'warning')
         
         db.session.commit()
+
+        # Back up this customer's call logs
+        try:
+            _backup_customer(call_log.customer_id)
+        except Exception:
+            logger.debug("Backup skipped", exc_info=True)
         
         flash('Call log created successfully!', 'success')
         
@@ -368,6 +375,12 @@ def call_log_edit(id):
             flash(f'Call log will be saved, but milestone/task failed: {e}', 'warning')
         
         db.session.commit()
+
+        # Back up this customer's call logs
+        try:
+            _backup_customer(call_log.customer_id)
+        except Exception:
+            logger.debug("Backup skipped", exc_info=True)
         
         flash('Call log updated successfully!', 'success')
         return redirect(url_for('call_logs.call_log_view', id=call_log.id))
@@ -409,6 +422,12 @@ def call_log_delete(id):
     # Delete the call log
     db.session.delete(call_log)
     db.session.commit()
+
+    # Back up this customer's call logs (reflects the deletion)
+    try:
+        _backup_customer(customer_id)
+    except Exception:
+        logger.debug("Backup skipped", exc_info=True)
     
     flash('Call log deleted successfully.', 'success')
     

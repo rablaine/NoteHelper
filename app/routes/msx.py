@@ -1028,10 +1028,12 @@ def import_stream():
         logger.exception("import-stream: Database check failed")
         return jsonify({"error": f"Database error: {e}"}), 500
 
+    # Capture user_id before entering the generator (g is request-scoped)
+    user_id = g.user.id
+
     def generate():
         phase = "initializing"
         try:
-            user_id = 1
             import_start_time = time.time()
             progress_q: queue.Queue = queue.Queue()
 

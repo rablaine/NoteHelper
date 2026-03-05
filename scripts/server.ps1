@@ -424,6 +424,25 @@ if (-not $backupConfigExists -and -not $Force) {
     if ($setupBackup -eq '' -or $setupBackup -eq 'Y' -or $setupBackup -eq 'y') {
         $backupScript = Join-Path $PSScriptRoot 'backup.ps1'
         & $backupScript -Setup
+
+        # Also enable call log backups into the same OneDrive folder.
+        # After backup.ps1 -Setup, backup_config.json has the backup_dir.
+        $callLogConfigFile = Join-Path $RepoRoot 'data\call_log_backup_config.json'
+        if (Test-Path $backupConfigFile) {
+            try {
+                $dbBackupCfg = Get-Content $backupConfigFile -Raw | ConvertFrom-Json
+                if ($dbBackupCfg.enabled -eq $true -and $dbBackupCfg.backup_dir) {
+                    $callLogConfig = @{
+                        enabled = $true
+                        backup_path = $dbBackupCfg.backup_dir
+                    } | ConvertTo-Json
+                    Set-Content -Path $callLogConfigFile -Value $callLogConfig -Encoding UTF8
+                    Write-Host "  [OK] Call log backups enabled -> $($dbBackupCfg.backup_dir)" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "  [WARNING] Could not configure call log backups." -ForegroundColor Yellow
+            }
+        }
     } else {
         # Create config with enabled=false so we don't ask again
         $declinedConfig = @{ enabled = $false } | ConvertTo-Json
@@ -434,6 +453,17 @@ if (-not $backupConfigExists -and -not $Force) {
     }
 } elseif (-not $backupConfigExists -and $Force) {
     Write-Host "  [INFO] Backups not configured. Run backup.bat to set up." -ForegroundColor Gray
+}
+
+# Also check/display call log backup status
+$callLogConfigFile = Join-Path $RepoRoot 'data\call_log_backup_config.json'
+if (Test-Path $callLogConfigFile) {
+    try {
+        $clConfig = Get-Content $callLogConfigFile -Raw | ConvertFrom-Json
+        if ($clConfig.enabled -eq $true -and $clConfig.backup_path) {
+            Write-Host "  [OK] Call log backups enabled -> $($clConfig.backup_path)" -ForegroundColor Green
+        }
+    } catch {}
 }
 
 # ==============================================================================
