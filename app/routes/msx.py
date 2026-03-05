@@ -6,11 +6,14 @@ Provides API endpoints for MSX (Dynamics 365) integration:
 - Token refresh
 - TPID account lookup
 - Connection testing
-- Streaming import from MSX
+- Streaming import from MSX (sequential and parallel)
 """
 
 import json
+import math
+import queue
 import time
+from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, jsonify, request, Response, g, current_app, stream_with_context
 import logging
 
@@ -901,28 +904,114 @@ def import_accounts():
 
 
 # -----------------------------------------------------------------------------
-# Streaming MSX Import (SSE)
+# Streaming MSX Import (SSE) -- 3 concurrent workers
 # -----------------------------------------------------------------------------
+
+# Parallel worker helpers
+_PARALLEL_WORKERS = 3
+_ACCT_BATCH = 15
+_TEAM_BATCH = 3
+
+
+def _split_chunks(items: list, n: int) -> list:
+    """Split *items* into *n* roughly-equal chunks."""
+    k, m = divmod(len(items), n)
+    return [
+        items[i * k + min(i, m):(i + 1) * k + min(i + 1, m)]
+        for i in range(n)
+    ]
+
+
+def _sse(data: dict) -> str:
+    return "data: " + json.dumps(data) + "\n\n"
+
+
+def _drain(q: queue.Queue) -> list:
+    events = []
+    while True:
+        try:
+            events.append(q.get_nowait())
+        except queue.Empty:
+            break
+    return events
+
+
+def _par_query_accounts(account_ids, batch_size, progress_q, worker_id):
+    """Worker: query account details for a chunk of IDs."""
+    accounts = {}
+    batches = math.ceil(len(account_ids) / batch_size)
+    for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
+        batch = account_ids[i:i + batch_size]
+        filter_parts = [f"accountid eq {aid}" for aid in batch]
+        result = query_entity(
+            "accounts",
+            select=["accountid", "name", "msp_mstopparentid",
+                    "_territoryid_value", "msp_verticalcode",
+                    "msp_verticalcategorycode"],
+            filter_query=" or ".join(filter_parts),
+            top=batch_size + 5,
+        )
+        if result.get("success"):
+            for rec in result.get("records", []):
+                aid = rec.get("accountid")
+                if aid:
+                    accounts[aid] = rec
+        progress_q.put({"worker": worker_id, "batch": batch_num,
+                        "total_batches": batches, "fetched": len(accounts)})
+    return accounts
+
+
+def _par_query_territories(territory_ids, batch_size, progress_q, worker_id):
+    """Worker: query territory details for a chunk of IDs."""
+    territories = {}
+    batches = math.ceil(len(territory_ids) / batch_size) if territory_ids else 0
+    for batch_num, i in enumerate(range(0, len(territory_ids), batch_size), start=1):
+        batch = territory_ids[i:i + batch_size]
+        filter_parts = [f"territoryid eq {tid}" for tid in batch]
+        result = query_entity(
+            "territories",
+            select=["territoryid", "name", "msp_ownerid",
+                    "msp_salesunitname", "msp_accountteamunitname"],
+            filter_query=" or ".join(filter_parts),
+            top=batch_size + 5,
+        )
+        if result.get("success"):
+            for rec in result.get("records", []):
+                tid = rec.get("territoryid")
+                if tid:
+                    territories[tid] = rec
+        progress_q.put({"worker": worker_id, "batch": batch_num,
+                        "total_batches": batches, "fetched": len(territories)})
+    return territories
+
+
+def _par_query_teams(account_ids, batch_size, progress_q, worker_id):
+    """Worker: query account teams for a chunk of account IDs."""
+    account_sellers, unique_sellers, account_ses = {}, {}, {}
+    batches = math.ceil(len(account_ids) / batch_size) if account_ids else 0
+    for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
+        batch = account_ids[i:i + batch_size]
+        teams_result = batch_query_account_teams(batch, batch_size=len(batch))
+        if teams_result.get("success"):
+            account_sellers.update(teams_result.get("account_sellers", {}))
+            unique_sellers.update(teams_result.get("unique_sellers", {}))
+            account_ses.update(teams_result.get("account_ses", {}))
+        progress_q.put({"worker": worker_id, "batch": batch_num,
+                        "total_batches": batches, "sellers_found": len(unique_sellers)})
+    return {"account_sellers": account_sellers,
+            "unique_sellers": unique_sellers,
+            "account_ses": account_ses}
+
 
 @msx_bp.route('/import-stream')
 def import_stream():
     """
     Stream import all accounts/data from MSX into NoteHelper database.
-    
-    Uses Server-Sent Events (SSE) to stream progress updates.
-    
-    Optimized approach:
-    - One query for all account assignments (scan_init)
-    - One query per account for details + territory
-    - One query per POD for team members (cached across accounts)
-    
-    Creates: PODs, Territories, Sellers, SEs, Verticals, Customers
-    """
-    # --- Pre-flight checks (run in normal request context) ---
-    # These return clear JSON errors BEFORE starting the SSE stream
-    # so the frontend gets an HTTP error instead of a broken stream.
 
-    # Check MSX auth is working (token available)
+    Uses 3 concurrent workers for the API query phases (accounts,
+    territories, teams) then writes to the database sequentially.
+    Sends Server-Sent Events (SSE) to stream progress updates.
+    """
     token = get_msx_token()
     if not token:
         logger.warning("import-stream: No MSX token available")
@@ -931,164 +1020,160 @@ def import_stream():
             "auth_required": True,
         }), 401
 
-    # Quick DB sanity check (can we query the User table?)
     try:
         user_check = db.session.execute(db.text("SELECT id FROM users LIMIT 1")).fetchone()
         if not user_check:
-            return jsonify({
-                "error": "Database not initialized. No user record found.",
-            }), 500
+            return jsonify({"error": "Database not initialized. No user record found."}), 500
     except Exception as e:
         logger.exception("import-stream: Database check failed")
         return jsonify({"error": f"Database error: {e}"}), 500
-    
+
     def generate():
         phase = "initializing"
         try:
-            # Get the user_id for single-user mode (user_id=1 hack for SSE context)
-            # In SSE streams we don't have proper request context, so use user_id=1
-            # This matches how the app handles single-user mode
             user_id = 1
-            
             import_start_time = time.time()
-            yield "data: " + json.dumps({"message": "Starting MSX import..."}) + "\n\n"
-            
+            progress_q: queue.Queue = queue.Queue()
+
+            yield _sse({"message": "Starting parallel MSX import...", "progress": 0})
+
+            # ----------------------------------------------------------
+            # Phase 1: scan_init (single-threaded)
+            # ----------------------------------------------------------
             phase = "fetching account assignments"
-            # 1. Initialize - get all account IDs
-            yield "data: " + json.dumps({"message": "Fetching your account assignments from MSX..."}) + "\n\n"
-            
+            yield _sse({"message": "Fetching your account assignments from MSX...", "progress": 1})
             init_result = scan_init()
             if not init_result.get("success"):
                 error_msg = init_result.get("error", "Failed to initialize scan")
                 if init_result.get("vpn_blocked") or is_vpn_blocked():
-                    yield "data: " + json.dumps({"error": error_msg, "vpn_blocked": True}) + "\n\n"
+                    yield _sse({"error": error_msg, "vpn_blocked": True})
                 else:
-                    yield "data: " + json.dumps({"error": error_msg}) + "\n\n"
+                    yield _sse({"error": error_msg})
                 return
-            
+
             account_ids = init_result.get("account_ids", [])
-            total_accounts = len(account_ids)
             user_info = init_result.get("user", {})
             role = init_result.get("role", "Unknown")
-            
-            yield "data: " + json.dumps({
-                "message": f"Found {total_accounts} accounts to import...",
-                "user": user_info.get("name"),
-                "role": role
-            }) + "\n\n"
-            
-            phase = "querying accounts"
-            # 2. Batch query all accounts — inline the loop so we can
-            #    yield SSE progress after each batch in real time.
-            BATCH_SIZE = 15
-            accounts_raw = {}
-            total_batches = (len(account_ids) + BATCH_SIZE - 1) // BATCH_SIZE
+            yield _sse({
+                "message": f"Found {len(account_ids)} accounts to import...",
+                "user": user_info.get("name"), "role": role, "progress": 2,
+            })
 
-            yield "data: " + json.dumps({
-                "message": f"Querying {len(account_ids)} accounts ({total_batches} batches)...",
-                "progress": 2
-            }) + "\n\n"
-
-            for batch_num, i in enumerate(range(0, len(account_ids), BATCH_SIZE), start=1):
-                # Bail early on VPN block
-                if is_vpn_blocked():
-                    yield "data: " + json.dumps({"error": "IP address is blocked — connect to VPN and retry.", "vpn_blocked": True}) + "\n\n"
-                    return
-
-                batch = account_ids[i:i + BATCH_SIZE]
-                filter_parts = [f"accountid eq {aid}" for aid in batch]
-                filter_query = " or ".join(filter_parts)
-                result = query_entity(
-                    "accounts",
-                    select=["accountid", "name", "msp_mstopparentid",
-                            "_territoryid_value", "msp_verticalcode",
-                            "msp_verticalcategorycode"],
-                    filter_query=filter_query,
-                    top=BATCH_SIZE + 5,
-                )
-                if result.get("success"):
-                    for rec in result.get("records", []):
-                        acct_id = rec.get("accountid")
-                        if acct_id:
-                            accounts_raw[acct_id] = rec
-                pct = 2 + int((batch_num / total_batches) * 10)  # 2-12%
-                yield "data: " + json.dumps({
-                    "message": f"Querying accounts... batch {batch_num}/{total_batches} ({len(accounts_raw)} fetched)",
-                    "progress": pct
-                }) + "\n\n"
-
-            if not accounts_raw:
-                yield "data: " + json.dumps({"error": "Failed to query any accounts"}) + "\n\n"
+            if not account_ids:
+                yield _sse({"error": "No accounts found for this user."})
                 return
 
-            yield "data: " + json.dumps({
+            # ----------------------------------------------------------
+            # Phase 2: Parallel account queries (3 workers)
+            # ----------------------------------------------------------
+            phase = "querying accounts"
+            chunks = _split_chunks(account_ids, _PARALLEL_WORKERS)
+            total_batches = sum(math.ceil(len(c) / _ACCT_BATCH) for c in chunks if c)
+            completed = 0
+
+            yield _sse({
+                "message": f"Querying {len(account_ids)} accounts in parallel ({_PARALLEL_WORKERS} workers)...",
+                "progress": 3,
+            })
+
+            accounts_raw: dict = {}
+            with ThreadPoolExecutor(max_workers=_PARALLEL_WORKERS) as pool:
+                futures = [
+                    pool.submit(_par_query_accounts, chunk, _ACCT_BATCH, progress_q, idx + 1)
+                    for idx, chunk in enumerate(chunks) if chunk
+                ]
+                while not all(f.done() for f in futures):
+                    time.sleep(0.3)
+                    for evt in _drain(progress_q):
+                        completed += 1
+                        pct = 3 + int((completed / max(total_batches, 1)) * 9)
+                        yield _sse({
+                            "message": f"Querying accounts... ({evt['fetched']} fetched)",
+                            "progress": min(pct, 12),
+                        })
+                for evt in _drain(progress_q):
+                    completed += 1
+                    pct = 3 + int((completed / max(total_batches, 1)) * 9)
+                    yield _sse({
+                        "message": f"Querying accounts... ({evt['fetched']} fetched)",
+                        "progress": min(pct, 12),
+                    })
+                for f in futures:
+                    accounts_raw.update(f.result())
+
+            if not accounts_raw:
+                yield _sse({"error": "Failed to query any accounts"})
+                return
+
+            yield _sse({
                 "message": f"Retrieved {len(accounts_raw)} accounts. Getting territory details...",
-                "progress": 13
-            }) + "\n\n"
-            
+                "progress": 13,
+            })
+
+            # ----------------------------------------------------------
+            # Phase 3: Parallel territory queries (3 workers)
+            # ----------------------------------------------------------
             phase = "querying territories"
-            # 3. Collect unique territory IDs and batch query them inline
-            territory_ids = set()
-            for acct in accounts_raw.values():
-                terr_id = acct.get("_territoryid_value")
-                if terr_id:
-                    territory_ids.add(terr_id)
-            
-            territories_raw = {}
+            territory_ids = list({
+                acct.get("_territoryid_value")
+                for acct in accounts_raw.values()
+                if acct.get("_territoryid_value")
+            })
+
+            territories_raw: dict = {}
             if territory_ids:
-                unique_terr = list(territory_ids)
-                terr_batches = (len(unique_terr) + BATCH_SIZE - 1) // BATCH_SIZE
+                t_chunks = _split_chunks(territory_ids, _PARALLEL_WORKERS)
+                t_total = sum(math.ceil(len(c) / _ACCT_BATCH) for c in t_chunks if c)
+                t_done = 0
 
-                yield "data: " + json.dumps({
-                    "message": f"Querying {len(unique_terr)} territories ({terr_batches} batches)...",
-                    "progress": 14
-                }) + "\n\n"
+                yield _sse({
+                    "message": f"Querying {len(territory_ids)} territories in parallel...",
+                    "progress": 14,
+                })
 
-                for batch_num, i in enumerate(range(0, len(unique_terr), BATCH_SIZE), start=1):
-                    batch = unique_terr[i:i + BATCH_SIZE]
-                    filter_parts = [f"territoryid eq {tid}" for tid in batch]
-                    filter_query = " or ".join(filter_parts)
-                    result = query_entity(
-                        "territories",
-                        select=["territoryid", "name", "msp_ownerid",
-                                "msp_salesunitname", "msp_accountteamunitname"],
-                        filter_query=filter_query,
-                        top=BATCH_SIZE + 5,
-                    )
-                    if result.get("success"):
-                        for rec in result.get("records", []):
-                            terr_id = rec.get("territoryid")
-                            if terr_id:
-                                territories_raw[terr_id] = rec
-                    pct = 14 + int((batch_num / terr_batches) * 6)  # 14-20%
-                    yield "data: " + json.dumps({
-                        "message": f"Querying territories... batch {batch_num}/{terr_batches} ({len(territories_raw)} fetched)",
-                        "progress": pct
-                    }) + "\n\n"
-            
-            yield "data: " + json.dumps({
-                "message": f"Processing account data...",
-                "progress": 21
-            }) + "\n\n"
-            
+                with ThreadPoolExecutor(max_workers=_PARALLEL_WORKERS) as pool:
+                    futures = [
+                        pool.submit(_par_query_territories, chunk, _ACCT_BATCH, progress_q, idx + 1)
+                        for idx, chunk in enumerate(t_chunks) if chunk
+                    ]
+                    while not all(f.done() for f in futures):
+                        time.sleep(0.3)
+                        for evt in _drain(progress_q):
+                            t_done += 1
+                            pct = 14 + int((t_done / max(t_total, 1)) * 6)
+                            yield _sse({
+                                "message": f"Querying territories... ({evt['fetched']} fetched)",
+                                "progress": min(pct, 20),
+                            })
+                    for evt in _drain(progress_q):
+                        t_done += 1
+                        pct = 14 + int((t_done / max(t_total, 1)) * 6)
+                        yield _sse({
+                            "message": f"Querying territories... ({evt['fetched']} fetched)",
+                            "progress": min(pct, 20),
+                        })
+                    for f in futures:
+                        territories_raw.update(f.result())
+
+            yield _sse({"message": "Processing account data...", "progress": 21})
+
+            # ----------------------------------------------------------
+            # Process accounts into data structures (same as sequential)
+            # ----------------------------------------------------------
             phase = "processing account data"
-            # 4. Process all accounts and build data structures
-            accounts_data = []  # List of account details
-            pod_accounts = {}  # pod_name -> [account_ids] for team lookup
-            territories_seen = {}  # territory_name -> territory_info
-            verticals_seen = set()  # vertical names
-            
+            accounts_data = []
+            pod_accounts = {}
+            territories_seen = {}
+            verticals_seen = set()
+
             for account_id, acct in accounts_raw.items():
-                # Get territory info from batch result
                 territory_id = acct.get("_territoryid_value")
                 territory_info = None
                 pod_name = None
-                
+
                 if territory_id and territory_id in territories_raw:
                     terr = territories_raw[territory_id]
                     terr_name = terr.get("name", "")
-                    
-                    # Derive POD from territory name (e.g., "East.SMECC.MAA.0601" -> "East POD 06")
                     name_parts = terr_name.split(".")
                     if len(name_parts) >= 4:
                         region = name_parts[0]
@@ -1096,17 +1181,17 @@ def import_stream():
                         if len(suffix) >= 2:
                             pod_num = suffix[:2]
                             pod_name = f"{region} POD {pod_num}"
-                    
                     territory_info = {
                         "id": territory_id,
                         "name": terr_name,
                         "atu": terr.get("msp_accountteamunitname"),
                     }
-                
-                # Build account data (seller info will be added after batch query)
-                vertical = acct.get("msp_verticalcode@OData.Community.Display.V1.FormattedValue")
-                vertical_category = acct.get("msp_verticalcategorycode@OData.Community.Display.V1.FormattedValue")
-                
+
+                vertical = acct.get(
+                    "msp_verticalcode@OData.Community.Display.V1.FormattedValue")
+                vertical_category = acct.get(
+                    "msp_verticalcategorycode@OData.Community.Display.V1.FormattedValue")
+
                 account_data = {
                     "id": account_id,
                     "name": acct.get("name"),
@@ -1115,141 +1200,148 @@ def import_stream():
                     "vertical": vertical,
                     "vertical_category": vertical_category,
                     "territory_name": territory_info.get("name") if territory_info else None,
-                    "seller_name": None,  # Will be set from msp_accountteams query
-                    "seller_type": None,  # Will be set from msp_accountteams query
+                    "seller_name": None,
+                    "seller_type": None,
                     "pod_name": pod_name,
                 }
                 accounts_data.append(account_data)
-                
-                # Track unique territories
+
                 if territory_info and territory_info.get("name"):
                     territories_seen[territory_info["name"]] = {
                         "name": territory_info["name"],
                         "atu": territory_info.get("atu"),
                         "pod_name": pod_name,
                     }
-                
-                # Track POD for SE deduplication later
+
                 if pod_name:
-                    if pod_name not in pod_accounts:
-                        pod_accounts[pod_name] = []
-                    pod_accounts[pod_name].append(account_id)
-                
-                # Track verticals
+                    pod_accounts.setdefault(pod_name, []).append(account_id)
+
                 if vertical and vertical.upper() != "N/A":
                     verticals_seen.add(vertical)
                 if vertical_category and vertical_category.upper() != "N/A":
                     verticals_seen.add(vertical_category)
-            
-            yield "data: " + json.dumps({
-                "message": f"Found {len(accounts_data)} accounts, {len(territories_seen)} territories, {len(pod_accounts)} PODs",
-                "progress": 22
-            }) + "\n\n"
-            
+
+            yield _sse({
+                "message": (
+                    f"Found {len(accounts_data)} accounts, "
+                    f"{len(territories_seen)} territories, "
+                    f"{len(pod_accounts)} PODs"
+                ),
+                "progress": 22,
+            })
+
+            # ----------------------------------------------------------
+            # Phase 4: Parallel team queries (3 workers)
+            # ----------------------------------------------------------
             phase = "querying sellers and SEs"
-            # 5. Batch query all account teams for sellers and SEs
-            # Uses server-side filtering: Corporate + Cloud & AI*, batched by 3 accounts
-            # (3 accounts × ~22 Cloud & AI records = ~66, safely under 100 limit)
-            # Process in chunks for progress updates
-            account_ids_list = [a["id"] for a in accounts_data]
-            batch_size = 3
-            total_batches = (len(account_ids_list) + batch_size - 1) // batch_size
-            
-            yield "data: " + json.dumps({
-                "message": f"Fetching sellers and SEs ({total_batches} batches)...",
-                "progress": 25
-            }) + "\n\n"
-            
-            # Run batch_query_account_teams but show incremental progress
-            # Progress spans 25-85% during this phase
-            account_sellers = {}
-            sellers_seen = {}
-            account_ses = {}
-            
-            for batch_idx in range(0, len(account_ids_list), batch_size):
-                batch = account_ids_list[batch_idx:batch_idx + batch_size]
-                batch_num = batch_idx // batch_size + 1
-                
-                # Update progress
-                progress = 25 + int((batch_num / total_batches) * 60)  # 25-85%
-                if batch_num % 5 == 0 or batch_num == 1:  # Update every 5 batches
-                    yield "data: " + json.dumps({
-                        "message": f"Querying teams batch {batch_num}/{total_batches}...",
-                        "progress": progress
-                    }) + "\n\n"
-                
-                # Query this batch
-                teams_result = batch_query_account_teams(batch, batch_size=len(batch))
-                
-                if teams_result.get("success"):
-                    # Merge results
-                    account_sellers.update(teams_result.get("account_sellers", {}))
-                    sellers_seen.update(teams_result.get("unique_sellers", {}))
-                    account_ses.update(teams_result.get("account_ses", {}))
-            
-            # Populate seller info on account_data
+            all_ids = [a["id"] for a in accounts_data]
+            a_chunks = _split_chunks(all_ids, _PARALLEL_WORKERS)
+            team_total = sum(math.ceil(len(c) / _TEAM_BATCH) for c in a_chunks if c)
+            team_done = 0
+
+            yield _sse({
+                "message": (
+                    f"Fetching sellers and SEs in parallel "
+                    f"({_PARALLEL_WORKERS} workers, ~{team_total} batches)..."
+                ),
+                "progress": 25,
+            })
+
+            account_sellers: dict = {}
+            sellers_seen: dict = {}
+            account_ses: dict = {}
+
+            with ThreadPoolExecutor(max_workers=_PARALLEL_WORKERS) as pool:
+                futures = [
+                    pool.submit(_par_query_teams, chunk, _TEAM_BATCH, progress_q, idx + 1)
+                    for idx, chunk in enumerate(a_chunks) if chunk
+                ]
+                while not all(f.done() for f in futures):
+                    time.sleep(0.3)
+                    for evt in _drain(progress_q):
+                        team_done += 1
+                        pct = 25 + int((team_done / max(team_total, 1)) * 60)
+                        if team_done % 3 == 0 or team_done == 1:
+                            yield _sse({
+                                "message": f"Querying teams batch {team_done}/{team_total}...",
+                                "progress": min(pct, 85),
+                            })
+                for evt in _drain(progress_q):
+                    team_done += 1
+                    pct = 25 + int((team_done / max(team_total, 1)) * 60)
+                    yield _sse({
+                        "message": f"Querying teams batch {team_done}/{team_total}...",
+                        "progress": min(pct, 85),
+                    })
+                for f in futures:
+                    r = f.result()
+                    account_sellers.update(r["account_sellers"])
+                    sellers_seen.update(r["unique_sellers"])
+                    account_ses.update(r["account_ses"])
+
+            # Populate seller info on accounts
             accounts_with_sellers = 0
-            for account_data in accounts_data:
-                acct_id = account_data["id"]
-                if acct_id in account_sellers:
-                    seller = account_sellers[acct_id]
-                    account_data["seller_name"] = seller["name"]
-                    account_data["seller_type"] = seller["type"]
+            for ad in accounts_data:
+                if ad["id"] in account_sellers:
+                    seller = account_sellers[ad["id"]]
+                    ad["seller_name"] = seller["name"]
+                    ad["seller_type"] = seller["type"]
                     accounts_with_sellers += 1
-            
-            # Build pod_teams by aggregating SEs from all accounts in each POD
-            pod_teams = {}  # pod_name -> {data_se: [...], infra_se: [...], apps_se: [...]}
-            for pod_name, acct_ids in pod_accounts.items():
-                pod_teams[pod_name] = {"data_se": [], "infra_se": [], "apps_se": []}
+
+            # Build pod_teams
+            pod_teams = {}
+            for pn, acct_ids in pod_accounts.items():
+                pod_teams[pn] = {"data_se": [], "infra_se": [], "apps_se": []}
                 seen_ses = {"data_se": set(), "infra_se": set(), "apps_se": set()}
-                
-                for acct_id in acct_ids:
-                    if acct_id in account_ses:
-                        for role in ["data_se", "infra_se", "apps_se"]:
-                            for se in account_ses[acct_id].get(role, []):
+                for aid in acct_ids:
+                    if aid in account_ses:
+                        for role in ("data_se", "infra_se", "apps_se"):
+                            for se in account_ses[aid].get(role, []):
                                 if se["name"] not in seen_ses[role]:
                                     seen_ses[role].add(se["name"])
-                                    pod_teams[pod_name][role].append(se)
-            
-            yield "data: " + json.dumps({
-                "message": f"Found {len(sellers_seen)} sellers for {accounts_with_sellers}/{len(accounts_data)} accounts, SEs for {len(pod_teams)} PODs",
-                "progress": 86
-            }) + "\n\n"
-            
+                                    pod_teams[pn][role].append(se)
+
+            yield _sse({
+                "message": (
+                    f"Found {len(sellers_seen)} sellers for "
+                    f"{accounts_with_sellers}/{len(accounts_data)} accounts"
+                ),
+                "progress": 86,
+            })
+
+            # ----------------------------------------------------------
+            # Phase 5: Database writes (sequential, same as original)
+            # ----------------------------------------------------------
             phase = "creating database records"
-            # 6. Create database entities
-            yield "data: " + json.dumps({"message": "Creating PODs..."}) + "\n\n"
-            
-            pods_map = {}  # pod_name -> POD object
+            yield _sse({"message": "Creating PODs...", "progress": 87})
+
+            pods_map = {}
             pods_created = 0
-            
-            for pod_name in pod_accounts.keys():
-                existing = POD.query.filter_by(name=pod_name, user_id=user_id).first()
+            for pn in pod_accounts:
+                existing = POD.query.filter_by(name=pn, user_id=user_id).first()
                 if existing:
-                    pods_map[pod_name] = existing
+                    pods_map[pn] = existing
                 else:
-                    pod = POD(name=pod_name, user_id=user_id)
+                    pod = POD(name=pn, user_id=user_id)
                     db.session.add(pod)
-                    pods_map[pod_name] = pod
+                    pods_map[pn] = pod
                     pods_created += 1
-            
             db.session.flush()
-            yield "data: " + json.dumps({
+
+            yield _sse({
                 "message": f"Created {pods_created} new PODs",
-                "progress": 88
-            }) + "\n\n"
-            
-            # Create Territories
-            yield "data: " + json.dumps({"message": "Creating territories..."}) + "\n\n"
-            
-            territories_map = {}  # territory_name -> Territory object
+                "progress": 88,
+            })
+
+            # Territories
+            yield _sse({"message": "Creating territories...", "progress": 89})
+            territories_map = {}
             territories_created = 0
-            
             for terr_name, terr_info in territories_seen.items():
-                existing = Territory.query.filter_by(name=terr_name, user_id=user_id).first()
+                existing = Territory.query.filter_by(
+                    name=terr_name, user_id=user_id).first()
                 if existing:
                     territories_map[terr_name] = existing
-                    # Update POD if not set
                     if not existing.pod and terr_info.get("pod_name"):
                         existing.pod = pods_map.get(terr_info["pod_name"])
                 else:
@@ -1259,200 +1351,166 @@ def import_stream():
                     db.session.add(territory)
                     territories_map[terr_name] = territory
                     territories_created += 1
-            
             db.session.flush()
-            yield "data: " + json.dumps({
+
+            yield _sse({
                 "message": f"Created {territories_created} new territories",
-                "progress": 90
-            }) + "\n\n"
-            
-            # Create Sellers
-            yield "data: " + json.dumps({"message": "Creating sellers..."}) + "\n\n"
-            
-            sellers_map = {}  # seller_name -> Seller object
+                "progress": 90,
+            })
+
+            # Sellers
+            yield _sse({"message": "Creating sellers...", "progress": 91})
+            sellers_map = {}
             sellers_created = 0
-            
             for seller_name, seller_info in sellers_seen.items():
-                existing = Seller.query.filter_by(name=seller_name, user_id=user_id).first()
+                existing = Seller.query.filter_by(
+                    name=seller_name, user_id=user_id).first()
                 if existing:
                     sellers_map[seller_name] = existing
                 else:
                     seller_type = seller_info.get("type", "Growth")
-                    # Look up alias for new sellers using their systemuser ID
                     systemuser_id = seller_info.get("user_id")
                     alias = get_user_alias(systemuser_id) if systemuser_id else None
-                    
-                    seller = Seller(name=seller_name, seller_type=seller_type, alias=alias, user_id=user_id)
+                    seller = Seller(
+                        name=seller_name, seller_type=seller_type,
+                        alias=alias, user_id=user_id,
+                    )
                     db.session.add(seller)
                     sellers_map[seller_name] = seller
                     sellers_created += 1
-            
             db.session.flush()
-            
+
             # Associate sellers with territories
-            for account_data in accounts_data:
-                seller_name = account_data.get("seller_name")
-                territory_name = account_data.get("territory_name")
-                if seller_name and territory_name:
-                    seller = sellers_map.get(seller_name)
-                    territory = territories_map.get(territory_name)
-                    if seller and territory and territory not in seller.territories:
-                        seller.territories.append(territory)
-            
+            for ad in accounts_data:
+                sn = ad.get("seller_name")
+                tn = ad.get("territory_name")
+                if sn and tn:
+                    s = sellers_map.get(sn)
+                    t = territories_map.get(tn)
+                    if s and t and t not in s.territories:
+                        s.territories.append(t)
             db.session.flush()
-            yield "data: " + json.dumps({
+
+            yield _sse({
                 "message": f"Created {sellers_created} new sellers",
-                "progress": 92
-            }) + "\n\n"
-            
-            # Create Solution Engineers
-            yield "data: " + json.dumps({"message": "Creating solution engineers..."}) + "\n\n"
-            
-            solution_engineers_map = {}  # (name, specialty) -> SE object
+                "progress": 92,
+            })
+
+            # Solution Engineers
+            yield _sse({"message": "Creating solution engineers...", "progress": 93})
+            se_map = {}
             ses_created = 0
-            
-            # Map SE role keys to specialty names
             specialty_map = {
                 "data_se": "Azure Data",
                 "infra_se": "Azure Core and Infra",
-                "apps_se": "Azure Apps and AI"
+                "apps_se": "Azure Apps and AI",
             }
-            
-            # Collect SE info from all POD teams
-            for pod_name, team in pod_teams.items():
-                pod = pods_map.get(pod_name)
+            for pn, team in pod_teams.items():
+                pod = pods_map.get(pn)
                 if not pod:
                     continue
-                
-                # Process all SE roles (each is now a list of SEs)
                 for se_role, specialty in specialty_map.items():
-                    se_list = team.get(se_role, [])
-                    for se_info in se_list:
+                    for se_info in team.get(se_role, []):
                         if not se_info.get("name"):
                             continue
-                        
                         se_key = (se_info["name"], specialty)
-                        if se_key not in solution_engineers_map:
+                        if se_key not in se_map:
                             existing = SolutionEngineer.query.filter_by(
-                                name=se_info["name"],
-                                specialty=specialty,
-                                user_id=user_id
+                                name=se_info["name"], specialty=specialty,
+                                user_id=user_id,
                             ).first()
                             if existing:
-                                solution_engineers_map[se_key] = existing
+                                se_map[se_key] = existing
                             else:
-                                # Look up alias for new SEs using their systemuser ID
                                 systemuser_id = se_info.get("user_id")
                                 alias = get_user_alias(systemuser_id) if systemuser_id else None
-                                
                                 se = SolutionEngineer(
-                                    name=se_info["name"],
-                                    alias=alias,
-                                    specialty=specialty,
-                                    user_id=user_id
+                                    name=se_info["name"], alias=alias,
+                                    specialty=specialty, user_id=user_id,
                                 )
                                 db.session.add(se)
-                                solution_engineers_map[se_key] = se
+                                se_map[se_key] = se
                                 ses_created += 1
-                        
-                        # Add POD association
-                        se = solution_engineers_map.get(se_key)
+                        se = se_map.get(se_key)
                         if se and pod not in se.pods:
                             se.pods.append(pod)
-            
             db.session.flush()
-            yield "data: " + json.dumps({
+
+            yield _sse({
                 "message": f"Created {ses_created} new solution engineers",
-                "progress": 93
-            }) + "\n\n"
-            
-            # Create Verticals
-            yield "data: " + json.dumps({"message": "Creating verticals..."}) + "\n\n"
-            
-            verticals_map = {}  # name -> Vertical object
+                "progress": 94,
+            })
+
+            # Verticals
+            yield _sse({"message": "Creating verticals...", "progress": 95})
+            verticals_map = {}
             verticals_created = 0
-            
-            for vertical_name in verticals_seen:
-                existing = Vertical.query.filter_by(name=vertical_name, user_id=user_id).first()
+            for vn in verticals_seen:
+                existing = Vertical.query.filter_by(
+                    name=vn, user_id=user_id).first()
                 if existing:
-                    verticals_map[vertical_name] = existing
+                    verticals_map[vn] = existing
                 else:
-                    vertical = Vertical(name=vertical_name, user_id=user_id)
+                    vertical = Vertical(name=vn, user_id=user_id)
                     db.session.add(vertical)
-                    verticals_map[vertical_name] = vertical
+                    verticals_map[vn] = vertical
                     verticals_created += 1
-            
             db.session.flush()
-            yield "data: " + json.dumps({
+
+            yield _sse({
                 "message": f"Created {verticals_created} new verticals",
-                "progress": 94
-            }) + "\n\n"
-            
-            # Create Customers
-            yield "data: " + json.dumps({
-                "message": "Creating customers...",
-                "progress": 95
-            }) + "\n\n"
-            
+                "progress": 96,
+            })
+
+            # Customers
+            yield _sse({"message": "Creating customers...", "progress": 97})
             customers_created = 0
             customers_skipped = 0
-            
-            for idx, account_data in enumerate(accounts_data, 1):
+
+            for idx, ad in enumerate(accounts_data, 1):
                 if idx % 10 == 0:
-                    yield "data: " + json.dumps({
+                    yield _sse({
                         "message": f"Processing customer {idx}/{len(accounts_data)}...",
-                        "progress": 95 + int((idx / len(accounts_data)) * 4)  # 95-99%
-                    }) + "\n\n"
-                
-                tpid = account_data.get("tpid")
-                customer_name = account_data.get("name")
-                
+                        "progress": 97 + int((idx / len(accounts_data)) * 2),
+                    })
+
+                tpid = ad.get("tpid")
+                customer_name = ad.get("name")
                 if not tpid or not customer_name:
                     customers_skipped += 1
                     continue
-                
-                # Check if customer already exists by TPID
-                existing = Customer.query.filter_by(tpid=tpid, user_id=user_id).first()
+
+                existing = Customer.query.filter_by(
+                    tpid=tpid, user_id=user_id).first()
                 if existing:
                     customers_skipped += 1
-                    # Update tpid_url if not set
-                    if not existing.tpid_url and account_data.get("url"):
-                        existing.tpid_url = account_data["url"]
+                    if not existing.tpid_url and ad.get("url"):
+                        existing.tpid_url = ad["url"]
                     continue
-                
-                # Create new customer
+
                 customer = Customer(
-                    name=customer_name,
-                    tpid=tpid,
-                    tpid_url=account_data.get("url"),
-                    user_id=user_id
+                    name=customer_name, tpid=tpid,
+                    tpid_url=ad.get("url"), user_id=user_id,
                 )
-                
-                # Associate territory
-                territory_name = account_data.get("territory_name")
+                territory_name = ad.get("territory_name")
                 if territory_name and territory_name in territories_map:
                     customer.territory = territories_map[territory_name]
-                
-                # Associate seller
-                seller_name = account_data.get("seller_name")
+                seller_name = ad.get("seller_name")
                 if seller_name and seller_name in sellers_map:
                     customer.seller = sellers_map[seller_name]
-                
-                # Associate verticals
-                if account_data.get("vertical") and account_data["vertical"] in verticals_map:
-                    customer.verticals.append(verticals_map[account_data["vertical"]])
-                if account_data.get("vertical_category") and account_data["vertical_category"] in verticals_map:
-                    vert = verticals_map[account_data["vertical_category"]]
+                if ad.get("vertical") and ad["vertical"] in verticals_map:
+                    customer.verticals.append(verticals_map[ad["vertical"]])
+                if ad.get("vertical_category") and ad["vertical_category"] in verticals_map:
+                    vert = verticals_map[ad["vertical_category"]]
                     if vert not in customer.verticals:
                         customer.verticals.append(vert)
-                
                 db.session.add(customer)
                 customers_created += 1
-            
+
             db.session.commit()
-            
-            # Final summary
-            yield "data: " + json.dumps({
+
+            duration = round(time.time() - import_start_time, 1)
+            yield _sse({
                 "message": "Import complete!",
                 "progress": 100,
                 "complete": True,
@@ -1464,32 +1522,34 @@ def import_stream():
                     "verticals_created": verticals_created,
                     "customers_created": customers_created,
                     "customers_skipped": customers_skipped,
-                    "duration": round(time.time() - import_start_time, 1),
-                }
-            }) + "\n\n"
-            
+                    "duration": duration,
+                },
+            })
+
             logger.info(
-                f"MSX Import complete: {pods_created} PODs, {territories_created} territories, "
-                f"{sellers_created} sellers, {ses_created} SEs, {verticals_created} verticals, "
+                f"Parallel MSX Import complete in {duration}s: "
+                f"{pods_created} PODs, {territories_created} territories, "
+                f"{sellers_created} sellers, {ses_created} SEs, "
+                f"{verticals_created} verticals, "
                 f"{customers_created} customers created, {customers_skipped} skipped"
             )
-            
+
         except Exception as e:
             try:
                 db.session.rollback()
             except Exception:
-                pass  # Don't let rollback failure mask the real error
+                pass
             error_detail = f"[{type(e).__name__}] {e}"
-            logger.exception(f"Error during MSX import stream (phase: {phase}): {error_detail}")
-            yield "data: " + json.dumps({
-                "error": f"Import failed during '{phase}': {error_detail}"
-            }) + "\n\n"
-    
+            logger.exception(
+                f"Error during parallel MSX import (phase: {phase}): {error_detail}"
+            )
+            yield _sse({"error": f"Import failed during '{phase}': {error_detail}"})
+
     return Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',
             'X-Accel-Buffering': 'no',
-        }
+        },
     )
