@@ -192,10 +192,14 @@ def customer_view(id):
         customer_name=customer.name
     ).order_by(RevenueAnalysis.priority_score.desc()).all()
     
+    from app.routes.ai import is_ai_enabled
+    ai_enabled = is_ai_enabled()
+
     return render_template('customer_view.html', 
                           customer=customer, 
                           call_logs=call_logs,
-                          revenue_analyses=revenue_analyses)
+                          revenue_analyses=revenue_analyses,
+                          ai_enabled=ai_enabled)
 
 
 @customers_bp.route('/customer/<int:id>/edit', methods=['GET', 'POST'])
