@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}NoteHelper{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0d6efd">
     
     <!-- DNS Prefetch and Preconnect for faster CDN loading -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -182,8 +184,8 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid px-4">
-            <a class="navbar-brand" href="{{ url_for('main.index') }}">
-                <i class="bi bi-journal-text"></i> NoteHelper
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
+                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-white" style="width:24px;height:24px;position:relative;top:1px;"><i class="bi bi-currency-dollar" style="color:#198754;font-size:16px;font-weight:bold;"></i></span><span class="ms-2">NoteHelper</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -2315,6 +2317,12 @@
             tourDriver.drive();
         }, 500);
     });
+    </script>
+    <script>
+    // Register PWA service worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+    }
     </script>
 </body>
 </html>
