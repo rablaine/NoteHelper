@@ -44,6 +44,17 @@ Throughout the year, mergers/acquisitions and seller changes cause customer data
 - If we're not positive about a change, ask the user to validate.
 - The "move call logs between customers/TPIDs" feature is a separate UI workflow, not part of the sync.
 
+### New Brainstorming Notes (pods + immutable customer anchor)
+
+- **POD rebuild on every sync:** Right now we appear to only *accumulate* resources in PODs during sync and never remove them. Consider making account sync **drop and recreate PODs from scratch** each run.
+  - Expected impact: should not affect any part of the app **except** the POD view.
+  - Benefit: prevents stale POD memberships and avoids drift over time.
+  - Constraint: if PODs ever gain additional user-managed fields, we will need to preserve them or move them elsewhere.
+
+- **Update account fields + relationships, but never change the account/customer identity:** During sync, we should update the **verticals, territory, and seller** associated with each account/customer when those values change in MSX.
+  - The underlying customer/account construct (anchored by TPID) should **never be replaced or reassigned**.
+  - This must not break downstream associations: engagements, milestone links, revenue links, note links, etc.
+
 ## Affected Code Paths
 
 1. **`app/routes/msx.py` > `import_stream()`** (line ~1044): The main SSE streaming import. This is the primary path to update.
