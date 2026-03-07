@@ -1,0 +1,18 @@
+{#
+    Customer favicon macro.
+
+    Renders either the customer's cached favicon or a fallback building icon.
+    Import in templates with:
+        from 'partials/customer_favicon.html' import customer_favicon
+
+    Usage:
+        customer_favicon(customer)            -- 16px default
+        customer_favicon(customer, size=20)   -- custom size
+#}
+{% macro customer_favicon(customer, size=16) -%}
+{%- if customer and customer.favicon_b64 -%}
+<img src="data:image/png;base64,{{ customer.favicon_b64 }}" width="{{ size }}" height="{{ size }}" alt="" class="customer-favicon" style="vertical-align: middle;">
+{%- else -%}
+<i class="bi bi-building"></i>
+{%- endif -%}
+{%- endmacro %}

@@ -1486,6 +1486,10 @@
                         }
 
                         accountsImported = true;
+
+                        // Auto-trigger favicon fetch after account sync
+                        fetch('/api/admin/fetch-favicons', { method: 'POST' }).catch(() => {});
+
                         const summaryDiv = document.getElementById('importAccountsSummary');
                         if (finalSummary) {
                             const s = finalSummary;

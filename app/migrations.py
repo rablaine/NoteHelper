@@ -93,6 +93,9 @@ def run_migrations(db):
     # Migration: Drop user_id columns from all tables (single-user system)
     _drop_user_id_columns(db, inspector)
 
+    # Migration: Add website and favicon_b64 columns to customers
+    _migrate_customer_favicon_columns(db, inspector)
+
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -768,3 +771,10 @@ def _drop_user_id_columns(db, inspector):
     db.session.execute(text('PRAGMA foreign_keys=ON'))
     db.session.commit()
 
+
+def _migrate_customer_favicon_columns(db, inspector):
+    """Add website and favicon_b64 columns to customers table for favicon support."""
+    if 'customers' not in inspector.get_table_names():
+        return
+    _add_column_if_not_exists(db, inspector, 'customers', 'website', 'VARCHAR(500)')
+    _add_column_if_not_exists(db, inspector, 'customers', 'favicon_b64', 'TEXT')

@@ -14,6 +14,7 @@ import math
 import queue
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 from flask import Blueprint, jsonify, request, Response, g, current_app, stream_with_context
 import logging
 
@@ -67,6 +68,39 @@ from app.services.msx_api import (
 from app.models import Customer, Milestone, Territory, Seller, POD, SolutionEngineer, SyncStatus, Vertical, db
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_domain(url_or_domain: str) -> str:
+    """Extract a clean domain from a URL or bare domain string.
+
+    Handles MSX websiteurl values like:
+      'http://www.example.com'  -> 'example.com'
+      'https://example.com/foo' -> 'example.com'
+      'example.com'             -> 'example.com'
+      'www.example.com'         -> 'example.com'
+
+    Returns:
+        Clean domain string, or empty string if unparseable.
+    """
+    if not url_or_domain:
+        return ""
+    raw = url_or_domain.strip()
+    # Add scheme if missing so urlparse works
+    if not raw.startswith(("http://", "https://")):
+        raw = "http://" + raw
+    try:
+        parsed = urlparse(raw)
+        host = parsed.hostname or ""
+    except Exception:
+        return ""
+    # Strip www. prefix
+    if host.startswith("www."):
+        host = host[4:]
+    # Basic sanity: must contain at least one dot
+    if "." not in host:
+        return ""
+    return host.lower()
+
 
 msx_bp = Blueprint('msx', __name__, url_prefix='/api/msx')
 
@@ -981,7 +1015,8 @@ def _par_query_accounts(account_ids, batch_size, progress_q, worker_id):
             "accounts",
             select=["accountid", "name", "msp_mstopparentid",
                     "_territoryid_value", "msp_verticalcode",
-                    "msp_verticalcategorycode"],
+                    "msp_verticalcategorycode", "websiteurl",
+                    "msp_parentinglevelcode"],
             filter_query=" or ".join(filter_parts),
             top=batch_size + 5,
         )
@@ -1194,6 +1229,24 @@ def import_stream():
             # Process accounts into data structures (same as sequential)
             # ----------------------------------------------------------
             phase = "processing account data"
+
+            # Build a TPID -> website map, preferring top-level parent's website.
+            # msp_parentinglevelcode 861980000 = Top, 861980001 = Child
+            tpid_website_map: dict = {}  # tpid (str) -> website domain
+            for acct in accounts_raw.values():
+                raw_tpid = acct.get("msp_mstopparentid")
+                website = acct.get("websiteurl") or ""
+                if not raw_tpid or not website:
+                    continue
+                level_code = acct.get("msp_parentinglevelcode")
+                is_top = (level_code == 861980000)
+                domain = _extract_domain(website)
+                if not domain:
+                    continue
+                # Top-level parent always wins; otherwise first-come
+                if raw_tpid not in tpid_website_map or is_top:
+                    tpid_website_map[raw_tpid] = domain
+
             accounts_data = []
             pod_accounts = {}
             territories_seen = {}
@@ -1237,6 +1290,7 @@ def import_stream():
                     "name": acct.get("name"),
                     "tpid": tpid_int,
                     "url": build_account_url(account_id),
+                    "website": tpid_website_map.get(acct.get("msp_mstopparentid")),
                     "vertical": vertical,
                     "vertical_category": vertical_category,
                     "territory_name": territory_info.get("name") if territory_info else None,
@@ -1524,14 +1578,16 @@ def import_stream():
                 if normalized is not None:
                     existing_tpids.add(normalized)
 
-            # Also grab customers missing tpid_url for update
+            # Also grab customers missing tpid_url or website for update
             missing_url_tpids = {}
-            for row in db.session.query(Customer.tpid, Customer.id).filter(
-                (Customer.tpid_url == None) | (Customer.tpid_url == '')  # noqa: E711
-            ).all():
+            missing_website_tpids = {}
+            for row in db.session.query(Customer.tpid, Customer.id, Customer.tpid_url, Customer.website).all():
                 normalized = _safe_int(row[0])
                 if normalized is not None:
-                    missing_url_tpids[normalized] = row[1]
+                    if not row[2]:  # tpid_url is null/empty
+                        missing_url_tpids[normalized] = row[1]
+                    if not row[3]:  # website is null/empty
+                        missing_website_tpids[normalized] = row[1]
 
             with db.session.no_autoflush:
                 logger.info(
@@ -1565,11 +1621,18 @@ def import_stream():
                             if cust:
                                 cust.tpid_url = ad["url"]
                                 customers_updated += 1
+                        # Backfill missing website
+                        if tpid in missing_website_tpids and ad.get("website"):
+                            cust = db.session.get(Customer, missing_website_tpids[tpid])
+                            if cust:
+                                cust.website = ad["website"]
+                                customers_updated += 1
                         continue
 
                     customer = Customer(
                         name=customer_name, tpid=tpid,
                         tpid_url=ad.get("url"),
+                        website=ad.get("website"),
                     )
                     territory_name = ad.get("territory_name")
                     if territory_name and territory_name in territories_map:

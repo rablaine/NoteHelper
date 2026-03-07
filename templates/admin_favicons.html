@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Favicon Gallery - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2><i class="bi bi-image"></i> Favicon Gallery</h2>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="badge bg-success">{{ fetched_count }} fetched</span>
+            <span class="badge bg-secondary">{{ total - fetched_count }} missing</span>
+            <span class="badge bg-info text-dark">{{ total }} total</span>
+            <button id="fetchMissingBtn" class="btn btn-sm btn-primary">
+                <i class="bi bi-download"></i> Fetch Missing
+            </button>
+            <button id="refreshAllBtn" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-clockwise"></i> Refresh All
+            </button>
+            <button id="reloadPageBtn" class="btn btn-sm btn-outline-info" onclick="location.reload()">
+                <i class="bi bi-arrow-repeat"></i> Reload Page
+            </button>
+            <a href="{{ url_for('admin.admin_panel') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Admin
+            </a>
+        </div>
+    </div>
+
+    <div id="statusAlert" class="alert d-none mb-3" role="alert"></div>
+
+    {% if customers_with %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="bi bi-check-circle text-success"></i> Fetched Favicons ({{ customers_with|length }})
+        </div>
+        <div class="card-body">
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 row-cols-xl-8 g-3">
+                {% for c in customers_with %}
+                <div class="col">
+                    <div class="card h-100 text-center p-2">
+                        <div class="mb-2">
+                            <img src="data:image/png;base64,{{ c.favicon_b64 }}"
+                                 width="32" height="32" alt="favicon"
+                                 class="border rounded" style="image-rendering: pixelated;">
+                        </div>
+                        <a href="{{ url_for('customers.customer_view', id=c.id) }}"
+                           class="small text-truncate d-block" title="{{ c.name }}">
+                            {{ c.name }}
+                        </a>
+                        <small class="text-muted text-truncate d-block" title="{{ c.website }}">
+                            {{ c.website }}
+                        </small>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if customers_without %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="bi bi-hourglass text-warning"></i> Missing Favicons ({{ customers_without|length }})
+        </div>
+        <div class="card-body">
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 row-cols-xl-8 g-3">
+                {% for c in customers_without %}
+                <div class="col">
+                    <div class="card h-100 text-center p-2">
+                        <div class="mb-2">
+                            <i class="bi bi-building fs-3 text-muted"></i>
+                        </div>
+                        <a href="{{ url_for('customers.customer_view', id=c.id) }}"
+                           class="small text-truncate d-block" title="{{ c.name }}">
+                            {{ c.name }}
+                        </a>
+                        <small class="text-muted text-truncate d-block" title="{{ c.website }}">
+                            {{ c.website }}
+                        </small>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not customers_with and not customers_without %}
+    <div class="alert alert-info">
+        No customers with websites found. Run an account sync to populate website data.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusAlert = document.getElementById('statusAlert');
+
+    function showStatus(msg, type) {
+        statusAlert.className = `alert alert-${type} mb-3`;
+        statusAlert.textContent = msg;
+        statusAlert.classList.remove('d-none');
+    }
+
+    async function faviconAction(url, btn) {
+        const origText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Working...';
+        showStatus('Fetching favicons (4 parallel workers)...', 'info');
+
+        try {
+            const resp = await fetch(url, { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) {
+                showStatus(data.message, 'success');
+                // Auto-reload after brief delay so user sees the message
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showStatus('Error: ' + (data.error || 'Unknown'), 'danger');
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            }
+        } catch (e) {
+            showStatus('Network error: ' + e.message, 'danger');
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+    }
+
+    document.getElementById('fetchMissingBtn').addEventListener('click', function() {
+        faviconAction('/api/admin/fetch-favicons', this);
+    });
+
+    document.getElementById('refreshAllBtn').addEventListener('click', function() {
+        if (confirm('Re-fetch ALL favicons? This will hit the Google API for every customer with a website.')) {
+            faviconAction('/api/admin/refresh-favicons', this);
+        }
+    });
+});
+</script>
+{% endblock %}

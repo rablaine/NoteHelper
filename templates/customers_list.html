@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'partials/customer_favicon.html' import customer_favicon %}
 
 {% block title %}Customers - NoteHelper{% endblock %}
 
@@ -122,7 +123,7 @@
                         <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
                             <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                                 <h5 class="mb-0">
-                                    <span>{{ customer.name }}</span>
+                                    <span>{{ customer_favicon(customer) }} {{ customer.name }}</span>
                                     {% if customer.tpid_url %}
                                         (<a href="{{ customer.tpid_url }}" target="_blank" onclick="event.stopPropagation();">{{ customer.tpid }}</a>)
                                     {% else %}
@@ -165,7 +166,7 @@
                         <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
                             <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                                 <h5 class="mb-0">
-                                    <span>{{ customer.name }}</span>
+                                    <span>{{ customer_favicon(customer) }} {{ customer.name }}</span>
                                     {% if customer.tpid_url %}
                                         (<a href="{{ customer.tpid_url }}" target="_blank" onclick="event.stopPropagation();">{{ customer.tpid }}</a>)
                                     {% else %}
@@ -203,7 +204,7 @@
                 <div class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('customers.customer_view', id=customer.id) }}'">
                     <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                         <h5 class="mb-0">
-                            <span>{{ customer.name }}</span>
+                            <span>{{ customer_favicon(customer) }} {{ customer.name }}</span>
                             {% if customer.tpid_url %}
                                 (<a href="{{ customer.tpid_url }}" target="_blank" onclick="event.stopPropagation();">{{ customer.tpid }}</a>)
                             {% else %}

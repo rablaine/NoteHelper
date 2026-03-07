@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'partials/customer_favicon.html' import customer_favicon %}
 
 {% block title %}Call Logs - NoteHelper{% endblock %}
 
@@ -32,7 +33,7 @@
                 <div class="d-flex w-100 justify-content-between align-items-start mb-2">
                     <h5 class="mb-0">
                         {% if call.customer %}
-                            <a href="{{ url_for('customers.customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">{{ call.customer.name }}</a>
+                            <a href="{{ url_for('customers.customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">{{ customer_favicon(call.customer) }} {{ call.customer.name }}</a>
                             {% if call.customer.tpid_url %}
                                 (<a href="{{ call.customer.tpid_url }}" target="_blank" onclick="event.stopPropagation();">{{ call.customer.tpid }}</a>)
                             {% else %}

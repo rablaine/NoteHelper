@@ -2,14 +2,17 @@
 Admin routes for NoteHelper.
 Handles admin panel, user management, and domain whitelisting.
 """
+import base64
 import json
 import os
 import shutil
 import signal
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash, jsonify, g
 
 from app.models import (
@@ -44,6 +47,10 @@ def admin_panel():
         'total_revenue_records': CustomerRevenueData.query.count() + ProductRevenueData.query.count(),
         'total_revenue_analyses': RevenueAnalysis.query.count(),
         'total_revenue_imports': RevenueImport.query.count(),
+        'customers_with_website': Customer.query.filter(
+            Customer.website.isnot(None), Customer.website != '').count(),
+        'customers_with_favicon': Customer.query.filter(
+            Customer.favicon_b64.isnot(None), Customer.favicon_b64 != '').count(),
     }
     
     # AI configuration status -- validate that values look real, not placeholders
@@ -284,6 +291,216 @@ def api_update_dismiss():
         db.session.commit()
     
     return jsonify({'dismissed': True, 'commit': remote_commit})
+
+
+# ==============================================================================
+# Favicon Fetch API
+# ==============================================================================
+
+# Google's generic globe favicon (1x1 or known hash) to detect "no real favicon"
+_GOOGLE_GLOBE_SIZES = {726, 762, 764, 766, 768, 770, 786, 822, 834, 894, 896, 937}
+
+GOOGLE_FAVICON_URL = "https://www.google.com/s2/favicons"
+FAVICON_SIZE = 32
+
+
+def _is_generic_globe(image_bytes: bytes) -> bool:
+    """Detect if the fetched image is Google's generic globe icon.
+
+    Checks if the response size matches known globe icon sizes (which vary
+    slightly by format but are always small). Real favicons are typically
+    larger or have distinct sizes.
+
+    Args:
+        image_bytes: Raw bytes from Google's favicon API.
+
+    Returns:
+        True if the image appears to be the generic globe.
+    """
+    return len(image_bytes) in _GOOGLE_GLOBE_SIZES
+
+
+def fetch_favicon_for_domain(domain: str, timeout: int = 5) -> str | None:
+    """Fetch a favicon from Google's API and return base64-encoded PNG.
+
+    Args:
+        domain: Clean domain string (e.g. 'example.com').
+        timeout: HTTP request timeout in seconds.
+
+    Returns:
+        Base64-encoded PNG string, or None if unavailable/generic.
+    """
+    if not domain:
+        return None
+    try:
+        resp = requests.get(
+            GOOGLE_FAVICON_URL,
+            params={"domain": domain, "sz": FAVICON_SIZE},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        if _is_generic_globe(resp.content):
+            return None
+        return base64.b64encode(resp.content).decode("ascii")
+    except Exception:
+        return None
+
+
+@admin_bp.route('/api/admin/fetch-favicons', methods=['POST'])
+def api_fetch_favicons():
+    """Fetch favicons for all customers that have a website but no favicon.
+
+    Uses 4 parallel workers to speed up the Google favicon API calls.
+    Skips customers that already have a favicon or have no website set.
+
+    Returns:
+        JSON with counts of fetched, skipped, and failed favicons.
+    """
+    try:
+        SyncStatus.mark_started('favicons')
+
+        customers = Customer.query.filter(
+            Customer.website.isnot(None),
+            Customer.website != '',
+            (Customer.favicon_b64.is_(None)) | (Customer.favicon_b64 == ''),
+        ).all()
+
+        if not customers:
+            SyncStatus.mark_completed('favicons', success=True, items_synced=0,
+                                      details='No customers need favicon updates')
+            return jsonify({
+                'success': True,
+                'message': 'No customers need favicon updates.',
+                'fetched': 0, 'skipped': 0, 'failed': 0,
+            })
+
+        # Build work items: (customer_id, domain)
+        work = [(c.id, c.website) for c in customers]
+
+        # Parallel fetch (I/O bound - threads are ideal)
+        results: dict[int, str | None] = {}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            future_to_id = {
+                pool.submit(fetch_favicon_for_domain, domain): cid
+                for cid, domain in work
+            }
+            for future in as_completed(future_to_id):
+                cid = future_to_id[future]
+                results[cid] = future.result()
+
+        # Apply results to DB
+        fetched = 0
+        failed = 0
+        for cid, b64 in results.items():
+            if b64:
+                cust = db.session.get(Customer, cid)
+                if cust:
+                    cust.favicon_b64 = b64
+                    fetched += 1
+            else:
+                failed += 1
+
+        db.session.commit()
+        SyncStatus.mark_completed(
+            'favicons', success=True, items_synced=fetched,
+            details=f'{fetched} fetched, {failed} unavailable',
+        )
+        return jsonify({
+            'success': True,
+            'message': f'Fetched {fetched} favicons, {failed} unavailable.',
+            'fetched': fetched,
+            'skipped': 0,
+            'failed': failed,
+        })
+    except Exception as e:
+        db.session.rollback()
+        SyncStatus.mark_completed('favicons', success=False, details=str(e))
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/refresh-favicons', methods=['POST'])
+def api_refresh_favicons():
+    """Re-fetch ALL favicons, including ones already fetched.
+
+    Uses 4 parallel workers. Useful when favicon quality improves or domains change.
+    """
+    try:
+        SyncStatus.mark_started('favicons')
+
+        customers = Customer.query.filter(
+            Customer.website.isnot(None),
+            Customer.website != '',
+        ).all()
+
+        if not customers:
+            SyncStatus.mark_completed('favicons', success=True, items_synced=0,
+                                      details='No customers with websites')
+            return jsonify({
+                'success': True,
+                'message': 'No customers with websites.',
+                'fetched': 0, 'failed': 0,
+            })
+
+        work = [(c.id, c.website) for c in customers]
+
+        results: dict[int, str | None] = {}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            future_to_id = {
+                pool.submit(fetch_favicon_for_domain, domain): cid
+                for cid, domain in work
+            }
+            for future in as_completed(future_to_id):
+                cid = future_to_id[future]
+                results[cid] = future.result()
+
+        fetched = 0
+        failed = 0
+        for cid, b64 in results.items():
+            cust = db.session.get(Customer, cid)
+            if not cust:
+                continue
+            if b64:
+                cust.favicon_b64 = b64
+                fetched += 1
+            else:
+                cust.favicon_b64 = None
+                failed += 1
+
+        db.session.commit()
+        SyncStatus.mark_completed(
+            'favicons', success=True, items_synced=fetched,
+            details=f'{fetched} refreshed, {failed} unavailable',
+        )
+        return jsonify({
+            'success': True,
+            'message': f'Refreshed {fetched} favicons, {failed} unavailable.',
+            'fetched': fetched,
+            'failed': failed,
+        })
+    except Exception as e:
+        db.session.rollback()
+        SyncStatus.mark_completed('favicons', success=False, details=str(e))
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/admin/favicons')
+def admin_favicon_gallery():
+    """Gallery page showing all customer favicons for debugging/preview."""
+    customers = Customer.query.filter(
+        Customer.website.isnot(None),
+        Customer.website != '',
+    ).order_by(Customer.name).all()
+
+    total = len(customers)
+    with_favicon = sum(1 for c in customers if c.favicon_b64)
+    without_favicon = [c for c in customers if not c.favicon_b64]
+    with_favicon_list = [c for c in customers if c.favicon_b64]
+
+    return render_template('admin_favicons.html',
+                           customers_with=with_favicon_list,
+                           customers_without=without_favicon,
+                           total=total,
+                           fetched_count=with_favicon)
 
 
 # ==============================================================================

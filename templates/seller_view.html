@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'partials/customer_favicon.html' import customer_favicon %}
 
 {% block title %}{{ seller.name }} - NoteHelper{% endblock %}
 
@@ -143,7 +144,7 @@
                                     <tr>
                                         <td>
                                             <a href="{{ url_for('customers.customer_view', id=customer_data.customer.id) }}">
-                                                {{ customer_data.customer.name }}
+                                                {{ customer_favicon(customer_data.customer) }} {{ customer_data.customer.name }}
                                             </a>
                                         </td>
                                         <td>

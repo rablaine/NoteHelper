@@ -532,6 +532,50 @@
             </div>
         </div>
 
+        <!-- Customer Favicons -->
+        <div class="card mb-4">
+            <div class="card-header collapsed" data-bs-toggle="collapse" data-bs-target="#faviconCollapse" aria-expanded="false" role="button" style="cursor: pointer;">
+                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-image"></i> Customer Favicons</span>
+                    <span class="d-flex align-items-center gap-2">
+                        <span class="badge bg-secondary">{{ stats.customers_with_favicon }}/{{ stats.customers_with_website }} fetched</span>
+                        <i class="bi bi-chevron-down"></i>
+                    </span>
+                </h5>
+            </div>
+            <div class="collapse" id="faviconCollapse">
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Favicons are fetched from Google's favicon service for customers with a website domain.
+                        Websites are populated during MSX account sync. Favicons auto-fetch after each account sync.
+                    </p>
+                    <div class="row mb-3">
+                        <div class="col-auto">
+                            <strong>{{ stats.customers_with_website }}</strong> customers with website
+                        </div>
+                        <div class="col-auto">
+                            <strong>{{ stats.customers_with_favicon }}</strong> favicons cached
+                        </div>
+                        <div class="col-auto">
+                            <strong>{{ stats.customers_with_website - stats.customers_with_favicon }}</strong> missing
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary btn-sm" id="fetchFaviconsBtn">
+                            <i class="bi bi-download"></i> Fetch Missing Favicons
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" id="refreshFaviconsBtn">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh All
+                        </button>
+                        <a href="{{ url_for('admin.admin_favicon_gallery') }}" class="btn btn-outline-info btn-sm">
+                            <i class="bi bi-grid-3x3-gap"></i> View Gallery
+                        </a>
+                    </div>
+                    <div id="faviconStatus" class="mt-2 small" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Setup Wizard (collapsed at bottom when complete) -->
         {% if setup_complete %}
         <div class="card mb-4">
@@ -703,6 +747,42 @@ if (resetPromptBtn) {
         });
     });
 }
+
+// Fetch Favicons
+function _faviconAction(url, btn, originalHtml) {
+    const statusEl = document.getElementById('faviconStatus');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Fetching...';
+    statusEl.style.display = 'block';
+    statusEl.className = 'mt-2 small text-muted';
+    statusEl.textContent = 'Contacting Google favicon service...';
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            if (data.success) {
+                statusEl.className = 'mt-2 small text-success';
+                statusEl.textContent = data.message;
+            } else {
+                statusEl.className = 'mt-2 small text-danger';
+                statusEl.textContent = data.error || 'Unknown error';
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            statusEl.className = 'mt-2 small text-danger';
+            statusEl.textContent = 'Network error: ' + err.message;
+        });
+}
+document.getElementById('fetchFaviconsBtn').addEventListener('click', function() {
+    _faviconAction('/api/admin/fetch-favicons', this, '<i class="bi bi-download"></i> Fetch Missing Favicons');
+});
+document.getElementById('refreshFaviconsBtn').addEventListener('click', function() {
+    if (!confirm('Re-fetch ALL favicons? This may take a moment.')) return;
+    _faviconAction('/api/admin/refresh-favicons', this, '<i class="bi bi-arrow-clockwise"></i> Refresh All');
+});
 
 // Shut Down Server
 document.getElementById('shutdownServerBtn').addEventListener('click', function() {
@@ -1290,6 +1370,21 @@ document.getElementById('importFromMsxBtn').addEventListener('click', async func
                                     <i class="bi bi-people"></i> View Customers
                                 </a>
                             `;
+
+                            // Auto-trigger favicon fetch after account sync
+                            fetch('/api/admin/fetch-favicons', { method: 'POST' })
+                                .then(r => r.json())
+                                .then(d => {
+                                    if (d.success && d.fetched > 0) {
+                                        const faviconStatus = document.getElementById('faviconStatus');
+                                        if (faviconStatus) {
+                                            faviconStatus.style.display = 'block';
+                                            faviconStatus.className = 'mt-2 small text-success';
+                                            faviconStatus.textContent = `Auto-fetched ${d.fetched} favicons after account sync.`;
+                                        }
+                                    }
+                                })
+                                .catch(() => {});  // Silent fail - not critical
                         }
                     } catch (parseError) {
                         if (parseError.message !== 'Unexpected end of JSON input') {

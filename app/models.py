@@ -278,6 +278,8 @@ class Customer(db.Model):
     nickname = db.Column(db.String(200), nullable=True)
     tpid = db.Column(db.BigInteger, nullable=False, unique=True)
     tpid_url = db.Column(db.String(500), nullable=True)
+    website = db.Column(db.String(500), nullable=True)  # Domain extracted from MSX websiteurl
+    favicon_b64 = db.Column(db.Text, nullable=True)  # Base64-encoded 32x32 PNG favicon
     notes = db.Column(db.Text, nullable=True)  # General notes for tracking opportunities/milestones
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'partials/customer_favicon.html' import customer_favicon %}
 
 {% block title %}{{ topic.name }} - NoteHelper{% endblock %}
 
@@ -71,7 +72,7 @@
                                     <h5 class="mb-0">
                                         {% if call.customer %}
                                             <a href="{{ url_for('customers.customer_view', id=call.customer.id) }}" class="text-decoration-none" onclick="event.stopPropagation();">
-                                                {{ call.customer.name }}
+                                                {{ customer_favicon(call.customer) }} {{ call.customer.name }}
                                             </a>
                                         {% else %}
                                             <span class="text-muted">No Customer</span>

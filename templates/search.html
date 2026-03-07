@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'partials/customer_favicon.html' import customer_favicon %}
 
 {% block title %}Search Call Logs - NoteHelper{% endblock %}
 
@@ -106,8 +107,8 @@
             {% for customer_data in seller_data.customers_sorted %}
                 <div class="ms-3 mb-4">
                     <h6 class="mb-2">
-                        <i class="bi bi-building text-success"></i>
                         {% if customer_data.customer %}
+                            {{ customer_favicon(customer_data.customer) }}
                             <a href="{{ url_for('customers.customer_view', id=customer_data.customer.id) }}">{{ customer_data.customer.name }}</a>
                             {% if customer_data.customer.tpid_url %}
                                 (<a href="{{ customer_data.customer.tpid_url }}" target="_blank">{{ customer_data.customer.tpid }}</a>)

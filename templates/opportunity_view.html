@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'partials/customer_favicon.html' import customer_favicon %}
 
 {% block title %}{{ opportunity.name }} - NoteHelper{% endblock %}
 
@@ -17,7 +18,7 @@
     <div class="flex-shrink-0 d-flex gap-2">
         {% if opportunity.customer %}
             <a href="{{ url_for('customers.customer_view', id=opportunity.customer.id) }}" class="btn btn-outline-secondary text-nowrap">
-                <i class="bi bi-building"></i> {{ opportunity.customer.get_display_name() }}
+                {{ customer_favicon(opportunity.customer) }} {{ opportunity.customer.get_display_name() }}
             </a>
         {% endif %}
         {% if msx_data %}

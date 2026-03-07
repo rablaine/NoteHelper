@@ -1511,7 +1511,8 @@ def batch_query_accounts(
                 "accounts",
                 select=[
                     "accountid", "name", "msp_mstopparentid", "_territoryid_value",
-                    "msp_verticalcode", "msp_verticalcategorycode"
+                    "msp_verticalcode", "msp_verticalcategorycode",
+                    "websiteurl", "msp_parentinglevelcode"
                 ],
                 filter_query=filter_query,
                 top=batch_size + 5  # A little buffer just in case
