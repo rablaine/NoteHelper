@@ -21,7 +21,7 @@ from app.models import (
     db, User, POD, Territory, Seller, Customer, Topic, CallLog, AIQueryLog,
     RevenueImport, CustomerRevenueData, ProductRevenueData, RevenueAnalysis,
     RevenueConfig, RevenueEngagement, Milestone, Opportunity, MsxTask,
-    SolutionEngineer, SyncStatus, UserPreference, UsageEvent,
+    SolutionEngineer, SyncStatus, UserPreference, UsageEvent, DailyFeatureStats,
     call_logs_milestones, utc_now
 )
 
@@ -940,4 +940,67 @@ def api_telemetry_events():
         'total': pagination.total,
         'pages': pagination.pages,
     })
+
+
+@admin_bp.route('/api/admin/telemetry/feature-health', methods=['GET'])
+def api_telemetry_feature_health():
+    """Return a feature-health report: popularity ranking, dead features, trends.
+
+    Query params:
+        days: Number of days to analyse (default 30, max 365).
+
+    Combines aggregated DailyFeatureStats (for completed days) with today's
+    live UsageEvent data so the report is always current.
+    """
+    from app.services.telemetry_aggregation import get_feature_health
+
+    days = min(int(request.args.get('days', 30)), 365)
+    return jsonify(get_feature_health(days=days))
+
+
+@admin_bp.route('/api/admin/telemetry/aggregate', methods=['POST'])
+def api_telemetry_aggregate():
+    """Manually trigger aggregation of raw events into daily stats.
+
+    JSON body (all optional):
+        days_back: How many days to aggregate (default 7).
+        prune_raw: If true, prune raw events beyond retention window.
+        raw_retention_days: Days of raw events to keep (default 90).
+    """
+    from app.services.telemetry_aggregation import aggregate_daily_stats
+
+    data = request.get_json(silent=True) or {}
+    try:
+        result = aggregate_daily_stats(
+            days_back=min(int(data.get('days_back', 7)), 365),
+            prune_raw=bool(data.get('prune_raw', False)),
+            raw_retention_days=int(data.get('raw_retention_days', 90)),
+        )
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/telemetry/flush', methods=['POST'])
+def api_telemetry_flush():
+    """Manually flush the central telemetry buffer to App Insights."""
+    from app.services.telemetry_shipper import flush_buffer, is_telemetry_enabled
+
+    if not is_telemetry_enabled():
+        return jsonify({
+            'success': False,
+            'reason': 'Telemetry shipping is disabled (NOTEHELPER_TELEMETRY_OPT_OUT)',
+        })
+
+    result = flush_buffer()
+    return jsonify({'success': result.get('flushed', False), **result})
+
+
+@admin_bp.route('/api/admin/telemetry/shipping-status', methods=['GET'])
+def api_telemetry_shipping_status():
+    """Return the current central telemetry shipping status and stats."""
+    from app.services.telemetry_shipper import get_flush_stats
+
+    return jsonify(get_flush_stats())
 

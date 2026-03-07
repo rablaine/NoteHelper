@@ -83,9 +83,9 @@
 
         <!-- MSX Integration + AI Integration side by side -->
         <div class="row mb-4">
-            <div class="col-md-6 mb-4 mb-md-0">
+            <div class="col-md-6 d-flex flex-column mb-4 mb-md-0">
                 <!-- MSX Integration -->
-                <div class="card h-100">
+                <div class="card mb-4">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-link-45deg"></i> MSX Integration</h5>
                     </div>
@@ -204,12 +204,51 @@
                                 <p class="mb-0" id="msxImportErrorText"></p>
                             </div>
                         </div>
+
+                    </div>
+                </div>
+                <!-- Customer Favicons -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-image"></i> Customer Favicons</span>
+                            <span class="badge bg-secondary">{{ stats.customers_with_favicon }}/{{ stats.customers_with_website }} fetched</span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">
+                            Favicons are fetched from Google's favicon service for customers with a website domain.
+                            Websites are populated during MSX account sync. Favicons auto-fetch after each account sync.
+                        </p>
+                        <div class="row mb-2">
+                            <div class="col-auto">
+                                <small><strong>{{ stats.customers_with_website }}</strong> with website</small>
+                            </div>
+                            <div class="col-auto">
+                                <small><strong>{{ stats.customers_with_favicon }}</strong> cached</small>
+                            </div>
+                            <div class="col-auto">
+                                <small><strong>{{ stats.customers_with_website - stats.customers_with_favicon }}</strong> missing</small>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm" id="fetchFaviconsBtn">
+                                <i class="bi bi-download"></i> Fetch Missing
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" id="refreshFaviconsBtn">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh All
+                            </button>
+                            <a href="{{ url_for('admin.admin_favicon_gallery') }}" class="btn btn-outline-info btn-sm">
+                                <i class="bi bi-grid-3x3-gap"></i> Gallery
+                            </a>
+                        </div>
+                        <div id="faviconStatus" class="mt-2 small" style="display: none;"></div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-6 d-flex flex-column">
                 <!-- AI Integration -->
-                <div class="card h-100">
+                <div class="card mb-4">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-stars"></i> AI Integration</h5>
                     </div>
@@ -305,14 +344,9 @@
                         <div id="aiTestResult" class="mt-2"></div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Updates + Connect Export side by side -->
-        <div class="row mb-4">
-            <div class="col-md-6 mb-4 mb-md-0">
                 <!-- Update Check -->
-                <div class="card h-100 d-flex flex-column{{ ' border-danger' if update_available else '' }}" id="updateCheckCard">
+                <div class="card flex-grow-1 d-flex flex-column{{ ' border-danger' if update_available else '' }}" id="updateCheckCard">
                     <div class="card-header{{ ' bg-danger text-white' if update_available else '' }}">
                         <h5 class="mb-0"><i class="bi bi-cloud-download"></i> Updates{{ ' <span class="badge bg-light text-danger">New</span>' | safe if update_available else '' }}</h5>
                     </div>
@@ -327,20 +361,6 @@
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <!-- Connect Export -->
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Connect Export</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted small mb-3">Generate structured exports of your call log activity for writing Microsoft Connects (self-evaluations). Includes customer summaries, topic breakdowns, and milestone revenue impact.</p>
-                        <a href="{{ url_for('connect_export.connect_export_page') }}" class="btn btn-primary btn-sm">
-                            <i class="bi bi-box-arrow-up-right"></i> Go to Connect Export
-                        </a>
                     </div>
                 </div>
             </div>
@@ -532,104 +552,27 @@
             </div>
         </div>
 
-        <!-- Customer Favicons -->
-        <div class="card mb-4">
-            <div class="card-header collapsed" data-bs-toggle="collapse" data-bs-target="#faviconCollapse" aria-expanded="false" role="button" style="cursor: pointer;">
-                <h5 class="mb-0 d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-image"></i> Customer Favicons</span>
-                    <span class="d-flex align-items-center gap-2">
-                        <span class="badge bg-secondary">{{ stats.customers_with_favicon }}/{{ stats.customers_with_website }} fetched</span>
-                        <i class="bi bi-chevron-down"></i>
-                    </span>
-                </h5>
-            </div>
-            <div class="collapse" id="faviconCollapse">
-                <div class="card-body">
-                    <p class="text-muted small mb-3">
-                        Favicons are fetched from Google's favicon service for customers with a website domain.
-                        Websites are populated during MSX account sync. Favicons auto-fetch after each account sync.
-                    </p>
-                    <div class="row mb-3">
-                        <div class="col-auto">
-                            <strong>{{ stats.customers_with_website }}</strong> customers with website
-                        </div>
-                        <div class="col-auto">
-                            <strong>{{ stats.customers_with_favicon }}</strong> favicons cached
-                        </div>
-                        <div class="col-auto">
-                            <strong>{{ stats.customers_with_website - stats.customers_with_favicon }}</strong> missing
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-primary btn-sm" id="fetchFaviconsBtn">
-                            <i class="bi bi-download"></i> Fetch Missing Favicons
-                        </button>
-                        <button class="btn btn-outline-secondary btn-sm" id="refreshFaviconsBtn">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh All
-                        </button>
-                        <a href="{{ url_for('admin.admin_favicon_gallery') }}" class="btn btn-outline-info btn-sm">
-                            <i class="bi bi-grid-3x3-gap"></i> View Gallery
-                        </a>
-                    </div>
-                    <div id="faviconStatus" class="mt-2 small" style="display: none;"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Setup Wizard (collapsed at bottom when complete) -->
-        {% if setup_complete %}
-        <div class="card mb-4">
-            <div class="card-header collapsed" data-bs-toggle="collapse" data-bs-target="#setupWizardCollapse" aria-expanded="false" role="button" style="cursor: pointer;">
-                <h5 class="mb-0 d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-rocket-takeoff"></i> Setup Wizard</span>
-                    <span class="d-flex align-items-center gap-2">
-                        <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Complete</span>
-                        <i class="bi bi-chevron-down"></i>
-                    </span>
-                </h5>
-            </div>
-            <div class="collapse" id="setupWizardCollapse">
-                <div class="card-body">
-                    <p class="text-muted small mb-3">Re-run the initial setup wizard to check your progress or complete any remaining steps.</p>
-                    <div class="row text-center mb-3">
-                        <div class="col">
-                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
-                            <div class="small mt-1">Accounts</div>
-                        </div>
-                        <div class="col">
-                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
-                            <div class="small mt-1">Milestones</div>
-                        </div>
-                        <div class="col">
-                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
-                            <div class="small mt-1">Revenue</div>
-                        </div>
-                    </div>
-                    <button class="btn btn-warning" id="adminRerunWizardBtn">
-                        <i class="bi bi-rocket-takeoff"></i> Re-run Setup Wizard
-                    </button>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
         <!-- Usage Telemetry -->
         <div class="card mb-4">
-            <div class="card-header">
+            <div class="card-header" data-bs-toggle="collapse" data-bs-target="#telemetryCollapse" role="button" style="cursor: pointer;" id="telemetryCardHeader">
                 <h5 class="mb-0 d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-graph-up"></i> Usage Telemetry</span>
-                    <div>
-                        <select class="form-select form-select-sm d-inline-block w-auto me-2" id="telemetryDays">
-                            <option value="7">Last 7 days</option>
-                            <option value="30" selected>Last 30 days</option>
-                            <option value="90">Last 90 days</option>
-                        </select>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="loadTelemetryStats()" title="Refresh">
-                            <i class="bi bi-arrow-clockwise"></i>
-                        </button>
-                    </div>
+                    <span class="d-flex align-items-center gap-2">
+                        <span class="d-flex align-items-center gap-2" onclick="event.stopPropagation();">
+                            <select class="form-select form-select-sm d-inline-block w-auto" id="telemetryDays">
+                                <option value="7">Last 7 days</option>
+                                <option value="30" selected>Last 30 days</option>
+                                <option value="90">Last 90 days</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="loadTelemetryStats()" title="Refresh">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </span>
+                        <i class="bi bi-chevron-down"></i>
+                    </span>
                 </h5>
             </div>
+            <div class="collapse" id="telemetryCollapse">
             <div class="card-body">
                 <div id="telemetryLoading" class="text-center py-3">
                     <span class="spinner-border spinner-border-sm"></span> Loading telemetry data...
@@ -713,13 +656,98 @@
                     <div id="telNoErrors" class="text-muted small" style="display: none;">
                         No errors in this period.
                     </div>
+
+                    <!-- Feature Health -->
+                    <hr class="my-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Feature Health</h6>
+                        <button class="btn btn-sm btn-outline-primary" onclick="aggregateAndRefresh()" id="aggregateBtn" title="Aggregate raw events into daily stats for trend analysis">
+                            <i class="bi bi-database-gear"></i> Aggregate Now
+                        </button>
+                    </div>
+
+                    <!-- Feature ranking -->
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-3">
+                            <thead><tr>
+                                <th>Feature</th>
+                                <th class="text-end">Events</th>
+                                <th class="text-end">Share</th>
+                                <th class="text-end">Errors</th>
+                                <th class="text-end">Trend</th>
+                            </tr></thead>
+                            <tbody id="telHealthBody"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Dead features -->
+                    <div id="telDeadFeatures" style="display: none;">
+                        <h6 class="mt-3 mb-2 text-danger"><i class="bi bi-exclamation-circle"></i> Unused Features</h6>
+                        <p class="text-muted small mb-1">These features had zero usage in the selected period:</p>
+                        <div id="telDeadList"></div>
+                    </div>
+
+                    <!-- Central Telemetry Shipping -->
+                    <hr class="my-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0"><i class="bi bi-cloud-arrow-up"></i> Central Telemetry</h6>
+                        <button class="btn btn-sm btn-outline-primary" onclick="flushTelemetry()" id="btnFlushNow">
+                            <i class="bi bi-send"></i> Flush Now
+                        </button>
+                    </div>
+                    <p class="text-muted small mb-2">
+                        Anonymous feature usage events are buffered and flushed to App Insights every 30s.
+                        Set <code>NOTEHELPER_TELEMETRY_OPT_OUT=true</code> to disable.
+                    </p>
+                    <div id="shippingStatus" class="small">
+                        <span class="text-muted">Loading status...</span>
+                    </div>
+                    <div id="flushResult" class="small mt-1" style="display: none;"></div>
                 </div>
 
                 <div id="telemetryEmpty" class="text-muted text-center py-3" style="display: none;">
                     No telemetry data yet. Events are recorded as you use the app.
                 </div>
             </div>
+            </div>
         </div>
+
+        <!-- Setup Wizard (collapsed at bottom when complete) -->
+        {% if setup_complete %}
+        <div class="card mb-4">
+            <div class="card-header collapsed" data-bs-toggle="collapse" data-bs-target="#setupWizardCollapse" aria-expanded="false" role="button" style="cursor: pointer;">
+                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-rocket-takeoff"></i> Setup Wizard</span>
+                    <span class="d-flex align-items-center gap-2">
+                        <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Complete</span>
+                        <i class="bi bi-chevron-down"></i>
+                    </span>
+                </h5>
+            </div>
+            <div class="collapse" id="setupWizardCollapse">
+                <div class="card-body">
+                    <p class="text-muted small mb-3">Re-run the initial setup wizard to check your progress or complete any remaining steps.</p>
+                    <div class="row text-center mb-3">
+                        <div class="col">
+                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
+                            <div class="small mt-1">Accounts</div>
+                        </div>
+                        <div class="col">
+                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
+                            <div class="small mt-1">Milestones</div>
+                        </div>
+                        <div class="col">
+                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
+                            <div class="small mt-1">Revenue</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-warning" id="adminRerunWizardBtn">
+                        <i class="bi bi-rocket-takeoff"></i> Re-run Setup Wizard
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Danger Zone (collapsed by default) -->
         <div class="card mb-4 border-danger">
@@ -1692,6 +1720,30 @@ document.addEventListener('DOMContentLoaded', function() {
 // Usage Telemetry
 // ==============================================================================
 
+// Restore collapsed state from localStorage
+(function() {
+    const el = document.getElementById('telemetryCollapse');
+    const header = document.getElementById('telemetryCardHeader');
+    const chevron = header.querySelector('.bi-chevron-down');
+    if (localStorage.getItem('telemetryCollapsed') === 'false') {
+        el.classList.add('show');
+        chevron.style.transform = 'rotate(180deg)';
+    } else {
+        header.classList.add('collapsed');
+        chevron.style.transform = 'rotate(0deg)';
+    }
+    el.addEventListener('shown.bs.collapse', () => {
+        localStorage.setItem('telemetryCollapsed', 'false');
+        chevron.style.transform = 'rotate(180deg)';
+        chevron.style.transition = 'transform 0.2s';
+    });
+    el.addEventListener('hidden.bs.collapse', () => {
+        localStorage.setItem('telemetryCollapsed', 'true');
+        chevron.style.transform = 'rotate(0deg)';
+        chevron.style.transition = 'transform 0.2s';
+    });
+})();
+
 function loadTelemetryStats() {
     const days = document.getElementById('telemetryDays').value;
     const loading = document.getElementById('telemetryLoading');
@@ -1780,6 +1832,150 @@ function loadTelemetryStats() {
             loading.style.display = 'none';
             empty.style.display = '';
             empty.textContent = 'Failed to load telemetry: ' + err.message;
+        });
+
+    // Load feature health in parallel
+    loadFeatureHealth(days);
+    loadShippingStatus();
+}
+
+function loadFeatureHealth(days) {
+    fetch('/api/admin/telemetry/feature-health?days=' + days)
+        .then(r => r.json())
+        .then(data => {
+            const healthBody = document.getElementById('telHealthBody');
+            const deadDiv = document.getElementById('telDeadFeatures');
+            const deadList = document.getElementById('telDeadList');
+
+            // Build trend lookup from the response
+            const trendMap = {};
+            (data.trends || []).forEach(t => { trendMap[t.category] = t; });
+
+            // Feature ranking table
+            healthBody.innerHTML = (data.feature_ranking || []).map(f => {
+                const trend = trendMap[f.category];
+                let trendHtml = '<span class="text-muted">-</span>';
+                if (trend) {
+                    if (trend.direction === 'up') {
+                        trendHtml = `<span class="text-success"><i class="bi bi-arrow-up-short"></i> +${trend.change_pct}%</span>`;
+                    } else if (trend.direction === 'down') {
+                        trendHtml = `<span class="text-danger"><i class="bi bi-arrow-down-short"></i> ${trend.change_pct}%</span>`;
+                    } else {
+                        trendHtml = `<span class="text-muted"><i class="bi bi-dash"></i> stable</span>`;
+                    }
+                }
+                return `<tr>
+                    <td>${f.category}</td>
+                    <td class="text-end">${f.events.toLocaleString()}</td>
+                    <td class="text-end">${f.share_pct}%</td>
+                    <td class="text-end">${f.errors > 0 ? '<span class="text-danger">' + f.errors + '</span>' : '0'}</td>
+                    <td class="text-end">${trendHtml}</td>
+                </tr>`;
+            }).join('');
+
+            // Dead features
+            if (data.dead_features && data.dead_features.length > 0) {
+                deadDiv.style.display = '';
+                deadList.innerHTML = data.dead_features.map(f =>
+                    `<span class="badge bg-secondary me-1 mb-1">${f}</span>`
+                ).join('');
+            } else {
+                deadDiv.style.display = 'none';
+            }
+        })
+        .catch(() => {});
+}
+
+function aggregateAndRefresh() {
+    const btn = document.getElementById('aggregateBtn');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Aggregating...';
+
+    const days = document.getElementById('telemetryDays').value;
+    fetch('/api/admin/telemetry/aggregate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days_back: parseInt(days) })
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+        if (data.success) {
+            loadFeatureHealth(days);
+        }
+    })
+    .catch(() => {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    });
+}
+
+function loadShippingStatus() {
+    fetch('/api/admin/telemetry/shipping-status')
+        .then(r => r.json())
+        .then(data => {
+            const el = document.getElementById('shippingStatus');
+            const statusBadge = data.enabled
+                ? '<span class="badge bg-success">Active</span>'
+                : '<span class="badge bg-secondary">Opted Out</span>';
+            const instanceId = data.instance_id ? data.instance_id.substring(0, 8) + '...' : 'N/A';
+
+            let html = `Status: ${statusBadge} &nbsp; Instance: <code>${instanceId}</code>`;
+            if (data.flush_count > 0) {
+                html += ` &nbsp; Flushed: ${data.events_flushed} events (${data.flush_count} flushes)`;
+            }
+            if (data.buffer_size > 0) {
+                html += ` &nbsp; Buffered: ${data.buffer_size}`;
+            }
+            if (data.flush_errors > 0) {
+                html += ` &nbsp; <span class="text-warning">Errors: ${data.flush_errors}</span>`;
+            }
+            el.innerHTML = html;
+
+            document.getElementById('btnFlushNow').disabled = !data.enabled;
+        })
+        .catch(() => {
+            document.getElementById('shippingStatus').innerHTML =
+                '<span class="text-muted">Could not load shipping status</span>';
+        });
+}
+
+function flushTelemetry() {
+    const btn = document.getElementById('btnFlushNow');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Flushing...';
+
+    const resultEl = document.getElementById('flushResult');
+    resultEl.style.display = 'none';
+
+    fetch('/api/admin/telemetry/flush', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+            resultEl.style.display = 'block';
+
+            if (data.success) {
+                resultEl.className = 'small mt-1 text-success';
+                resultEl.innerHTML = `<i class="bi bi-check-circle"></i> Flushed ${data.events_sent || 0} events`;
+            } else {
+                resultEl.className = 'small mt-1 text-warning';
+                resultEl.innerHTML = `<i class="bi bi-info-circle"></i> ${data.reason || data.error || 'Buffer empty'}`;
+            }
+            // Refresh stats after flush
+            loadShippingStatus();
+            setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
+        })
+        .catch(() => {
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+            resultEl.style.display = 'block';
+            resultEl.className = 'small mt-1 text-danger';
+            resultEl.innerHTML = '<i class="bi bi-x-circle"></i> Flush request failed';
+            setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
         });
 }
 

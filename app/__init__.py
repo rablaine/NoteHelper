@@ -153,4 +153,8 @@ def create_app():
     from app.services.update_checker import start_update_checker
     start_update_checker(interval_seconds=43200)
 
+    # Start telemetry flush thread (buffers events, flushes to App Insights every 30s)
+    from app.services.telemetry_shipper import start_flush_thread
+    start_flush_thread(app)
+
     return app

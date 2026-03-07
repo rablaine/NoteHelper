@@ -1100,3 +1100,36 @@ class UsageEvent(db.Model):
 
     def __repr__(self) -> str:
         return f'<UsageEvent {self.method} {self.endpoint} {self.status_code}>'
+
+
+class DailyFeatureStats(db.Model):
+    """Aggregated daily feature usage statistics.
+
+    One row per (date, category, endpoint, method) combination. Produced by
+    rolling up raw ``UsageEvent`` rows so we can track long-term feature
+    popularity without keeping every individual request forever.
+
+    No PII is stored -- just counts and averages.
+    """
+    __tablename__ = 'daily_feature_stats'
+    __table_args__ = (
+        db.UniqueConstraint('date', 'category', 'endpoint', 'method', name='uq_daily_feature'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+
+    # Feature identification
+    category = db.Column(db.String(50), nullable=False, index=True)
+    endpoint = db.Column(db.String(500), nullable=False)
+    method = db.Column(db.String(10), nullable=False)
+    is_api = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Aggregated metrics
+    event_count = db.Column(db.Integer, nullable=False, default=0)
+    error_count = db.Column(db.Integer, nullable=False, default=0)
+    avg_response_ms = db.Column(db.Float, nullable=True)
+    unique_referrers = db.Column(db.Integer, nullable=False, default=0)
+
+    def __repr__(self) -> str:
+        return f'<DailyFeatureStats {self.date} {self.category} {self.endpoint} ({self.event_count})>'

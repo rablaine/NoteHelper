@@ -137,6 +137,8 @@ def init_telemetry(app: Flask) -> None:
         if response.status_code >= 400:
             error_type = f'HTTP {response.status_code}'
 
+        category = _derive_category(blueprint, path)
+
         try:
             from app.models import db, UsageEvent
 
@@ -151,7 +153,7 @@ def init_telemetry(app: Flask) -> None:
                 referrer_path=_safe_referrer_path(request),
                 error_type=error_type,
                 error_message=error_message,
-                category=_derive_category(blueprint, path),
+                category=category,
             )
             db.session.add(event)
             db.session.commit()
@@ -162,5 +164,20 @@ def init_telemetry(app: Flask) -> None:
                 db.session.rollback()
             except Exception:
                 pass
+
+        # Queue event for central telemetry (App Insights).
+        # This is intentionally outside the try/except above so a
+        # local DB failure doesn't prevent central shipping.
+        try:
+            from app.services.telemetry_shipper import queue_event
+            queue_event(
+                category=category,
+                method=request.method,
+                status_code=response.status_code,
+                response_time_ms=elapsed_ms,
+                is_api=is_api,
+            )
+        except Exception:
+            pass  # Central telemetry must never break the request
 
         return response
