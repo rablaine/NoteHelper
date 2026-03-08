@@ -33,9 +33,6 @@ CRM_RESOURCE = "https://microsoftsales.crm.dynamics.com"
 CRM_BASE_URL = "https://microsoftsales.crm.dynamics.com/api/data/v9.2"
 TENANT_ID = "72f988bf-86f1-41af-91ab-2d7cd011db47"  # Microsoft corporate tenant
 
-# AI Gateway scope — included in az login so users consent once
-AI_GATEWAY_SCOPE = "api://0f6db4af-332c-4fd5-b894-77fadb181e5c/.default"
-
 # On Windows, we need shell=True for subprocess to find az in PATH
 IS_WINDOWS = sys.platform == "win32"
 
@@ -536,8 +533,10 @@ def start_az_login() -> Dict[str, Any]:
             pass  # already dead
 
     try:
-        # Include the AI gateway scope so users consent to it during sign-in
-        cmd = f'az login --tenant {TENANT_ID} --scope "{AI_GATEWAY_SCOPE}"'
+        # Login scoped to the Microsoft corporate tenant.
+        # AI gateway consent is handled separately by AzureCliCredential
+        # when gateway_client._get_token() is first called.
+        cmd = f'az login --tenant {TENANT_ID}'
 
         if IS_WINDOWS:
             import subprocess as _sp
@@ -549,7 +548,7 @@ def start_az_login() -> Dict[str, Any]:
         else:
             # On Linux/Mac, launch in background
             process = subprocess.Popen(
-                ["az", "login", "--tenant", TENANT_ID, "--scope", AI_GATEWAY_SCOPE],
+                ["az", "login", "--tenant", TENANT_ID],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
