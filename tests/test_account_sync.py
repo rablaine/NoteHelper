@@ -60,6 +60,7 @@ class TestImportAccountsUpsert:
             data = resp.get_json()
             assert data["customers_created"] == 0
             assert data["customers_updated"] == 1
+            assert data["customers_unchanged"] == 0
 
             db.session.refresh(cust)
             assert cust.name == "New Name Corp"
@@ -178,6 +179,7 @@ class TestImportAccountsUpsert:
             ])
             data = resp.get_json()
             assert data["customers_updated"] == 0
+            assert data["customers_unchanged"] == 1
 
 
 class TestImportStreamUpsert:

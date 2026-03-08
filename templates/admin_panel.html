@@ -1496,10 +1496,10 @@ document.getElementById('importFromMsxBtn').addEventListener('click', async func
                                 <ul class="mb-0">
                                     <li>PODs: ${s.pods_created || 0} created</li>
                                     <li>Territories: ${s.territories_created || 0} created</li>
-                                    <li>Sellers: ${s.sellers_created || 0} created</li>
+                                    <li>Sellers: ${s.sellers_created || 0} created${s.sellers_updated ? ', ' + s.sellers_updated + ' updated' : ''}</li>
                                     <li>Solution Engineers: ${s.solution_engineers_created || 0} created</li>
                                     <li>Verticals: ${s.verticals_created || 0} created</li>
-                                    <li>Customers: ${s.customers_created || 0} created, ${s.customers_skipped || 0} skipped</li>
+                                    <li>Customers: ${s.customers_created || 0} created${s.customers_updated ? ', ' + s.customers_updated + ' updated' : ''}${s.customers_unchanged ? ', ' + s.customers_unchanged + ' unchanged' : ''}${s.customers_skipped ? ', ' + s.customers_skipped + ' skipped' : ''}</li>
                                     ${s.duration ? '<li class="mt-1"><i class="bi bi-clock"></i> Completed in ' + s.duration + 's</li>' : ''}
                                 </ul>
                                 <a href="{{ url_for('customers.customers_list') }}" class="btn btn-sm btn-outline-primary mt-2">

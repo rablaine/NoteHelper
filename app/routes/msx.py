@@ -890,6 +890,7 @@ def import_accounts():
         
         # 2. Upsert customers from accounts
         customers_updated = 0
+        customers_unchanged = 0
         seen_tpids = set()  # In-memory dedup for same-TPID accounts in batch
 
         # Pre-load existing customers keyed by TPID for upsert comparison.
@@ -946,8 +947,9 @@ def import_accounts():
 
                     if changed:
                         customers_updated += 1
+                    else:
+                        customers_unchanged += 1
 
-                    customers_skipped += 1
                     continue
 
                 # Create new customer
@@ -973,10 +975,10 @@ def import_accounts():
         SyncStatus.mark_completed(
             'accounts', success=True,
             items_synced=customers_created,
-            details=f'{customers_created} created, {customers_skipped} skipped, {customers_updated} updated',
+            details=f'{customers_created} created, {customers_updated} updated, {customers_unchanged} unchanged, {customers_skipped} skipped',
         )
         
-        logger.info(f"API Import complete: {territories_created} territories, {sellers_created} sellers, {customers_created} customers created, {customers_updated} updated, {customers_skipped} skipped")
+        logger.info(f"API Import complete: {territories_created} territories, {sellers_created} sellers, {customers_created} customers created, {customers_updated} updated, {customers_unchanged} unchanged, {customers_skipped} skipped")
         
         return jsonify({
             "success": True,
@@ -985,6 +987,7 @@ def import_accounts():
             "customers_created": customers_created,
             "customers_skipped": customers_skipped,
             "customers_updated": customers_updated,
+            "customers_unchanged": customers_unchanged,
         })
         
     except Exception as e:
@@ -1607,6 +1610,7 @@ def import_stream():
             customers_created = 0
             customers_skipped = 0
             customers_updated = 0
+            customers_unchanged = 0
             seen_tpids = set()  # In-memory dedup for same-TPID accounts in batch
 
             # Pre-load existing TPIDs to avoid per-row DB queries + autoflush.
@@ -1713,6 +1717,8 @@ def import_stream():
 
                         if changed:
                             customers_updated += 1
+                        else:
+                            customers_unchanged += 1
 
                         continue
 
@@ -1784,7 +1790,7 @@ def import_stream():
             SyncStatus.mark_completed(
                 'accounts', success=True,
                 items_synced=customers_created,
-                details=f'{customers_created} created, {customers_skipped} skipped, {customers_updated} updated',
+                details=f'{customers_created} created, {customers_updated} updated, {customers_unchanged} unchanged, {customers_skipped} skipped',
             )
 
             duration = round(time.time() - import_start_time, 1)
@@ -1802,6 +1808,7 @@ def import_stream():
                     "customers_created": customers_created,
                     "customers_skipped": customers_skipped,
                     "customers_updated": customers_updated,
+                    "customers_unchanged": customers_unchanged,
                     "duration": duration,
                 },
             })
@@ -1812,7 +1819,7 @@ def import_stream():
                 f"{sellers_created} sellers ({sellers_updated} updated), {ses_created} SEs, "
                 f"{verticals_created} verticals, "
                 f"{customers_created} customers created, {customers_updated} updated, "
-                f"{customers_skipped} skipped"
+                f"{customers_unchanged} unchanged, {customers_skipped} skipped"
             )
 
         except Exception as e:

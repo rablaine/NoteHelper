@@ -1496,9 +1496,9 @@
                                 '<ul class="list-unstyled mb-0">' +
                                 '<li><i class="bi bi-people-fill text-primary"></i> PODs: ' + (s.pods_created || 0) + ' created</li>' +
                                 '<li><i class="bi bi-geo-alt text-info"></i> Territories: ' + (s.territories_created || 0) + ' created</li>' +
-                                '<li><i class="bi bi-person text-primary"></i> Sellers: ' + (s.sellers_created || 0) + ' created</li>' +
+                                '<li><i class="bi bi-person text-primary"></i> Sellers: ' + (s.sellers_created || 0) + ' created' + (s.sellers_updated ? ', ' + s.sellers_updated + ' updated' : '') + '</li>' +
                                 '<li><i class="bi bi-person-gear text-secondary"></i> Solution Engineers: ' + (s.solution_engineers_created || 0) + ' created</li>' +
-                                '<li><i class="bi bi-building text-success"></i> Customers: ' + (s.customers_created || 0) + ' created, ' + (s.customers_skipped || 0) + ' skipped</li>' +
+                                '<li><i class="bi bi-building text-success"></i> Customers: ' + (s.customers_created || 0) + ' created' + (s.customers_updated ? ', ' + s.customers_updated + ' updated' : '') + (s.customers_unchanged ? ', ' + s.customers_unchanged + ' unchanged' : '') + (s.customers_skipped ? ', ' + s.customers_skipped + ' skipped' : '') + '</li>' +
                                 (s.duration ? '<li>Completed in ' + s.duration + 's</li>' : '') +
                                 '</ul>';
                         }
