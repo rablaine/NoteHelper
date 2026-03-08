@@ -41,6 +41,9 @@ def _handle_milestone_and_task(note):
     milestone_status = request.form.get('milestone_status', '').strip()
     milestone_status_code = request.form.get('milestone_status_code', '').strip()
     milestone_opp_name = request.form.get('milestone_opportunity_name', '').strip()
+    milestone_workload = request.form.get('milestone_workload', '').strip()
+    milestone_monthly_usage_str = request.form.get('milestone_monthly_usage', '').strip()
+    milestone_monthly_usage = float(milestone_monthly_usage_str) if milestone_monthly_usage_str else None
     
     # Get customer for milestone association
     customer_id = request.form.get('customer_id')
@@ -57,6 +60,8 @@ def _handle_milestone_and_task(note):
             msx_status=milestone_status,
             msx_status_code=int(milestone_status_code) if milestone_status_code else None,
             opportunity_name=milestone_opp_name,
+            workload=milestone_workload or None,
+            monthly_usage=milestone_monthly_usage,
             customer_id=int(customer_id) if customer_id else None
         )
         db.session.add(milestone)
@@ -72,6 +77,10 @@ def _handle_milestone_and_task(note):
             milestone.msx_status_code = int(milestone_status_code)
         if milestone_opp_name:
             milestone.opportunity_name = milestone_opp_name
+        if milestone_workload:
+            milestone.workload = milestone_workload
+        if milestone_monthly_usage is not None:
+            milestone.monthly_usage = milestone_monthly_usage
     
     # Associate milestone with call log
     note.milestones = [milestone]

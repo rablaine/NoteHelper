@@ -118,8 +118,8 @@
                                     <span class="badge {% if ms.msx_status == 'On Track' %}bg-success{% elif ms.msx_status == 'At Risk' %}bg-warning text-dark{% elif ms.msx_status == 'Blocked' %}bg-danger{% elif ms.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}">
                                         {{ ms.msx_status or 'Unknown' }}
                                     </span>
-                                    {% if ms.dollar_value %}
-                                        <div class="small text-muted mt-1">${{ "{:,.0f}".format(ms.dollar_value) }}</div>
+                                    {% if ms.monthly_usage %}
+                                        <div class="small text-muted mt-1">${{ "{:,.0f}".format(ms.monthly_usage) }}/mo</div>
                                     {% endif %}
                                 </div>
                             </div>

@@ -136,8 +136,8 @@
                                 {% endif %}
                             </div>
                             <div class="text-end flex-shrink-0">
-                                {% if ms.dollar_value %}
-                                    <span class="small text-muted">${{ "{:,.0f}".format(ms.dollar_value) }}/mo</span>
+                                {% if ms.monthly_usage %}
+                                    <span class="small text-muted">${{ "{:,.0f}".format(ms.monthly_usage) }}/mo</span>
                                 {% endif %}
                                 {% if ms.due_date %}
                                     {% set days_until = (ms.due_date - today).days %}
