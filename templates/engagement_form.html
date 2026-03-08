@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if engagement else 'New' }} Engagement - {{ customer.get_display_name() }} - NoteHelper{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="mb-0">{{ 'Edit' if engagement else 'New' }} Engagement</h1>
+        <small class="text-muted">
+            for <a href="{{ url_for('customers.customer_view', id=customer.id) }}">{{ customer.get_display_name() }}</a>
+        </small>
+    </div>
+</div>
+
+<form method="POST">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-lightning"></i> Engagement Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label for="title" class="form-label">Title *</label>
+                            <input type="text" class="form-control" id="title" name="title"
+                                   value="{{ engagement.title if engagement else '' }}" required
+                                   placeholder="e.g., Azure Migration Phase 2">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-select" id="status" name="status">
+                                {% for s in ['Active', 'On Hold', 'Won', 'Lost'] %}
+                                <option value="{{ s }}" {% if engagement and engagement.status == s %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <h6 class="text-muted mt-4 mb-3"><i class="bi bi-journal-text"></i> The Story</h6>
+
+                    <div class="mb-3">
+                        <label for="key_individuals" class="form-label">
+                            Key Individuals & Titles
+                            <small class="text-muted fw-normal ms-1">"I've been working with..."</small>
+                        </label>
+                        <textarea class="form-control" id="key_individuals" name="key_individuals"
+                                  rows="2" placeholder="Names, titles, and roles of key contacts">{{ engagement.key_individuals or '' if engagement else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="technical_problem" class="form-label">
+                            Technical/Business Problem
+                            <small class="text-muted fw-normal ms-1">"...they have run into..."</small>
+                        </label>
+                        <textarea class="form-control" id="technical_problem" name="technical_problem"
+                                  rows="3" placeholder="What problem or challenge are they facing?">{{ engagement.technical_problem or '' if engagement else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="business_impact" class="form-label">
+                            Business Process/Strategy Impact
+                            <small class="text-muted fw-normal ms-1">"...and it's impacting..."</small>
+                        </label>
+                        <textarea class="form-control" id="business_impact" name="business_impact"
+                                  rows="3" placeholder="How is this problem impacting their business?">{{ engagement.business_impact or '' if engagement else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="solution_resources" class="form-label">
+                            Solution Resources
+                            <small class="text-muted fw-normal ms-1">"We are addressing the Opportunity with..."</small>
+                        </label>
+                        <textarea class="form-control" id="solution_resources" name="solution_resources"
+                                  rows="3" placeholder="What Azure services/solutions are we proposing?">{{ engagement.solution_resources or '' if engagement else '' }}</textarea>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="estimated_acr" class="form-label">
+                                Business Outcome / Estimated $$ACR
+                                <small class="text-muted fw-normal ms-1">"...which will result in..."</small>
+                            </label>
+                            <input type="text" class="form-control" id="estimated_acr" name="estimated_acr"
+                                   value="{{ engagement.estimated_acr or '' if engagement else '' }}"
+                                   placeholder="e.g., $50K/mo ACR">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="target_date" class="form-label">
+                                Target Date/Timeline
+                                <small class="text-muted fw-normal ms-1">"...by..."</small>
+                            </label>
+                            <input type="date" class="form-control" id="target_date" name="target_date"
+                                   value="{{ engagement.target_date.strftime('%Y-%m-%d') if engagement and engagement.target_date else '' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            {% if customer_notes %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-journal-text"></i> Link Notes</h5>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% for note in customer_notes %}
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="note_ids"
+                               value="{{ note.id }}" id="note_{{ note.id }}"
+                               {% if engagement and note in engagement.notes %}checked{% endif %}>
+                        <label class="form-check-label small" for="note_{{ note.id }}">
+                            <strong>{{ note.call_date.strftime('%b %d, %Y') }}</strong>
+                            - {{ note.content|striptags|truncate(60) }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if opportunities %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-briefcase"></i> Link Opportunities</h5>
+                </div>
+                <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                    {% for opp in opportunities %}
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="opportunity_ids"
+                               value="{{ opp.id }}" id="opp_{{ opp.id }}"
+                               {% if engagement and opp in engagement.opportunities %}checked{% endif %}>
+                        <label class="form-check-label small" for="opp_{{ opp.id }}">
+                            {{ opp.name|truncate(50) }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if milestones %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-flag"></i> Link Milestones</h5>
+                </div>
+                <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                    {% for ms in milestones %}
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="milestone_ids"
+                               value="{{ ms.id }}" id="ms_{{ ms.id }}"
+                               {% if engagement and ms in engagement.milestones %}checked{% endif %}>
+                        <label class="form-check-label small" for="ms_{{ ms.id }}">
+                            {{ ms.display_text|truncate(50) }}
+                            {% if ms.msx_status %}
+                            <span class="badge {% if ms.msx_status == 'On Track' %}bg-success{% elif ms.msx_status == 'At Risk' %}bg-warning text-dark{% elif ms.msx_status == 'Blocked' %}bg-danger{% else %}bg-secondary{% endif %} ms-1">{{ ms.msx_status }}</span>
+                            {% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between mb-4">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-circle"></i> {{ 'Save Changes' if engagement else 'Create Engagement' }}
+        </button>
+        <a href="{{ url_for('customers.customer_view', id=customer.id) }}" class="btn btn-secondary">
+            <i class="bi bi-x-circle"></i> Cancel
+        </a>
+    </div>
+</form>
+
+{% if engagement %}
+<div class="card border-danger mb-4">
+    <div class="card-body">
+        <h6 class="text-danger mb-2">Danger Zone</h6>
+        <p class="small text-muted mb-2">Deleting this engagement will NOT delete any linked notes, opportunities, or milestones. It only removes the engagement thread.</p>
+        <form method="POST" action="{{ url_for('engagements.engagement_delete', id=engagement.id) }}"
+              onsubmit="return confirm('Delete engagement &quot;{{ engagement.title }}&quot;? This cannot be undone.');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash"></i> Delete Engagement
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

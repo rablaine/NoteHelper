@@ -4,7 +4,42 @@
 {% block title %}{{ customer.name }} - NoteHelper{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 gap-3">
+<style>
+    .clickable-call {
+        cursor: pointer;
+        transition: background-color 0.15s ease-in-out;
+    }
+    .clickable-call:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+    html[data-bs-theme="dark"] .clickable-call:hover {
+        background-color: rgba(255, 255, 255, 0.15);
+    }
+    .clickable-call a {
+        position: relative;
+        z-index: 2;
+    }
+    .engagement-card {
+        transition: border-color 0.15s ease-in-out;
+    }
+    .engagement-card:hover {
+        border-color: var(--bs-primary) !important;
+    }
+    .story-completeness .progress {
+        height: 4px;
+    }
+    .opp-mini-card {
+        background-color: rgba(0, 0, 0, 0.03);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    html[data-bs-theme="dark"] .opp-mini-card {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+</style>
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-3 gap-3">
     <div style="min-width: 0; flex: 1; display: flex; align-items: center; gap: 0.5rem;">
         <span style="flex-shrink: 0; line-height: 1; margin-top: 4px; margin-right: 6px;">{{ customer_favicon(customer, size=34) }}</span>
         <h1 class="mb-0 text-truncate" style="min-width: 0;" title="{{ customer.name }}">
@@ -19,173 +54,60 @@
         <a href="{{ url_for('notes.note_create') }}?customer_id={{ customer.id }}" class="btn btn-success text-nowrap">
             <i class="bi bi-plus-circle"></i> New Note
         </a>
+        <a href="{{ url_for('engagements.engagement_create', customer_id=customer.id) }}" class="btn btn-outline-primary text-nowrap">
+            <i class="bi bi-diagram-3"></i> New Engagement
+        </a>
         <a href="{{ url_for('customers.customer_edit', id=customer.id) }}" class="btn btn-primary text-nowrap">
             <i class="bi bi-pencil"></i> Edit Customer
         </a>
     </div>
 </div>
 
+<!-- Compute partner_dict for essentials card -->
+{% set partner_dict = {} %}
+{% for call in notes %}
+    {% for partner in call.partners %}
+        {% if partner.id not in partner_dict %}
+            {% set _ = partner_dict.update({partner.id: partner}) %}
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+
+<!-- Main Layout: Sidebar (left) + Content (right) -->
 <div class="row">
+    <!-- Sidebar -->
     <div class="col-md-4">
-        <div class="card mb-3">
-            <div class="card-header">
-                <h5 class="mb-0">Details</h5>
-            </div>
-            <div class="card-body">
-                <p><strong>TPID:</strong> 
-                    {% if customer.tpid_url %}
-                        <a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>
-                    {% else %}
-                        {{ customer.tpid }}
-                    {% endif %}
-                </p>
-                <p><strong>Seller:</strong> 
-                    {% if customer.seller %}
-                        <a href="{{ url_for('sellers.seller_view', id=customer.seller.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
-                        {% if customer.seller.seller_type %}
-                            <span class="badge {% if customer.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ customer.seller.seller_type }}</span>
-                        {% endif %}
-                    {% else %}
-                        <span class="badge bg-secondary text-muted">No seller assigned</span>
-                    {% endif %}
-                </p>
-                <p><strong>Territory:</strong> 
-                    {% if customer.territory %}
-                        <a href="{{ url_for('territories.territory_view', id=customer.territory.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</a>
-                    {% else %}
-                        <span class="badge bg-secondary text-muted">No territory assigned</span>
-                    {% endif %}
-                </p>
-                {% if customer.verticals %}
-                    <p><strong>Verticals:</strong><br>
-                        {% for vertical in customer.verticals|sort(attribute='name') %}
-                            <span class="badge bg-primary">{{ vertical.name }}</span>{% if not loop.last %} {% endif %}
-                        {% endfor %}
-                    </p>
-                {% endif %}
-                <p><strong>Total Calls:</strong> {{ notes|length }}</p>
-                
-                {% set partner_dict = {} %}
-                {% for call in notes %}
-                    {% for partner in call.partners %}
-                        {% if partner.id not in partner_dict %}
-                            {% set _ = partner_dict.update({partner.id: partner}) %}
-                        {% endif %}
-                    {% endfor %}
-                {% endfor %}
-                {% if partner_dict %}
-                <p><strong>Partners:</strong><br>
-                    {% for partner_id, partner in partner_dict.items()|sort(attribute='1.name') %}
-                        <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;">
-                            <i class="bi bi-building"></i> {{ partner.name }}
-                        </a>
-                    {% endfor %}
-                </p>
-                {% endif %}
-            </div>
-        </div>
-        
-        {% set milestone_dict = {} %}
-        {% for call in notes %}
-            {% for milestone in call.milestones %}
-                {% if milestone.id not in milestone_dict %}
-                    {% set _ = milestone_dict.update({milestone.id: milestone}) %}
-                {% endif %}
-            {% endfor %}
-        {% endfor %}
-        {% if milestone_dict %}
-        <!-- Customer Milestones Card -->
-        <div class="card mb-3">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-flag"></i> Milestones</h5>
-            </div>
-            <div class="card-body">
-                {% for milestone_id, milestone in milestone_dict.items()|sort(attribute='1.created_at', reverse=true) %}
-                    <div class="{% if not loop.last %}mb-2{% endif %}">
-                        <a href="{{ url_for('milestones.milestone_view', id=milestone.id) }}" class="badge bg-success text-decoration-none" title="{{ milestone.display_text }}">
-                            <i class="bi bi-flag"></i> {{ milestone.display_text[:35] }}{% if milestone.display_text|length > 35 %}...{% endif %}
-                        </a>
-                        {% if milestone.msx_status %}
-                        <span class="badge {% if milestone.msx_status == 'On Track' %}bg-success{% elif milestone.msx_status == 'At Risk' %}bg-warning text-dark{% elif milestone.msx_status == 'Blocked' %}bg-danger{% elif milestone.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}">{{ milestone.msx_status }}</span>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        
-        <!-- Customer Opportunities Card -->
-        {% if customer.opportunities.count() > 0 %}
-        <div class="card mb-3">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-briefcase"></i> Opportunities</h5>
-            </div>
-            <div class="card-body">
-                {% for opp in customer.opportunities.order_by(None).all()|sort(attribute='name') %}
-                    <div class="{% if not loop.last %}mb-3 pb-3 border-bottom{% endif %}">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <a href="{{ url_for('opportunities.opportunity_view', id=opp.id) }}" class="fw-bold text-decoration-none">
-                                <i class="bi bi-briefcase"></i> {{ opp.name }}
-                            </a>
-                        </div>
-                        {% set opp_milestones = opp.milestones.all() %}
-                        {% if opp_milestones %}
-                            <div class="mt-1">
-                                {% for ms in opp_milestones %}
-                                    <span class="badge {% if ms.msx_status == 'On Track' %}bg-success{% elif ms.msx_status == 'At Risk' %}bg-warning text-dark{% elif ms.msx_status == 'Blocked' %}bg-danger{% elif ms.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}" title="{{ ms.display_text }}">
-                                        <i class="bi bi-flag"></i> {{ ms.display_text[:20] }}{% if ms.display_text|length > 20 %}...{% endif %}
-                                    </span>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        
-        <!-- Customer Notes Card -->
+        <!-- Account Context Card -->
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-sticky"></i> Notes</h5>
+                <h5 class="mb-0"><i class="bi bi-sticky"></i> Account Context</h5>
                 <div class="d-flex gap-2">
-                    {% if ai_enabled and notes %}
-                    <button type="button" class="btn btn-sm btn-outline-success" id="generateNotesBtn" onclick="generateEngagementSummary()" title="Use AI to generate an engagement summary from all notes">
-                        <i class="bi bi-stars"></i> Generate
-                    </button>
-                    {% endif %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="editOverviewBtn" onclick="toggleOverviewEdit()">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="editContextBtn" onclick="toggleContextEdit()">
                         <i class="bi bi-pencil"></i> Edit
                     </button>
                 </div>
             </div>
             <div class="card-body">
-                <div id="overviewDisplay" {% if not customer.overview %}style="display: none;"{% endif %}>
-                    <p class="mb-0" style="white-space: pre-wrap;">{{ customer.overview or '' }}</p>
+                <div id="contextDisplay" {% if not customer.account_context %}style="display: none;"{% endif %}>
+                    <p class="mb-0" style="white-space: pre-wrap;">{{ customer.account_context or '' }}</p>
                 </div>
-                <div id="overviewEmpty" {% if customer.overview %}style="display: none;"{% endif %}>
-                    <p class="text-muted mb-0">No notes yet. Click Edit to add notes about opportunities or milestones.</p>
+                <div id="contextEmpty" {% if customer.account_context %}style="display: none;"{% endif %}>
+                    <p class="text-muted mb-0">No account context yet. Click Edit to add high-level context about this account.</p>
                 </div>
-                <div id="overviewGenerating" style="display: none;">
-                    <div class="d-flex align-items-center gap-2 text-muted">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span>Analyzing {{ notes|length }} note{{ 's' if notes|length != 1 else '' }}...</span>
-                    </div>
-                </div>
-                <form id="overviewForm" action="{{ url_for('customers.customer_update_overview', id=customer.id) }}" method="post" style="display: none;">
-                    <textarea class="form-control mb-2" name="overview" id="overviewTextarea" rows="10" placeholder="Track opportunities, milestones, key contacts, etc.">{{ customer.overview or '' }}</textarea>
+                <form id="contextForm" action="{{ url_for('customers.customer_update_overview', id=customer.id) }}" method="post" style="display: none;">
+                    <textarea class="form-control mb-2" name="account_context" id="contextTextarea" rows="10" placeholder="High-level account context: key contacts, strategic priorities, ongoing initiatives...">{{ customer.account_context or '' }}</textarea>
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-sm btn-primary">
                             <i class="bi bi-check-lg"></i> Save
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelOverviewEdit()">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelContextEdit()">
                             Cancel
                         </button>
                     </div>
                 </form>
             </div>
         </div>
-        
+
         {% if revenue_analyses %}
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -239,38 +161,235 @@
             </div>
         </div>
         {% endif %}
-    </div>
-    
-    <div class="col-md-8">
+
+        <!-- Customer Opportunities Card -->
+        {% if customer.opportunities.count() > 0 %}
         <div class="card mb-3">
             <div class="card-header">
-                <h5 class="mb-0">Notes (most recent first)</h5>
+                <h5 class="mb-0"><i class="bi bi-briefcase"></i> Opportunities</h5>
+            </div>
+            <div class="card-body p-2">
+                {% for opp in customer.opportunities.order_by(None).all()|sort(attribute='name') %}
+                    <div class="opp-mini-card rounded p-2 {% if not loop.last %}mb-2{% endif %}">
+                        <a href="{{ url_for('opportunities.opportunity_view', id=opp.id) }}" class="fw-bold text-decoration-none d-block{% if opp.milestones.count() > 0 %} mb-1{% endif %}" title="{{ opp.name }}">
+                            <i class="bi bi-briefcase"></i> {{ opp.name }}
+                        </a>
+                        {% set opp_milestones = opp.milestones.all() %}
+                        {% if opp_milestones %}
+                            {% for ms in opp_milestones %}
+                                <div class="d-flex align-items-start gap-2 {% if not loop.last %}mb-1{% endif %}" style="padding-left: 0.25rem;">
+                                    <i class="bi bi-{% if ms.msx_status == 'On Track' %}check-circle text-success{% elif ms.msx_status == 'At Risk' %}exclamation-triangle text-warning{% elif ms.msx_status == 'Blocked' %}x-circle text-danger{% elif ms.msx_status == 'Completed' %}check2-circle text-info{% else %}flag text-secondary{% endif %}" style="margin-top: 2px;" title="{{ ms.msx_status or 'Unknown' }}"></i>
+                                    <div class="min-width-0 flex-grow-1" style="min-width: 0;">
+                                        <div class="d-flex justify-content-between align-items-start gap-1">
+                                            <div style="min-width: 0; flex: 1;">
+                                                <a href="{{ url_for('milestones.milestone_view', id=ms.id) }}" class="text-decoration-none small text-truncate d-block" title="{{ ms.display_text }}">
+                                                    {{ ms.display_text }}
+                                                </a>
+                                                {% if ms.workload %}
+                                                    <div class="text-muted text-truncate" style="font-size: 0.7em;" title="{{ ms.workload }}">{{ ms.workload }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="text-end flex-shrink-0">
+                                                {% if ms.dollar_value %}
+                                                    <span class="small text-muted">${{ "{:,.0f}".format(ms.dollar_value) }}/mo</span>
+                                                {% endif %}
+                                                {% if ms.due_date %}
+                                                    {% set days_until = (ms.due_date - today).days %}
+                                                    {% if ms.msx_status == 'Completed' %}
+                                                    <div style="font-size: 0.7em;" class="text-success"><i class="bi bi-calendar-check"></i> {{ ms.due_date.strftime('%b %d, %Y') }}</div>
+                                                    {% else %}
+                                                    <div style="font-size: 0.7em;" class="{% if days_until < 0 %}text-danger{% elif days_until <= 30 %}text-warning{% elif days_until <= 90 %}text-success{% else %}text-muted{% endif %}"><i class="bi bi-calendar"></i> {{ ms.due_date.strftime('%b %d, %Y') }}{% if days_until < 0 %} <span class="fw-semibold">(overdue)</span>{% elif days_until <= 30 %} <span class="fw-semibold">({{ days_until }}d)</span>{% endif %}</div>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Main Content -->
+    <div class="col-md-8">
+        <!-- Essentials panel (Azure portal style) -->
+        <div class="card mb-3">
+            <div class="card-body py-3">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        {% if customer.tpid %}
+                        <div class="mb-2">
+                            <div class="text-muted small">TPID</div>
+                            <div>
+                                {% if customer.tpid_url %}
+                                    <a href="{{ customer.tpid_url }}" target="_blank">{{ customer.tpid }}</a>
+                                {% else %}
+                                    {{ customer.tpid }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="mb-2">
+                            <div class="text-muted small">Seller</div>
+                            <div>
+                                {% if customer.seller %}
+                                    <a href="{{ url_for('sellers.seller_view', id=customer.seller.id) }}" class="badge bg-secondary text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
+                                    {% if customer.seller.seller_type %}
+                                        <span class="badge {% if customer.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ customer.seller.seller_type }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Unassigned</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-muted small">Territory</div>
+                            <div>
+                                {% if customer.territory %}
+                                    <a href="{{ url_for('territories.territory_view', id=customer.territory.id) }}" class="badge bg-info text-dark text-decoration-none"><i class="bi bi-geo-alt"></i> {{ customer.territory.name }}</a>
+                                {% else %}
+                                    <span class="text-muted">Unassigned</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-2">
+                            <div class="text-muted small">Last Contact</div>
+                            <div>
+                                {% if last_contact %}
+                                    {{ last_contact.strftime('%b %d, %Y') }}
+                                {% else %}
+                                    <span class="text-muted">--</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if customer.verticals|length > 0 %}
+                        <div class="mb-2">
+                            <div class="text-muted small">Verticals</div>
+                            <div>
+                                {% for vertical in customer.verticals|sort(attribute='name') %}
+                                    <span class="badge bg-primary">{{ vertical.name }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if partner_dict %}
+                        <div class="mb-2">
+                            <div class="text-muted small">Partners</div>
+                            <div>
+                                {% for partner_id, partner in partner_dict.items()|sort(attribute='1.name') %}
+                                    <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="text-decoration-none" style="color: #a78bfa;">
+                                        <i class="bi bi-building"></i> {{ partner.name }}
+                                    </a>{% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Engagements Section -->
+        {% if engagements %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Engagements</h5>
+                <a href="{{ url_for('engagements.engagement_create', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-plus"></i> New
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for eng in engagements %}
+                    <div class="col-md-6">
+                        <a href="{{ url_for('engagements.engagement_view', id=eng.id) }}" class="card engagement-card h-100 text-decoration-none border{% if eng.status == 'Active' %}-primary{% endif %}" style="{% if eng.status == 'Active' %}border-width: 2px;{% endif %}">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title mb-0 text-body">{{ eng.title }}</h6>
+                                    <span class="badge flex-shrink-0 ms-2
+                                        {% if eng.status == 'Active' %}bg-success
+                                        {% elif eng.status == 'On Hold' %}bg-warning text-dark
+                                        {% elif eng.status == 'Won' %}bg-primary
+                                        {% elif eng.status == 'Lost' %}bg-secondary
+                                        {% endif %}">{{ eng.status }}</span>
+                                </div>
+                                <!-- Story completeness -->
+                                <div class="story-completeness mb-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-muted" style="font-size: 0.75rem;">Story {{ eng.story_completeness }}%</span>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar {% if eng.story_completeness >= 80 %}bg-success{% elif eng.story_completeness >= 40 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                             style="width: {{ eng.story_completeness }}%"></div>
+                                    </div>
+                                </div>
+                                <!-- Quick stats -->
+                                <div class="d-flex gap-3 text-muted" style="font-size: 0.8rem;">
+                                    <span><i class="bi bi-journal-text"></i> {{ eng.linked_note_count }} note{{ 's' if eng.linked_note_count != 1 else '' }}</span>
+                                    {% if eng.opportunities|length > 0 %}
+                                    <span><i class="bi bi-briefcase"></i> {{ eng.opportunities|length }}</span>
+                                    {% endif %}
+                                    {% if eng.milestones|length > 0 %}
+                                    <span><i class="bi bi-flag"></i> {{ eng.milestones|length }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if eng.target_date %}
+                                <div class="text-muted mt-1" style="font-size: 0.75rem;">
+                                    <i class="bi bi-calendar"></i> Target: {{ eng.target_date.strftime('%b %d, %Y') }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- Empty engagement state -->
+        <div class="card mb-3 border-dashed">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-diagram-3 text-muted" style="font-size: 2rem;"></i>
+                <p class="text-muted mt-2 mb-2">No engagements yet. Create one to organize your notes into workstreams.</p>
+                <a href="{{ url_for('engagements.engagement_create', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-plus-circle"></i> Create First Engagement
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Notes List -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-journal-text"></i> Notes ({{ notes|length }})</h5>
+                <a href="{{ url_for('notes.note_create') }}?customer_id={{ customer.id }}" class="btn btn-sm btn-success">
+                    <i class="bi bi-plus"></i> New Note
+                </a>
             </div>
             <div class="card-body">
                 {% if notes %}
-                    <style>
-                        .clickable-call {
-                            cursor: pointer;
-                            transition: background-color 0.15s ease-in-out;
-                        }
-                        .clickable-call:hover {
-                            background-color: rgba(0, 0, 0, 0.05);
-                        }
-                        html[data-bs-theme="dark"] .clickable-call:hover {
-                            background-color: rgba(255, 255, 255, 0.15);
-                        }
-                        .clickable-call a {
-                            position: relative;
-                            z-index: 2;
-                        }
-                    </style>
-                    {# Check if all call logs are with the same seller as the customer's seller #}
+                    {# Check if all notes are with the same seller as the customer's seller #}
                     {% set all_same_seller = notes|selectattr('seller.id', 'equalto', customer.seller.id)|list|length == notes|length if customer.seller else false %}
                     <div class="list-group">
                         {% for call in notes %}
                             <div class="list-group-item clickable-call" onclick="window.location.href='{{ url_for('notes.note_view', id=call.id) }}';">
                                 <div class="d-flex w-100 justify-content-between mb-2">
-                                    <h6 class="mb-0">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</h6>
+                                    <div>
+                                        <h6 class="mb-0 d-inline">{{ call.call_date.strftime('%b %d, %Y') }}{% if call.call_date.hour != 0 or call.call_date.minute != 0 %} {{ call.call_date.strftime('%I:%M %p') }}{% endif %}</h6>
+                                        {% if call.engagements %}
+                                            {% for eng in call.engagements %}
+                                                <span class="badge bg-primary bg-opacity-25 text-primary ms-1" style="font-size: 0.7rem;" onclick="event.stopPropagation(); window.location.href='{{ url_for('engagements.engagement_view', id=eng.id) }}';">
+                                                    <i class="bi bi-diagram-3"></i> {{ eng.title[:25] }}{% if eng.title|length > 25 %}...{% endif %}
+                                                </span>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </div>
                                     {% if call.seller and not all_same_seller %}
                                         <a href="{{ url_for('sellers.seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                                     {% endif %}
@@ -310,85 +429,33 @@
 
 {% block extra_js %}
 <script>
-function toggleOverviewEdit() {
-    document.getElementById('overviewDisplay').style.display = 'none';
-    document.getElementById('overviewEmpty').style.display = 'none';
-    document.getElementById('overviewForm').style.display = 'block';
-    document.getElementById('editOverviewBtn').style.display = 'none';
-    document.getElementById('overviewTextarea').focus();
+function toggleContextEdit() {
+    document.getElementById('contextDisplay').style.display = 'none';
+    document.getElementById('contextEmpty').style.display = 'none';
+    document.getElementById('contextForm').style.display = 'block';
+    document.getElementById('editContextBtn').style.display = 'none';
+    document.getElementById('contextTextarea').focus();
 }
 
-function cancelOverviewEdit() {
-    const textarea = document.getElementById('overviewTextarea');
-    const hasNotes = textarea.defaultValue.trim().length > 0;
+function cancelContextEdit() {
+    const textarea = document.getElementById('contextTextarea');
+    const hasContext = textarea.defaultValue.trim().length > 0;
     
     // Reset textarea to original value
     textarea.value = textarea.defaultValue;
     
-    document.getElementById('overviewForm').style.display = 'none';
-    document.getElementById('editOverviewBtn').style.display = 'inline-block';
-    const genBtn = document.getElementById('generateNotesBtn');
+    document.getElementById('contextForm').style.display = 'none';
+    document.getElementById('editContextBtn').style.display = 'inline-block';
+    const genBtn = document.getElementById('generateContextBtn');
     if (genBtn) genBtn.style.display = 'inline-block';
     
-    if (hasNotes) {
-        document.getElementById('overviewDisplay').style.display = 'block';
-        document.getElementById('overviewEmpty').style.display = 'none';
+    if (hasContext) {
+        document.getElementById('contextDisplay').style.display = 'block';
+        document.getElementById('contextEmpty').style.display = 'none';
     } else {
-        document.getElementById('overviewDisplay').style.display = 'none';
-        document.getElementById('overviewEmpty').style.display = 'block';
+        document.getElementById('contextDisplay').style.display = 'none';
+        document.getElementById('contextEmpty').style.display = 'block';
     }
-}
-
-function generateEngagementSummary() {
-    const btn = document.getElementById('generateNotesBtn');
-    const editBtn = document.getElementById('editOverviewBtn');
-    const generating = document.getElementById('overviewGenerating');
-    const display = document.getElementById('overviewDisplay');
-    const empty = document.getElementById('overviewEmpty');
-
-    // Show loading state
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Generating...';
-    display.style.display = 'none';
-    empty.style.display = 'none';
-    generating.style.display = 'block';
-
-    fetch('/api/ai/generate-engagement-summary', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
-        body: JSON.stringify({customer_id: {{ customer.id }}})
-    })
-    .then(r => r.json())
-    .then(data => {
-        generating.style.display = 'none';
-        if (data.success) {
-            // Open the edit form with the generated summary pre-filled
-            const textarea = document.getElementById('overviewTextarea');
-            textarea.value = data.summary;
-            textarea.rows = Math.max(10, data.summary.split('\n').length + 2);
-            document.getElementById('overviewForm').style.display = 'block';
-            btn.style.display = 'none';
-            editBtn.style.display = 'none';
-            textarea.focus();
-        } else {
-            alert('Failed to generate summary: ' + (data.error || 'Unknown error'));
-            // Restore original display
-            const hasNotes = document.getElementById('overviewTextarea').defaultValue.trim().length > 0;
-            if (hasNotes) display.style.display = 'block';
-            else empty.style.display = 'block';
-        }
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-stars"></i> Generate';
-    })
-    .catch(err => {
-        generating.style.display = 'none';
-        alert('Error: ' + err.message);
-        const hasNotes = document.getElementById('overviewTextarea').defaultValue.trim().length > 0;
-        if (hasNotes) display.style.display = 'block';
-        else empty.style.display = 'block';
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-stars"></i> Generate';
-    });
 }
 </script>
 {% endblock %}

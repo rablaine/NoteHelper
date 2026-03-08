@@ -280,7 +280,7 @@ def _customer_to_dict(customer: Customer) -> Dict[str, Any]:
             "nickname": customer.nickname,
             "tpid": customer.tpid,
             "tpid_url": customer.tpid_url,
-            "overview": customer.overview,
+            "account_context": customer.account_context,
             "seller_name": customer.seller.name if customer.seller else None,
             "territory_name": customer.territory.name if customer.territory else None,
             "verticals": [v.name for v in customer.verticals],
@@ -585,10 +585,10 @@ def restore_from_backup(data: Dict[str, Any]) -> Dict[str, Any]:
 
     db.session.commit()
 
-    # Restore customer overview if present in backup and customer has no notes yet
-    backup_notes = cust_data.get("overview") or cust_data.get("notes")
-    if backup_notes and not customer.overview:
-        customer.overview = backup_notes
+    # Restore customer account context if present in backup and customer has none yet
+    backup_context = cust_data.get("account_context") or cust_data.get("overview") or cust_data.get("notes")
+    if backup_context and not customer.account_context:
+        customer.account_context = backup_context
         db.session.commit()
 
     return {

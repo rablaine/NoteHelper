@@ -182,13 +182,13 @@ def customer_create():
 
 @customers_bp.route('/customer/<int:id>')
 def customer_view(id):
-    """View customer details (FR008)."""
+    """View customer details with engagement dashboard (FR008)."""
     customer = Customer.query.filter_by(id=id).first_or_404()
     # Sort call logs by date (descending) - customer.notes is already loaded as a list
     notes = sorted(customer.notes, key=lambda c: c.call_date, reverse=True)
     
     # Get revenue analysis for this customer if available
-    from app.models import RevenueAnalysis
+    from app.models import RevenueAnalysis, Engagement
     revenue_analyses = RevenueAnalysis.query.filter_by(
         customer_name=customer.name
     ).order_by(RevenueAnalysis.priority_score.desc()).all()
@@ -196,11 +196,41 @@ def customer_view(id):
     from app.routes.ai import is_ai_enabled
     ai_enabled = is_ai_enabled()
 
+    # Compute engagement metrics
+    engagements = customer.engagements  # already ordered by created_at desc
+    active_engagements = [e for e in engagements if e.status == 'Active']
+
+    # Identify unassigned notes (not linked to any engagement)
+    assigned_note_ids = set()
+    for eng in engagements:
+        for note in eng.notes:
+            assigned_note_ids.add(note.id)
+    unassigned_notes = [n for n in notes if n.id not in assigned_note_ids]
+
+    # Compute last contact date
+    last_contact = notes[0].call_date if notes else None
+
+    # Active milestone count
+    active_milestones = customer.milestones.filter(
+        ~db.or_(
+            db.literal_column('msx_status').in_(['Completed', 'Cancelled', 'Lost to Competitor', 'Hygiene/Duplicate']),
+        )
+    ).count() if customer.milestones.count() > 0 else 0
+
+    # Opportunity count
+    opportunity_count = customer.opportunities.count()
+
     return render_template('customer_view.html', 
                           customer=customer, 
                           notes=notes,
+                          engagements=engagements,
+                          active_engagements=active_engagements,
+                          unassigned_notes=unassigned_notes,
                           revenue_analyses=revenue_analyses,
-                          ai_enabled=ai_enabled)
+                          ai_enabled=ai_enabled,
+                          last_contact=last_contact,
+                          active_milestone_count=active_milestones,
+                          opportunity_count=opportunity_count)
 
 
 @customers_bp.route('/customer/<int:id>/edit', methods=['GET', 'POST'])
@@ -291,25 +321,25 @@ def api_save_tpid_url(customer_id):
 
 @customers_bp.route('/customer/<int:id>/overview', methods=['POST'])
 def customer_update_overview(id):
-    """Update customer overview via AJAX or form POST."""
+    """Update customer account context via AJAX or form POST."""
     customer = Customer.query.filter_by(id=id).first_or_404()
     
-    overview = request.form.get('overview', '').strip()
-    customer.overview = overview if overview else None
+    account_context = request.form.get('account_context', '').strip()
+    customer.account_context = account_context if account_context else None
     
     db.session.commit()
 
-    # Trigger backup to include updated notes in OneDrive JSON
+    # Trigger backup to include updated context in OneDrive JSON
     try:
         _backup_customer(customer.id)
     except Exception:
-        pass  # Backup failure should not block notes save
+        pass  # Backup failure should not block save
     
     # Check if AJAX request
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'success': True, 'overview': customer.overview})
+        return jsonify({'success': True, 'account_context': customer.account_context})
     
-    flash('Notes updated successfully.', 'success')
+    flash('Account context updated successfully.', 'success')
     return redirect(url_for('customers.customer_view', id=id))
 
 

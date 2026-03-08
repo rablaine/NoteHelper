@@ -59,6 +59,27 @@ sellers_territories = db.Table(
     db.Column('territory_id', db.Integer, db.ForeignKey('territories.id'), primary_key=True)
 )
 
+# Association table for many-to-many relationship between Note and Engagement
+notes_engagements = db.Table(
+    'notes_engagements',
+    db.Column('note_id', db.Integer, db.ForeignKey('notes.id'), primary_key=True),
+    db.Column('engagement_id', db.Integer, db.ForeignKey('engagements.id'), primary_key=True)
+)
+
+# Association table for many-to-many relationship between Engagement and Opportunity
+engagements_opportunities = db.Table(
+    'engagements_opportunities',
+    db.Column('engagement_id', db.Integer, db.ForeignKey('engagements.id'), primary_key=True),
+    db.Column('opportunity_id', db.Integer, db.ForeignKey('opportunities.id'), primary_key=True)
+)
+
+# Association table for many-to-many relationship between Engagement and Milestone
+engagements_milestones = db.Table(
+    'engagements_milestones',
+    db.Column('engagement_id', db.Integer, db.ForeignKey('engagements.id'), primary_key=True),
+    db.Column('milestone_id', db.Integer, db.ForeignKey('milestones.id'), primary_key=True)
+)
+
 # Association table for many-to-many relationship between Customer and Vertical
 customers_verticals = db.Table(
     'customers_verticals',
@@ -280,7 +301,7 @@ class Customer(db.Model):
     tpid_url = db.Column(db.String(500), nullable=True)
     website = db.Column(db.String(500), nullable=True)  # Domain extracted from MSX websiteurl
     favicon_b64 = db.Column(db.Text, nullable=True)  # Base64-encoded 32x32 PNG favicon
-    overview = db.Column(db.Text, nullable=True)  # General overview for tracking opportunities/milestones
+    account_context = db.Column(db.Text, nullable=True)  # Persistent freeform account notes
     territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
@@ -289,6 +310,8 @@ class Customer(db.Model):
     seller = db.relationship('Seller', back_populates='customers')
     territory = db.relationship('Territory', back_populates='customers')
     notes = db.relationship('Note', back_populates='customer', lazy='select')
+    engagements = db.relationship('Engagement', back_populates='customer', lazy='select',
+                                  order_by='Engagement.created_at.desc()')
     verticals = db.relationship(
         'Vertical',
         secondary=customers_verticals,
@@ -450,6 +473,12 @@ class Note(db.Model):
         back_populates='notes',
         lazy='select'
     )
+    engagements = db.relationship(
+        'Engagement',
+        secondary=notes_engagements,
+        back_populates='notes',
+        lazy='select'
+    )
     
     @property
     def seller(self):
@@ -464,6 +493,73 @@ class Note(db.Model):
     def __repr__(self) -> str:
         name = self.customer.name if self.customer else 'General'
         return f'<Note {self.id} for {name}>'
+
+
+class Engagement(db.Model):
+    """Engagement thread representing a workstream or project with a customer.
+
+    Captures the seller's narrative around an active effort using structured
+    story fields (key individuals, problem, impact, solution, outcome, timeline).
+    Links to notes, opportunities, and milestones for full context.
+    """
+    __tablename__ = 'engagements'
+
+    STATUSES = ['Active', 'On Hold', 'Won', 'Lost']
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
+    title = db.Column(db.String(300), nullable=False)
+    status = db.Column(db.String(50), nullable=False, default='Active')
+
+    # Story fields
+    key_individuals = db.Column(db.Text, nullable=True)  # "I've been working with..."
+    technical_problem = db.Column(db.Text, nullable=True)  # "...they have run into..."
+    business_impact = db.Column(db.Text, nullable=True)  # "...and it's impacting..."
+    solution_resources = db.Column(db.Text, nullable=True)  # "We are addressing the Opportunity with..."
+    estimated_acr = db.Column(db.String(200), nullable=True)  # "...which will result in..."
+    target_date = db.Column(db.Date, nullable=True)  # "...by..."
+
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    # Relationships
+    customer = db.relationship('Customer', back_populates='engagements')
+    notes = db.relationship(
+        'Note',
+        secondary=notes_engagements,
+        back_populates='engagements',
+        lazy='select'
+    )
+    opportunities = db.relationship(
+        'Opportunity',
+        secondary=engagements_opportunities,
+        backref=db.backref('engagements', lazy='select'),
+        lazy='select'
+    )
+    milestones = db.relationship(
+        'Milestone',
+        secondary=engagements_milestones,
+        backref=db.backref('engagements', lazy='select'),
+        lazy='select'
+    )
+
+    @property
+    def story_completeness(self) -> int:
+        """Return percentage of story fields filled (0-100)."""
+        fields = [
+            self.key_individuals, self.technical_problem, self.business_impact,
+            self.solution_resources, self.estimated_acr, self.target_date
+        ]
+        filled = sum(1 for f in fields if f)
+        return int((filled / len(fields)) * 100)
+
+    @property
+    def linked_note_count(self) -> int:
+        """Return count of linked notes."""
+        return len(self.notes)
+
+    def __repr__(self) -> str:
+        return f'<Engagement {self.id}: {self.title[:50]}>'
 
 
 class Opportunity(db.Model):

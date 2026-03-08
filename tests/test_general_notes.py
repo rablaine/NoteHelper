@@ -175,7 +175,7 @@ class TestGeneralNoteListView:
         response = client.get('/notes?filter=general')
         assert response.status_code == 200
         assert b'General Note' in response.data
-        # Customer overview should not appear
+        # Customer account context should not appear
         assert b'Acme Corp' not in response.data
 
     def test_no_filter_shows_all(self, client, app, sample_data):

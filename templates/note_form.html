@@ -129,6 +129,29 @@
                     </div>
                     {% endif %}
                     
+                    <!-- Engagement Selector (shown when a customer is selected) -->
+                    {% if not is_general_note %}
+                    <div class="mb-3" id="engagementSection" {% if not preselect_customer_id and not (note and note.customer_id) %}style="display: none;"{% endif %}>
+                        <label for="engagement_ids" class="form-label">Engagements</label>
+                        <select class="form-select" id="engagement_ids" name="engagement_ids" multiple size="3">
+                            {% if note and note.customer %}
+                                {% for eng in note.customer.engagements %}
+                                    <option value="{{ eng.id }}" {% if eng in note.engagements %}selected{% endif %}>
+                                        {{ eng.title }} ({{ eng.status }})
+                                    </option>
+                                {% endfor %}
+                            {% elif preselect_customer and preselect_customer.engagements %}
+                                {% for eng in preselect_customer.engagements %}
+                                    <option value="{{ eng.id }}" {% if preselect_engagement_id and preselect_engagement_id == eng.id %}selected{% endif %}>
+                                        {{ eng.title }} ({{ eng.status }})
+                                    </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                        <div class="form-text">Hold Ctrl/Cmd to select multiple. Optional.</div>
+                    </div>
+                    {% endif %}
+                    
                     <!-- Call Date/Time and Partners side-by-side -->
                     <div class="row mb-3">
                         <div class="col-md-6">

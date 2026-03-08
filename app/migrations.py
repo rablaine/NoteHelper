@@ -136,6 +136,9 @@ def run_migrations(db):
     # Migration: Rename columns from old call_log naming to note naming
     _rename_calllog_columns(db, inspector)
 
+    # Migration: Rename customers.overview -> account_context
+    _rename_overview_to_account_context(db, inspector)
+
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -908,3 +911,16 @@ def _rename_calllog_columns(db, inspector):
                 ))
                 conn.commit()
             print(f"  Renamed column '{table}.{old_col}' -> '{new_col}'")
+
+
+def _rename_overview_to_account_context(db, inspector):
+    """Rename customers.overview -> account_context for clarity."""
+    if not _table_exists(inspector, 'customers'):
+        return
+    if _column_exists(inspector, 'customers', 'overview') and not _column_exists(inspector, 'customers', 'account_context'):
+        with db.engine.connect() as conn:
+            conn.execute(text(
+                "ALTER TABLE [customers] RENAME COLUMN [overview] TO [account_context]"
+            ))
+            conn.commit()
+        print("  Renamed column 'customers.overview' -> 'account_context'")

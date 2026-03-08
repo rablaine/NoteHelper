@@ -467,14 +467,14 @@ class TestGenerateEngagementSummary:
 
     @patch('app.routes.ai.get_azure_openai_client')
     def test_includes_customer_notes_in_prompt(self, mock_get_client, app, client):
-        """Should include existing customer overview in the user message sent to AI."""
+        """Should include existing customer account context in the user message sent to AI."""
         customer_id = self._create_customer_with_logs(app)
 
-        # Add notes to the customer
+        # Add account context to the customer
         from app.models import Customer
         with app.app_context():
             customer = db.session.get(Customer, customer_id)
-            customer.overview = "Key contact is Jane Smith (CTO). Budget approved for Q3."
+            customer.account_context = "Key contact is Jane Smith (CTO). Budget approved for Q3."
             db.session.commit()
 
         mock_client = MagicMock()
@@ -489,10 +489,10 @@ class TestGenerateEngagementSummary:
             )
 
         assert resp.status_code == 200
-        # Verify the user message sent to OpenAI includes the customer overview
+        # Verify the user message sent to OpenAI includes the customer account context
         call_args = mock_client.chat.completions.create.call_args
         user_message = call_args[1]['messages'][1]['content'] if 'messages' in call_args[1] else call_args[0][0][1]['content']
-        assert 'Existing Customer Notes' in user_message
+        assert 'Existing Account Context' in user_message
         assert 'Jane Smith (CTO)' in user_message
         assert 'Budget approved for Q3' in user_message
 
@@ -501,32 +501,18 @@ class TestGenerateButtonVisibility:
     """Tests that the Generate button appears/hides based on AI config."""
 
     def test_generate_button_visible_when_ai_enabled(self, app, client):
-        """Generate button should appear when AI is enabled and customer has call logs."""
-        from app.models import Customer, Note
+        """Generate button should appear on engagement page when AI is enabled and notes linked."""
+        from app.models import Customer, Note, Engagement
         with app.app_context():
             customer = Customer(name="Button Test", tpid=33333)
             db.session.add(customer)
             db.session.flush()
-            cl = Note(
+            engagement = Engagement(
                 customer_id=customer.id,
-                call_date=datetime(2025, 6, 1),
-                content="Test call",
+                title="Test Engagement",
+                status="Active",
             )
-            db.session.add(cl)
-            db.session.commit()
-            cid = customer.id
-
-        with patch.dict('os.environ', AI_ENV_VARS):
-            resp = client.get(f'/customer/{cid}')
-        assert resp.status_code == 200
-        assert b'id="generateNotesBtn"' in resp.data
-
-    def test_generate_button_hidden_when_ai_disabled(self, app, client):
-        """Generate button should not appear when AI is disabled."""
-        from app.models import Customer, Note
-        with app.app_context():
-            customer = Customer(name="No AI Test", tpid=44444)
-            db.session.add(customer)
+            db.session.add(engagement)
             db.session.flush()
             cl = Note(
                 customer_id=customer.id,
@@ -534,24 +520,63 @@ class TestGenerateButtonVisibility:
                 content="Test call",
             )
             db.session.add(cl)
+            db.session.flush()
+            engagement.notes.append(cl)
             db.session.commit()
-            cid = customer.id
+            eid = engagement.id
+
+        with patch.dict('os.environ', AI_ENV_VARS):
+            resp = client.get(f'/engagement/{eid}')
+        assert resp.status_code == 200
+        assert b'id="generateStoryBtn"' in resp.data
+
+    def test_generate_button_hidden_when_ai_disabled(self, app, client):
+        """Generate button should not appear when AI is disabled."""
+        from app.models import Customer, Note, Engagement
+        with app.app_context():
+            customer = Customer(name="No AI Test", tpid=44444)
+            db.session.add(customer)
+            db.session.flush()
+            engagement = Engagement(
+                customer_id=customer.id,
+                title="No AI Engagement",
+                status="Active",
+            )
+            db.session.add(engagement)
+            db.session.flush()
+            cl = Note(
+                customer_id=customer.id,
+                call_date=datetime(2025, 6, 1),
+                content="Test call",
+            )
+            db.session.add(cl)
+            db.session.flush()
+            engagement.notes.append(cl)
+            db.session.commit()
+            eid = engagement.id
 
         with patch.dict('os.environ', {}, clear=True):
-            resp = client.get(f'/customer/{cid}')
+            resp = client.get(f'/engagement/{eid}')
         assert resp.status_code == 200
-        assert b'id="generateNotesBtn"' not in resp.data
+        assert b'id="generateStoryBtn"' not in resp.data
 
     def test_generate_button_hidden_when_no_notes(self, app, client):
-        """Generate button should not appear when customer has no call logs."""
-        from app.models import Customer
+        """Generate button should not appear when engagement has no linked notes."""
+        from app.models import Customer, Engagement
         with app.app_context():
             customer = Customer(name="No Logs Test", tpid=55555)
             db.session.add(customer)
+            db.session.flush()
+            engagement = Engagement(
+                customer_id=customer.id,
+                title="Empty Engagement",
+                status="Active",
+            )
+            db.session.add(engagement)
             db.session.commit()
-            cid = customer.id
+            eid = engagement.id
 
         with patch.dict('os.environ', AI_ENV_VARS):
-            resp = client.get(f'/customer/{cid}')
+            resp = client.get(f'/engagement/{eid}')
         assert resp.status_code == 200
-        assert b'id="generateNotesBtn"' not in resp.data
+        assert b'id="generateStoryBtn"' not in resp.data

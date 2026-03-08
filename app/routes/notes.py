@@ -160,6 +160,7 @@ def note_create():
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
         partner_ids = request.form.getlist('partner_ids')
+        engagement_ids = request.form.getlist('engagement_ids')
         referrer = request.form.get('referrer', '')
         
         # Validation -- customer is optional for general notes
@@ -214,6 +215,14 @@ def note_create():
             partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
             note.partners.extend(partners)
         
+        # Add engagements
+        if engagement_ids:
+            from app.models import Engagement
+            engagements = Engagement.query.filter(
+                Engagement.id.in_([int(eid) for eid in engagement_ids])
+            ).all()
+            note.engagements.extend(engagements)
+        
         db.session.add(note)
         
         # Handle milestone and optional task creation (only for customer-linked notes)
@@ -263,6 +272,9 @@ def note_create():
     # Pre-select topic from query params
     preselect_topic_id = request.args.get('topic_id', type=int)
     
+    # Pre-select engagement from query params
+    preselect_engagement_id = request.args.get('engagement_id', type=int)
+    
     # Capture referrer for redirect after creation
     referrer = request.referrer or ''
     
@@ -301,6 +313,7 @@ def note_create():
                          preselect_customer_id=preselect_customer_id,
                          preselect_customer=preselect_customer,
                          preselect_topic_id=preselect_topic_id,
+                         preselect_engagement_id=preselect_engagement_id,
                          previous_calls=previous_calls,
                          referrer=referrer,
                          today=today,
@@ -330,6 +343,7 @@ def note_edit(id):
         content = request.form.get('content', '').strip()
         topic_ids = request.form.getlist('topic_ids')
         partner_ids = request.form.getlist('partner_ids')
+        engagement_ids = request.form.getlist('engagement_ids')
         
         # Validation -- customer is optional for general notes
         if not call_date_str:
@@ -368,6 +382,15 @@ def note_edit(id):
         if partner_ids:
             partners = Partner.query.filter(Partner.id.in_([int(pid) for pid in partner_ids])).all()
             note.partners = partners
+        
+        # Update engagements
+        note.engagements = []
+        if engagement_ids:
+            from app.models import Engagement
+            engagements = Engagement.query.filter(
+                Engagement.id.in_([int(eid) for eid in engagement_ids])
+            ).all()
+            note.engagements = engagements
         
         # Handle milestone and optional task creation (only for customer-linked notes)
         if customer_id:

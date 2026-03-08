@@ -110,6 +110,7 @@ def create_app():
     from app.routes.milestones import bp as milestones_bp
     from app.routes.msx import msx_bp
     from app.routes.opportunities import opportunities_bp
+    from app.routes.engagements import engagements_bp
     from app.routes.connect_export import connect_export_bp
     from app.routes.backup import backup_bp
     
@@ -128,6 +129,7 @@ def create_app():
     app.register_blueprint(milestones_bp)
     app.register_blueprint(msx_bp)
     app.register_blueprint(opportunities_bp)
+    app.register_blueprint(engagements_bp)
     app.register_blueprint(connect_export_bp)
     app.register_blueprint(backup_bp)
     

@@ -1048,14 +1048,14 @@ class TestRestoreAllRoute:
 
 
 # =========================================================================
-# Customer overview backup integration
+# Customer account context backup integration
 # =========================================================================
 
 class TestCustomerNotesBackupIntegration:
-    """Verify that customer overview changes trigger backup and restore correctly."""
+    """Verify that customer account context changes trigger backup and restore correctly."""
 
     def test_update_notes_triggers_backup(self, client, app, backup_dir, sample_data, monkeypatch):
-        """Saving customer overview should write a backup JSON file."""
+        """Saving customer account context should write a backup JSON file."""
         monkeypatch.setattr(
             "app.services.backup._load_db_backup_config",
             lambda: {"enabled": True, "backup_dir": backup_dir},
@@ -1063,7 +1063,7 @@ class TestCustomerNotesBackupIntegration:
 
         resp = client.post(
             f"/customer/{sample_data['customer1_id']}/overview",
-            data={"overview": "Key engagement notes for Acme"},
+            data={"account_context": "Key engagement notes for Acme"},
             headers={"X-Requested-With": "XMLHttpRequest"},
         )
         assert resp.status_code == 200
@@ -1074,7 +1074,7 @@ class TestCustomerNotesBackupIntegration:
 
         with open(filepath, "r") as f:
             backup = json.load(f)
-        assert backup["customer"]["overview"] == "Key engagement notes for Acme"
+        assert backup["customer"]["account_context"] == "Key engagement notes for Acme"
 
     def test_update_notes_backup_disabled(self, client, app, backup_dir, sample_data, monkeypatch):
         """No backup file when backup is disabled."""
@@ -1088,7 +1088,7 @@ class TestCustomerNotesBackupIntegration:
 
         resp = client.post(
             f"/customer/{sample_data['customer1_id']}/overview",
-            data={"overview": "Should not trigger backup"},
+            data={"account_context": "Should not trigger backup"},
             headers={"X-Requested-With": "XMLHttpRequest"},
         )
         assert resp.status_code == 200
@@ -1123,7 +1123,7 @@ class TestCustomerNotesBackupIntegration:
         assert backup["customer"]["name"] == "Acme Corp Updated"
 
     def test_restore_includes_notes(self, app):
-        """Restoring a backup with notes should set the customer overview field."""
+        """Restoring a backup with account_context should set the customer account_context field."""
         with app.app_context():
             from flask import g
             user = User.query.first()
@@ -1132,7 +1132,7 @@ class TestCustomerNotesBackupIntegration:
             customer = Customer(name="Notes Restore Corp", tpid=77777)
             db.session.add(customer)
             db.session.commit()
-            assert customer.overview is None
+            assert customer.account_context is None
 
             backup_data = {
                 "_notehelper_backup": True,
@@ -1149,14 +1149,14 @@ class TestCustomerNotesBackupIntegration:
             assert result["success"] is True
 
             db.session.refresh(customer)
-            assert customer.overview == "Restored engagement summary"
+            assert customer.account_context == "Restored engagement summary"
 
             # Cleanup
             db.session.delete(customer)
             db.session.commit()
 
     def test_restore_does_not_overwrite_existing_notes(self, app):
-        """Restoring should not overwrite notes if the customer already has them."""
+        """Restoring should not overwrite account_context if the customer already has it."""
         with app.app_context():
             from flask import g
             user = User.query.first()
@@ -1164,7 +1164,7 @@ class TestCustomerNotesBackupIntegration:
 
             customer = Customer(
                 name="Existing Notes Corp", tpid=88888,
-                overview="My existing notes",
+                account_context="My existing notes",
             )
             db.session.add(customer)
             db.session.commit()
@@ -1184,7 +1184,7 @@ class TestCustomerNotesBackupIntegration:
             assert result["success"] is True
 
             db.session.refresh(customer)
-            assert customer.overview == "My existing notes"
+            assert customer.account_context == "My existing notes"
 
             # Cleanup
             db.session.delete(customer)
@@ -1215,7 +1215,7 @@ class TestCustomerNotesBackupIntegration:
             assert result["success"] is True
 
             db.session.refresh(customer)
-            assert customer.overview is None
+            assert customer.account_context is None
 
             # Cleanup
             db.session.delete(customer)
