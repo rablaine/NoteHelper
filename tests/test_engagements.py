@@ -375,7 +375,7 @@ class TestCustomerViewEngagements:
         assert b'Active' in resp.data
 
     def test_customer_view_shows_metrics(self, client, app, engagement_data):
-        """Customer view should show key metrics row."""
+        """Customer view should show key essentials and engagement details."""
         cid = engagement_data['customer_id']
         with app.app_context():
             Engagement(customer_id=cid, title='Active 1', status='Active')
@@ -388,11 +388,10 @@ class TestCustomerViewEngagements:
 
         resp = client.get(f'/customer/{cid}')
         assert resp.status_code == 200
-        # Should show active engagements count and last contact
-        assert b'Active Engagements' in resp.data
+        # Should show essentials panel fields and engagements section
         assert b'Last Contact' in resp.data
-        assert b'Active Milestones' in resp.data
-        assert b'Opportunities' in resp.data
+        assert b'Engagements' in resp.data
+        assert b'Active 1' in resp.data
 
     def test_customer_view_empty_engagements_cta(self, client, app, engagement_data):
         """Customer view without engagements should show create CTA."""
