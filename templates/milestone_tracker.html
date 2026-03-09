@@ -723,14 +723,17 @@ document.getElementById('areaFilter').addEventListener('change', applyFilters);
 document.getElementById('myTeamFilter').addEventListener('change', applyFilters);
 document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
 
-// Restore saved filters and apply
-restoreFilters();
-applyFilters();
-
 // =============================================================================
 // Client-side Sorting
 // =============================================================================
 let currentSort = { column: 'monthly', direction: 'desc' };
+
+// Restore saved filters and apply
+restoreFilters();
+applyFilters();
+
+// Show initial sort indicator (default: monthly desc)
+updateSortIndicators();
 
 function sortTable(column) {
     const table = document.getElementById('milestonesTable');
