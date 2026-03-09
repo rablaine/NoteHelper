@@ -226,7 +226,7 @@ pytest --cov=app tests/  # with coverage
 - Safe to experiment and break things
 
 **Production Environment:**
-- Runs locally or on a server via `python run.py` or Gunicorn
+- Runs locally or on a server via `flask run` or Gunicorn
 - SQLite database (persisted in `data/` directory)
 - Real user data - handle with care
 

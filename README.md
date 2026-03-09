@@ -70,7 +70,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 5. **Start the server:**
 ```bash
-python run.py
+flask run
 ```
 
 6. **Visit** `http://localhost:5000` in your browser
