@@ -2014,9 +2014,19 @@
             setupCustomerSearchModal('quickNoteModal', 'customerSearch', 'customerResults', '{{ url_for("notes.note_create") }}?customer_id=', '{{ url_for("notes.note_create") }}');
             // Setup for customer lookup modal - goes directly to customer page
             setupCustomerSearchModal('quickCustomerLookupModal', 'customerLookupSearch', 'customerLookupResults', '{{ url_for("customers.customer_view", id=0) }}'.replace('/0', '/'));
+            // Setup for calendar quick-create modal (if present on page)
+            // Uses a dynamic URL suffix so the selected date is appended
+            var calendarDateSuffix = '';
+            window._quickCreateUpdateDate = function(dateStr) { calendarDateSuffix = '&date=' + dateStr; };
+            setupCustomerSearchModal(
+                'quickCreateModal', 'quickCreateSearch', 'quickCreateCustomerList',
+                '{{ url_for("notes.note_create") }}?customer_id=',
+                '{{ url_for("notes.note_create") }}',
+                function() { return calendarDateSuffix; }
+            );
         });
         
-        function setupCustomerSearchModal(modalId, searchInputId, resultsId, baseUrl, noCustomerUrl) {
+        function setupCustomerSearchModal(modalId, searchInputId, resultsId, baseUrl, noCustomerUrl, urlSuffixFn) {
             const customerSearch = document.getElementById(searchInputId);
             const customerResults = document.getElementById(resultsId);
             const modal = document.getElementById(modalId);
@@ -2026,9 +2036,11 @@
 
             function renderResults(customers){
                 let html = '';
+                const suffix = urlSuffixFn ? urlSuffixFn() : '';
                 // Show "Not Customer Associated" option at top for call log modal
                 if (noCustomerUrl) {
-                    html += `<a href="${noCustomerUrl}" class="list-group-item list-group-item-action list-group-item-light border-bottom-2"><i class="bi bi-journal-text text-secondary"></i> <em>Not Customer Associated</em> <span class="badge bg-secondary ms-2">General Note</span></a>`;
+                    const noCustomerSuffix = suffix ? (noCustomerUrl.includes('?') ? suffix : '?' + suffix.substring(1)) : '';
+                    html += `<a href="${noCustomerUrl}${noCustomerSuffix}" class="list-group-item list-group-item-action list-group-item-light border-bottom-2"><i class="bi bi-journal-text text-secondary"></i> <em>Not Customer Associated</em> <span class="badge bg-secondary ms-2">General Note</span></a>`;
                 }
                 if (customers.length === 0 && !noCustomerUrl) {
                     customerResults.innerHTML = '<div class="list-group-item text-muted">No customers found</div>';
@@ -2037,7 +2049,7 @@
                 html += customers.map(c => {
                     const displayName = c.nickname ? `${c.name} (${c.nickname})` : c.name;
                     const tpidBadge = c.tpid ? `<span class="badge bg-secondary ms-2">TPID: ${c.tpid}</span>` : '';
-                    return `<a href="${baseUrl}${c.id}" class="list-group-item list-group-item-action"><i class="bi bi-building"></i> ${displayName}${tpidBadge}</a>`;
+                    return `<a href="${baseUrl}${c.id}${suffix}" class="list-group-item list-group-item-action"><i class="bi bi-building"></i> ${displayName}${tpidBadge}</a>`;
                 }).join('');
                 customerResults.innerHTML = html;
             }

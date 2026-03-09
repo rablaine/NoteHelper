@@ -320,11 +320,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">Select a customer to create a note:</p>
-                <input type="text" class="form-control mb-3" id="quickCreateSearch" placeholder="Search customers...">
-                <div class="list-group" id="quickCreateCustomerList" style="max-height: 400px; overflow-y: auto;">
-                    <!-- Customer list will be populated here -->
+                <div class="mb-3">
+                    <label for="quickCreateSearch" class="form-label">Search for Customer</label>
+                    <input type="text" class="form-control" id="quickCreateSearch" placeholder="Search customers..." autocomplete="off">
                 </div>
+                <div id="quickCreateCustomerList" class="list-group" style="max-height: 400px; overflow-y: auto;"></div>
             </div>
         </div>
     </div>
@@ -333,90 +333,22 @@
 <script>
     // ===== QUICK CREATE FROM CALENDAR =====
     let quickCreateDate = null;
-    let quickCreateModal = null;
     
     function openQuickCreateModal(dateStr) {
-        // Lazily initialize modal
-        if (!quickCreateModal) {
-            quickCreateModal = new bootstrap.Modal(document.getElementById('quickCreateModal'));
-        }
         quickCreateDate = dateStr;
         // Format date for display
         const dateObj = new Date(dateStr + 'T00:00:00');
         const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
         document.getElementById('quickCreateDate').textContent = dateObj.toLocaleDateString('en-US', options);
         
-        // Load customers
-        loadQuickCreateCustomers();
-        quickCreateModal.show();
-        
-        // Focus search after modal opens
-        document.getElementById('quickCreateModal').addEventListener('shown.bs.modal', function() {
-            document.getElementById('quickCreateSearch').focus();
-        }, { once: true });
-    }
-    
-    function loadQuickCreateCustomers() {
-        const listEl = document.getElementById('quickCreateCustomerList');
-        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
-        
-        fetch('/api/customers')
-            .then(r => r.json())
-            .then(customers => {
-                renderQuickCreateCustomers(customers);
-            })
-            .catch(err => {
-                listEl.innerHTML = '<div class="alert alert-danger">Error loading customers</div>';
-            });
-    }
-    
-    function renderQuickCreateCustomers(customers, filter = '') {
-        const listEl = document.getElementById('quickCreateCustomerList');
-        listEl.innerHTML = '';
-        
-        const filtered = filter 
-            ? customers.filter(c => {
-                const q = filter.toLowerCase();
-                return c.name.toLowerCase().includes(q) ||
-                       (c.tpid && String(c.tpid).includes(q));
-            })
-            : customers;
-        
-        if (filtered.length === 0) {
-            listEl.innerHTML = '<div class="text-muted text-center py-3">No customers found</div>';
-            return;
+        // Update URLs on the shared picker to include the date parameter
+        if (window._quickCreateUpdateDate) {
+            window._quickCreateUpdateDate(dateStr);
         }
         
-        filtered.forEach(customer => {
-            const item = document.createElement('a');
-            item.href = `/note/new?customer_id=${customer.id}&date=${quickCreateDate}`;
-            item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-            item.innerHTML = `
-                <div>
-                    <strong>${customer.name}</strong>
-                    ${customer.territory ? `<small class="text-muted ms-2"><i class="bi bi-geo-alt"></i> ${customer.territory}</small>` : ''}
-                </div>
-                <i class="bi bi-chevron-right text-muted"></i>
-            `;
-            listEl.appendChild(item);
-        });
-        
-        // Store for filtering
-        listEl._allCustomers = customers;
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('quickCreateModal'));
+        modal.show();
     }
-    
-    // Search filter
-    document.getElementById('quickCreateSearch').addEventListener('input', function(e) {
-        const listEl = document.getElementById('quickCreateCustomerList');
-        if (listEl._allCustomers) {
-            renderQuickCreateCustomers(listEl._allCustomers, e.target.value);
-        }
-    });
-    
-    // Clear search when modal closes
-    document.getElementById('quickCreateModal').addEventListener('hidden.bs.modal', function() {
-        document.getElementById('quickCreateSearch').value = '';
-    });
     
     // ===== DRAFT MANAGEMENT =====
     const DRAFT_KEY_PREFIX = 'notehelper_draft_';
