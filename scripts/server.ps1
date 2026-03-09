@@ -485,9 +485,13 @@ if (-not $backupConfigExists -and -not $Force) {
             -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
         Unregister-ScheduledTask -TaskName $BackupTaskName -Confirm:$false -ErrorAction SilentlyContinue
 
+        # Try SYSTEM first (reliable on Entra ID cloud-joined machines, but needs admin).
+        # Fall back to Interactive if not elevated. Interactive works when the user is
+        # logged in, and StartWhenAvailable catches up on missed runs.
+        # NEVER use S4U — it silently fails on Entra-only accounts (no creds/profile).
         $taskRegistered = $false
         try {
-            $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+            $principal = New-ScheduledTaskPrincipal -UserId 'NT AUTHORITY\SYSTEM' -LogonType ServiceAccount -RunLevel Highest
             Register-ScheduledTask `
                 -TaskName $BackupTaskName -Action $action -Trigger $trigger `
                 -Principal $principal -Settings $settings `
@@ -495,6 +499,7 @@ if (-not $backupConfigExists -and -not $Force) {
                 -ErrorAction Stop | Out-Null
             $taskRegistered = $true
         } catch {
+            # SYSTEM requires admin — fall back to Interactive (runs when logged in)
             try {
                 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
                 Register-ScheduledTask `
@@ -548,9 +553,12 @@ if (-not $autoStartTask -and -not $Force) {
         -StartWhenAvailable `
         -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
 
+    # Use Interactive logon type directly. The AtLogOn trigger guarantees the
+    # user is logged in, so Interactive always works. S4U is unreliable on
+    # Entra ID / cloud-joined machines (no stored local credentials).
     $asRegistered = $false
     try {
-        $asPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+        $asPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
         Register-ScheduledTask `
             -TaskName $AutoStartTaskName -Action $asAction -Trigger $asTrigger `
             -Principal $asPrincipal -Settings $asSettings `
@@ -558,18 +566,8 @@ if (-not $autoStartTask -and -not $Force) {
             -ErrorAction Stop | Out-Null
         $asRegistered = $true
     } catch {
-        try {
-            $asPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-            Register-ScheduledTask `
-                -TaskName $AutoStartTaskName -Action $asAction -Trigger $asTrigger `
-                -Principal $asPrincipal -Settings $asSettings `
-                -Description 'Start NoteHelper web server automatically at login' `
-                -ErrorAction Stop | Out-Null
-            $asRegistered = $true
-        } catch {
-            Write-Host "  [WARNING] Could not register auto-start task: $_" -ForegroundColor Yellow
-            Write-Host "            You can still start manually with start.bat." -ForegroundColor Gray
-        }
+        Write-Host "  [WARNING] Could not register auto-start task: $_" -ForegroundColor Yellow
+        Write-Host "            You can still start manually with start.bat." -ForegroundColor Gray
     }
 
     if ($asRegistered) {

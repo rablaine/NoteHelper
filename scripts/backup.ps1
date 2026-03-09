@@ -257,6 +257,10 @@ function Run-Backup {
 
     try {
         Copy-Item $DbFile $backupFile -Force
+        # Copy-Item preserves the source file's LastWriteTime, so every backup
+        # would show the same modified timestamp. Touch it so the backup file's
+        # modification time reflects when the backup was actually taken.
+        (Get-Item $backupFile).LastWriteTime = Get-Date
         $size = (Get-Item $backupFile).Length
         $sizeMB = [math]::Round($size / 1MB, 1)
 
@@ -352,11 +356,13 @@ if ($Setup) {
     # Remove existing task if present
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
-    # Try S4U first (runs whether logged in or not, but requires admin)
-    # Fall back to Interactive (runs only when logged in, no admin needed)
+    # Try SYSTEM first (reliable on Entra ID cloud-joined machines, but needs admin).
+    # Fall back to Interactive if not elevated. Interactive works when the user is
+    # logged in, and StartWhenAvailable catches up on missed runs.
+    # NEVER use S4U — it silently fails on Entra-only accounts (no creds/profile).
     $registered = $false
     try {
-        $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+        $principal = New-ScheduledTaskPrincipal -UserId 'NT AUTHORITY\SYSTEM' -LogonType ServiceAccount -RunLevel Highest
         Register-ScheduledTask `
             -TaskName $TaskName `
             -Action $action `
@@ -366,10 +372,10 @@ if ($Setup) {
             -Description 'Daily backup of NoteHelper database to OneDrive' `
             -ErrorAction Stop | Out-Null
         $registered = $true
-        Write-Host "  [OK] Scheduled task '$TaskName' registered." -ForegroundColor Green
-        Write-Host "       Runs daily at 11:00 AM (even when logged out)." -ForegroundColor Gray
+        Write-Host "  [OK] Scheduled task '$TaskName' registered (runs as SYSTEM)." -ForegroundColor Green
+        Write-Host "       Runs daily at 11:00 AM." -ForegroundColor Gray
     } catch {
-        # S4U requires admin -- fall back to Interactive
+        # SYSTEM requires admin — fall back to Interactive (runs when logged in)
         try {
             $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
             Register-ScheduledTask `
@@ -381,8 +387,8 @@ if ($Setup) {
                 -Description 'Daily backup of NoteHelper database to OneDrive' `
                 -ErrorAction Stop | Out-Null
             $registered = $true
-            Write-Host "  [OK] Scheduled task '$TaskName' registered." -ForegroundColor Green
-            Write-Host "       Runs daily at 11:00 AM (while you're logged in)." -ForegroundColor Gray
+            Write-Host "  [OK] Scheduled task '$TaskName' registered (runs while logged in)." -ForegroundColor Green
+            Write-Host "       Runs daily at 11:00 AM. Tip: run setup as Admin for SYSTEM mode." -ForegroundColor Gray
         } catch {
             Write-Host "  [WARNING] Could not register scheduled task: $_" -ForegroundColor Yellow
             Write-Host "            You can still run backups manually with backup.bat" -ForegroundColor Gray
