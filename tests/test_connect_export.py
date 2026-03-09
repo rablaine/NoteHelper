@@ -780,41 +780,14 @@ class TestHelperFunctions:
 class TestAiSummaryEndpoint:
     """Tests for the AI summary generation endpoint."""
 
-    def test_ai_summary_requires_ai_enabled(self, client, app, monkeypatch):
-        """Should return 400 when AI is not configured."""
-        # Explicitly disable AI
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: False)
-        with app.app_context():
-            from app.models import ConnectExport, User, db
-            user = User.query.first()
-            export = ConnectExport(
-                name='AI Test',
-                start_date=date(2025, 1, 1),
-                end_date=date(2025, 6, 30),
-                note_count=0,
-                customer_count=0,
-            )
-            db.session.add(export)
-            db.session.commit()
-            export_id = export.id
-
-        response = client.post(f'/api/connect-export/{export_id}/ai-summary',
-                               content_type='application/json')
-        assert response.status_code == 400
-        data = response.get_json()
-        assert data['success'] is False
-        assert 'not configured' in data['error']
-
-    def test_ai_summary_nonexistent_export(self, client, app, monkeypatch):
+    def test_ai_summary_nonexistent_export(self, client, app):
         """Should return 404 for nonexistent export."""
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: True)
         response = client.post('/api/connect-export/99999/ai-summary',
                                content_type='application/json')
         assert response.status_code == 404
 
     def test_ai_summary_no_data(self, client, app, monkeypatch):
         """Should return 400 when export has no call log data."""
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: True)
         with app.app_context():
             from app.models import ConnectExport, User, db
             user = User.query.first()
@@ -837,7 +810,6 @@ class TestAiSummaryEndpoint:
 
     def test_ai_summary_success(self, client, app, sample_data, monkeypatch):
         """Should generate and cache AI summary successfully."""
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: True)
 
         # Mock the generate_ai_summary function
         mock_summary = (
@@ -915,7 +887,6 @@ class TestAiSummaryEndpoint:
 
     def test_ai_summary_handles_error(self, client, app, sample_data, monkeypatch):
         """Should return 500 and log failure when AI call fails."""
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: True)
         monkeypatch.setattr(
             'app.routes.connect_export.generate_ai_summary',
             lambda data, text: (_ for _ in ()).throw(
@@ -955,7 +926,6 @@ class TestAiSummaryEndpoint:
 
     def test_ai_summary_logs_success(self, client, app, sample_data, monkeypatch):
         """Should log successful AI query with token usage."""
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: True)
         monkeypatch.setattr(
             'app.routes.connect_export.generate_ai_summary',
             lambda data, text: ('## Summary\n- Done', {
@@ -998,18 +968,8 @@ class TestAiSummaryEndpoint:
 class TestAiEnabledInTemplate:
     """Tests for AI button visibility in the template."""
 
-    def test_ai_button_hidden_when_disabled(self, client, monkeypatch):
-        """AI Generate button should not appear when AI is not configured."""
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: False)
-        response = client.get('/connect-export')
-        assert response.status_code == 200
-        # The button element is inside {% if ai_enabled %} so it won't render,
-        # but the AI Summary card is always present (hidden). Check for button markup.
-        assert b'<button class="btn btn-primary btn-sm" id="aiGenerateBtn"' not in response.data
-
-    def test_ai_button_shown_when_enabled(self, client, monkeypatch):
-        """AI Generate button should appear when AI is configured."""
-        monkeypatch.setattr('app.routes.connect_export.is_ai_enabled', lambda: True)
+    def test_ai_button_always_shown(self, client):
+        """AI Generate button should always appear (AI is always enabled)."""
         response = client.get('/connect-export')
         assert response.status_code == 200
         assert b'AI Generate' in response.data

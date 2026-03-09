@@ -155,12 +155,6 @@
         [data-bs-theme="dark"] .btn-success {
             color: #fff !important;
         }
-        /* Setup Wizard amber button hover */
-        #rerunSetupBtn:hover {
-            background-color: #a67c00 !important;
-            border-color: #a67c00 !important;
-            cursor: pointer;
-        }
         [data-bs-theme="dark"] .btn-danger {
             background-color: #842029 !important;
             border-color: #842029 !important;
@@ -273,7 +267,7 @@
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
         <div class="container-fluid px-4">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
                 <img src="{{ url_for('static', filename='favicon.svg') }}" alt="NoteHelper" width="28" height="28" style="position:relative;top:1px;margin-right:2px;filter:drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);"><span class="ms-2">NoteHelper</span>
@@ -326,11 +320,6 @@
                     </li>
                 </ul>
                 <div class="d-flex align-items-center gap-2">
-                    {% if first_run_modal_dismissed and not has_customers %}
-                    <button class="btn btn-sm" id="rerunSetupBtn" title="Re-run setup wizard" style="background-color: #c49000; border-color: #c49000; color: #fff;">
-                        <i class="bi bi-rocket-takeoff"></i> Setup Wizard
-                    </button>
-                    {% endif %}
                     <button class="btn btn-outline-light" id="navQuickLookup" data-bs-toggle="modal" data-bs-target="#quickCustomerLookupModal" title="Quick customer lookup">
                         <i class="bi bi-building"></i>
                     </button>
@@ -518,7 +507,7 @@
 
                     <!-- STEP 1: Welcome + Dark Mode -->
                     <div class="onboarding-step" id="onboardingStep1">
-                        <p class="lead mb-3">Let's get you set up! This wizard will walk you through connecting to MSX and importing your data.</p>
+                        <p class="lead mb-3">Let's get you set up! This wizard will walk you through connecting to MSX, enabling AI-powered features, and importing your data.</p>
                         
                         <div class="card mb-3">
                             <div class="card-body">
@@ -539,86 +528,86 @@
                         </div>
                         
                         <div class="alert alert-info mb-0">
-                            <i class="bi bi-info-circle"></i> <strong>What's next:</strong> We'll connect to MSX to pull in your accounts, milestones, and get your revenue data ready.
+                            <i class="bi bi-info-circle"></i> <strong>What's next:</strong> We'll sign you in to Azure (which also enables AI features like topic suggestions and engagement summaries), then import your accounts, milestones, and revenue data.
                         </div>
                     </div>
 
-                    <!-- STEP 2: Authenticate with MSX -->
+                    <!-- STEP 2: Connect to MSX -->
                     <div class="onboarding-step d-none" id="onboardingStep2">
                         <h6 class="mb-3"><i class="bi bi-shield-lock text-primary"></i> Connect to MSX</h6>
-                        <p>NoteHelper uses your Azure credentials to access MSX data. Click below to connect your Microsoft account.</p>
-                        
+                        <p>Sign in to Azure to access MSX data and enable AI features.</p>
+
                         <div class="card mb-3">
-                            <div class="card-body text-center" id="authCard">
-                                <!-- Initial state: not checked yet -->
-                                <div id="authInitial">
-                                    <p class="mb-2">Click below to sign in to Azure.</p>
-                                    <p class="mb-3 small text-muted"><i class="bi bi-info-circle"></i> Make sure you select your <strong>Microsoft corporate account</strong> or authentication will fail.</p>
-                                    <button class="btn btn-primary btn-lg" id="onboardStartAuth">
-                                        <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
-                                    </button>
-                                </div>
-                                <!-- Waiting state: az login launched, polling -->
-                                <div id="authWaiting" class="d-none">
-                                    <div id="authBrowserHint" class="d-none">
-                                        <p class="mb-2 text-primary fw-bold">A browser window should open for sign-in.</p>
-                                        <p class="mb-2">Select your <strong>Microsoft corporate account</strong>. This page will update automatically.</p>
-                                    </div>
-                                    <p class="mb-2 small text-muted" id="authDetectNote"><i class="bi bi-info-circle"></i> It may take a few seconds to detect your sign-in.</p>
-                                    <div class="mb-3">
-                                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                                        <span class="text-muted ms-2" id="authWaitingStatus">Waiting for sign-in to complete...</span>
-                                    </div>
-                                    <div>
-                                        <button class="btn btn-outline-secondary btn-sm" id="authCancelBtn">
-                                            <i class="bi bi-x-circle"></i> Cancel
+                            <div class="card-body" id="authCard">
+                                <!-- Initial: show button -->
+                                <div id="signInInitial">
+                                    <p class="small text-muted mb-2"><i class="bi bi-info-circle"></i> A browser window will open. Select your <strong>Microsoft corporate account</strong> and approve the consent prompt.</p>
+                                    <div class="text-center">
+                                        <button class="btn btn-primary btn-lg" id="startSignInBtn">
+                                            <i class="bi bi-box-arrow-in-right"></i> Sign In to Azure
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Success state -->
-                                <div id="authSuccess" class="d-none">
-                                    <i class="bi bi-check-circle-fill text-success fs-1"></i>
-                                    <p class="mt-2 mb-0 fw-bold text-success">Connected to MSX!</p>
-                                    <small class="text-muted" id="authUserEmail"></small>
-                                    <p class="mt-2 mb-0 small text-muted" id="authAutoAdvance">Moving to next step...</p>
+
+                                <!-- Waiting: spinner + elapsed timer -->
+                                <div id="signInWaiting" class="d-none text-center">
+                                    <p class="mb-2 text-primary fw-bold" id="signInBrowserHint">Select your Microsoft corporate account, then approve the consent prompt.</p>
+                                    <p class="mb-2 small text-muted">This page will update automatically once you're signed in.</p>
+                                    <p class="mb-2 small text-warning d-none" id="signInConsentHint"><i class="bi bi-window-stack"></i> <strong>Still waiting?</strong> Try minimizing your foreground windows. The consent prompt may be behind them. Look for <strong>"Permissions requested"</strong> for <strong>NoteHelper-AI-Gateway</strong> (with the NoteHelper icon).</p>
+                                    <div class="mb-2">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                        <span class="text-muted ms-2" id="signInStatus">Waiting for sign-in...</span>
+                                    </div>
+                                    <button class="btn btn-outline-secondary btn-sm" id="signInCancelBtn">
+                                        <i class="bi bi-x-circle"></i> Cancel
+                                    </button>
                                 </div>
-                                <!-- Error/timeout state -->
-                                <div id="authError" class="d-none">
-                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
-                                    <p class="mt-2 mb-1 fw-bold text-warning" id="authErrorMessage">Authentication timed out</p>
+
+                                <!-- Success: signed in + AI enabled -->
+                                <div id="signInSuccess" class="d-none">
+                                    <div class="d-flex align-items-center text-success mb-2">
+                                        <i class="bi bi-check-circle-fill fs-5 me-2"></i>
+                                        <div>
+                                            <span class="fw-bold">Signed in</span>
+                                            <small class="text-muted ms-2" id="signInEmail"></small>
+                                        </div>
+                                    </div>
+                                    <div id="signInAiStatus"></div>
+                                </div>
+
+                                <!-- VPN blocked after sign-in -->
+                                <div id="signInVpnBlocked" class="d-none">
+                                    <div class="d-flex align-items-center text-success mb-2">
+                                        <i class="bi bi-check-circle-fill fs-5 me-2"></i>
+                                        <span class="fw-bold">Signed in</span>
+                                        <small class="text-muted ms-2" id="signInVpnEmail"></small>
+                                    </div>
+                                    <div class="alert alert-warning py-2 mb-2">
+                                        <i class="bi bi-wifi-off"></i> <strong>VPN Required</strong> -- Connect to corpnet to reach MSX, then try again.
+                                    </div>
+                                    <button class="btn btn-outline-primary btn-sm" id="vpnRetryBtn">
+                                        <i class="bi bi-arrow-clockwise"></i> I'm on VPN -- Try Again
+                                    </button>
+                                </div>
+
+                                <!-- Error -->
+                                <div id="signInError" class="d-none text-center">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning fs-3"></i>
+                                    <p class="mt-2 mb-1 fw-bold text-warning" id="signInErrorMsg">Authentication timed out</p>
                                     <p class="small text-muted mb-2">Make sure you selected your Microsoft corporate account and try again.</p>
-                                    <button class="btn btn-primary btn-sm" id="authRetry">
+                                    <button class="btn btn-primary btn-sm" id="signInRetryBtn">
                                         <i class="bi bi-arrow-clockwise"></i> Try Again
                                     </button>
                                 </div>
-                                <!-- Authenticated but VPN blocked -->
-                                <div id="authVpnBlocked" class="d-none">
-                                    <div id="authVpnSignedIn" class="mb-2 d-none">
-                                        <i class="bi bi-check-circle-fill text-success"></i>
-                                        <span class="small text-success fw-bold">Signed in</span>
-                                    </div>
-                                    <i class="bi bi-wifi-off text-muted fs-1"></i>
-                                    <p class="mt-2 mb-1 fw-bold">VPN Required</p>
-                                    <p class="small text-muted mb-2">Connect to corpnet to reach MSX, then try again.</p>
-                                    <button class="btn btn-outline-primary btn-sm" id="authVpnRetry">
-                                        <i class="bi bi-arrow-clockwise"></i> I'm on VPN - Try Again
-                                    </button>
-                                </div>
-                                <!-- CLI not installed -->
-                                <div id="authNoCli" class="d-none">
-                                    <i class="bi bi-exclamation-triangle-fill text-danger fs-1"></i>
+
+                                <!-- No CLI -->
+                                <div id="signInNoCli" class="d-none text-center">
+                                    <i class="bi bi-exclamation-triangle-fill text-danger fs-3"></i>
                                     <p class="mt-2 mb-1 fw-bold text-danger">Azure CLI Not Installed</p>
-                                    <p class="text-muted">Install Azure CLI from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then try again.</p>
-                                    <button class="btn btn-outline-primary btn-sm" id="authRetryNoCli">
+                                    <p class="text-muted">Install from <a href="https://aka.ms/installazurecli" target="_blank">aka.ms/installazurecli</a>, then try again.</p>
+                                    <button class="btn btn-outline-primary btn-sm" id="signInNoCliRetryBtn">
                                         <i class="bi bi-arrow-clockwise"></i> Check Again
                                     </button>
-                                </div>
-                                <!-- Already authenticated state -->
-                                <div id="authAlready" class="d-none">
-                                    <i class="bi bi-check-circle-fill text-success fs-1"></i>
-                                    <p class="mt-2 mb-0 fw-bold text-success">Already connected to MSX!</p>
-                                    <small class="text-muted">Your existing session is still active.</small>
-                                    <p class="mt-2 mb-0 small text-muted">Moving to next step...</p>
                                 </div>
                             </div>
                         </div>
@@ -626,7 +615,7 @@
 
                     <!-- STEP 3: Import Accounts -->
                     <div class="onboarding-step d-none" id="onboardingStep3">
-                        <h6 class="mb-3"><i class="bi bi-building text-primary"></i> Import Your Accounts <span class="text-muted fw-normal">(~3 min)</span></h6>
+                        <h6 class="mb-3"><i class="bi bi-building text-primary"></i> Import Your Accounts <span class="text-muted fw-normal">(~1–2 min)</span></h6>
                         <p>We'll import your customer accounts, territories, sellers, and POD members from MSX.</p>
                         
                         <p class="small text-muted mb-3"><i class="bi bi-shield-lock me-1"></i>Requires VPN. If you get disconnected, just reconnect and retry.</p>
@@ -702,7 +691,7 @@
 
                     <!-- STEP 4: Import Milestones -->
                     <div class="onboarding-step d-none" id="onboardingStep4">
-                        <h6 class="mb-3"><i class="bi bi-flag text-primary"></i> Import Milestones <span class="text-muted fw-normal">(~6 min)</span></h6>
+                        <h6 class="mb-3"><i class="bi bi-flag text-primary"></i> Import Milestones <span class="text-muted fw-normal">(~2 min)</span></h6>
                         <p>Now let's pull in your milestone data from MSX. This syncs milestone status for all your accounts.</p>
                         
                         <p class="small text-muted mb-3"><i class="bi bi-shield-lock me-1"></i>Requires VPN. If you get disconnected, just reconnect and retry.</p>
@@ -781,7 +770,7 @@
 
                     <!-- STEP 5: Revenue & Finish -->
                     <div class="onboarding-step d-none" id="onboardingStep5">
-                        <h6 class="mb-3"><i class="bi bi-graph-up text-primary"></i> One More Thing: Revenue Data <span class="text-muted fw-normal">(~1 min)</span></h6>
+                        <h6 class="mb-3"><i class="bi bi-graph-up text-primary"></i> One More Thing: Revenue Data <span class="text-muted fw-normal">(~10 sec)</span></h6>
                         <p>Importing revenue data powers the Revenue Analyzer — trend charts, service breakdowns, and growth tracking for your accounts.</p>
                         
                         <div class="card mb-3 border-primary">
@@ -833,8 +822,7 @@
                                     <div id="importRevenueSummary" class="small text-muted"></div>
                                     <div class="alert alert-info mt-3 mb-0 py-2 small text-start">
                                         <i class="bi bi-lightbulb text-warning"></i>
-                                        <strong>Tip:</strong> Want AI-powered suggestions and auto-summaries? Set up Azure OpenAI in your environment.
-                                        <a href="https://github.com/rablaine/NoteHelper#ai-features-optional" target="_blank">See setup instructions <i class="bi bi-box-arrow-up-right"></i></a>
+                                        <strong>Tip:</strong> AI-powered suggestions and auto-summaries are ready to use! Check the Admin Panel to manage AI settings.
                                     </div>
                                 </div>
 
@@ -852,13 +840,10 @@
                         <p class="small text-muted mb-0"><i class="bi bi-info-circle"></i> Optional — you can do this anytime from the Revenue Analyzer.</p>
                     </div>
 
+
+
                 </div>
-                <div class="modal-footer d-flex justify-content-between">
-                    <div class="d-flex align-items-center">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="onboardSkipBtn">
-                            Skip setup - I'll do this later
-                        </button>
-                    </div>
+                <div class="modal-footer d-flex justify-content-end">
                     <div>
                         <button type="button" class="btn btn-secondary d-none" id="onboardBackBtn">
                             <i class="bi bi-arrow-left"></i> Back
@@ -949,18 +934,18 @@
                 let authCompleted = false;
                 let vpnVerified = false;
                 // Pre-set import state from server-side data
-                let accountsImported = {{ 'true' if has_customers else 'false' }};
+                let accountsImported = {{ 'true' if accounts_synced else 'false' }};
                 let milestonesImported = {{ 'true' if has_milestones else 'false' }};
                 let revenueImported = {{ 'true' if has_revenue else 'false' }};
+                let aiEnabled = true;
                 const milestonesSyncState = '{{ milestones_sync_state }}';
                 const revenueSyncState = '{{ revenue_sync_state }}';
-                let authPollTimer = null;
 
                 const stepBadge = document.getElementById('onboardingStepBadge');
                 const progressBar = document.getElementById('onboardingProgress');
                 const nextBtn = document.getElementById('onboardNextBtn');
                 const backBtn = document.getElementById('onboardBackBtn');
-                const skipBtn = document.getElementById('onboardSkipBtn');
+
 
                 function showStep(step) {
                     currentStep = step;
@@ -969,9 +954,9 @@
                     // Show current
                     const el = document.getElementById('onboardingStep' + step);
                     if (el) el.classList.remove('d-none');
-                    // Update badge and progress (weighted: 5%, 15%, 35%, 35%, 10%)
+                    // Update badge and progress (weighted: 5%, 15%, 40%, 25%, 15%)
                     stepBadge.textContent = 'Step ' + step + ' of ' + totalSteps;
-                    const stepProgress = {1: 0, 2: 5, 3: 20, 4: 55, 5: 90};
+                    const stepProgress = {1: 0, 2: 5, 3: 20, 4: 55, 5: 80};
                     progressBar.style.width = stepProgress[step] + '%';
 
                     // Back button visibility
@@ -982,16 +967,6 @@
                         nextBtn.innerHTML = '<i class="bi bi-check-lg"></i> Finish';
                     } else {
                         nextBtn.innerHTML = 'Next <i class="bi bi-arrow-right"></i>';
-                    }
-                    // Update skip button text once core import is done
-                    if (step === totalSteps) {
-                        skipBtn.classList.add('d-none');
-                    } else if (step >= 4 && accountsImported) {
-                        skipBtn.classList.remove('d-none');
-                        skipBtn.textContent = 'Done - skip remaining steps';
-                    } else {
-                        skipBtn.classList.remove('d-none');
-                        skipBtn.textContent = 'Skip setup - I\'ll do this later';
                     }
                     // Show "already completed" state if navigating to a previously-done step
                     if (step === 3 && accountsImported) {
@@ -1008,8 +983,6 @@
                     }
                     // Disable next if step requires completion
                     updateNextButton();
-                    // Auto-check auth status on step 2
-                    if (step === 2) checkExistingAuth();
                 }
 
                 function setWizardProgress(pct) {
@@ -1057,8 +1030,8 @@
                     } else {
                         nextBtn.disabled = false;
                     }
-                    // Show Skip button on step 4 (milestones) and step 5 (revenue) when not yet done
-                    if ((currentStep === 4 && !milestonesImported) || (currentStep === 5 && !revenueImported)) {
+                    // Show Skip button on step 5 (revenue) only when not yet done
+                    if (currentStep === 5 && !revenueImported) {
                         skipStepBtn.classList.remove('d-none');
                     } else {
                         skipStepBtn.classList.add('d-none');
@@ -1069,7 +1042,8 @@
                 function nextIncompleteStep() {
                     if (!accountsImported) return 3;
                     if (!milestonesImported) return 4;
-                    return 5;  // Revenue is always the last stop
+                    if (!revenueImported) return 5;
+                    return 5;  // Revenue is the last step
                 }
 
                 nextBtn.addEventListener('click', async () => {
@@ -1086,13 +1060,6 @@
 
                 backBtn.addEventListener('click', () => {
                     if (currentStep > 1) showStep(currentStep - 1);
-                });
-
-                skipBtn.addEventListener('click', async () => {
-                    skipBtn.blur();
-                    await dismissOnboarding();
-                    modal.hide();
-                    window.location.reload();
                 });
 
                 async function dismissOnboarding() {
@@ -1130,250 +1097,188 @@
                 }
 
                 // --- Step 2: Authentication ---
-                async function checkExistingAuth() {
-                    try {
-                        // Check current auth status
-                        const resp = await fetch('/api/msx/status');
-                        const data = await resp.json();
+                const SIGN_IN_TIMEOUT_MS = 120000;  // 2 min total timeout
+                const CONSENT_HINT_DELAY = 5;       // seconds before showing "look under windows" hint
+                let signInPollTimer = null;
+                let wizardElapsedTimer = null;
 
-                        if (data.authenticated) {
-                            // Auth is done — now actively test VPN by hitting CRM.
-                            // Auth works off-VPN (Azure AD is public), but MSX CRM needs VPN.
-                            authCompleted = true;
-                            updateNextButton();
-
-                            // Show brief "Verifying..." while we test CRM connectivity
-                            const statusEl = document.getElementById('authWaitingStatus');
-                            if (statusEl) statusEl.textContent = 'Verifying MSX connection...';
-                            showAuthState('authWaiting');
-
-                            try {
-                                const vpnResp = await fetch('/api/msx/vpn-check', { method: 'POST' });
-                                const vpnData = await vpnResp.json();
-                                if (!vpnData.success) {
-                                    if (window.showVpnBanner) window.showVpnBanner();
-                                    showAuthState('authVpnBlocked');
-                                    return;
-                                }
-                                if (window.hideVpnBanner) window.hideVpnBanner();
-                            } catch (e) {
-                                // Network error testing VPN — treat as blocked
-                                showAuthState('authVpnBlocked');
-                                return;
-                            }
-
-                            vpnVerified = true;
-                            updateNextButton();
-                            showAuthState('authAlready');
-                            // Only auto-advance if user already completed a later step
-                            // (i.e. navigating back). For first-time wizard, let them click Next.
-                            if (accountsImported || milestonesImported || revenueImported) {
-                                setTimeout(() => {
-                                    if (currentStep === 2) showStep(nextIncompleteStep());
-                                }, 2000);
-                            }
-                            return;
-                        }
-
-                        // Not authenticated — check if VPN is known-blocked before attempting auth
-                        if (data.vpn_blocked) {
-                            showAuthState('authVpnBlocked');
-                            return;
-                        }
-
-                        // Then check if az CLI is logged in (even without cached token)
-                        const azResp = await fetch('/api/msx/az-status');
-                        const azData = await azResp.json();
-                        if (!azData.az_installed) {
-                            showAuthState('authNoCli');
-                        }
-                        // If az is logged in but no CRM token, just show the button —
-                        // let the user click "Sign in with Azure" themselves.
-                    } catch (err) {
-                        console.error('Failed to check auth status:', err);
-                    }
-                }
-
-                function showAuthState(stateId) {
-                    ['authInitial', 'authWaiting', 'authSuccess', 'authError', 'authNoCli', 'authAlready', 'authVpnBlocked'].forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el) el.classList.add('d-none');
-                    });
-                    document.getElementById(stateId).classList.remove('d-none');
-                    // Toggle "Signed in" badge inside VPN-blocked state
-                    const signedInBadge = document.getElementById('authVpnSignedIn');
-                    if (signedInBadge) {
-                        signedInBadge.classList.toggle('d-none', !(stateId === 'authVpnBlocked' && authCompleted));
-                    }
-                }
-
-                const AUTH_POLL_TIMEOUT_MS = 20000; // 20 seconds
-                let authPollStartTime = null;
-                let authElapsedTimer = null;
-                let authLoginHandled = false; // prevent duplicate completeAzLogin calls
-
-                async function startAzLogin() {
-                    showAuthState('authWaiting');
-                    authLoginHandled = false;
-                    const statusEl = document.getElementById('authWaitingStatus');
-                    // Hide browser hint until we know we need az login
-                    const browserHint = document.getElementById('authBrowserHint');
-                    if (browserHint) browserHint.classList.add('d-none');
-
-                    try {
-                        // First check if az CLI is already logged in — skip browser popup if so
-                        if (statusEl) statusEl.textContent = 'Checking existing session...';
-                        const azResp = await fetch('/api/msx/az-status');
-                        const azData = await azResp.json();
-                        if (azData.logged_in) {
-                            // Already signed in — go straight to token acquisition
-                            await completeAzLogin(azData.user_email);
-                            return;
-                        }
-                    } catch (e) {
-                        // Couldn't check — fall through to full az login
-                    }
-
-                    // Not logged in — launch browser sign-in
-                    if (statusEl) statusEl.textContent = 'Waiting for sign-in to complete...';
+                async function startSignIn() {
+                    signInCompleting = false;
+                    showSignInState('signInWaiting');
+                    const statusEl = document.getElementById('signInStatus');
+                    const browserHint = document.getElementById('signInBrowserHint');
+                    const consentHint = document.getElementById('signInConsentHint');
+                    if (consentHint) consentHint.classList.add('d-none');
                     if (browserHint) browserHint.classList.remove('d-none');
 
+                    // Step 1: Clear any existing session for a clean start
+                    if (statusEl) statusEl.textContent = 'Preparing...';
                     try {
-                        const resp = await fetch('/api/msx/az-login/start', { method: 'POST' });
+                        await fetch('/api/msx/az-logout', { method: 'POST' });
+                    } catch (e) { /* continue */ }
+
+                    // Step 2: Launch az login with consent scope
+                    try {
+                        const resp = await fetch('/api/msx/az-login/start', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ scope: 'api://0f6db4af-332c-4fd5-b894-77fadb181e5c/.default' })
+                        });
                         const data = await resp.json();
                         if (data.error) {
-                            document.getElementById('authErrorMessage').textContent = data.error;
-                            showAuthState('authError');
+                            if (data.error.toLowerCase().includes('not installed')) {
+                                showSignInState('signInNoCli');
+                            } else {
+                                document.getElementById('signInErrorMsg').textContent = data.error;
+                                showSignInState('signInError');
+                            }
                             return;
                         }
-                        // Start polling for login completion
-                        pollAzLoginStatus();
                     } catch (err) {
-                        document.getElementById('authErrorMessage').textContent = 'Could not start sign-in';
-                        showAuthState('authError');
+                        document.getElementById('signInErrorMsg').textContent = 'Could not start sign-in';
+                        showSignInState('signInError');
+                        return;
                     }
-                }
 
-                function cancelAzLogin() {
-                    if (authPollTimer) { clearInterval(authPollTimer); authPollTimer = null; }
-                    if (authElapsedTimer) { clearInterval(authElapsedTimer); authElapsedTimer = null; }
-                    authLoginHandled = false;
-                    showAuthState('authInitial');
-                }
+                    // Step 3: Poll for login completion
+                    const startTime = Date.now();
+                    if (statusEl) statusEl.textContent = 'Waiting for sign-in...';
 
-                function pollAzLoginStatus() {
-                    if (authPollTimer) clearInterval(authPollTimer);
-                    if (authElapsedTimer) clearInterval(authElapsedTimer);
-                    authPollStartTime = Date.now();
-
-                    // Update elapsed time display every second
-                    const statusEl = document.getElementById('authWaitingStatus');
-                    authElapsedTimer = setInterval(() => {
-                        const elapsed = Math.round((Date.now() - authPollStartTime) / 1000);
+                    wizardElapsedTimer = setInterval(() => {
+                        const elapsed = Math.round((Date.now() - startTime) / 1000);
                         if (statusEl) statusEl.textContent = 'Waiting for sign-in... (' + elapsed + 's)';
+                        if (elapsed >= CONSENT_HINT_DELAY && consentHint) consentHint.classList.remove('d-none');
                     }, 1000);
 
-                    // Poll az account show every 1.5s. If the user signed in
-                    // with the right Microsoft account, this picks it up in
-                    // ~3-5 seconds. If 15s passes, something went wrong.
-                    authPollTimer = setInterval(async () => {
-                        // Timeout check
-                        if (Date.now() - authPollStartTime > AUTH_POLL_TIMEOUT_MS) {
-                            clearInterval(authPollTimer); authPollTimer = null;
-                            clearInterval(authElapsedTimer); authElapsedTimer = null;
-                            document.getElementById('authErrorMessage').textContent =
-                                'Authentication timed out';
-                            showAuthState('authError');
+                    signInPollTimer = setInterval(async () => {
+                        if (Date.now() - startTime > SIGN_IN_TIMEOUT_MS) {
+                            clearWizardTimers();
+                            document.getElementById('signInErrorMsg').textContent = 'Authentication timed out';
+                            showSignInState('signInError');
                             return;
                         }
-                        // Guard: skip if we already handled a successful login
-                        if (authLoginHandled) return;
                         try {
                             const resp = await fetch('/api/msx/az-status');
                             const data = await resp.json();
-                            if (authLoginHandled) return; // re-check after await
                             if (data.logged_in) {
-                                authLoginHandled = true;
-                                clearInterval(authPollTimer); authPollTimer = null;
-                                clearInterval(authElapsedTimer); authElapsedTimer = null;
-                                await completeAzLogin(data.user_email);
+                                clearWizardTimers();
+                                if (statusEl) statusEl.textContent = 'Verifying MSX connection...';
+                                if (browserHint) browserHint.classList.add('d-none');
+                                if (consentHint) consentHint.classList.add('d-none');
+                                await completeSignIn(data.user_email);
                             }
-                        } catch (err) {
-                            console.error('Auth poll error:', err);
-                        }
-                    }, 1500);
+                        } catch (err) { /* keep polling */ }
+                    }, 1000);
                 }
 
-                async function completeAzLogin(userEmail) {
-                    // Show a brief "Connecting..." state while we grab the CRM token
-                    const statusEl = document.getElementById('authWaitingStatus');
-                    if (statusEl) statusEl.textContent = 'Connecting to MSX...';
-                    showAuthState('authWaiting');
+                let signInCompleting = false;
+                async function completeSignIn(email) {
+                    if (signInCompleting) return;  // prevent duplicate calls from overlapping poll ticks
+                    signInCompleting = true;
+
+                    // Set subscription, kill az login process, clear gateway cache
                     try {
-                        // Tell backend to set subscription + refresh CRM token
-                        const resp = await fetch('/api/msx/az-login/complete', { method: 'POST' });
-                        const data = await resp.json();
-                        if (data.success) {
-                            authCompleted = true;
-                            const emailEl = document.getElementById('authUserEmail');
-                            const email = userEmail || data.user_email;
-                            if (emailEl && email) emailEl.textContent = 'Signed in as ' + email;
-                            updateNextButton();
+                        await fetch('/api/msx/az-login/complete', { method: 'POST' });
+                    } catch (e) { /* continue */ }
 
-                            // Auth succeeded — actively test VPN by hitting CRM.
-                            const waitEl = document.getElementById('authWaitingStatus');
-                            if (waitEl) waitEl.textContent = 'Verifying MSX connection...';
-
-                            try {
-                                const vpnResp = await fetch('/api/msx/vpn-check', { method: 'POST' });
-                                const vpnData = await vpnResp.json();
-                                if (!vpnData.success) {
-                                    if (window.showVpnBanner) window.showVpnBanner();
-                                    showAuthState('authVpnBlocked');
-                                    return;
-                                }
-                                if (window.hideVpnBanner) window.hideVpnBanner();
-                            } catch (e) {
-                                showAuthState('authVpnBlocked');
-                                return;
-                            }
-
-                            vpnVerified = true;
-                            updateNextButton();
-                            showAuthState('authSuccess');
-                            // Auto-advance past completed steps
-                            setTimeout(() => {
-                                if (currentStep === 2) showStep(nextIncompleteStep());
-                            }, 2000);
-                        } else {
-                            document.getElementById('authErrorMessage').textContent = data.error || 'Failed to get CRM token';
-                            showAuthState('authError');
+                    // VPN check
+                    try {
+                        const vpnResp = await fetch('/api/msx/vpn-check', { method: 'POST' });
+                        const vpnData = await vpnResp.json();
+                        if (!vpnData.success) {
+                            if (window.showVpnBanner) window.showVpnBanner();
+                            const emailEl = document.getElementById('signInVpnEmail');
+                            if (emailEl && email) emailEl.textContent = email;
+                            showSignInState('signInVpnBlocked');
+                            return;
                         }
-                    } catch (err) {
-                        document.getElementById('authErrorMessage').textContent = 'Failed to complete sign-in';
-                        showAuthState('authError');
+                        if (window.hideVpnBanner) window.hideVpnBanner();
+                    } catch (e) {
+                        showSignInState('signInVpnBlocked');
+                        return;
+                    }
+
+                    // Auth + VPN verified
+                    authCompleted = true;
+                    vpnVerified = true;
+
+                    const emailEl = document.getElementById('signInEmail');
+                    if (emailEl && email) emailEl.textContent = email;
+
+                    // Try to enable AI (consent may have been granted during login)
+                    const aiStatusEl = document.getElementById('signInAiStatus');
+                    try {
+                        await fetch('/api/admin/ai-clear-cache', { method: 'POST' });
+                        const grantResp = await fetch('/api/admin/ai-enable', { method: 'POST' });
+                        const grantData = await grantResp.json();
+                        if (grantData.success && grantData.ai_enabled) {
+                            aiEnabled = true;
+                            if (aiStatusEl) aiStatusEl.innerHTML = '<div class="d-flex align-items-center text-success"><i class="bi bi-check-circle-fill fs-5 me-2"></i><span class="fw-bold"><i class="bi bi-stars text-warning"></i> AI features enabled</span></div>';
+                        } else {
+                            if (aiStatusEl) aiStatusEl.innerHTML = '<div class="d-flex align-items-center text-muted"><i class="bi bi-dash-circle fs-5 me-2"></i><span>AI consent not granted. Enable anytime from the Admin Panel.</span></div>';
+                        }
+                    } catch (e) {
+                        if (aiStatusEl) aiStatusEl.innerHTML = '<div class="d-flex align-items-center text-muted"><i class="bi bi-dash-circle fs-5 me-2"></i><span>Could not check AI status. Enable from the Admin Panel.</span></div>';
+                    }
+
+                    showSignInState('signInSuccess');
+                    nextBtn.innerHTML = 'Next <i class="bi bi-arrow-right"></i>';
+                    nextBtn.disabled = false;
+
+                    // Auto-advance for returning users who already have data
+                    if (accountsImported || milestonesImported || revenueImported) {
+                        setTimeout(() => {
+                            if (currentStep === 2) showStep(nextIncompleteStep());
+                        }, 2000);
                     }
                 }
 
-                document.getElementById('onboardStartAuth').addEventListener('click', startAzLogin);
-                document.getElementById('authRetry').addEventListener('click', startAzLogin);
-                document.getElementById('authCancelBtn').addEventListener('click', cancelAzLogin);
-                const retryNoCliBtn = document.getElementById('authRetryNoCli');
-                if (retryNoCliBtn) retryNoCliBtn.addEventListener('click', checkExistingAuth);
-                const vpnRetryBtn = document.getElementById('authVpnRetry');
-                if (vpnRetryBtn) vpnRetryBtn.addEventListener('click', async () => {
-                    vpnRetryBtn.disabled = true;
-                    vpnRetryBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking...';
+                function cancelSignIn() {
+                    signInCompleting = false;
+                    clearWizardTimers();
+                    // Kill any lingering az login process
+                    fetch('/api/msx/az-login/complete', { method: 'POST' }).catch(() => {});
+                    showSignInState('signInInitial');
+                    nextBtn.innerHTML = 'Next <i class="bi bi-arrow-right"></i>';
+                    nextBtn.disabled = true;
+                }
+
+                function clearWizardTimers() {
+                    if (signInPollTimer) { clearInterval(signInPollTimer); signInPollTimer = null; }
+                    if (wizardElapsedTimer) { clearInterval(wizardElapsedTimer); wizardElapsedTimer = null; }
+                }
+
+                function showSignInState(stateId) {
+                    ['signInInitial', 'signInWaiting', 'signInSuccess', 'signInError', 'signInNoCli', 'signInVpnBlocked'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.classList.toggle('d-none', id !== stateId);
+                    });
+                }
+
+                // Step 2 event listeners
+                document.getElementById('startSignInBtn').addEventListener('click', startSignIn);
+                document.getElementById('signInRetryBtn').addEventListener('click', startSignIn);
+                document.getElementById('signInCancelBtn').addEventListener('click', cancelSignIn);
+                document.getElementById('signInNoCliRetryBtn').addEventListener('click', startSignIn);
+                document.getElementById('vpnRetryBtn').addEventListener('click', async () => {
+                    const btn = document.getElementById('vpnRetryBtn');
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking...';
                     try {
                         const resp = await fetch('/api/msx/vpn-check', { method: 'POST' });
                         const data = await resp.json();
-                        if (data.success && window.hideVpnBanner) {
-                            window.hideVpnBanner();
+                        if (data.success) {
+                            if (window.hideVpnBanner) window.hideVpnBanner();
+                            // Re-run the full sign-in check
+                            const azResp = await fetch('/api/msx/az-status');
+                            const azData = await azResp.json();
+                            if (azData.logged_in) {
+                                await completeSignIn(azData.user_email);
+                            }
                         }
                     } catch (e) { /* ignore */ }
-                    vpnRetryBtn.disabled = false;
-                    vpnRetryBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> I\'m on VPN - Try Again';
-                    checkExistingAuth();
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> I\'m on VPN -- Try Again';
                 });
 
                 // --- Step 3: Import Accounts ---
@@ -1747,7 +1652,7 @@
                                 '</ul>';
                         }
                         showRevenueState('Success');
-                        setWizardProgress(100);
+                        setWizardProgress(90);
                         updateNextButton();
                     } catch (err) {
                         const msg = err.message || 'Connection error during import';
@@ -1766,6 +1671,8 @@
                 });
                 document.getElementById('importRevenueRetry').addEventListener('click', () => revenueFileInput.click());
 
+
+
                 // --- Wizard Initialization: detect progress and resume at correct step ---
                 async function initWizard() {
                     let startStep = 1;
@@ -1782,7 +1689,9 @@
                             // Auth check failed — fall through to step 1 or 2
                         }
 
-                        if (authCompleted && accountsImported && milestonesImported) {
+                        if (authCompleted && accountsImported && milestonesImported && revenueImported) {
+                            startStep = 5;
+                        } else if (authCompleted && accountsImported && milestonesImported) {
                             startStep = 5;
                         } else if (authCompleted && accountsImported) {
                             startStep = 4;
@@ -2053,22 +1962,6 @@
             });
         })();
 
-        // Re-run Setup Wizard button
-        const rerunBtn = document.getElementById('rerunSetupBtn');
-        if (rerunBtn) {
-            rerunBtn.addEventListener('click', async () => {
-                try {
-                    await fetch('/api/preferences/reset-onboarding', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    window.location.reload();
-                } catch (err) {
-                    console.error('Failed to reset onboarding:', err);
-                }
-            });
-        }
-        
         // Dark Mode Toggle (only if it exists in menu)
         const darkModeToggle = document.getElementById('darkModeToggle');
         const darkModeIcon = document.getElementById('darkModeIcon');

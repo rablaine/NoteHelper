@@ -81,11 +81,11 @@
             </div>
         </div>
 
-        <!-- MSX Integration + AI Integration side by side -->
+        <!-- MSX Integration + Updates / Favicons side by side -->
         <div class="row mb-4">
             <div class="col-md-6 d-flex flex-column mb-4 mb-md-0">
                 <!-- MSX Integration -->
-                <div class="card mb-4">
+                <div class="card flex-grow-1">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-link-45deg"></i> MSX Integration</h5>
                     </div>
@@ -207,8 +207,29 @@
 
                     </div>
                 </div>
+            </div>
+            <div class="col-md-6 d-flex flex-column">
+                <!-- Update Check -->
+                <div class="card mb-4{{ ' border-danger' if update_available else '' }}" id="updateCheckCard">
+                    <div class="card-header{{ ' bg-danger text-white' if update_available else '' }}">
+                        <h5 class="mb-0"><i class="bi bi-cloud-download"></i> Updates{{ ' <span class="badge bg-light text-danger">New</span>' | safe if update_available else '' }}</h5>
+                    </div>
+                    <div class="card-body d-flex align-items-center">
+                        <div id="updateCheckContent" class="w-100">
+                            <div class="d-flex align-items-center gap-3">
+                                <div id="updateStatus" class="flex-grow-1">
+                                    <span class="text-muted">Checking for updates...</span>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm" id="updateCheckBtn" onclick="checkForUpdates(true)">
+                                    <i class="bi bi-arrow-clockwise"></i> Check Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Customer Favicons -->
-                <div class="card">
+                <div class="card flex-grow-1">
                     <div class="card-header">
                         <h5 class="mb-0 d-flex justify-content-between align-items-center">
                             <span><i class="bi bi-image"></i> Customer Favicons</span>
@@ -246,56 +267,10 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-6 d-flex flex-column">
-                <!-- AI Integration -->
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-stars"></i> AI Integration</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted small mb-2">
-                            AI features use the centralized APIM gateway.
-                            Requires <code>az login</code> with your Microsoft account.
-                        </p>
-                        <!-- Consent status (loaded via JS) -->
-                        <div id="aiConsentStatus" class="mb-2">
-                            <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking AI consent...</span>
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <button class="btn btn-outline-success btn-sm" id="aiTestBtn">
-                                <i class="bi bi-lightning"></i> Test Connection
-                            </button>
-                            <button class="btn btn-outline-warning btn-sm d-none" id="aiReloginBtn">
-                                <i class="bi bi-arrow-repeat"></i> Re-login to enable AI
-                            </button>
-                        </div>
-                        <div id="aiTestResult" class="mt-2"></div>
-                    </div>
-                </div>
-
-                <!-- Update Check -->
-                <div class="card flex-grow-1 d-flex flex-column{{ ' border-danger' if update_available else '' }}" id="updateCheckCard">
-                    <div class="card-header{{ ' bg-danger text-white' if update_available else '' }}">
-                        <h5 class="mb-0"><i class="bi bi-cloud-download"></i> Updates{{ ' <span class="badge bg-light text-danger">New</span>' | safe if update_available else '' }}</h5>
-                    </div>
-                    <div class="card-body d-flex align-items-center">
-                        <div id="updateCheckContent" class="w-100">
-                            <div class="d-flex align-items-center gap-3">
-                                <div id="updateStatus" class="flex-grow-1">
-                                    <span class="text-muted">Checking for updates...</span>
-                                </div>
-                                <button class="btn btn-outline-secondary btn-sm" id="updateCheckBtn" onclick="checkForUpdates(true)">
-                                    <i class="bi bi-arrow-clockwise"></i> Check Now
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- Setup Wizard (shown here when incomplete, moves to bottom when done) -->
-        {% set setup_complete = has_customers and has_milestones and has_revenue %}
+        {% set setup_complete = accounts_synced and has_milestones and has_revenue %}
         {% if not setup_complete %}
         <div class="card mb-4">
             <div class="card-header">
@@ -308,7 +283,7 @@
                     <p class="text-muted small mb-3">Re-run the initial setup wizard to check your progress or complete any remaining steps.</p>
                     <div class="row text-center mb-3">
                         <div class="col">
-                            <i class="bi bi-{% if has_customers %}check-circle-fill text-success{% else %}circle text-muted{% endif %} fs-4"></i>
+                            <i class="bi bi-{% if accounts_synced %}check-circle-fill text-success{% else %}circle text-muted{% endif %} fs-4"></i>
                             <div class="small mt-1">Accounts</div>
                         </div>
                         <div class="col">
@@ -1297,128 +1272,6 @@ document.getElementById('adminRerunWizardBtn').addEventListener('click', async f
         alert('Failed to launch setup wizard: ' + err.message);
     }
 });
-
-// --- AI Consent Check (runs on page load) ---
-async function checkAiConsent() {
-    const statusDiv = document.getElementById('aiConsentStatus');
-    const reloginBtn = document.getElementById('aiReloginBtn');
-    try {
-        const resp = await fetch('/api/admin/ai-consent-check');
-        const data = await resp.json();
-        if (data.consented) {
-            statusDiv.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle-fill"></i> AI gateway consent granted</span>';
-            reloginBtn.classList.add('d-none');
-        } else if (data.needs_relogin) {
-            statusDiv.innerHTML = `<span class="text-warning small"><i class="bi bi-exclamation-triangle-fill"></i> ${data.error || 'AI consent required &mdash; sign out and sign back in to grant permission'}</span>`;
-            reloginBtn.classList.remove('d-none');
-        } else {
-            statusDiv.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle-fill"></i> ${data.error || 'Unable to check AI consent'}</span>`;
-            reloginBtn.classList.add('d-none');
-        }
-    } catch (err) {
-        statusDiv.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle-fill"></i> ${err.message}</span>`;
-    }
-}
-checkAiConsent();
-
-// AI Re-login button — logout then start login with gateway scope
-const aiReloginBtn = document.getElementById('aiReloginBtn');
-if (aiReloginBtn) {
-    aiReloginBtn.addEventListener('click', async function() {
-        const btn = this;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Signing out...';
-        try {
-            await fetch('/api/msx/az-logout', { method: 'POST' });
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Opening login...';
-            const resp = await fetch('/api/msx/az-login/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scope: 'api://0f6db4af-332c-4fd5-b894-77fadb181e5c/.default' })
-            });
-            const data = await resp.json();
-            if (data.success) {
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Waiting for sign-in...';
-                // Poll for login completion
-                const poll = setInterval(async () => {
-                    const statusResp = await fetch('/api/msx/az-login/status');
-                    const statusData = await statusResp.json();
-                    if (!statusData.running) {
-                        clearInterval(poll);
-                        // Complete the login (sets subscription + refreshes tokens)
-                        await fetch('/api/msx/az-login/complete', { method: 'POST' });
-                        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-login to enable AI';
-                        btn.disabled = false;
-                        // Re-check consent
-                        checkAiConsent();
-                        // Refresh MSX status too
-                        if (typeof loadMsxStatus === 'function') loadMsxStatus();
-                    }
-                }, 2000);
-            } else {
-                alert(data.error || 'Failed to launch login');
-                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-login to enable AI';
-                btn.disabled = false;
-            }
-        } catch (err) {
-            alert('Error: ' + err.message);
-            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-login to enable AI';
-            btn.disabled = false;
-        }
-    });
-}
-
-// AI Connection Test
-const aiTestBtn = document.getElementById('aiTestBtn');
-if (aiTestBtn) {
-    aiTestBtn.addEventListener('click', async function() {
-        const btn = this;
-        const resultDiv = document.getElementById('aiTestResult');
-        const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
-        btn.disabled = true;
-        
-        try {
-            const response = await fetch('/api/admin/ai-config/test', { method: 'POST' });
-            const data = await response.json();
-            
-            if (data.success) {
-                resultDiv.innerHTML = `
-                    <div class="alert alert-success py-2">
-                        <i class="bi bi-check-circle-fill"></i> <strong>Connection successful!</strong><br>
-                        <small class="text-muted">Response: ${data.response}</small>
-                    </div>
-                `;
-                checkAiConsent();  // Refresh consent status
-            } else if (data.needs_relogin) {
-                resultDiv.innerHTML = `
-                    <div class="alert alert-warning py-2">
-                        <i class="bi bi-exclamation-triangle-fill"></i> <strong>AI consent required</strong><br>
-                        <small>Click "Re-login to enable AI" above to grant permission.</small>
-                    </div>
-                `;
-                checkAiConsent();
-            } else {
-                resultDiv.innerHTML = `
-                    <div class="alert alert-danger py-2">
-                        <i class="bi bi-x-circle-fill"></i> <strong>Connection failed</strong><br>
-                        <small>${data.error}</small>
-                    </div>
-                `;
-            }
-        } catch (err) {
-            resultDiv.innerHTML = `
-                <div class="alert alert-danger py-2">
-                    <i class="bi bi-x-circle-fill"></i> <strong>Error</strong><br>
-                    <small>${err.message}</small>
-                </div>
-            `;
-        } finally {
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
-        }
-    });
-}
 
 // MSX Import Accounts (SSE streaming)
 document.getElementById('importFromMsxBtn').addEventListener('click', async function() {

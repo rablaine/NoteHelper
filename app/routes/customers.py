@@ -193,9 +193,6 @@ def customer_view(id):
         customer_name=customer.name
     ).order_by(RevenueAnalysis.priority_score.desc()).all()
     
-    from app.routes.ai import is_ai_enabled
-    ai_enabled = is_ai_enabled()
-
     # Compute engagement metrics
     engagements = customer.engagements  # already ordered by created_at desc
     active_engagements = [e for e in engagements if e.status == 'Active']
@@ -227,7 +224,6 @@ def customer_view(id):
                           active_engagements=active_engagements,
                           unassigned_notes=unassigned_notes,
                           revenue_analyses=revenue_analyses,
-                          ai_enabled=ai_enabled,
                           last_contact=last_contact,
                           active_milestone_count=active_milestones,
                           opportunity_count=opportunity_count)

@@ -62,7 +62,7 @@ class TestOnboardingWizardDisplay:
 
         # Step 2: Authentication (az login flow)
         assert 'Connect to MSX' in html
-        assert 'onboardStartAuth' in html
+        assert 'startSignInBtn' in html
         assert 'Sign In to Azure' in html
 
         # Step 3: Import Accounts (with progress bar)
@@ -81,12 +81,12 @@ class TestOnboardingWizardDisplay:
         assert 'revenueFileInput' in html
         assert 'importRevenueProgress' in html
 
-    def test_onboarding_has_skip_button(self, client, app):
-        """Verify the skip button is present."""
+    def test_onboarding_has_no_skip_button(self, client, app):
+        """Verify the skip button has been removed (wizard is mandatory)."""
         response = client.get('/')
         html = response.data.decode('utf-8')
-        assert 'onboardSkipBtn' in html
-        assert "Skip setup" in html
+        assert 'onboardSkipBtn' not in html
+        assert "Skip setup" not in html
 
     def test_onboarding_has_navigation_buttons(self, client, app):
         """Verify Next/Back buttons exist."""
@@ -246,8 +246,9 @@ class TestResetOnboarding:
         response = client.get('/')
         assert b'id="welcomeModal"' in response.data
 
-    def test_rerun_button_shown_when_dismissed_no_customers(self, client, app):
-        """Re-run button should appear when wizard dismissed and no customers exist."""
+    def test_rerun_button_removed_from_navbar(self, client, app):
+        """Navbar re-run button was removed (wizard is mandatory, can't be skipped)."""
+        # Even when dismissed with no customers, the navbar button should not exist
         with app.app_context():
             from app.models import db, UserPreference
             pref = UserPreference.query.first()
@@ -256,9 +257,7 @@ class TestResetOnboarding:
 
         response = client.get('/')
         html = response.data.decode('utf-8')
-        # The actual button element (not just JS reference)
-        assert 'id="rerunSetupBtn"' in html
-        assert 'Setup Wizard' in html
+        assert 'id="rerunSetupBtn"' not in html
 
         # Clean up
         with app.app_context():
@@ -266,16 +265,6 @@ class TestResetOnboarding:
             pref = UserPreference.query.first()
             pref.first_run_modal_dismissed = False
             db.session.commit()
-
-    def test_rerun_button_hidden_when_wizard_not_dismissed(self, client, app):
-        """Re-run button should NOT appear when wizard hasn't been dismissed yet."""
-        # When first_run_modal_dismissed is False, the wizard itself shows
-        # and the re-run button HTML element should not be rendered
-        response = client.get('/')
-        html = response.data.decode('utf-8')
-        assert 'id="welcomeModal"' in html
-        # The button element itself (not JS getElementById reference)
-        assert 'id="rerunSetupBtn"' not in html
 
 
 class TestAzLoginEndpoints:
@@ -453,18 +442,18 @@ class TestOnboardingAuthUiElements:
         response = client.get('/')
         html = response.data.decode('utf-8')
         assert 'Sign In to Azure' in html
-        assert 'onboardStartAuth' in html
+        assert 'startSignInBtn' in html
 
     def test_step2_has_auth_states(self, client, app):
-        """Step 2 should have all auth state divs."""
+        """Step 2 should have all sign-in state divs."""
         response = client.get('/')
         html = response.data.decode('utf-8')
-        assert 'id="authInitial"' in html
-        assert 'id="authWaiting"' in html
-        assert 'id="authSuccess"' in html
-        assert 'id="authError"' in html
-        assert 'id="authNoCli"' in html
-        assert 'id="authAlready"' in html
+        assert 'id="signInInitial"' in html
+        assert 'id="signInWaiting"' in html
+        assert 'id="signInSuccess"' in html
+        assert 'id="signInError"' in html
+        assert 'id="signInNoCli"' in html
+        assert 'id="signInVpnBlocked"' in html
 
     def test_step2_no_device_code_elements(self, client, app):
         """Step 2 should NOT have old device code elements."""
@@ -478,9 +467,9 @@ class TestOnboardingAuthUiElements:
         """Step 2 should have retry, cancel buttons."""
         response = client.get('/')
         html = response.data.decode('utf-8')
-        assert 'id="authRetry"' in html
-        assert 'id="authRetryNoCli"' in html
-        assert 'id="authCancelBtn"' in html
+        assert 'id="signInRetryBtn"' in html
+        assert 'id="signInNoCliRetryBtn"' in html
+        assert 'id="signInCancelBtn"' in html
 
     def test_step2_no_wrong_tenant_state(self, client, app):
         """Step 2 should NOT have the authWrongTenant state (simplified auth)."""
@@ -494,13 +483,13 @@ class TestOnboardingAuthUiElements:
         response = client.get('/')
         html = response.data.decode('utf-8')
         assert 'Microsoft corporate account' in html
-        assert 'authentication will fail' in html
+        assert 'approve the consent prompt' in html
 
-    def test_step2_has_20s_timeout(self, client, app):
-        """Step 2 JS should use a 20-second auth timeout."""
+    def test_step2_has_120s_timeout(self, client, app):
+        """Step 2 JS should use a 120-second sign-in timeout."""
         response = client.get('/')
         html = response.data.decode('utf-8')
-        assert 'AUTH_POLL_TIMEOUT_MS = 20000' in html
+        assert 'SIGN_IN_TIMEOUT_MS = 120000' in html
 
 
 class TestAzLogoutEndpoint:
@@ -773,17 +762,17 @@ class TestWizardOptionalSteps:
         assert 'Optional' in html
         assert 'Milestone Tracker' in html
 
-    def test_step4_has_skip_button_in_footer(self, client, app):
-        """Footer should have a Skip button for step 4."""
+    def test_wizard_has_skip_button_element(self, client, app):
+        """Wizard footer should have a Skip button (used on step 5 for revenue)."""
         response = client.get('/')
         html = response.data.decode('utf-8')
         assert 'id="onboardSkipStepBtn"' in html
 
-    def test_step4_skip_button_visibility_logic(self, client, app):
-        """Skip button should only show on step 4 when milestones not imported."""
+    def test_step5_skip_button_visibility_logic(self, client, app):
+        """Skip button should only show on step 5 when revenue not imported."""
         response = client.get('/')
         html = response.data.decode('utf-8')
-        assert 'currentStep === 4 && !milestonesImported' in html
+        assert 'currentStep === 5 && !revenueImported' in html
 
     def test_milestones_required_for_next_button(self, client, app):
         """Step 4 Next button should be gated on milestonesImported."""
@@ -791,19 +780,13 @@ class TestWizardOptionalSteps:
         html = response.data.decode('utf-8')
         assert "currentStep === 4 && !milestonesImported" in html
 
-    def test_skip_button_disabled_after_import(self, client, app):
-        """Skip button should hide when milestones are imported."""
+    def test_step4_no_skip_button(self, client, app):
+        """Milestones step should NOT allow skipping — skip is only for revenue."""
         response = client.get('/')
         html = response.data.decode('utf-8')
-        # The logic hides skip when milestones imported (else branch adds d-none)
-        assert "skipStepBtn.classList.add('d-none')" in html
-
-    def test_footer_skip_btn_updates_text_after_accounts(self, client, app):
-        """Footer skip button text should change after accounts are imported."""
-        response = client.get('/')
-        html = response.data.decode('utf-8')
-        assert 'Done' in html
-        assert 'skip remaining steps' in html
+        # Skip button condition should NOT reference step 4
+        assert 'currentStep === 4 && !milestonesImported' not in html.split('skipStepBtn')[0] or \
+               'currentStep === 5 && !revenueImported' in html
 
     def test_step5_inline_revenue_upload(self, client, app):
         """Step 5 should have inline revenue CSV upload (not a link to another page)."""

@@ -11,6 +11,7 @@ Covers:
 import os
 import pytest
 from unittest.mock import patch, MagicMock
+from app import db
 
 
 # =============================================================================
@@ -253,58 +254,24 @@ class TestScheduledSync:
 
 
 # =============================================================================
-# AI Feature Auto-Hide
+# AI buttons always visible (AI is always enabled)
 # =============================================================================
 
-class TestAIAutoHide:
-    """Tests that AI UI elements are hidden when env vars are not configured."""
+class TestAIAlwaysEnabled:
+    """Tests that AI UI elements are always visible (AI is always on)."""
 
-    def test_ai_disabled_without_env_vars(self, app):
-        """is_ai_enabled should return False when env vars are missing."""
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('AZURE_OPENAI_ENDPOINT', None)
-            os.environ.pop('AZURE_OPENAI_DEPLOYMENT', None)
-            from app.routes.ai import is_ai_enabled
-            assert is_ai_enabled() is False
-
-    def test_ai_enabled_with_env_vars(self, app):
-        """is_ai_enabled should return True when both env vars are set."""
-        with patch.dict(os.environ, {
-            'AZURE_OPENAI_ENDPOINT': 'https://test.openai.azure.com/',
-            'AZURE_OPENAI_DEPLOYMENT': 'gpt-4o-mini'
-        }):
-            from app.routes.ai import is_ai_enabled
-            assert is_ai_enabled() is True
-
-    def test_note_form_hides_ai_buttons_when_disabled(self, client, app, sample_data):
-        """Call log form should not show AI buttons when AI is not configured."""
+    def test_note_form_always_shows_ai_buttons(self, client, app, sample_data):
+        """Call log form should always show AI buttons."""
         with app.app_context():
             from app.models import Customer
             customer = Customer.query.first()
             customer_id = customer.id
 
-        # Patch at the source — the function is imported inline from app.routes.ai
-        with patch('app.routes.ai.is_ai_enabled', return_value=False):
-            response = client.get(f'/note/new?customer_id={customer_id}')
-            html = response.data.decode()
-            # The AI button HTML elements should not be rendered
-            assert 'id="aiSuggestBtn"' not in html
-            assert 'id="aiMatchMilestoneBtn"' not in html
-
-    def test_note_form_shows_ai_buttons_when_enabled(self, client, app, sample_data):
-        """Call log form should show AI buttons when AI is configured."""
-        with app.app_context():
-            from app.models import Customer
-            customer = Customer.query.first()
-            customer_id = customer.id
-
-        with patch.dict(os.environ, {
-            'AZURE_OPENAI_ENDPOINT': 'https://test.openai.azure.com/',
-            'AZURE_OPENAI_DEPLOYMENT': 'gpt-4o-mini'
-        }):
-            response = client.get(f'/note/new?customer_id={customer_id}')
-            html = response.data.decode()
-            assert 'Auto-tag with AI' in html
+        response = client.get(f'/note/new?customer_id={customer_id}')
+        html = response.data.decode()
+        assert 'id="aiSuggestBtn"' in html
+        assert 'id="aiMatchMilestoneBtn"' in html
+        assert 'Auto-tag with AI' in html
 
 
 # =============================================================================

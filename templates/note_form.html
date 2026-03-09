@@ -50,7 +50,7 @@
                 <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
                     <i class="bi bi-check-circle text-success"></i> Draft saved
                 </div>
-                {% if not note and ai_enabled %}
+                {% if not note %}
                 <button type="button" class="btn btn-success" id="autoFillBtn" onclick="startAutoFill()" title="Auto-fill from meeting transcript">
                     <i class="bi bi-magic"></i> Auto-fill
                 </button>
@@ -99,7 +99,7 @@
                 <form method="POST" id="noteForm">
                     <input type="hidden" name="referrer" value="{{ referrer if referrer else '' }}">
                     
-                    <!-- Customer (full width) -->
+                    <!-- Customer + Engagement side by side -->
                     {% if is_general_note %}
                     <div class="mb-3">
                         <div class="alert alert-secondary py-2 mb-0">
@@ -107,48 +107,58 @@
                         </div>
                     </div>
                     {% else %}
-                    <div class="mb-3">
-                        <label for="customer_id" class="form-label">Customer *</label>
-                        <select class="form-select" id="customer_id" name="customer_id" required {% if not note and preselect_customer_id %}disabled{% endif %}>
-                            <option value="">-- Select customer --</option>
-                            {% for customer in customers %}
-                                <option value="{{ customer.id }}"
-                                    {% if (note and note.customer_id == customer.id) or (preselect_customer_id and preselect_customer_id == customer.id) %}selected{% endif %}>
-                                    {{ customer.name }} ({{ customer.tpid }})
-                                </option>
-                            {% endfor %}
-                        </select>
-                        {% if not note and preselect_customer_id %}
-                            <input type="hidden" name="customer_id" value="{{ preselect_customer_id }}">
-                        {% endif %}
-                        {% if note and note.customer and note.customer.seller %}
-                            <div class="form-text">Seller: <strong>{{ note.customer.seller.name }}</strong></div>
-                        {% elif preselect_customer and preselect_customer.seller %}
-                            <div class="form-text">Seller: <strong>{{ preselect_customer.seller.name }}</strong></div>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                    
-                    <!-- Engagement Selector (shown when a customer is selected) -->
-                    {% if not is_general_note %}
-                    <div class="mb-3" id="engagementSection" {% if not preselect_customer_id and not (note and note.customer_id) %}style="display: none;"{% endif %}>
-                        <label for="engagement_ids" class="form-label">Engagements</label>
-                        <select class="form-select" id="engagement_ids" name="engagement_ids" multiple size="3">
-                            {% if note and note.customer %}
-                                {% for eng in note.customer.engagements %}
-                                    <option value="{{ eng.id }}" {% if eng in note.engagements %}selected{% endif %}>
-                                        {{ eng.title }} ({{ eng.status }})
+                    <div class="row mb-3">
+                        <div class="col-md-7">
+                            <label for="customer_id" class="form-label">Customer *</label>
+                            <select class="form-select" id="customer_id" name="customer_id" required {% if not note and preselect_customer_id %}disabled{% endif %}>
+                                <option value="">-- Select customer --</option>
+                                {% for customer in customers %}
+                                    <option value="{{ customer.id }}"
+                                        {% if (note and note.customer_id == customer.id) or (preselect_customer_id and preselect_customer_id == customer.id) %}selected{% endif %}>
+                                        {{ customer.name }} ({{ customer.tpid }})
                                     </option>
                                 {% endfor %}
-                            {% elif preselect_customer and preselect_customer.engagements %}
-                                {% for eng in preselect_customer.engagements %}
-                                    <option value="{{ eng.id }}" {% if preselect_engagement_id and preselect_engagement_id == eng.id %}selected{% endif %}>
-                                        {{ eng.title }} ({{ eng.status }})
-                                    </option>
-                                {% endfor %}
+                            </select>
+                            {% if not note and preselect_customer_id %}
+                                <input type="hidden" name="customer_id" value="{{ preselect_customer_id }}">
                             {% endif %}
-                        </select>
-                        <div class="form-text">Hold Ctrl/Cmd to select multiple. Optional.</div>
+                            {% if note and note.customer and note.customer.seller %}
+                                <div class="form-text">Seller: <strong>{{ note.customer.seller.name }}</strong></div>
+                            {% elif preselect_customer and preselect_customer.seller %}
+                                <div class="form-text">Seller: <strong>{{ preselect_customer.seller.name }}</strong></div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-5" id="engagementSection" {% if not preselect_customer_id and not (note and note.customer_id) %}style="display: none;"{% endif %}>
+                            <label class="form-label">Engagement(s)</label>
+                            <!-- Hidden select for form submission -->
+                            <select class="d-none" id="engagement_ids" name="engagement_ids" multiple>
+                                {% if note and note.customer %}
+                                    {% for eng in note.customer.engagements %}
+                                        <option value="{{ eng.id }}" {% if eng in note.engagements %}selected{% endif %}>
+                                            {{ eng.title }} ({{ eng.status }})
+                                        </option>
+                                    {% endfor %}
+                                {% elif preselect_customer and preselect_customer.engagements %}
+                                    {% for eng in preselect_customer.engagements %}
+                                        <option value="{{ eng.id }}" {% if preselect_engagement_id and preselect_engagement_id == eng.id %}selected{% endif %}>
+                                            {{ eng.title }} ({{ eng.status }})
+                                        </option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                            <!-- Compact dropdown trigger -->
+                            <div class="dropdown" id="engagementDropdown">
+                                <button class="form-select text-start text-truncate" type="button"
+                                        id="engagementDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                                        aria-expanded="false" style="cursor: pointer;">
+                                    <span class="text-muted">Select...</span>
+                                </button>
+                                <ul class="dropdown-menu w-100 shadow-sm py-1" id="engagementDropdownMenu"
+                                    style="max-height: 240px; overflow-y: auto;">
+                                    <!-- Populated from hidden select -->
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                     {% endif %}
                     
@@ -189,11 +199,9 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label for="topic_search" class="form-label mb-0">Topics</label>
-                            {% if ai_enabled %}
                             <button type="button" class="btn btn-sm btn-outline-info" id="aiSuggestBtn">
                                 <i class="bi bi-stars"></i> <span id="aiSuggestBtnText">Auto-tag with AI</span>
                             </button>
-                            {% endif %}
                         </div>
                         <input type="text" class="form-control" id="topic_search" 
                                placeholder="Search and add topics..." autocomplete="off">
@@ -249,11 +257,9 @@
                                 <div id="milestone_loading" class="text-muted small" style="display: none;">
                                     <span class="spinner-border spinner-border-sm me-1"></span> Loading milestones...
                                 </div>
-                                {% if ai_enabled %}
                                 <button type="button" class="btn btn-sm btn-outline-info" id="aiMatchMilestoneBtn" style="display: none;" onclick="aiMatchMilestone()">
                                     <i class="bi bi-stars"></i> <span id="aiMatchMilestoneBtnText">Match Milestone</span>
                                 </button>
-                                {% endif %}
                             </div>
                         </div>
                         <input type="text" class="form-control" id="milestone_search" 
@@ -560,6 +566,56 @@ document.getElementById('noteForm').onsubmit = function(e) {
     
     return true;
 };
+
+// --- Engagement multi-select dropdown ---
+(function() {
+    const hiddenSelect = document.getElementById('engagement_ids');
+    if (!hiddenSelect) return;  // general note — no engagement selector
+
+    const btn = document.getElementById('engagementDropdownBtn');
+    const menu = document.getElementById('engagementDropdownMenu');
+
+    function buildMenu() {
+        menu.innerHTML = '';
+        const options = hiddenSelect.options;
+        if (options.length === 0) {
+            menu.innerHTML = '<li class="px-3 py-2 text-muted small">No engagements for this customer</li>';
+            return;
+        }
+        for (let i = 0; i < options.length; i++) {
+            const opt = options[i];
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <label class="dropdown-item d-flex align-items-center gap-2 py-1 pe-3" style="cursor: pointer; white-space: normal;">
+                    <input type="checkbox" class="form-check-input mt-0" value="${opt.value}" ${opt.selected ? 'checked' : ''}>
+                    <span class="small">${opt.textContent.trim()}</span>
+                </label>`;
+            const cb = li.querySelector('input[type="checkbox"]');
+            cb.addEventListener('change', function() {
+                opt.selected = this.checked;
+                updateLabel();
+            });
+            menu.appendChild(li);
+        }
+    }
+
+    function updateLabel() {
+        const selected = Array.from(hiddenSelect.selectedOptions);
+        if (selected.length === 0) {
+            btn.innerHTML = '<span class="text-muted">Select...</span>';
+        } else if (selected.length === 1) {
+            btn.textContent = selected[0].textContent.trim();
+        } else {
+            btn.textContent = selected.length + ' engagements selected';
+        }
+    }
+
+    buildMenu();
+    updateLabel();
+
+    // Expose rebuild for dynamic customer changes
+    window.rebuildEngagementDropdown = function() { buildMenu(); updateLabel(); };
+})();
 
 // Topic search and selection functionality
 const allTopics = [
@@ -1514,8 +1570,6 @@ let lastAiCallFailed = false;
 let aiButtonDisabledUntil = 0;
 
 // Show AI button if AI is enabled (no need for API call - we already have this from template)
-{% if ai_enabled %}
-{% endif %}
 
 document.getElementById('aiSuggestBtn').addEventListener('click', function() {
     const aiBtn = this;

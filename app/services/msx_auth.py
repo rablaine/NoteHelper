@@ -510,6 +510,24 @@ def az_logout() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def kill_az_login_process() -> None:
+    """Kill any running ``az login`` process spawned by :func:`start_az_login`.
+
+    Called after we've confirmed the token is valid and set the subscription,
+    because ``az login`` keeps running indefinitely waiting for the user to
+    pick a subscription in the console window.  We don't need it anymore.
+    """
+    global _az_login_state
+    proc = _az_login_state.get("process")
+    if proc is not None:
+        try:
+            proc.kill()
+            logger.info("Killed lingering az login process (pid=%s)", proc.pid)
+        except OSError:
+            pass  # already dead
+    _az_login_state = {"active": False, "process": None, "started_at": None}
+
+
 def start_az_login(scope: str | None = None) -> Dict[str, Any]:
     """Launch ``az login --tenant <TENANT>`` in a visible console window.
 

@@ -294,26 +294,8 @@ def test_admin_panel_has_shutdown_button(client):
     assert b'Shut Down Server' in response.data
 
 
-# =============================================================================
-# Admin Panel AI Integration Card (Gateway Mode)
-# =============================================================================
 
-def test_admin_ai_card_shows_gateway_info(client):
-    """Admin AI card shows gateway-based UI with test button and consent status div."""
-    response = client.get('/admin')
-    html = response.data.decode()
-
-    # Gateway-based card always shows these elements
-    assert 'APIM gateway' in html
-    assert 'id="aiTestBtn"' in html
-    assert 'id="aiConsentStatus"' in html
-    assert 'id="aiReloginBtn"' in html
-    # Should NOT show old env var checklist
-    assert 'AZURE_OPENAI_ENDPOINT' not in html
-    assert 'AZURE_CLIENT_SECRET' not in html
-
-
-def test_admin_ai_consent_check_endpoint_ok(client):
+def test_admin_ai_consent_check_endpoint_ok(client, app):
     """AI consent check endpoint returns ok when consent is valid."""
     mock_result = {"consented": True, "error": None, "needs_relogin": False, "status": "ok"}
     with patch('app.gateway_client.check_ai_consent', return_value=mock_result):
@@ -322,9 +304,10 @@ def test_admin_ai_consent_check_endpoint_ok(client):
 
     assert response.status_code == 200
     assert data['consented'] is True
+    assert 'ai_enabled' in data
 
 
-def test_admin_ai_consent_check_endpoint_needs_relogin(client):
+def test_admin_ai_consent_check_endpoint_needs_relogin(client, app):
     """AI consent check endpoint returns needs_relogin when consent is missing."""
     mock_result = {"consented": False, "error": "consent_required", "needs_relogin": True, "status": "needs_relogin"}
     with patch('app.gateway_client.check_ai_consent', return_value=mock_result):
@@ -334,6 +317,7 @@ def test_admin_ai_consent_check_endpoint_needs_relogin(client):
     assert response.status_code == 200
     assert data['consented'] is False
     assert data['needs_relogin'] is True
+    assert 'ai_enabled' in data
 
 
 def test_admin_ai_consent_check_endpoint_error(client):
@@ -350,8 +334,7 @@ def test_admin_ai_consent_check_endpoint_error(client):
 def test_admin_ai_test_consent_error_returns_needs_relogin(client):
     """AI test connection returns needs_relogin when GatewayConsentError is raised."""
     from app.gateway_client import GatewayConsentError
-    with patch('app.gateway_client.is_gateway_enabled', return_value=True), \
-         patch('app.gateway_client.gateway_call', side_effect=GatewayConsentError('consent_required')):
+    with patch('app.gateway_client.gateway_call', side_effect=GatewayConsentError('consent_required')):
         response = client.post('/api/admin/ai-config/test')
         data = response.get_json()
 

@@ -723,7 +723,7 @@ class UserPreference(db.Model):
     __tablename__ = 'user_preferences'
     
     id = db.Column(db.Integer, primary_key=True)
-    dark_mode = db.Column(db.Boolean, default=False, nullable=False)
+    dark_mode = db.Column(db.Boolean, default=True, nullable=False)
     customer_view_grouped = db.Column(db.Boolean, default=False, nullable=False)
     customer_sort_by = db.Column(db.String(20), default='alphabetical', nullable=False)  # 'alphabetical', 'grouped', or 'by_calls'
     topic_sort_by_calls = db.Column(db.Boolean, default=False, nullable=False)
@@ -734,6 +734,7 @@ class UserPreference(db.Model):
     dismissed_update_commit = db.Column(db.String(7), nullable=True)  # Last dismissed update commit hash (short)
     workiq_summary_prompt = db.Column(db.Text, nullable=True)  # Custom WorkIQ meeting summary prompt (null = use default)
     workiq_connect_impact = db.Column(db.Boolean, default=True, nullable=False)  # Extract Connect impact signals from WorkIQ summaries
+    ai_enabled = db.Column(db.Boolean, default=False, nullable=False)  # True once user explicitly grants AI gateway consent
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     

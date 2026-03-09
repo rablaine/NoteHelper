@@ -447,7 +447,7 @@ def dark_mode_preference():
     # GET request
     pref = UserPreference.query.first()
     if not pref:
-        pref = UserPreference(dark_mode=False)
+        pref = UserPreference(dark_mode=True)
         db.session.add(pref)
         db.session.commit()
     
@@ -684,12 +684,12 @@ def update_workiq_connect_impact():
 def inject_preferences():
     """Inject user preferences and pending link requests into all templates."""
     pref = UserPreference.query.first() if g.user.is_authenticated else None
-    dark_mode = pref.dark_mode if pref else False
+    dark_mode = pref.dark_mode if pref else True
     customer_view_grouped = pref.customer_view_grouped if pref else False
     topic_sort_by_calls = pref.topic_sort_by_calls if pref else False
     first_run_modal_dismissed = pref.first_run_modal_dismissed if pref else False
     guided_tour_completed = pref.guided_tour_completed if pref else False
-    has_customers = SyncStatus.is_complete('accounts')
+    accounts_synced = SyncStatus.is_complete('accounts')
     has_milestones = SyncStatus.is_complete('milestones')
     has_revenue = SyncStatus.is_complete('revenue_import')
     accounts_sync_state = SyncStatus.get_status('accounts')['state']
@@ -719,7 +719,7 @@ def inject_preferences():
         topic_sort_by_calls=topic_sort_by_calls,
         first_run_modal_dismissed=first_run_modal_dismissed,
         guided_tour_completed=guided_tour_completed,
-        has_customers=has_customers,
+        accounts_synced=accounts_synced,
         has_milestones=has_milestones,
         has_revenue=has_revenue,
         accounts_sync_state=accounts_sync_state,

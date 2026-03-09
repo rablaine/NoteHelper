@@ -139,6 +139,9 @@ def run_migrations(db):
     # Migration: Rename customers.overview -> account_context
     _rename_overview_to_account_context(db, inspector)
 
+    # Migration: Add ai_enabled column to user_preferences
+    _add_column_if_not_exists(db, inspector, 'user_preferences', 'ai_enabled', 'BOOLEAN DEFAULT 0 NOT NULL')
+
     # =========================================================================
     # End migrations
     # =========================================================================

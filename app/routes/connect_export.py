@@ -22,8 +22,7 @@ from flask import (
 from app.models import (
     Note, ConnectExport, Customer, Milestone, db,
 )
-from app.routes.ai import is_ai_enabled
-from app.gateway_client import is_gateway_enabled, gateway_call, GatewayError
+from app.gateway_client import gateway_call, GatewayError
 
 connect_export_bp = Blueprint('connect_export', __name__)
 
@@ -588,55 +587,13 @@ def _chunk_customers(data: dict, max_tokens: int = CHUNK_TARGET_TOKENS) -> list[
     return chunks
 
 
-def _call_openai(system_prompt: str, user_prompt: str,
-                 max_tokens: int = 2000) -> tuple[str, dict]:
-    """
-    Make a single Azure OpenAI chat completion call (direct/legacy mode).
-
-    Returns (response_text, usage_dict).
-    """
-    from app.routes.ai import get_azure_openai_client, get_openai_deployment
-
-    client = get_azure_openai_client()
-    deployment = get_openai_deployment()
-
-    response = client.chat.completions.create(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=max_tokens,
-        model=deployment,
-    )
-
-    text = response.choices[0].message.content or ''
-    usage = {
-        'model': response.model or deployment,
-        'prompt_tokens': response.usage.prompt_tokens if response.usage else 0,
-        'completion_tokens': response.usage.completion_tokens if response.usage else 0,
-        'total_tokens': response.usage.total_tokens if response.usage else 0,
-    }
-    return text.strip(), usage
-
-
 def _generate_ai_summary_single(data: dict, text_export: str) -> tuple[str, dict]:
     """Generate an AI summary with a single API call (export fits in context)."""
-
-    # ---- Gateway path ----
-    if is_gateway_enabled():
-        result = gateway_call("/v1/connect-summary", {
-            "mode": "single",
-            "text_export": text_export,
-        }, timeout=180)
-        return result.get("summary", ""), result.get("usage", {})
-
-    # ---- Direct / legacy path ----
-    user_prompt = (
-        "Here is my note data for this Connect period.  "
-        "Please write my Connect self-evaluation.\n\n"
-        f"{text_export}"
-    )
-    return _call_openai(CONNECT_SUMMARY_SYSTEM_PROMPT, user_prompt, max_tokens=2000)
+    result = gateway_call("/v1/connect-summary", {
+        "mode": "single",
+        "text_export": text_export,
+    }, timeout=180)
+    return result.get("summary", ""), result.get("usage", {})
 
 
 def _generate_ai_summary_chunked(data: dict, text_export: str) -> tuple[str, dict]:
@@ -658,98 +615,49 @@ def _generate_ai_summary_chunked(data: dict, text_export: str) -> tuple[str, dic
     }
     partial_summaries: list[str] = [''] * chunk_count
 
-    # ---- Gateway path ----
-    if is_gateway_enabled():
-        def _process_chunk_gw(index: int, customers: list[dict]) -> tuple[int, str, dict]:
-            customer_text = '\n'.join(_build_customer_text_block(c) for c in customers)
-            general_notes_text = ''
-            if index == chunk_count - 1:
-                gn = data.get('general_notes', [])
-                if gn:
-                    general_notes_text = '\n\n' + _build_general_notes_text_block(gn)
-
-            result = gateway_call("/v1/connect-summary", {
-                "mode": "chunk",
-                "header": header,
-                "customer_text": customer_text,
-                "general_notes_text": general_notes_text,
-                "chunk_index": index + 1,
-                "chunk_count": chunk_count,
-            }, timeout=180)
-            return index, result.get("summary", ""), result.get("usage", {})
-
-        with ThreadPoolExecutor(max_workers=min(chunk_count, 4)) as executor:
-            futures = [
-                executor.submit(_process_chunk_gw, i, customers)
-                for i, customers in enumerate(chunks)
-            ]
-            for future in as_completed(futures):
-                idx, text, usage = future.result()
-                partial_summaries[idx] = text
-                aggregated_usage['model'] = usage.get('model', '')
-                aggregated_usage['prompt_tokens'] += usage.get('prompt_tokens', 0)
-                aggregated_usage['completion_tokens'] += usage.get('completion_tokens', 0)
-                aggregated_usage['total_tokens'] += usage.get('total_tokens', 0)
-
-        # Synthesis call
-        result = gateway_call("/v1/connect-summary", {
-            "mode": "synthesis",
-            "header": header,
-            "partial_summaries": partial_summaries,
-            "chunk_count": chunk_count,
-        }, timeout=180)
-        final_text = result.get("summary", "")
-        synthesis_usage = result.get("usage", {})
-        aggregated_usage['prompt_tokens'] += synthesis_usage.get('prompt_tokens', 0)
-        aggregated_usage['completion_tokens'] += synthesis_usage.get('completion_tokens', 0)
-        aggregated_usage['total_tokens'] += synthesis_usage.get('total_tokens', 0)
-
-        return final_text, aggregated_usage
-
-    # ---- Direct / legacy path ----
-    def _process_chunk(index: int, customers: list[dict]) -> tuple[int, str, dict]:
-        """Process a single chunk -- designed to run in a thread."""
+    def _process_chunk_gw(index: int, customers: list[dict]) -> tuple[int, str, dict]:
         customer_text = '\n'.join(_build_customer_text_block(c) for c in customers)
         general_notes_text = ''
         if index == chunk_count - 1:
             gn = data.get('general_notes', [])
             if gn:
                 general_notes_text = '\n\n' + _build_general_notes_text_block(gn)
-        user_prompt = (
-            f"Overall period stats:\n{header}\n\n"
-            f"Customer details (chunk {index + 1} of {chunk_count}):\n\n"
-            f"{customer_text}{general_notes_text}"
-        )
-        text, usage = _call_openai(CONNECT_CHUNK_SYSTEM_PROMPT, user_prompt, max_tokens=1500)
-        return index, text, usage
+
+        result = gateway_call("/v1/connect-summary", {
+            "mode": "chunk",
+            "header": header,
+            "customer_text": customer_text,
+            "general_notes_text": general_notes_text,
+            "chunk_index": index + 1,
+            "chunk_count": chunk_count,
+        }, timeout=180)
+        return index, result.get("summary", ""), result.get("usage", {})
 
     with ThreadPoolExecutor(max_workers=min(chunk_count, 4)) as executor:
         futures = [
-            executor.submit(_process_chunk, i, customers)
+            executor.submit(_process_chunk_gw, i, customers)
             for i, customers in enumerate(chunks)
         ]
         for future in as_completed(futures):
             idx, text, usage = future.result()
             partial_summaries[idx] = text
-            aggregated_usage['model'] = usage['model']
-            aggregated_usage['prompt_tokens'] += usage['prompt_tokens']
-            aggregated_usage['completion_tokens'] += usage['completion_tokens']
-            aggregated_usage['total_tokens'] += usage['total_tokens']
+            aggregated_usage['model'] = usage.get('model', '')
+            aggregated_usage['prompt_tokens'] += usage.get('prompt_tokens', 0)
+            aggregated_usage['completion_tokens'] += usage.get('completion_tokens', 0)
+            aggregated_usage['total_tokens'] += usage.get('total_tokens', 0)
 
-    combined = '\n\n---\n\n'.join(
-        f"### Chunk {i + 1}\n{s}" for i, s in enumerate(partial_summaries)
-    )
-    synthesis_prompt = (
-        f"Overall period stats:\n{header}\n\n"
-        f"Here are partial summaries from {chunk_count} customer groups:\n\n"
-        f"{combined}"
-    )
-    final_text, synthesis_usage = _call_openai(
-        CONNECT_SYNTHESIS_SYSTEM_PROMPT, synthesis_prompt, max_tokens=2000
-    )
-    aggregated_usage['prompt_tokens'] += synthesis_usage['prompt_tokens']
-    aggregated_usage['completion_tokens'] += synthesis_usage['completion_tokens']
-    aggregated_usage['total_tokens'] += synthesis_usage['total_tokens']
+    # Synthesis call
+    result = gateway_call("/v1/connect-summary", {
+        "mode": "synthesis",
+        "header": header,
+        "partial_summaries": partial_summaries,
+        "chunk_count": chunk_count,
+    }, timeout=180)
+    final_text = result.get("summary", "")
+    synthesis_usage = result.get("usage", {})
+    aggregated_usage['prompt_tokens'] += synthesis_usage.get('prompt_tokens', 0)
+    aggregated_usage['completion_tokens'] += synthesis_usage.get('completion_tokens', 0)
+    aggregated_usage['total_tokens'] += synthesis_usage.get('total_tokens', 0)
 
     return final_text, aggregated_usage
 
@@ -800,7 +708,6 @@ def connect_export_page():
         previous_exports=previous_exports,
         default_start=default_start.isoformat() if default_start else '',
         default_end=default_end.isoformat(),
-        ai_enabled=is_ai_enabled(),
     )
 
 
@@ -907,13 +814,6 @@ def generate_connect_ai_summary(export_id: int):
     Automatically chunks large exports and processes them in parallel.
     """
     from app.models import AIQueryLog
-
-    if not is_ai_enabled():
-        return jsonify({
-            'success': False,
-            'error': 'AI features are not configured '
-                     '(set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT in .env)',
-        }), 400
 
     user = g.user
     export_record = ConnectExport.query.filter_by(

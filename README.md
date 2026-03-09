@@ -36,7 +36,7 @@ The script will:
 
 On subsequent runs, the script detects the existing venv and `.env`, installs any new dependencies, and launches the app.
 
-> **What the script does NOT do:** It does not set up an Azure OpenAI service principal, GPT deployment, or fill in AI credentials in `.env`. Those are optional steps you can do later — see [AI Features](#ai-features-optional) for instructions.
+> **What the script does NOT do:** It does not enable AI features. Those are optional and require signing in with Azure CLI — see [AI Features](#ai-features-optional) for instructions.
 
 > **Next steps:** Once the server is running, check out [Initial Setup (First Run)](#initial-setup-first-run) to import your accounts and milestones, then optionally [AI Features](#ai-features-optional) to enable auto-tagging and meeting summaries.
 
@@ -206,65 +206,28 @@ The **Admin Panel** shows backup status, recent backups, and a "Backup Now" butt
 
 ## AI Features (Optional)
 
-NoteHelper can use Azure OpenAI to auto-suggest topics, match milestones, and auto-fill task descriptions. This requires an Azure OpenAI resource and a service principal for authentication.
+NoteHelper can use Azure OpenAI to auto-suggest topics, match milestones, and auto-fill task descriptions. All AI calls route through a shared APIM gateway — no Azure OpenAI resource or env vars needed.
 
-### 1. Create an Azure OpenAI Resource
+### Prerequisites
 
-1. In the [Azure Portal](https://portal.azure.com), create an **Azure OpenAI** resource
-2. Once deployed, go to **Keys and Endpoint** and copy the **Endpoint** URL (e.g. `https://your-resource.openai.azure.com/`)
-3. Go to **Model deployments** → **Manage Deployments** and deploy a model (e.g. `gpt-4o-mini`). Note the **deployment name**
+- **Azure CLI** — install with `winget install Microsoft.AzureCLI` (the launcher can do this for you)
+- **Microsoft corp account** (`@microsoft.com`)
 
-### 2. Create a Service Principal
+### Enable AI
 
-```bash
-# Create the service principal
-az ad sp create-for-rbac --name "NoteHelper-AI" --skip-assignment
+AI features are enabled during the first-time setup wizard (Step 2). The wizard will:
 
-# Note the output values:
-# - appId      → AZURE_CLIENT_ID
-# - password   → AZURE_CLIENT_SECRET
-# - tenant     → AZURE_TENANT_ID
-```
+1. Sign you in with `az login` (or detect an existing session)
+2. Request consent for the **NoteHelper-AI-Gateway** Entra app
+3. Once consent is granted, AI features are enabled automatically
 
-### 3. Grant Permissions on the OpenAI Resource
+You can also enable or disable AI later from the **Admin Panel** → **AI Integration** card.
 
-The service principal needs the **Cognitive Services OpenAI User** role on your Azure OpenAI resource:
+### No Environment Variables Required
 
-```bash
-# Get your OpenAI resource ID
-az cognitiveservices account show \
-  --name your-openai-resource-name \
-  --resource-group your-resource-group \
-  --query id -o tsv
+The gateway URL and Entra app ID are built into the app. There are no AI-related env vars to configure.
 
-# Assign the role
-az role assignment create \
-  --assignee <AZURE_CLIENT_ID> \
-  --role "Cognitive Services OpenAI User" \
-  --scope <resource-id-from-above>
-```
-
-### 4. Add to .env
-
-```dotenv
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
-AZURE_OPENAI_API_VERSION=2024-08-01-preview
-AZURE_CLIENT_ID=your-app-id
-AZURE_CLIENT_SECRET=your-password
-AZURE_TENANT_ID=your-tenant-id
-```
-
-### 5. Verify in NoteHelper
-
-After restarting the server:
-
-1. Go to **Admin Panel**
-2. Look for the **AI Integration** card — it shows whether your AI connection is configured
-3. Click **Test AI Connection** to verify NoteHelper can reach your Azure OpenAI endpoint
-4. A green checkmark confirms everything is working. The AI-powered "Suggest Topics" and "Match Milestone" buttons will now appear on the call log form.
-
-> **Note:** When AI environment variables are not configured, all AI buttons are automatically hidden from the UI. MSX integration (account imports, milestones) does **not** require these AI variables — it uses your `az login` session.
+> **Note:** When AI is not enabled, all AI buttons are automatically hidden from the UI. MSX integration (account imports, milestones) does **not** require AI — it uses your `az login` session independently.
 
 ## WorkIQ Integration (Meeting Import)
 

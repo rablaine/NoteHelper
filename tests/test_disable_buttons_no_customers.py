@@ -1,111 +1,63 @@
 """
-Tests for disabling MSX/revenue buttons when no customer accounts have been imported.
+Tests for MSX/revenue button availability.
 
-Verifies that milestone sync, revenue import, and revenue analyze buttons are
-disabled with 'Import accounts first' hints when has_customers is False.
+The wizard now enforces account import before users can access the product,
+so buttons are always enabled. Backend guards still reject requests when
+no accounts have been synced.
 """
 import pytest
 from app.models import db, Customer, SyncStatus
 
 
-class TestMilestoneTrackerDisabledButtons:
-    """Test milestone tracker buttons disabled when no customers."""
+class TestMilestoneTrackerButtons:
+    """Test milestone tracker buttons are always enabled (wizard enforces import)."""
 
-    def test_top_sync_button_disabled_no_customers(self, client, app):
-        """Top Sync from MSX button should be disabled when no customers exist."""
-        response = client.get('/milestone-tracker')
-        assert response.status_code == 200
-        html = response.data.decode()
-        # Should have a disabled button, not an active onclick button
-        assert 'disabled' in html
-        assert 'Import accounts</a> first' in html
-
-    def test_top_sync_button_enabled_with_customers(self, client, app, sample_data):
-        """Top Sync from MSX button should be enabled when customers exist."""
-        with app.app_context():
-            SyncStatus.mark_started('accounts')
-            SyncStatus.mark_completed('accounts', success=True, items_synced=3)
+    def test_top_sync_button_always_enabled(self, client, app):
+        """Top Sync from MSX button should always be active."""
         response = client.get('/milestone-tracker')
         assert response.status_code == 200
         html = response.data.decode()
         assert 'onclick="syncMilestones()"' in html
+        assert 'Import accounts</a> first' not in html
 
-    def test_bottom_sync_button_disabled_no_customers(self, client, app):
-        """Bottom Sync from MSX button (empty state) should be disabled when no customers."""
+    def test_bottom_sync_button_always_enabled(self, client, app):
+        """Bottom Sync from MSX button (empty state) should always be active."""
         response = client.get('/milestone-tracker')
         assert response.status_code == 200
         html = response.data.decode()
-        # The empty state area should NOT have the active syncBtnEmpty button
-        assert 'id="syncBtnEmpty"' not in html
-        # Should show import accounts hint in the empty state area
-        assert 'Import accounts</a> first' in html
-
-    def test_bottom_sync_button_enabled_with_customers(self, client, app, sample_data):
-        """Bottom Sync from MSX button (empty state) should work when customers exist."""
-        with app.app_context():
-            SyncStatus.mark_started('accounts')
-            SyncStatus.mark_completed('accounts', success=True, items_synced=3)
-        response = client.get('/milestone-tracker')
-        assert response.status_code == 200
-        html = response.data.decode()
-        # When there are customers but no milestones, the empty state shows active button
         assert 'id="syncBtnEmpty"' in html
 
 
-class TestRevenueDashboardDisabledButtons:
-    """Test revenue dashboard buttons disabled when no customers."""
+class TestRevenueDashboardButtons:
+    """Test revenue dashboard buttons are always enabled (wizard enforces import)."""
 
-    def test_top_buttons_disabled_no_customers(self, client, app):
-        """Top Import Data and Re-analyze buttons should be disabled when no customers."""
+    def test_top_buttons_always_enabled(self, client, app):
+        """Top Import Data and Re-analyze buttons should always be active."""
         response = client.get('/revenue')
         assert response.status_code == 200
         html = response.data.decode()
-        assert 'Import accounts</a> first' in html
-        # Import Data link should not be active
+        assert 'Import accounts</a> first' not in html
+        assert '/revenue/import' in html
         assert 'Re-analyze' in html
 
-    def test_bottom_import_button_disabled_no_customers(self, client, app):
-        """Bottom Import Data button (empty state) should be disabled when no customers."""
+    def test_bottom_import_button_always_enabled(self, client, app):
+        """Bottom Import Data button (empty state) should always link to import."""
         response = client.get('/revenue')
         assert response.status_code == 200
         html = response.data.decode()
-        # Should NOT have an active link to revenue import in the empty state
-        assert 'Import accounts</a> first' in html
-
-    def test_top_buttons_enabled_with_customers(self, client, app, sample_data):
-        """Top Import Data and Re-analyze should be enabled when customers exist."""
-        response = client.get('/revenue')
-        assert response.status_code == 200
-        html = response.data.decode()
-        # Import Data should be an active link
-        assert "url_for('revenue.revenue_import')" in html or '/revenue/import' in html
-
-    def test_bottom_import_button_enabled_with_customers(self, client, app, sample_data):
-        """Bottom Import Data button (empty state) should link to import when customers exist."""
-        response = client.get('/revenue')
-        assert response.status_code == 200
-        html = response.data.decode()
-        # Should have active import link, not disabled button
         assert '/revenue/import' in html
 
 
-class TestRevenueImportDisabledButtons:
-    """Test revenue import page buttons disabled when no customers."""
+class TestRevenueImportButtons:
+    """Test revenue import page buttons are always enabled (wizard enforces import)."""
 
-    def test_import_button_disabled_no_customers(self, client, app):
-        """Import CSV button should be disabled when no customers exist."""
+    def test_import_button_always_enabled(self, client, app):
+        """Import CSV button should always be active."""
         response = client.get('/revenue/import')
         assert response.status_code == 200
         html = response.data.decode()
-        assert 'Import accounts</a> first' in html
-
-    def test_import_button_enabled_with_customers(self, client, app, sample_data):
-        """Import CSV button should work when customers exist."""
-        response = client.get('/revenue/import')
-        assert response.status_code == 200
-        html = response.data.decode()
-        # Should have active file upload form
         assert 'type="file"' in html
+        assert 'Import accounts</a> first' not in html
 
 
 class TestBackendGuardsNoCustomers:

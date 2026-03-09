@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from app.models import db, AIQueryLog, Topic, Customer, Note, User
+from app.models import db, AIQueryLog, Topic, Customer, Note, User, UserPreference
 
 
 # ---------------------------------------------------------------------------
@@ -90,26 +90,6 @@ class TestGatewayClientModule:
         assert result["consented"] is False
         assert result["needs_relogin"] is True
         assert "non-Microsoft" in result["error"]
-
-
-class TestIsAIEnabledGatewayMode:
-    """Verify is_ai_enabled returns True when gateway is available."""
-
-    def test_ai_enabled_via_gateway(self, app):
-        from app.routes.ai import is_ai_enabled
-        with app.app_context():
-            assert is_ai_enabled() is True
-
-    def test_ai_enabled_via_direct(self, app):
-        """Legacy path still works."""
-        from app.routes.ai import is_ai_enabled
-        direct_env = {
-            "AZURE_OPENAI_ENDPOINT": "https://x.openai.azure.com/",
-            "AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini",
-        }
-        with app.app_context():
-            with patch.dict(os.environ, direct_env, clear=True):
-                assert is_ai_enabled() is True
 
 
 class TestSuggestTopicsGateway:

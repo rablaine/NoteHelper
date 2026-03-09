@@ -2,113 +2,29 @@
 AI routes for NoteHelper.
 Handles AI-powered topic suggestion and related features.
 
-All AI calls go through the APIM gateway by default
-(NoteHelper → APIM → App Service gateway → Azure OpenAI).
-A direct-to-OpenAI legacy path is preserved for fallback when
-``AZURE_OPENAI_ENDPOINT`` + ``AZURE_OPENAI_DEPLOYMENT`` are set and
-the gateway is explicitly bypassed.
+All AI calls go through the centralized APIM gateway
+(NoteHelper -> APIM -> App Service gateway -> Azure OpenAI).
+No direct Azure OpenAI credentials are needed locally.
+
+AI is always enabled -- the onboarding wizard enforces gateway
+consent before users can access the product.
 """
 from flask import Blueprint, request, jsonify, g
-from datetime import date
 import json
 import logging
-import os
 
 from app.models import db, AIQueryLog, Topic
-from app.gateway_client import is_gateway_enabled, gateway_call, GatewayError
+from app.gateway_client import gateway_call, GatewayError
 
 logger = logging.getLogger(__name__)
 
 # Create blueprint
 ai_bp = Blueprint('ai', __name__)
 
-# System prompt for topic suggestion (used only in direct/legacy mode)
-TOPIC_SUGGESTION_PROMPT = (
-    "You are a helpful assistant that analyzes call notes and suggests relevant topic tags. "
-    "Based on the call notes provided, return a JSON array of 3-7 short topic tags (1-3 words each) "
-    "that best describe the key technologies, products, or themes discussed. "
-    "Return ONLY a JSON array of strings, nothing else. "
-    'Example: ["Azure OpenAI", "Vector Search", "RAG Pattern"]'
-)
-
-
-def is_ai_enabled() -> bool:
-    """Check if AI features are enabled.
-
-    Returns True when *either* the APIM gateway or direct Azure OpenAI
-    credentials are configured.
-    """
-    if is_gateway_enabled():
-        return True
-    return bool(
-        os.environ.get('AZURE_OPENAI_ENDPOINT')
-        and os.environ.get('AZURE_OPENAI_DEPLOYMENT')
-    )
-
-
-def is_gateway_mode() -> bool:
-    """Return True if calls should go through the APIM gateway."""
-    return is_gateway_enabled()
-
-
-def get_openai_deployment() -> str:
-    """Get the Azure OpenAI deployment name from environment."""
-    return os.environ.get('AZURE_OPENAI_DEPLOYMENT', '')
-
-
-def get_azure_openai_client():
-    """Create an Azure OpenAI client with Entra ID authentication.
-    
-    All configuration is read from environment variables:
-    - AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID (service principal)
-    - AZURE_OPENAI_ENDPOINT (endpoint URL)
-    - AZURE_OPENAI_API_VERSION (optional, defaults to 2024-08-01-preview)
-    """
-    from openai import AzureOpenAI
-    from azure.identity import ClientSecretCredential, get_bearer_token_provider
-    
-    # Get service principal credentials from environment
-    client_id = os.environ.get('AZURE_CLIENT_ID')
-    client_secret = os.environ.get('AZURE_CLIENT_SECRET')
-    tenant_id = os.environ.get('AZURE_TENANT_ID')
-    
-    if not all([client_id, client_secret, tenant_id]):
-        raise ValueError("Missing Azure service principal environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)")
-    
-    # Get OpenAI endpoint from environment
-    endpoint_url = os.environ.get('AZURE_OPENAI_ENDPOINT')
-    api_version = os.environ.get('AZURE_OPENAI_API_VERSION', '2024-08-01-preview')
-    
-    if not endpoint_url:
-        raise ValueError("Missing AZURE_OPENAI_ENDPOINT environment variable")
-    
-    # Create credential and token provider
-    credential = ClientSecretCredential(
-        tenant_id=tenant_id,
-        client_id=client_id,
-        client_secret=client_secret
-    )
-    token_provider = get_bearer_token_provider(
-        credential, 
-        "https://cognitiveservices.azure.com/.default"
-    )
-    
-    # Create Azure OpenAI client
-    client = AzureOpenAI(
-        api_version=api_version,
-        azure_endpoint=endpoint_url,
-        azure_ad_token_provider=token_provider,
-    )
-    
-    return client
-
 
 @ai_bp.route('/api/ai/suggest-topics', methods=['POST'])
 def api_ai_suggest_topics():
     """Generate topic suggestions from call notes using AI."""
-
-    if not is_ai_enabled():
-        return jsonify({'success': False, 'error': 'AI features are not configured'}), 400
 
     data = request.get_json()
     call_notes = data.get('call_notes', '').strip()
@@ -117,80 +33,22 @@ def api_ai_suggest_topics():
         return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
 
     try:
-        # ---- Gateway path ----
-        if is_gateway_mode():
-            result = gateway_call("/v1/suggest-topics", {"call_notes": call_notes})
-            suggested_topics = result.get("topics", [])
-            usage = result.get("usage", {})
+        result = gateway_call("/v1/suggest-topics", {"call_notes": call_notes})
+        suggested_topics = result.get("topics", [])
+        usage = result.get("usage", {})
 
-            log_entry = AIQueryLog(
-                request_text=call_notes[:1000],
-                response_text=json.dumps(suggested_topics)[:1000],
-                success=True,
-                model=usage.get("model", "gateway"),
-                prompt_tokens=usage.get("prompt_tokens"),
-                completion_tokens=usage.get("completion_tokens"),
-                total_tokens=usage.get("total_tokens"),
-            )
-            db.session.add(log_entry)
+        log_entry = AIQueryLog(
+            request_text=call_notes[:1000],
+            response_text=json.dumps(suggested_topics)[:1000],
+            success=True,
+            model=usage.get("model", "gateway"),
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            total_tokens=usage.get("total_tokens"),
+        )
+        db.session.add(log_entry)
 
-        # ---- Direct / legacy path ----
-        else:
-            deployment_name = get_openai_deployment()
-            client = get_azure_openai_client()
-
-            response = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": TOPIC_SUGGESTION_PROMPT},
-                    {"role": "user", "content": f"Call notes:\n\n{call_notes}"}
-                ],
-                max_tokens=150,
-                model=deployment_name
-            )
-
-            response_text = response.choices[0].message.content
-            if not response_text or not response_text.strip():
-                raise ValueError("AI returned empty content")
-            response_text = response_text.strip()
-            raw_response_text = response_text
-
-            model_used = response.model or deployment_name
-            prompt_tokens = response.usage.prompt_tokens if response.usage else None
-            completion_tokens = response.usage.completion_tokens if response.usage else None
-            total_tokens = response.usage.total_tokens if response.usage else None
-
-            # Parse JSON response
-            import re
-            clean_text = response_text
-            if '```' in clean_text:
-                match = re.search(r'```(?:json)?\s*(.*?)\s*```', clean_text, re.DOTALL)
-                if match:
-                    clean_text = match.group(1).strip()
-                else:
-                    clean_text = clean_text.replace('```json', '').replace('```', '').strip()
-            array_match = re.search(r'\[.*\]', clean_text, re.DOTALL)
-            if array_match:
-                clean_text = array_match.group(0)
-
-            suggested_topics = json.loads(clean_text)
-            if not isinstance(suggested_topics, list):
-                raise ValueError("Response is not a list")
-            suggested_topics = [str(t).strip() for t in suggested_topics if t and str(t).strip()]
-            if not suggested_topics:
-                raise ValueError("No topics returned")
-
-            log_entry = AIQueryLog(
-                request_text=call_notes[:1000],
-                response_text=raw_response_text[:1000],
-                success=True,
-                model=model_used,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-            )
-            db.session.add(log_entry)
-
-        # ---- Common: create / match topics in DB ----
+        # Create / match topics in DB
         topic_ids = []
         for topic_name in suggested_topics:
             existing_topic = Topic.query.filter(
@@ -216,16 +74,6 @@ def api_ai_suggest_topics():
         db.session.commit()
         return jsonify({'success': False, 'error': f'AI request failed: {e}'}), 500
 
-    except (json.JSONDecodeError, ValueError) as e:
-        log_entry = AIQueryLog(
-            request_text=call_notes[:1000],
-            response_text=(raw_response_text[:1000] if 'raw_response_text' in dir() else None),
-            success=False, error_message=f"Parse error: {str(e)}"
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-        return jsonify({'success': False, 'error': 'AI returned invalid response format'}), 500
-
     except Exception as e:
         log_entry = AIQueryLog(
             request_text=call_notes[:1000], response_text=None,
@@ -240,9 +88,6 @@ def api_ai_suggest_topics():
 def api_ai_match_milestone():
     """Match call notes to the most relevant milestone using AI."""
 
-    if not is_ai_enabled():
-        return jsonify({'success': False, 'error': 'AI features are not configured'}), 400
-
     data = request.get_json()
     call_notes = data.get('call_notes', '').strip()
     milestones = data.get('milestones', [])
@@ -253,84 +98,25 @@ def api_ai_match_milestone():
         return jsonify({'success': False, 'error': 'No milestones provided'}), 400
 
     try:
-        # ---- Gateway path ----
-        if is_gateway_mode():
-            result = gateway_call("/v1/match-milestone", {
-                "call_notes": call_notes,
-                "milestones": milestones,
-            })
-            log_entry = AIQueryLog(
-                request_text=f"Match milestone: {call_notes[:500]}...",
-                response_text=json.dumps(result)[:500],
-                success=True,
-            )
-            db.session.add(log_entry)
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'matched_milestone_id': result.get('milestone_id'),
-                'reason': result.get('reason', '')
-            })
-
-        # ---- Direct / legacy path ----
-        deployment_name = get_openai_deployment()
-        milestone_list = "\n".join([
-            f"- ID: {m.get('id')}, Name: {m.get('name')}, Status: {m.get('status')}, Opportunity: {m.get('opportunity', '')}, Workload: {m.get('workload', '')}"
-            for m in milestones
-        ])
-
-        system_prompt = """You are an expert at matching customer call notes to sales milestones.
-Your task is to identify which milestone best matches the topics discussed in the call notes.
-
-Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
-{"milestone_id": "THE_MATCHED_ID", "reason": "Brief explanation of why this milestone matches"}
-
-If no milestone is a good match, respond with:
-{"milestone_id": null, "reason": "No milestone matches the call discussion"}"""
-
-        user_prompt = f"""Call Notes:
-{call_notes[:2000]}
-
-Available Milestones:
-{milestone_list}
-
-Which milestone best matches what was discussed in the call?"""
-
-        client = get_azure_openai_client()
-        response = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_tokens=150,
-            model=deployment_name
-        )
-        response_text = response.choices[0].message.content.strip()
-
+        result = gateway_call("/v1/match-milestone", {
+            "call_notes": call_notes,
+            "milestones": milestones,
+        })
         log_entry = AIQueryLog(
             request_text=f"Match milestone: {call_notes[:500]}...",
-            response_text=response_text[:500],
-            success=True
+            response_text=json.dumps(result)[:500],
+            success=True,
         )
         db.session.add(log_entry)
         db.session.commit()
 
-        import re
-        clean_text = response_text
-        if '```' in clean_text:
-            match = re.search(r'```(?:json)?\s*(.*?)\s*```', clean_text, re.DOTALL)
-            if match:
-                clean_text = match.group(1).strip()
-
-        result = json.loads(clean_text)
         return jsonify({
             'success': True,
             'matched_milestone_id': result.get('milestone_id'),
             'reason': result.get('reason', '')
         })
 
-    except (GatewayError, json.JSONDecodeError) as e:
+    except GatewayError as e:
         log_entry = AIQueryLog(
             request_text=f"Match milestone: {call_notes[:500]}...",
             response_text=None,
@@ -364,9 +150,6 @@ def api_ai_analyze_call():
     Returns: topics (list of {id, name})
     """
 
-    if not is_ai_enabled():
-        return jsonify({'success': False, 'error': 'AI features are not configured'}), 400
-
     data = request.get_json()
     call_notes = data.get('call_notes', '').strip()
 
@@ -374,81 +157,22 @@ def api_ai_analyze_call():
         return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
 
     try:
-        # ---- Gateway path ----
-        if is_gateway_mode():
-            result = gateway_call("/v1/analyze-call", {"call_notes": call_notes})
-            topics = result.get("topics", [])
-            usage = result.get("usage", {})
+        result = gateway_call("/v1/analyze-call", {"call_notes": call_notes})
+        topics = result.get("topics", [])
+        usage = result.get("usage", {})
 
-            log_entry = AIQueryLog(
-                request_text=f"Analyze call: {call_notes[:500]}...",
-                response_text=json.dumps(topics)[:500],
-                success=True,
-                model=usage.get("model", "gateway"),
-                prompt_tokens=usage.get("prompt_tokens"),
-                completion_tokens=usage.get("completion_tokens"),
-                total_tokens=usage.get("total_tokens"),
-            )
-            db.session.add(log_entry)
+        log_entry = AIQueryLog(
+            request_text=f"Analyze call: {call_notes[:500]}...",
+            response_text=json.dumps(topics)[:500],
+            success=True,
+            model=usage.get("model", "gateway"),
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            total_tokens=usage.get("total_tokens"),
+        )
+        db.session.add(log_entry)
 
-        # ---- Direct / legacy path ----
-        else:
-            deployment_name = get_openai_deployment()
-
-            system_prompt = """You are an expert at analyzing Azure customer call notes.
-Extract the key technologies and concepts discussed.
-
-Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
-{
-  "topics": ["Topic 1", "Topic 2", "Topic 3"]
-}
-
-Guidelines:
-- topics: List 2-5 Azure/Microsoft technologies or concepts discussed (e.g., "Azure Kubernetes Service", "Cost Optimization", "Data Migration")
-- Focus on specific, actionable technology areas rather than generic terms"""
-
-            user_prompt = f"""Analyze these call notes and extract the key topics/technologies discussed:
-
-{call_notes[:3000]}"""
-
-            client = get_azure_openai_client()
-            response = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=200,
-                model=deployment_name
-            )
-            response_text = response.choices[0].message.content.strip()
-
-            model_used = response.model or deployment_name
-            prompt_tokens = response.usage.prompt_tokens if response.usage else None
-            completion_tokens = response.usage.completion_tokens if response.usage else None
-            total_tokens = response.usage.total_tokens if response.usage else None
-
-            import re
-            clean_text = response_text
-            if '```' in clean_text:
-                match = re.search(r'```(?:json)?\s*(.*?)\s*```', clean_text, re.DOTALL)
-                if match:
-                    clean_text = match.group(1).strip()
-
-            parsed = json.loads(clean_text)
-            topics = parsed.get('topics', [])
-
-            log_entry = AIQueryLog(
-                request_text=f"Analyze call: {call_notes[:500]}...",
-                response_text=response_text[:500],
-                success=True,
-                model=model_used,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-            )
-            db.session.add(log_entry)
-
-        # ---- Common: create / match topics in DB ----
+        # Create / match topics in DB
         topic_ids = []
         for topic_name in topics:
             if not topic_name or not str(topic_name).strip():
@@ -470,7 +194,7 @@ Guidelines:
         db.session.commit()
         return jsonify({'success': True, 'topics': topic_ids})
 
-    except (GatewayError, json.JSONDecodeError) as e:
+    except GatewayError as e:
         log_entry = AIQueryLog(
             request_text=f"Analyze call: {call_notes[:500]}...",
             response_text=None,
@@ -493,7 +217,7 @@ Guidelines:
         return jsonify({'success': False, 'error': f'AI request failed: {e}'}), 500
 
 
-# System prompt for customer engagement summary generation
+# System prompt for customer engagement summary (kept for reference / gateway prompts.py)
 ENGAGEMENT_SUMMARY_PROMPT = (
     "You are a Microsoft technical seller's assistant. Analyze the provided notes "
     "and any existing customer account context for a customer and generate a structured engagement summary. "
@@ -517,11 +241,6 @@ ENGAGEMENT_SUMMARY_PROMPT = (
 @ai_bp.route('/api/ai/generate-engagement-summary', methods=['POST'])
 def api_ai_generate_engagement_summary():
     """Generate a structured engagement summary from all call logs for a customer."""
-    if not is_ai_enabled():
-        return jsonify({
-            'success': False,
-            'error': 'AI features are not configured'
-        }), 400
 
     data = request.get_json()
     customer_id = data.get('customer_id') if data else None
@@ -542,7 +261,6 @@ def api_ai_generate_engagement_summary():
     if not notes:
         return jsonify({'success': False, 'error': 'No notes found for this customer'}), 400
 
-    # Build note payloads (shared by both paths)
     import re as _re
     note_payloads = []
     for cl in notes:
@@ -556,88 +274,30 @@ def api_ai_generate_engagement_summary():
         overview = _re.sub(r'<[^>]+>', '', customer.account_context)
 
     try:
-        # ---- Gateway path ----
-        if is_gateway_mode():
-            result = gateway_call("/v1/engagement-summary", {
-                "customer_name": customer.name,
-                "tpid": customer.tpid or "",
-                "overview": overview,
-                "notes": note_payloads,
-            })
-            summary_text = result.get("summary", "")
-            usage = result.get("usage", {})
-
-            log_entry = AIQueryLog(
-                request_text=f"Engagement summary for {customer.name} ({len(notes)} logs)",
-                response_text=summary_text[:500],
-                success=True,
-                model=usage.get("model", "gateway"),
-                prompt_tokens=usage.get("prompt_tokens"),
-                completion_tokens=usage.get("completion_tokens"),
-                total_tokens=usage.get("total_tokens"),
-            )
-            db.session.add(log_entry)
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'summary': summary_text,
-                'note_count': len(notes)
-            })
-
-        # ---- Direct / legacy path ----
-        deployment_name = get_openai_deployment()
-
-        call_text_parts = []
-        for n in note_payloads:
-            entry = f"[{n['date']}]"
-            if n['topics']:
-                entry += f" Topics: {', '.join(n['topics'])}"
-            entry += f"\n{n['content']}"
-            call_text_parts.append(entry)
-        call_text = '\n\n---\n\n'.join(call_text_parts)
-
-        MAX_CHARS = 30000
-        if len(call_text) > MAX_CHARS:
-            call_text = call_text[:MAX_CHARS] + '\n\n[... additional notes truncated ...]'
-
-        notes_section = ''
-        if overview:
-            notes_section = f"\nExisting Account Context:\n{overview}\n"
-
-        user_message = (
-            f"Customer: {customer.name} (TPID: {customer.tpid})\n"
-            f"Total notes: {len(notes)}\n"
-            f"{notes_section}\n"
-            f"Notes:\n\n{call_text}"
-        )
-
-        client = get_azure_openai_client()
-        response = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": ENGAGEMENT_SUMMARY_PROMPT},
-                {"role": "user", "content": user_message}
-            ],
-            max_tokens=1000,
-            model=deployment_name
-        )
-
-        response_text = response.choices[0].message.content
-        if not response_text or not response_text.strip():
-            raise ValueError("AI returned empty content")
-        response_text = response_text.strip()
+        result = gateway_call("/v1/engagement-summary", {
+            "customer_name": customer.name,
+            "tpid": customer.tpid or "",
+            "overview": overview,
+            "notes": note_payloads,
+        })
+        summary_text = result.get("summary", "")
+        usage = result.get("usage", {})
 
         log_entry = AIQueryLog(
             request_text=f"Engagement summary for {customer.name} ({len(notes)} logs)",
-            response_text=response_text[:500],
+            response_text=summary_text[:500],
             success=True,
+            model=usage.get("model", "gateway"),
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            total_tokens=usage.get("total_tokens"),
         )
         db.session.add(log_entry)
         db.session.commit()
 
         return jsonify({
             'success': True,
-            'summary': response_text,
+            'summary': summary_text,
             'note_count': len(notes)
         })
 
@@ -677,8 +337,6 @@ ENGAGEMENT_STORY_PROMPT = (
 @ai_bp.route('/api/ai/generate-engagement-story', methods=['POST'])
 def api_ai_generate_engagement_story():
     """Generate structured story fields for a specific engagement from its linked notes."""
-    if not is_ai_enabled():
-        return jsonify({'success': False, 'error': 'AI features are not configured'}), 400
 
     data = request.get_json()
     engagement_id = data.get('engagement_id') if data else None
@@ -698,7 +356,6 @@ def api_ai_generate_engagement_story():
             'error': 'No notes linked to this engagement. Link some notes first.'
         }), 400
 
-    # Build the user_message (shared by both paths)
     import re as _re
     call_text_parts = []
     for cl in notes:
@@ -739,39 +396,13 @@ def api_ai_generate_engagement_story():
     )
 
     try:
-        # ---- Gateway path ----
-        if is_gateway_mode():
-            result = gateway_call("/v1/engagement-story", {
-                "user_message": user_message,
-            })
-            story_data = result.get("story", {})
-            usage = result.get("usage", {})
+        result = gateway_call("/v1/engagement-story", {
+            "user_message": user_message,
+        })
+        story_data = result.get("story", {})
+        usage = result.get("usage", {})
 
-        # ---- Direct / legacy path ----
-        else:
-            deployment_name = get_openai_deployment()
-            client = get_azure_openai_client()
-            response = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": ENGAGEMENT_STORY_PROMPT},
-                    {"role": "user", "content": user_message}
-                ],
-                max_tokens=1000,
-                model=deployment_name
-            )
-            response_text = response.choices[0].message.content
-            if not response_text or not response_text.strip():
-                raise ValueError("AI returned empty content")
-            response_text = response_text.strip()
-
-            if response_text.startswith('```'):
-                response_text = _re.sub(r'^```(?:json)?\s*', '', response_text)
-                response_text = _re.sub(r'\s*```$', '', response_text)
-
-            story_data = json.loads(response_text)
-            usage = {}
-
-        # ---- Common: save story fields to engagement ----
+        # Save story fields to engagement
         from datetime import datetime as _datetime
         if story_data.get('key_individuals'):
             engagement.key_individuals = story_data['key_individuals']
@@ -795,7 +426,7 @@ def api_ai_generate_engagement_story():
             request_text=f"Story for engagement '{engagement.title}' ({len(notes)} notes)",
             response_text=json.dumps(story_data)[:500],
             success=True,
-            model=usage.get("model", "gateway" if is_gateway_mode() else ""),
+            model=usage.get("model", "gateway"),
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
             total_tokens=usage.get("total_tokens"),

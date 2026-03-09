@@ -30,6 +30,7 @@ from app.services.msx_auth import (
     get_az_cli_status,
     start_az_login,
     get_az_login_process_status,
+    kill_az_login_process,
     set_subscription,
     az_logout,
     is_vpn_blocked,
@@ -316,6 +317,10 @@ def az_login_complete():
 
     set_subscription()
     token_ok = refresh_token()
+
+    # Kill the az login process — it's still running in a console window
+    # waiting for subscription selection, and we don't need it anymore.
+    kill_az_login_process()
 
     # Clear gateway token cache so fresh consent is used
     from app.gateway_client import clear_token_cache as clear_gw_cache

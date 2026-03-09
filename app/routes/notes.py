@@ -303,10 +303,6 @@ def note_create():
     # Current time for new call logs (default to now)
     now_time = datetime.now().strftime('%H:%M')
     
-    # Check if AI features are enabled (only for customer-linked notes)
-    from app.routes.ai import is_ai_enabled
-    ai_enabled = is_ai_enabled() if preselect_customer_id else False
-    
     # Get user's custom WorkIQ prompt (for meeting import modal)
     from app.services.workiq_service import DEFAULT_SUMMARY_PROMPT
     pref = UserPreference.query.first()
@@ -327,7 +323,6 @@ def note_create():
                          referrer=referrer,
                          today=today,
                          now_time=now_time,
-                         ai_enabled=ai_enabled,
                          workiq_prompt=user_prompt,
                          default_workiq_prompt=DEFAULT_SUMMARY_PROMPT,
                          workiq_connect_impact=connect_impact_enabled)
@@ -427,12 +422,7 @@ def note_edit(id):
     topics = Topic.query.order_by(Topic.name).all()
     partners = Partner.query.order_by(Partner.name).all()
     
-    # Load AI config for AI button visibility
-    from app.routes.ai import is_ai_enabled
-    ai_enabled = is_ai_enabled()
-    
     return render_template('note_form.html',
-                         ai_enabled=ai_enabled,
                          note=note,
                          customers=customers,
                          sellers=sellers,
@@ -706,60 +696,36 @@ def api_fill_my_day_process():
         result['summary'] = f'[Could not fetch summary: {str(e)}]'
         result['content_html'] = f'<h2>{title}</h2><p><em>Summary unavailable</em></p>'
     
-    # Step 2: AI analysis (topics + task suggestion) - only if we got a real summary
-    ai_client = None
-    deployment_name = None
+    # Step 2: AI analysis (topics) - only if we got a real summary and AI is enabled
     if result['summary_ok']:
         try:
-            from app.routes.ai import get_azure_openai_client, get_openai_deployment, is_ai_enabled
-            
-            deployment_name = get_openai_deployment()
-            if is_ai_enabled():
-                ai_client = get_azure_openai_client()
-                if ai_client:
-                    # Analyze call for topics
-                    all_topics = Topic.query.order_by(Topic.name).all()
-                    topic_names = [t.name for t in all_topics]
-                    
-                    prompt = f"""Analyze this meeting summary and identify relevant technology topics.
+            from app.gateway_client import gateway_call, GatewayError
 
-Available topics: {', '.join(topic_names)}
+            # Analyze call for topics via gateway
+            ai_result = gateway_call("/v1/analyze-call", {
+                "call_notes": result['summary'][:3000],
+            })
+            topic_names = ai_result.get("topics", [])
 
-Meeting summary:
-{result['summary']}
+            # Match topic names to IDs
+            all_topics = Topic.query.order_by(Topic.name).all()
+            matched_topics = []
+            for topic_name in topic_names:
+                for t in all_topics:
+                    if t.name.lower() == topic_name.lower():
+                        matched_topics.append({'id': t.id, 'name': t.name})
+                        break
 
-Return JSON format:
-{{"topics": ["topic1", "topic2"]}}"""
-                    
-                    response = ai_client.chat.completions.create(
-                        model=deployment_name,
-                        messages=[{'role': 'user', 'content': prompt}],
-                        temperature=0.3,
-                        max_tokens=200,
-                        response_format={"type": "json_object"}
-                    )
-                    
-                    import json
-                    ai_result = json.loads(response.choices[0].message.content)
-                    
-                    # Match topic names to IDs
-                    matched_topics = []
-                    for topic_name in ai_result.get('topics', []):
-                        for t in all_topics:
-                            if t.name.lower() == topic_name.lower():
-                                matched_topics.append({'id': t.id, 'name': t.name})
-                                break
-                    
-                    result['topics'] = matched_topics
+            result['topics'] = matched_topics
         except Exception as e:
             logger.warning(f"Fill My Day - AI analysis error for '{title}': {e}")
             # Non-fatal - continue without AI enrichment
-    
     # Step 3: Milestone matching - fetch from MSX and AI-match
     if result['summary_ok'] and customer_id:
         try:
             from app.services.msx_api import extract_account_id_from_url, get_milestones_by_account
-            
+            from app.gateway_client import gateway_call, GatewayError
+
             customer = db.session.get(Customer, int(customer_id))
             if customer and customer.tpid_url:
                 account_id = extract_account_id_from_url(customer.tpid_url)
@@ -767,42 +733,25 @@ Return JSON format:
                     msx_result = get_milestones_by_account(account_id)
                     if msx_result.get('success') and msx_result.get('milestones'):
                         milestones = msx_result['milestones']
-                        
-                        # AI match if we have a client and milestones
-                        if ai_client and len(milestones) > 0:
-                            milestone_list = "\n".join([
-                                f"- ID: {m['id']}, Name: {m['name']}, Status: {m['status']}, "
-                                f"Opportunity: {m.get('opportunity_name', '')}, "
-                                f"Workload: {m.get('workload', '')}"
-                                for m in milestones
-                            ])
-                            
-                            ms_prompt = f"""Match these call notes to the most relevant milestone.
 
-Call Notes:
-{result['summary'][:2000]}
+                        # AI match milestones via gateway
+                        if len(milestones) > 0:
+                            ms_result = gateway_call("/v1/match-milestone", {
+                                "call_notes": result['summary'][:2000],
+                                "milestones": [
+                                    {
+                                        "id": m['id'],
+                                        "name": m['name'],
+                                        "status": m['status'],
+                                        "opportunity": m.get('opportunity_name', ''),
+                                        "workload": m.get('workload', ''),
+                                    }
+                                    for m in milestones
+                                ],
+                            })
+                            matched_id = ms_result.get('milestone_id')
 
-Available Milestones:
-{milestone_list}
-
-Which milestone best matches what was discussed?
-
-Return JSON:
-{{"milestone_id": "THE_ID_OR_NULL", "reason": "why"}}"""
-                            
-                            ms_response = ai_client.chat.completions.create(
-                                model=deployment_name,
-                                messages=[{'role': 'user', 'content': ms_prompt}],
-                                temperature=0.3,
-                                max_tokens=150,
-                                response_format={"type": "json_object"}
-                            )
-                            
-                            ms_ai = json.loads(ms_response.choices[0].message.content)
-                            matched_id = ms_ai.get('milestone_id')
-                            
                             if matched_id:
-                                # Find the matched milestone data
                                 matched = next(
                                     (m for m in milestones if m['id'] == matched_id),
                                     None
@@ -817,7 +766,7 @@ Return JSON:
                                         'opportunity_name': matched.get('opportunity_name', ''),
                                         'url': matched.get('url', ''),
                                         'workload': matched.get('workload', ''),
-                                        'reason': ms_ai.get('reason', '')
+                                        'reason': ms_result.get('reason', '')
                                     }
         except Exception as e:
             logger.warning(f"Fill My Day - milestone matching error for '{title}': {e}")
