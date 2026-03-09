@@ -73,3 +73,6 @@ htmlcov/
 
 # Flask-Migrate
 migrations/versions/*.pyc
+
+# Issue plans (local only)
+issue_plans/

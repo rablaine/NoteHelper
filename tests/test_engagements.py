@@ -512,3 +512,107 @@ class TestStoryCompleteness:
             db.session.add(eng)
             db.session.commit()
             assert eng.story_completeness == 100
+
+
+class TestActiveEngagementsAPI:
+    """Test the /api/engagements/active endpoint for the homepage tab."""
+
+    def test_active_engagements_api_empty(self, client, app, engagement_data):
+        """API returns empty list when no engagements exist."""
+        resp = client.get('/api/engagements/active')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['success'] is True
+        assert data['count'] == 0
+        assert data['engagements'] == []
+
+    def test_active_engagements_api_returns_active(self, client, app, engagement_data):
+        """API returns active engagements with all expected fields."""
+        cid = engagement_data['customer_id']
+        with app.app_context():
+            eng = Engagement(
+                customer_id=cid,
+                title='Cloud Migration',
+                status='Active',
+                estimated_acr='$50k',
+                target_date=date(2026, 6, 30),
+            )
+            db.session.add(eng)
+            db.session.commit()
+            eng_id = eng.id
+
+        resp = client.get('/api/engagements/active')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['count'] == 1
+        e = data['engagements'][0]
+        assert e['id'] == eng_id
+        assert e['title'] == 'Cloud Migration'
+        assert e['status'] == 'Active'
+        assert e['customer_name'] == 'Contoso Ltd'
+        assert e['estimated_acr'] == '$50k'
+        assert e['target_date'] == '2026-06-30'
+        assert 'story_completeness' in e
+        assert 'linked_note_count' in e
+        assert 'opportunity_count' in e
+        assert 'milestone_count' in e
+        assert 'updated_at' in e
+        assert 'seller_name' in e
+
+    def test_active_engagements_excludes_won_lost(self, client, app, engagement_data):
+        """API excludes Won and Lost engagements."""
+        cid = engagement_data['customer_id']
+        with app.app_context():
+            db.session.add_all([
+                Engagement(customer_id=cid, title='Active One', status='Active'),
+                Engagement(customer_id=cid, title='On Hold One', status='On Hold'),
+                Engagement(customer_id=cid, title='Won One', status='Won'),
+                Engagement(customer_id=cid, title='Lost One', status='Lost'),
+            ])
+            db.session.commit()
+
+        resp = client.get('/api/engagements/active')
+        data = resp.get_json()
+        assert data['count'] == 2
+        titles = {e['title'] for e in data['engagements']}
+        assert titles == {'Active One', 'On Hold One'}
+
+    def test_active_engagements_filter_by_status(self, client, app, engagement_data):
+        """API supports status query param filter."""
+        cid = engagement_data['customer_id']
+        with app.app_context():
+            db.session.add_all([
+                Engagement(customer_id=cid, title='Active One', status='Active'),
+                Engagement(customer_id=cid, title='On Hold One', status='On Hold'),
+            ])
+            db.session.commit()
+
+        resp = client.get('/api/engagements/active?status=Active')
+        data = resp.get_json()
+        assert data['count'] == 1
+        assert data['engagements'][0]['title'] == 'Active One'
+
+        resp = client.get('/api/engagements/active?status=On Hold')
+        data = resp.get_json()
+        assert data['count'] == 1
+        assert data['engagements'][0]['title'] == 'On Hold One'
+
+    def test_homepage_shows_engagements_tab(self, client, app, engagement_data):
+        """Homepage renders the engagements tab when active engagements exist."""
+        cid = engagement_data['customer_id']
+        with app.app_context():
+            db.session.add(Engagement(
+                customer_id=cid, title='Active Eng', status='Active',
+            ))
+            db.session.commit()
+
+        resp = client.get('/')
+        assert resp.status_code == 200
+        assert b'engagements-tab' in resp.data
+        assert b'Engagements' in resp.data
+
+    def test_homepage_hides_engagements_tab_when_none(self, client, app, engagement_data):
+        """Homepage does NOT render the engagements tab when no active engagements."""
+        resp = client.get('/')
+        assert resp.status_code == 200
+        assert b'engagements-tab' not in resp.data

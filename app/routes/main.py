@@ -12,7 +12,8 @@ import os
 import re
 
 from app.models import (db, Note, Customer, Seller, Territory, Topic,
-                        UserPreference, NoteTemplate, User, SyncStatus)
+                        UserPreference, NoteTemplate, User, SyncStatus,
+                        Engagement)
 
 # Create blueprint
 main_bp = Blueprint('main', __name__)
@@ -114,7 +115,15 @@ def index():
         'topics': Topic.query.count()
     }
     has_milestones = SyncStatus.is_complete('milestones')
-    return render_template('index.html', stats=stats, has_milestones=has_milestones)
+    has_engagements = Engagement.query.filter(
+        Engagement.status.in_(['Active', 'On Hold'])
+    ).count() > 0
+    return render_template(
+        'index.html',
+        stats=stats,
+        has_milestones=has_milestones,
+        has_engagements=has_engagements,
+    )
 
 
 @main_bp.route('/api/notes/calendar')
@@ -215,6 +224,50 @@ def notes_calendar_api():
         'next_month': next_month,
         'today_day': today.day if today.year == year and today.month == month else None
     })
+
+
+@main_bp.route('/api/engagements/active')
+def api_active_engagements():
+    """Return active/on-hold engagements for the homepage tab."""
+    status_filter = request.args.get('status', '').strip()
+
+    query = Engagement.query.filter(
+        Engagement.status.in_(['Active', 'On Hold'])
+    )
+    if status_filter in ('Active', 'On Hold'):
+        query = query.filter(Engagement.status == status_filter)
+
+    # Eager-load relationships to avoid N+1
+    from sqlalchemy.orm import joinedload, subqueryload
+    query = query.options(
+        joinedload(Engagement.customer).joinedload(Customer.seller),
+        subqueryload(Engagement.notes),
+        subqueryload(Engagement.opportunities),
+        subqueryload(Engagement.milestones),
+    )
+
+    engagements = query.order_by(Engagement.updated_at.desc()).all()
+
+    results = []
+    for eng in engagements:
+        results.append({
+            'id': eng.id,
+            'title': eng.title,
+            'status': eng.status,
+            'customer_name': eng.customer.name if eng.customer else 'Unknown',
+            'customer_id': eng.customer_id,
+            'seller_name': (eng.customer.seller.name
+                           if eng.customer and eng.customer.seller else None),
+            'estimated_acr': eng.estimated_acr,
+            'target_date': eng.target_date.isoformat() if eng.target_date else None,
+            'story_completeness': eng.story_completeness,
+            'linked_note_count': eng.linked_note_count,
+            'opportunity_count': len(eng.opportunities),
+            'milestone_count': len(eng.milestones),
+            'updated_at': eng.updated_at.isoformat() if eng.updated_at else None,
+        })
+
+    return jsonify({'success': True, 'engagements': results, 'count': len(results)})
 
 
 @main_bp.route('/search')
