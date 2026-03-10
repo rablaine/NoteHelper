@@ -303,8 +303,8 @@ class TestSellerEngagementsUI:
         assert response.status_code == 200
         html = response.data.decode()
         assert 'Engagements' in html
-        assert 'engStatusFilter' in html
-        assert 'engSortSelect' in html
+        assert 'engagementsBody_statusFilter' in html
+        assert 'engagementsBody_sortSelect' in html
         assert 'Loading engagements...' in html
 
     def test_engagements_js_uses_correct_api_url(self, client, sample_data):
@@ -312,6 +312,5 @@ class TestSellerEngagementsUI:
         seller_id = sample_data['seller1_id']
         response = client.get(f'/seller/{seller_id}')
         html = response.data.decode()
-        # JS template literal uses SELLER_ID variable set via Jinja
-        assert f'const SELLER_ID = {seller_id};' in html
-        assert '/api/seller/${SELLER_ID}/engagements' in html
+        # API URL is passed directly as a JSON string via Jinja
+        assert f'/api/seller/{seller_id}/engagements' in html

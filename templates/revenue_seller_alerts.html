@@ -3,6 +3,7 @@
 
 {% block content %}
 <div class="container-fluid py-4">
+    {% if not request.args.get('embed') %}
     <div class="row mb-4">
         <div class="col">
             <nav aria-label="breadcrumb">
@@ -30,6 +31,7 @@
             </a>
         </div>
     </div>
+    {% endif %}
 
     <!-- Summary -->
     <div class="row mb-4">

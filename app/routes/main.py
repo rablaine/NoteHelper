@@ -906,6 +906,11 @@ def inject_preferences():
     except Exception:
         pass
     
+    # Get sellers for navbar dropdown
+    nav_sellers = []
+    if g.user.is_authenticated:
+        nav_sellers = Seller.query.order_by(Seller.name).all()
+
     return dict(
         dark_mode=dark_mode, 
         customer_view_grouped=customer_view_grouped, 
@@ -921,5 +926,6 @@ def inject_preferences():
         get_seller_color=get_seller_color,
         update_available=update_available,
         today=datetime.today(),
+        nav_sellers=nav_sellers,
     )
 

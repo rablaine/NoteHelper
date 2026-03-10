@@ -196,7 +196,7 @@ class TestCustomerToDict:
             result = _customer_to_dict(customer)
 
             assert result["_notehelper_backup"] is True
-            assert result["_version"] == 3
+            assert result["_version"] == 4
             assert "_exported_at" in result
 
             cust = result["customer"]
