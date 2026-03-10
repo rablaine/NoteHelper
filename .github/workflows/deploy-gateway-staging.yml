@@ -1,0 +1,55 @@
+# Deploy AI Gateway to staging slot on push to main
+# Manual swap to production: az webapp deployment slot swap -g NoteHelper_Resources -n app-notehelper-ai -s staging
+
+name: Deploy Gateway to Staging
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/gateway/**'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  AZURE_WEBAPP_NAME: app-notehelper-ai
+  AZURE_RESOURCE_GROUP: NoteHelper_Resources
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for Azure OIDC login
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Package gateway files
+        run: |
+          cd infra/gateway
+          zip -r ../../gateway-deploy.zip gateway.py openai_client.py prompts.py requirements.txt
+          cd ../..
+          ls -la gateway-deploy.zip
+
+      - name: Deploy to staging slot
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          slot-name: staging
+          package: gateway-deploy.zip
+
+      - name: Output staging URL
+        run: |
+          echo "🚀 Deployed to staging: https://app-notehelper-ai-staging.azurewebsites.net"
+          echo ""
+          echo "To promote to production, run:"
+          echo "  az webapp deployment slot swap -g NoteHelper_Resources -n app-notehelper-ai -s staging"
