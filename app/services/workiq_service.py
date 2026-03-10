@@ -286,6 +286,24 @@ def query_workiq(question: str, timeout: int = 120) -> str:
             logger.error(f"WorkIQ error: {result.stderr}")
             raise RuntimeError(f"WorkIQ query failed: {result.stderr}")
         
+        # Auto-accept EULA if WorkIQ prompts for it, then retry the query
+        if 'accept-eula' in result.stdout.lower() or 'end user license' in result.stdout.lower():
+            logger.info("WorkIQ EULA not yet accepted — auto-accepting...")
+            eula_cmd = [npx_path, "-y", "@microsoft/workiq", "accept-eula"]
+            eula_result = subprocess.run(
+                eula_cmd, capture_output=True, text=True, timeout=30, shell=False
+            )
+            logger.info(f"EULA acceptance result: {eula_result.stdout.strip()}")
+            if eula_result.returncode != 0:
+                raise RuntimeError(f"Failed to accept WorkIQ EULA: {eula_result.stderr}")
+            # Retry the original query
+            logger.info("Retrying WorkIQ query after EULA acceptance...")
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout, shell=False
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"WorkIQ query failed after EULA acceptance: {result.stderr}")
+        
         logger.info(f"WorkIQ response received ({len(result.stdout)} chars)")
         return result.stdout
         
