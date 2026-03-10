@@ -233,7 +233,7 @@ class TestMeetingImportAPI:
     @patch('app.services.workiq_service.get_meetings_for_date')
     def test_meetings_api_returns_meetings(self, mock_get_meetings, client):
         """Test meetings API returns formatted meetings."""
-        mock_get_meetings.return_value = [
+        mock_get_meetings.return_value = ([
             {
                 'id': 'test_meeting_1',
                 'title': 'Test Meeting',
@@ -242,7 +242,7 @@ class TestMeetingImportAPI:
                 'customer': 'Test Customer',
                 'attendees': ['John', 'Jane']
             }
-        ]
+        ], '| Time | Meeting Title | External Company |\n| 10:00 AM | Test Meeting | Test Customer |')
         
         response = client.get('/api/meetings?date=2026-02-24')
         assert response.status_code == 200
@@ -256,10 +256,10 @@ class TestMeetingImportAPI:
     @patch('app.services.workiq_service.find_best_customer_match')
     def test_meetings_api_auto_selects(self, mock_find_match, mock_get_meetings, client):
         """Test meetings API auto-selects matching meeting."""
-        mock_get_meetings.return_value = [
+        mock_get_meetings.return_value = ([
             {'id': 'meeting_1', 'title': 'Contoso Sync', 'start_time': None, 
              'start_time_str': '10:00', 'customer': 'Contoso', 'attendees': []}
-        ]
+        ], '| Time | Meeting Title | External Company |\n| 10:00 AM | Contoso Sync | Contoso |')
         mock_find_match.return_value = 0
         
         response = client.get('/api/meetings?date=2026-02-24&customer_name=Contoso')

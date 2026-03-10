@@ -294,7 +294,7 @@ def query_workiq(question: str, timeout: int = 120) -> str:
         raise TimeoutError(f"WorkIQ query timed out after {timeout} seconds")
 
 
-def get_meetings_for_date(date_str: str) -> List[Dict[str, Any]]:
+def get_meetings_for_date(date_str: str) -> tuple[List[Dict[str, Any]], str]:
     """
     Get all meetings for a specific date.
     
@@ -324,10 +324,12 @@ def get_meetings_for_date(date_str: str) -> List[Dict[str, Any]]:
         logger.info(f"WorkIQ raw response length: {len(response)}, first 200 chars: {response[:200]}")
         meetings = _parse_meetings_response(response, date_str)
         logger.info(f"Parsed {len(meetings)} meetings from response")
-        return meetings
+        if not meetings:
+            logger.warning(f"No meetings parsed for {date_str}. Full WorkIQ response:\n{response}")
+        return meetings, response
     except Exception as e:
         logger.error(f"Failed to get meetings for {date_str}: {e}")
-        return []
+        return [], str(e)
 
 
 def _parse_meetings_response(response: str, date_str: str) -> List[Dict[str, Any]]:

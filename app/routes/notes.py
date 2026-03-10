@@ -546,7 +546,7 @@ def api_get_meetings():
     
     # Get meetings from WorkIQ
     try:
-        meetings = get_meetings_for_date(date_str)
+        meetings, raw_response = get_meetings_for_date(date_str)
     except Exception as e:
         logger.error(f"WorkIQ error: {e}")
         return jsonify({'error': f'Failed to fetch meetings: {str(e)}'}), 500
@@ -579,7 +579,8 @@ def api_get_meetings():
         'auto_selected_index': auto_selected,
         'auto_selected_reason': auto_selected_reason,
         'date': date_str,
-        'customer_name': customer_name
+        'customer_name': customer_name,
+        'debug_raw_response': raw_response if not formatted_meetings else None,
     })
 
 
