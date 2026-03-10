@@ -30,7 +30,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.models import Note, Customer, Engagement, db
+from app.models import (
+    ConnectExport,
+    Customer,
+    Engagement,
+    Note,
+    NoteTemplate,
+    Partner,
+    PartnerContact,
+    RevenueConfig,
+    Specialty,
+    Topic,
+    UserPreference,
+    db,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +275,9 @@ def _customer_to_dict(customer: Customer) -> Dict[str, Any]:
     """Serialize a customer and all related data to a backup dict.
 
     Includes notes (with milestone links), engagements (with story fields
-    and links to notes/opportunities/milestones), and customer metadata.
+    and links to notes/opportunities/milestones), full partner records
+    (with contacts and specialties), full topic records (with descriptions),
+    and customer metadata.
 
     Args:
         customer: Customer with eagerly-loaded relationships.
@@ -278,9 +293,54 @@ def _customer_to_dict(customer: Customer) -> Dict[str, Any]:
         customer.engagements, key=lambda e: e.created_at, reverse=True
     )
 
+    # Collect all unique partners referenced by this customer's notes
+    seen_partner_ids = set()
+    partner_list = []
+    for note in notes:
+        for p in note.partners:
+            if p.id not in seen_partner_ids:
+                seen_partner_ids.add(p.id)
+                # Access the text notes column via the underlying table
+                # column (the 'notes' attribute is shadowed by the Note
+                # relationship).  The column may not exist if migrations
+                # haven't run (db.create_all skips it due to the shadow).
+                try:
+                    text_notes = db.session.execute(
+                        db.text("SELECT notes FROM partners WHERE id = :id"),
+                        {"id": p.id},
+                    ).scalar()
+                except Exception:
+                    text_notes = None
+                partner_list.append({
+                    "name": p.name,
+                    "notes": text_notes,
+                    "rating": p.rating,
+                    "contacts": [
+                        {
+                            "name": c.name,
+                            "email": c.email,
+                            "is_primary": c.is_primary,
+                        }
+                        for c in p.contacts
+                    ],
+                    "specialties": [s.name for s in p.specialties],
+                })
+
+    # Collect all unique topics referenced by this customer's notes
+    seen_topic_ids = set()
+    topic_list = []
+    for note in notes:
+        for t in note.topics:
+            if t.id not in seen_topic_ids:
+                seen_topic_ids.add(t.id)
+                topic_list.append({
+                    "name": t.name,
+                    "description": t.description,
+                })
+
     return {
         "_notehelper_backup": True,
-        "_version": 3,
+        "_version": 4,
         "_exported_at": datetime.now(timezone.utc).isoformat(),
         "customer": {
             "name": customer.name,
@@ -288,6 +348,8 @@ def _customer_to_dict(customer: Customer) -> Dict[str, Any]:
             "tpid": customer.tpid,
             "tpid_url": customer.tpid_url,
             "account_context": customer.account_context,
+            "website": customer.website,
+            "favicon_b64": customer.favicon_b64,
             "seller_name": customer.seller.name if customer.seller else None,
             "territory_name": customer.territory.name if customer.territory else None,
             "verticals": [v.name for v in customer.verticals],
@@ -333,6 +395,8 @@ def _customer_to_dict(customer: Customer) -> Dict[str, Any]:
             }
             for eng in engagements
         ],
+        "partners": partner_list,
+        "topics": topic_list,
     }
 
 
@@ -359,7 +423,8 @@ def backup_customer(customer_id: int) -> bool:
             db.joinedload(Customer.territory),
             db.joinedload(Customer.verticals),
             db.joinedload(Customer.notes).joinedload(Note.topics),
-            db.joinedload(Customer.notes).joinedload(Note.partners),
+            db.joinedload(Customer.notes).joinedload(Note.partners).joinedload(Partner.contacts),
+            db.joinedload(Customer.notes).joinedload(Note.partners).joinedload(Partner.specialties),
             db.joinedload(Customer.notes).joinedload(Note.milestones),
             db.joinedload(Customer.engagements).joinedload(Engagement.notes),
             db.joinedload(Customer.engagements).joinedload(Engagement.opportunities),
@@ -411,7 +476,8 @@ def backup_all_customers() -> Dict[str, int]:
             db.joinedload(Customer.territory),
             db.joinedload(Customer.verticals),
             db.joinedload(Customer.notes).joinedload(Note.topics),
-            db.joinedload(Customer.notes).joinedload(Note.partners),
+            db.joinedload(Customer.notes).joinedload(Note.partners).joinedload(Partner.contacts),
+            db.joinedload(Customer.notes).joinedload(Note.partners).joinedload(Partner.specialties),
             db.joinedload(Customer.notes).joinedload(Note.milestones),
             db.joinedload(Customer.engagements).joinedload(Engagement.notes),
             db.joinedload(Customer.engagements).joinedload(Engagement.opportunities),
@@ -440,7 +506,131 @@ def backup_all_customers() -> Dict[str, int]:
             logger.exception("Failed to back up customer %d", customer.id)
             failed += 1
 
+    # Also back up global (non-customer-specific) data
+    if not backup_global_data():
+        logger.warning("Global data backup failed during backup_all_customers")
+
     return {"backed_up": backed_up, "failed": failed}
+
+
+def _global_data_to_dict() -> Dict[str, Any]:
+    """Serialize non-customer-specific user data for backup.
+
+    Includes note templates, user preferences, specialties, and revenue config.
+    """
+    from app.models import NoteTemplate, UserPreference, RevenueConfig, ConnectExport
+
+    # Note templates (user-created only, skip builtins)
+    templates = NoteTemplate.query.order_by(NoteTemplate.id).all()
+    templates_data = [
+        {
+            "name": t.name,
+            "content": t.content,
+            "is_builtin": t.is_builtin,
+        }
+        for t in templates
+    ]
+
+    # User preferences (single-user app, so just grab first row if exists)
+    pref = UserPreference.query.first()
+    prefs_data = None
+    if pref:
+        # Store default template references by name for portability
+        cust_tmpl = pref.default_template_customer
+        noncust_tmpl = pref.default_template_noncustomer
+        prefs_data = {
+            "dark_mode": pref.dark_mode,
+            "customer_view_grouped": pref.customer_view_grouped,
+            "customer_sort_by": pref.customer_sort_by,
+            "topic_sort_by_calls": pref.topic_sort_by_calls,
+            "territory_view_accounts": pref.territory_view_accounts,
+            "show_customers_without_calls": pref.show_customers_without_calls,
+            "workiq_summary_prompt": pref.workiq_summary_prompt,
+            "workiq_connect_impact": pref.workiq_connect_impact,
+            "default_template_customer_name": cust_tmpl.name if cust_tmpl else None,
+            "default_template_noncustomer_name": noncust_tmpl.name if noncust_tmpl else None,
+        }
+
+    # Specialties (standalone entities not tied to a customer)
+    specialties = Specialty.query.order_by(Specialty.name).all()
+    specialties_data = [
+        {
+            "name": s.name,
+            "description": s.description,
+        }
+        for s in specialties
+    ]
+
+    # Revenue config (user-tuned thresholds)
+    rev_config = RevenueConfig.query.first()
+    rev_config_data = None
+    if rev_config:
+        rev_config_data = {
+            "min_revenue_for_outreach": rev_config.min_revenue_for_outreach,
+            "min_dollar_impact": rev_config.min_dollar_impact,
+            "dollar_at_risk_override": rev_config.dollar_at_risk_override,
+            "dollar_opportunity_override": rev_config.dollar_opportunity_override,
+            "high_value_threshold": rev_config.high_value_threshold,
+            "strategic_threshold": rev_config.strategic_threshold,
+            "volatile_min_revenue": rev_config.volatile_min_revenue,
+            "recent_drop_threshold": rev_config.recent_drop_threshold,
+            "expansion_growth_threshold": rev_config.expansion_growth_threshold,
+        }
+
+    # Connect exports (AI-generated summaries are user work product)
+    connect_exports = ConnectExport.query.order_by(ConnectExport.created_at).all()
+    connect_data = [
+        {
+            "name": ce.name,
+            "start_date": ce.start_date.isoformat(),
+            "end_date": ce.end_date.isoformat(),
+            "note_count": ce.note_count,
+            "customer_count": ce.customer_count,
+            "ai_summary": ce.ai_summary,
+            "created_at": ce.created_at.isoformat() if ce.created_at else None,
+        }
+        for ce in connect_exports
+    ]
+
+    return {
+        "_notehelper_global_backup": True,
+        "_version": 4,
+        "_exported_at": datetime.now(timezone.utc).isoformat(),
+        "note_templates": templates_data,
+        "user_preferences": prefs_data,
+        "specialties": specialties_data,
+        "revenue_config": rev_config_data,
+        "connect_exports": connect_data,
+    }
+
+
+def backup_global_data() -> bool:
+    """Write global (non-customer-specific) data to a JSON backup file.
+
+    The file is written to ``{backup_root}/notes/_global.json``.
+
+    Returns:
+        True if the file was written successfully, False otherwise.
+    """
+    backup_root = _get_backup_root()
+    if not backup_root:
+        return False
+
+    folder = os.path.join(backup_root, _NOTES_DIR)
+    filepath = os.path.join(folder, "_global.json")
+
+    try:
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        data = _global_data_to_dict()
+        tmp_path = filepath + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, filepath)
+        logger.debug("Global backup written: %s", filepath)
+        return True
+    except Exception:
+        logger.exception("Failed to write global backup")
+        return False
 
 
 def find_backup_folder() -> Optional[str]:
@@ -499,6 +689,19 @@ def restore_all_from_folder(notes_dir: Optional[str] = None) -> Dict[str, Any]:
     total_logs_skipped = 0
     customers_restored = []
     errors = []
+
+    # Restore global data if present
+    global_path = os.path.join(notes_dir, "_global.json")
+    if os.path.isfile(global_path):
+        try:
+            with open(global_path, "r", encoding="utf-8-sig") as f:
+                global_data = json.load(f)
+            if global_data.get("_notehelper_global_backup"):
+                restore_global_data(global_data)
+                logger.info("Global data restored from %s", global_path)
+        except Exception as exc:
+            logger.warning("Failed to restore global data: %s", exc)
+            errors.append(f"_global.json: {exc}")
 
     for seller_folder in sorted(os.listdir(notes_dir)):
         seller_path = os.path.join(notes_dir, seller_folder)
@@ -711,7 +914,7 @@ def restore_from_backup(data: Dict[str, Any]) -> Dict[str, Any]:
     db.session.commit()
 
     # ------------------------------------------------------------------
-    # Restore customer account context if missing
+    # Restore customer metadata (v4+)
     # ------------------------------------------------------------------
     backup_context = (
         cust_data.get("account_context")
@@ -720,7 +923,81 @@ def restore_from_backup(data: Dict[str, Any]) -> Dict[str, Any]:
     )
     if backup_context and not customer.account_context:
         customer.account_context = backup_context
-        db.session.commit()
+
+    if cust_data.get("website") and not customer.website:
+        customer.website = cust_data["website"]
+    if cust_data.get("favicon_b64") and not customer.favicon_b64:
+        customer.favicon_b64 = cust_data["favicon_b64"]
+
+    # ------------------------------------------------------------------
+    # Restore full partner records (v4+)
+    # ------------------------------------------------------------------
+    for p_data in data.get("partners", []):
+        p_name = p_data.get("name")
+        if not p_name:
+            continue
+        partner = Partner.query.filter_by(name=p_name).first()
+        if not partner:
+            partner = Partner(name=p_name)
+            db.session.add(partner)
+            db.session.flush()
+
+        # Enrich existing partner with backup data if fields are empty
+        p_text_notes = p_data.get("notes")
+        if p_text_notes:
+            # Use raw SQL to set the text 'notes' column (shadowed by
+            # relationship).  The column may not exist if migrations haven't
+            # run, so we silently skip on error.
+            try:
+                db.session.execute(
+                    db.text("UPDATE partners SET notes = :notes WHERE id = :id AND (notes IS NULL OR notes = '')"),
+                    {"notes": p_text_notes, "id": partner.id},
+                )
+            except Exception:
+                pass
+        if p_data.get("rating") is not None and partner.rating is None:
+            partner.rating = p_data["rating"]
+
+        # Restore contacts (dedup by name)
+        existing_contact_names = {c.name.lower() for c in partner.contacts}
+        for c_data in p_data.get("contacts", []):
+            c_name = c_data.get("name")
+            if not c_name or c_name.lower() in existing_contact_names:
+                continue
+            contact = PartnerContact(
+                partner_id=partner.id,
+                name=c_name,
+                email=c_data.get("email"),
+                is_primary=c_data.get("is_primary", False),
+            )
+            db.session.add(contact)
+            existing_contact_names.add(c_name.lower())
+
+        # Restore specialty links
+        existing_spec_names = {s.name.lower() for s in partner.specialties}
+        for spec_name in p_data.get("specialties", []):
+            if spec_name.lower() in existing_spec_names:
+                continue
+            spec = Specialty.query.filter_by(name=spec_name).first()
+            if not spec:
+                spec = Specialty(name=spec_name)
+                db.session.add(spec)
+                db.session.flush()
+            partner.specialties.append(spec)
+            existing_spec_names.add(spec_name.lower())
+
+    # ------------------------------------------------------------------
+    # Restore topic descriptions (v4+)
+    # ------------------------------------------------------------------
+    for t_data in data.get("topics", []):
+        t_name = t_data.get("name")
+        if not t_name:
+            continue
+        topic = Topic.query.filter_by(name=t_name).first()
+        if topic and t_data.get("description") and not topic.description:
+            topic.description = t_data["description"]
+
+    db.session.commit()
 
     return {
         "success": True,
@@ -730,6 +1007,167 @@ def restore_from_backup(data: Dict[str, Any]) -> Dict[str, Any]:
         "engagements_created": engagements_created,
         "engagements_skipped": engagements_skipped,
     }
+
+
+def restore_global_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Restore global (non-customer) data from a ``_global.json`` payload.
+
+    Handles: NoteTemplates, Specialties, UserPreference, RevenueConfig,
+    and ConnectExports.  All operations are idempotent — existing records
+    are left unchanged.
+
+    Returns a dict summarising what was created/skipped per section.
+    """
+    results: Dict[str, Any] = {}
+
+    # --- Note Templates ---
+    templates_data = data.get("note_templates", [])
+    created = skipped = 0
+    for t in templates_data:
+        name = t.get("name")
+        if not name:
+            continue
+        if NoteTemplate.query.filter_by(name=name).first():
+            skipped += 1
+            continue
+        tmpl = NoteTemplate(
+            name=name,
+            content=t.get("content", ""),
+            is_builtin=t.get("is_builtin", False),
+        )
+        db.session.add(tmpl)
+        created += 1
+    db.session.flush()
+    results["note_templates"] = {"created": created, "skipped": skipped}
+
+    # --- Specialties ---
+    specs_data = data.get("specialties", [])
+    created = skipped = 0
+    for s in specs_data:
+        name = s.get("name")
+        if not name:
+            continue
+        existing = Specialty.query.filter_by(name=name).first()
+        if existing:
+            if s.get("description") and not existing.description:
+                existing.description = s["description"]
+            skipped += 1
+            continue
+        spec = Specialty(name=name, description=s.get("description"))
+        db.session.add(spec)
+        created += 1
+    db.session.flush()
+    results["specialties"] = {"created": created, "skipped": skipped}
+
+    # --- User Preference ---
+    pref_data = data.get("user_preferences") or data.get("user_preference")
+    if pref_data:
+        pref = UserPreference.query.first()
+        if not pref:
+            pref = UserPreference()
+            db.session.add(pref)
+            db.session.flush()
+
+        # Only set fields that have values in the backup and are still default
+        pref_fields = [
+            "dark_mode",
+            "customer_view_grouped",
+            "customer_sort_by",
+            "topic_sort_by_calls",
+            "territory_view_accounts",
+            "show_customers_without_calls",
+            "workiq_summary_prompt",
+            "workiq_connect_impact",
+            "ai_enabled",
+        ]
+        for field in pref_fields:
+            if field in pref_data and pref_data[field] is not None:
+                setattr(pref, field, pref_data[field])
+
+        # Resolve default templates by name
+        for attr, key in [
+            ("default_template_customer_id", "default_template_customer_name"),
+            ("default_template_noncustomer_id", "default_template_noncustomer_name"),
+        ]:
+            tmpl_name = pref_data.get(key)
+            if tmpl_name:
+                tmpl = NoteTemplate.query.filter_by(name=tmpl_name).first()
+                if tmpl:
+                    setattr(pref, attr, tmpl.id)
+
+        results["user_preference"] = "restored"
+    else:
+        results["user_preference"] = "not_in_backup"
+
+    # --- Revenue Config ---
+    rc_data = data.get("revenue_config")
+    if rc_data:
+        rc = RevenueConfig.query.first()
+        if not rc:
+            rc = RevenueConfig()
+            db.session.add(rc)
+        rc_fields = [
+            "min_revenue_for_outreach",
+            "min_dollar_impact",
+            "dollar_at_risk_override",
+            "dollar_opportunity_override",
+            "high_value_threshold",
+            "strategic_threshold",
+            "volatile_min_revenue",
+            "recent_drop_threshold",
+            "expansion_growth_threshold",
+        ]
+        for field in rc_fields:
+            if field in rc_data and rc_data[field] is not None:
+                setattr(rc, field, rc_data[field])
+        results["revenue_config"] = "restored"
+    else:
+        results["revenue_config"] = "not_in_backup"
+
+    # --- Connect Exports ---
+    ce_data = data.get("connect_exports", [])
+    created = skipped = 0
+    for ce in ce_data:
+        name = ce.get("name")
+        start_date = ce.get("start_date")
+        if not name:
+            continue
+        # Dedup by name + start_date
+        existing_q = ConnectExport.query.filter_by(name=name)
+        if start_date:
+            existing_q = existing_q.filter_by(start_date=start_date)
+        if existing_q.first():
+            skipped += 1
+            continue
+        # Parse ISO date strings to Python date objects for SQLite
+        from datetime import date as _date
+        parsed_start = None
+        if start_date:
+            try:
+                parsed_start = _date.fromisoformat(start_date) if isinstance(start_date, str) else start_date
+            except (ValueError, TypeError):
+                parsed_start = None
+        end_date_raw = ce.get("end_date")
+        parsed_end = None
+        if end_date_raw:
+            try:
+                parsed_end = _date.fromisoformat(end_date_raw) if isinstance(end_date_raw, str) else end_date_raw
+            except (ValueError, TypeError):
+                parsed_end = None
+        export = ConnectExport(
+            name=name,
+            start_date=parsed_start,
+            end_date=parsed_end,
+            note_count=ce.get("note_count", 0),
+            customer_count=ce.get("customer_count", 0),
+            ai_summary=ce.get("ai_summary"),
+        )
+        db.session.add(export)
+        created += 1
+    results["connect_exports"] = {"created": created, "skipped": skipped}
+
+    db.session.commit()
+    return results
 
 
 def _restore_note_milestones(

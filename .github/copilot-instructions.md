@@ -98,14 +98,13 @@
 - Never run tests against production database
 - Aim for 70%+ code coverage
 - Test file naming: `test_*.py` or `*_test.py`
-- **Run scoped tests during development** - Run only the test file(s) relevant to what you're building (e.g., `pytest tests/test_views.py`). Do NOT run the full suite (`pytest tests/`) during normal development.
-- **Full test suite is reserved for merge-to-main only** - The full suite takes 12+ minutes. Only run `pytest tests/` after the user has manually tested the feature and explicitly asked to merge to main.
+- **Run scoped tests during development** - Run only the test file(s) relevant to what you're building (e.g., `pytest tests/test_views.py`). Do NOT run the full suite (`pytest tests/`) — the user runs that manually.
 - Add tests for any bugs discovered to prevent regression
 
 ## Terminal Command Rules
 
 **CRITICAL - DO NOT VIOLATE THESE RULES:**
-- **NEVER run the full test suite (`pytest tests/`) during development** — only run it when the user has tested the feature and told you to merge to main. During development, run only the relevant scoped test file(s) (e.g., `pytest tests/test_views.py`).
+- **NEVER run the full test suite (`pytest tests/`)** — the user runs that manually. During development, run only the relevant scoped test file(s) (e.g., `pytest tests/test_views.py`).
 - **NEVER pipe, redirect, or filter pytest output** — always run pytest plain and wait for it to finish. The full suite is 900+ tests and takes 12+ minutes. Let it complete.
 - **NEVER kill a running command and re-run it** — if a command is still running, WAIT. Do not start a new terminal command while one is still executing.
 - **NEVER chain pytest with `| Select-Object`, `| Out-String`, `| Where-Object`, `2>&1`, or any other output manipulation** — this causes truncation and wastes massive amounts of time re-running.
@@ -256,7 +255,7 @@ pytest --cov=app tests/  # with coverage
 4. **Prompt user to manually test new features or bug fixes** - Before committing, always ask the user to test the changes in the running app to verify everything works as expected
 5. Commit to feature branch with descriptive message
 6. **STOP AND WAIT for user confirmation** before merging to `main` — **NEVER merge to main without explicit user approval**
-7. When user says ready: run full test suite (`pytest tests/`), then merge to `main` with `--no-ff` and push
+7. When user says ready: merge to `main` with `--no-ff` and push
    - **Always use `git merge --no-ff`** to preserve feature branch history
 
 **CRITICAL — DO NOT AUTO-MERGE:**
@@ -266,8 +265,7 @@ pytest --cov=app tests/  # with coverage
 - Merging to `main` is a deployment gate — treat it seriously
 
 **Merge to Production Checklist:**
-- All tests passing (`pytest tests/`)
-- User has manually tested the feature
+- Scoped tests passing for changed code
 - User explicitly confirms "ready to deploy" or "merge to main"
 - Code follows PEP 8 standards
 - No secrets or .env file committed

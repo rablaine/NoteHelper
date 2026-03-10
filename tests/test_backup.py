@@ -530,8 +530,8 @@ class TestBackupRunAPI:
 class TestCustomerToDict:
     """Tests for _customer_to_dict serialization."""
 
-    def test_export_version_3(self, app):
-        """Exported dict should have _version 3."""
+    def test_export_version_4(self, app):
+        """Exported dict should have _version 4."""
         from app.models import db, Customer, Seller, Territory
         from app.services.backup import _customer_to_dict
 
@@ -548,10 +548,12 @@ class TestCustomerToDict:
             db.session.commit()
 
             data = _customer_to_dict(customer)
-            assert data["_version"] == 3
+            assert data["_version"] == 4
             assert data["_notehelper_backup"] is True
             assert "engagements" in data
             assert "notes" in data
+            assert "partners" in data
+            assert "topics" in data
 
     def test_export_includes_note_milestones(self, app):
         """Notes should include linked milestone IDs."""
@@ -699,6 +701,141 @@ class TestCustomerToDict:
 
             data = _customer_to_dict(customer)
             assert data["engagements"] == []
+
+    def test_export_includes_partner_details(self, app):
+        """Partners should include contacts, specialties, notes, and rating."""
+        from app.models import (
+            db, Customer, Note, Partner, PartnerContact, Specialty,
+            Seller, Territory,
+        )
+        from app.services.backup import _customer_to_dict
+
+        with app.app_context():
+            # Ensure the 'notes' text column exists (shadows relationship in model)
+            db.session.execute(db.text(
+                "ALTER TABLE partners ADD COLUMN notes TEXT"
+            )) if 'notes' not in [
+                row[1] for row in db.session.execute(
+                    db.text("PRAGMA table_info(partners)")
+                ).fetchall()
+            ] else None
+            db.session.commit()
+
+            seller = Seller(name='S', alias='s', seller_type='Growth')
+            territory = Territory(name='T')
+            db.session.add_all([seller, territory])
+            db.session.flush()
+
+            customer = Customer(
+                name='Partner Export', tpid=5004,
+                seller_id=seller.id, territory_id=territory.id,
+            )
+            db.session.add(customer)
+            db.session.flush()
+
+            spec = Specialty(name='Azure AI', description='AI/ML on Azure')
+            db.session.add(spec)
+            db.session.flush()
+
+            partner = Partner(name='Fabrikam')
+            partner.rating = 4
+            partner.specialties.append(spec)
+            db.session.add(partner)
+            db.session.flush()
+
+            # Set the text notes column via raw SQL (shadowed by relationship)
+            db.session.execute(
+                db.text("UPDATE partners SET notes = :notes WHERE id = :id"),
+                {"notes": "Great partner for AI workloads", "id": partner.id},
+            )
+
+            contact = PartnerContact(
+                partner_id=partner.id, name='Jane Doe',
+                email='jane@fabrikam.com', is_primary=True,
+            )
+            db.session.add(contact)
+            db.session.flush()
+
+            note = Note(
+                customer_id=customer.id,
+                call_date=datetime(2025, 5, 1, 10, 0, tzinfo=timezone.utc),
+                content='Partner test note',
+            )
+            note.partners.append(partner)
+            db.session.add(note)
+            db.session.commit()
+
+            data = _customer_to_dict(customer)
+            assert len(data["partners"]) == 1
+            p = data["partners"][0]
+            assert p["name"] == "Fabrikam"
+            assert p["rating"] == 4
+            assert p["notes"] == "Great partner for AI workloads"
+            assert len(p["contacts"]) == 1
+            assert p["contacts"][0]["name"] == "Jane Doe"
+            assert p["contacts"][0]["email"] == "jane@fabrikam.com"
+            assert p["contacts"][0]["is_primary"] is True
+            assert "Azure AI" in p["specialties"]
+
+    def test_export_includes_topic_descriptions(self, app):
+        """Topics should include descriptions."""
+        from app.models import db, Customer, Note, Topic, Seller, Territory
+        from app.services.backup import _customer_to_dict
+
+        with app.app_context():
+            seller = Seller(name='S', alias='s', seller_type='Growth')
+            territory = Territory(name='T')
+            db.session.add_all([seller, territory])
+            db.session.flush()
+
+            customer = Customer(
+                name='Topic Export', tpid=5005,
+                seller_id=seller.id, territory_id=territory.id,
+            )
+            db.session.add(customer)
+            db.session.flush()
+
+            topic = Topic(name='AKS', description='Azure Kubernetes Service')
+            db.session.add(topic)
+            db.session.flush()
+
+            note = Note(
+                customer_id=customer.id,
+                call_date=datetime(2025, 5, 1, 10, 0, tzinfo=timezone.utc),
+                content='Topic test note',
+            )
+            note.topics.append(topic)
+            db.session.add(note)
+            db.session.commit()
+
+            data = _customer_to_dict(customer)
+            assert len(data["topics"]) == 1
+            assert data["topics"][0]["name"] == "AKS"
+            assert data["topics"][0]["description"] == "Azure Kubernetes Service"
+
+    def test_export_includes_customer_website_and_favicon(self, app):
+        """Customer website and favicon_b64 should be exported."""
+        from app.models import db, Customer, Seller, Territory
+        from app.services.backup import _customer_to_dict
+
+        with app.app_context():
+            seller = Seller(name='S', alias='s', seller_type='Growth')
+            territory = Territory(name='T')
+            db.session.add_all([seller, territory])
+            db.session.flush()
+
+            customer = Customer(
+                name='Web Export', tpid=5006,
+                seller_id=seller.id, territory_id=territory.id,
+                website='https://example.com',
+                favicon_b64='data:image/png;base64,abc123',
+            )
+            db.session.add(customer)
+            db.session.commit()
+
+            data = _customer_to_dict(customer)
+            assert data["customer"]["website"] == "https://example.com"
+            assert data["customer"]["favicon_b64"] == "data:image/png;base64,abc123"
 
 
 class TestRestoreFromBackup:
@@ -1193,6 +1330,17 @@ class TestRestoreFromBackup:
         from app.services.backup import _customer_to_dict, restore_from_backup
 
         with app.app_context():
+            # Ensure the 'notes' text column exists on partners
+            if 'notes' not in [
+                row[1] for row in db.session.execute(
+                    db.text("PRAGMA table_info(partners)")
+                ).fetchall()
+            ]:
+                db.session.execute(db.text(
+                    "ALTER TABLE partners ADD COLUMN notes TEXT"
+                ))
+                db.session.commit()
+
             # --- Build rich customer data ---
             seller = Seller(name='RT Seller', alias='rts', seller_type='Growth')
             territory = Territory(name='RT Territory')
@@ -1269,7 +1417,7 @@ class TestRestoreFromBackup:
             exported = _customer_to_dict(customer)
 
             # --- Verify export structure ---
-            assert exported["_version"] == 3
+            assert exported["_version"] == 4
             assert len(exported["notes"]) == 2
             assert len(exported["engagements"]) == 1
             assert exported["engagements"][0]["title"] == "AKS Deployment"
@@ -1338,3 +1486,707 @@ class TestRestoreFromBackup:
             # Verify account context restored
             db.session.refresh(customer)
             assert customer.account_context == "Strategic customer"
+
+
+class TestRestoreV4PerCustomer:
+    """Tests for v4-specific per-customer restore fields."""
+
+    def _make_v4_backup(
+        self,
+        tpid: int = 5050,
+        notes: list = None,
+        engagements: list = None,
+        partners: list = None,
+        topics: list = None,
+        account_context: str = None,
+        website: str = None,
+        favicon_b64: str = None,
+    ) -> dict:
+        """Helper to build a v4 backup payload."""
+        cust = {
+            "name": "V4 Restore Test",
+            "nickname": "V4",
+            "tpid": tpid,
+            "tpid_url": "https://example.com/v4",
+            "account_context": account_context,
+            "website": website,
+            "favicon_b64": favicon_b64,
+            "seller_name": "Seller",
+            "territory_name": "Territory",
+            "verticals": [],
+        }
+        return {
+            "_notehelper_backup": True,
+            "_version": 4,
+            "_exported_at": datetime.now(timezone.utc).isoformat(),
+            "customer": cust,
+            "notes": notes or [],
+            "engagements": engagements or [],
+            "partners": partners or [],
+            "topics": topics or [],
+        }
+
+    def test_restore_customer_website_and_favicon(self, app):
+        """Should restore website and favicon_b64 when customer has none."""
+        from app.models import db, Customer
+        from app.services.backup import restore_from_backup
+
+        with app.app_context():
+            customer = Customer(name='V4 Web', tpid=5050)
+            db.session.add(customer)
+            db.session.commit()
+
+            data = self._make_v4_backup(
+                tpid=5050,
+                website='https://v4test.com',
+                favicon_b64='data:image/png;base64,xyz',
+            )
+
+            result = restore_from_backup(data)
+            assert result["success"] is True
+
+            db.session.refresh(customer)
+            assert customer.website == 'https://v4test.com'
+            assert customer.favicon_b64 == 'data:image/png;base64,xyz'
+
+    def test_restore_does_not_overwrite_existing_website(self, app):
+        """Should NOT overwrite existing website/favicon."""
+        from app.models import db, Customer
+        from app.services.backup import restore_from_backup
+
+        with app.app_context():
+            customer = Customer(
+                name='V4 Keep Web', tpid=5051,
+                website='https://original.com',
+                favicon_b64='original-favicon',
+            )
+            db.session.add(customer)
+            db.session.commit()
+
+            data = self._make_v4_backup(
+                tpid=5051,
+                website='https://backup.com',
+                favicon_b64='backup-favicon',
+            )
+
+            result = restore_from_backup(data)
+            assert result["success"] is True
+
+            db.session.refresh(customer)
+            assert customer.website == 'https://original.com'
+            assert customer.favicon_b64 == 'original-favicon'
+
+    def test_restore_partner_details(self, app):
+        """Should create partners with contacts and specialties from v4 backup."""
+        from app.models import db, Customer, Partner, PartnerContact, Specialty
+        from app.services.backup import restore_from_backup
+
+        with app.app_context():
+            # Ensure the 'notes' text column exists (shadows relationship in model)
+            if 'notes' not in [
+                row[1] for row in db.session.execute(
+                    db.text("PRAGMA table_info(partners)")
+                ).fetchall()
+            ]:
+                db.session.execute(db.text(
+                    "ALTER TABLE partners ADD COLUMN notes TEXT"
+                ))
+                db.session.commit()
+
+            customer = Customer(name='V4 Partner', tpid=5052)
+            db.session.add(customer)
+            db.session.commit()
+
+            data = self._make_v4_backup(
+                tpid=5052,
+                partners=[
+                    {
+                        "name": "NewPartner Inc",
+                        "notes": "Excellent at cloud migrations",
+                        "rating": 5,
+                        "contacts": [
+                            {
+                                "name": "Alice Smith",
+                                "email": "alice@newpartner.com",
+                                "is_primary": True,
+                            },
+                            {
+                                "name": "Bob Jones",
+                                "email": "bob@newpartner.com",
+                                "is_primary": False,
+                            },
+                        ],
+                        "specialties": ["Azure Migrate", "Networking"],
+                    },
+                ],
+            )
+
+            result = restore_from_backup(data)
+            assert result["success"] is True
+
+            partner = Partner.query.filter_by(name="NewPartner Inc").first()
+            assert partner is not None
+            assert partner.rating == 5
+
+            # Check text notes via raw SQL (shadowed column)
+            text_notes = db.session.execute(
+                db.text("SELECT notes FROM partners WHERE id = :id"),
+                {"id": partner.id},
+            ).scalar()
+            assert text_notes == "Excellent at cloud migrations"
+
+            contacts = PartnerContact.query.filter_by(partner_id=partner.id).all()
+            assert len(contacts) == 2
+            primary_contacts = [c for c in contacts if c.is_primary]
+            assert len(primary_contacts) == 1
+            assert primary_contacts[0].name == "Alice Smith"
+
+            specs = [s.name for s in partner.specialties]
+            assert "Azure Migrate" in specs
+            assert "Networking" in specs
+
+    def test_restore_partner_does_not_overwrite_existing(self, app):
+        """Should not overwrite rating or notes on existing partners."""
+        from app.models import db, Customer, Partner
+        from app.services.backup import restore_from_backup
+
+        with app.app_context():
+            # Ensure the 'notes' text column exists (shadows relationship in model)
+            if 'notes' not in [
+                row[1] for row in db.session.execute(
+                    db.text("PRAGMA table_info(partners)")
+                ).fetchall()
+            ]:
+                db.session.execute(db.text(
+                    "ALTER TABLE partners ADD COLUMN notes TEXT"
+                ))
+                db.session.commit()
+
+            customer = Customer(name='V4 Existing Partner', tpid=5053)
+            db.session.add(customer)
+
+            partner = Partner(name='ExistingCorp')
+            partner.rating = 3
+            db.session.add(partner)
+            db.session.flush()
+            db.session.execute(
+                db.text("UPDATE partners SET notes = :notes WHERE id = :id"),
+                {"notes": "Original notes", "id": partner.id},
+            )
+            db.session.commit()
+
+            data = self._make_v4_backup(
+                tpid=5053,
+                partners=[
+                    {
+                        "name": "ExistingCorp",
+                        "notes": "Backup notes trying to overwrite",
+                        "rating": 5,
+                        "contacts": [],
+                        "specialties": [],
+                    },
+                ],
+            )
+
+            result = restore_from_backup(data)
+            assert result["success"] is True
+
+            db.session.refresh(partner)
+            # Rating should NOT be overwritten (partner already had one)
+            assert partner.rating == 3
+            # Notes should NOT be overwritten (non-empty)
+            text_notes = db.session.execute(
+                db.text("SELECT notes FROM partners WHERE id = :id"),
+                {"id": partner.id},
+            ).scalar()
+            assert text_notes == "Original notes"
+
+    def test_restore_topic_descriptions(self, app):
+        """Should set description on existing topics that have none."""
+        from app.models import db, Customer, Topic
+        from app.services.backup import restore_from_backup
+
+        with app.app_context():
+            customer = Customer(name='V4 Topics', tpid=5054)
+            db.session.add(customer)
+
+            # Existing topic without description
+            topic = Topic(name='AKS')
+            db.session.add(topic)
+            db.session.commit()
+
+            data = self._make_v4_backup(
+                tpid=5054,
+                topics=[
+                    {"name": "AKS", "description": "Azure Kubernetes Service"},
+                    {"name": "CosmosDB", "description": "Globally distributed DB"},
+                ],
+            )
+
+            result = restore_from_backup(data)
+            assert result["success"] is True
+
+            db.session.refresh(topic)
+            assert topic.description == "Azure Kubernetes Service"
+
+            # CosmosDB topic should NOT be created by per-customer restore
+            # (topics in the per-customer section only update existing ones)
+            cosmos = Topic.query.filter_by(name="CosmosDB").first()
+            assert cosmos is None
+
+    def test_restore_does_not_overwrite_existing_topic_description(self, app):
+        """Should NOT overwrite existing topic descriptions."""
+        from app.models import db, Customer, Topic
+        from app.services.backup import restore_from_backup
+
+        with app.app_context():
+            customer = Customer(name='V4 Keep Topics', tpid=5055)
+            db.session.add(customer)
+
+            topic = Topic(name='AKS', description='Original description')
+            db.session.add(topic)
+            db.session.commit()
+
+            data = self._make_v4_backup(
+                tpid=5055,
+                topics=[
+                    {"name": "AKS", "description": "Trying to overwrite"},
+                ],
+            )
+
+            result = restore_from_backup(data)
+            assert result["success"] is True
+
+            db.session.refresh(topic)
+            assert topic.description == "Original description"
+
+    def test_v3_backup_still_works(self, app):
+        """v3 backups without partners/topics/website should restore fine."""
+        from app.models import db, Customer, Note
+        from app.services.backup import restore_from_backup
+
+        with app.app_context():
+            customer = Customer(name='V3 Compat', tpid=5056)
+            db.session.add(customer)
+            db.session.commit()
+
+            data = {
+                "_notehelper_backup": True,
+                "_version": 3,
+                "customer": {
+                    "name": "V3 Compat",
+                    "tpid": 5056,
+                },
+                "notes": [
+                    {
+                        "call_date": "2025-01-10T09:00:00+00:00",
+                        "content": "V3 note",
+                        "topics": [],
+                        "partners": [],
+                        "milestones": [],
+                    },
+                ],
+                "engagements": [],
+            }
+
+            result = restore_from_backup(data)
+            assert result["success"] is True
+            assert result["logs_created"] == 1
+
+            notes = Note.query.filter_by(customer_id=customer.id).all()
+            assert len(notes) == 1
+
+
+class TestGlobalDataExport:
+    """Tests for _global_data_to_dict serialization."""
+
+    def test_global_data_structure(self, app):
+        """Global export should have all expected top-level keys."""
+        from app.services.backup import _global_data_to_dict
+
+        with app.app_context():
+            data = _global_data_to_dict()
+            assert data["_notehelper_global_backup"] is True
+            assert data["_version"] == 4
+            assert "note_templates" in data
+            assert "user_preferences" in data
+            assert "specialties" in data
+            assert "revenue_config" in data
+            assert "connect_exports" in data
+
+    def test_global_data_includes_templates(self, app):
+        """Should include note templates."""
+        from app.models import db, NoteTemplate
+        from app.services.backup import _global_data_to_dict
+
+        with app.app_context():
+            tmpl = NoteTemplate(
+                name='Call Summary',
+                content='<h2>Summary</h2><p>Details here</p>',
+                is_builtin=False,
+            )
+            db.session.add(tmpl)
+            db.session.commit()
+
+            data = _global_data_to_dict()
+            templates = [t for t in data["note_templates"] if t["name"] == "Call Summary"]
+            assert len(templates) == 1
+            assert templates[0]["content"] == '<h2>Summary</h2><p>Details here</p>'
+            assert templates[0]["is_builtin"] is False
+
+    def test_global_data_includes_preferences(self, app):
+        """Should include user preferences with template names."""
+        from app.models import db, UserPreference, NoteTemplate
+        from app.services.backup import _global_data_to_dict
+
+        with app.app_context():
+            tmpl = NoteTemplate(name='My Template', content='<p>Test</p>')
+            db.session.add(tmpl)
+            db.session.flush()
+
+            # Update the existing UserPreference (conftest creates one)
+            pref = UserPreference.query.first()
+            pref.dark_mode = True
+            pref.customer_view_grouped = True
+            pref.default_template_customer_id = tmpl.id
+            db.session.commit()
+
+            data = _global_data_to_dict()
+            assert data["user_preferences"] is not None
+            assert data["user_preferences"]["dark_mode"] is True
+            assert data["user_preferences"]["customer_view_grouped"] is True
+            assert data["user_preferences"]["default_template_customer_name"] == "My Template"
+
+    def test_global_data_includes_specialties(self, app):
+        """Should include specialties with descriptions."""
+        from app.models import db, Specialty
+        from app.services.backup import _global_data_to_dict
+
+        with app.app_context():
+            spec = Specialty(name='Azure AI', description='AI services on Azure')
+            db.session.add(spec)
+            db.session.commit()
+
+            data = _global_data_to_dict()
+            specs = [s for s in data["specialties"] if s["name"] == "Azure AI"]
+            assert len(specs) == 1
+            assert specs[0]["description"] == "AI services on Azure"
+
+    def test_global_data_includes_revenue_config(self, app):
+        """Should include revenue config thresholds."""
+        from app.models import db, RevenueConfig
+        from app.services.backup import _global_data_to_dict
+
+        with app.app_context():
+            rc = RevenueConfig(
+                min_revenue_for_outreach=5000,
+                high_value_threshold=30000,
+            )
+            db.session.add(rc)
+            db.session.commit()
+
+            data = _global_data_to_dict()
+            assert data["revenue_config"] is not None
+            assert data["revenue_config"]["min_revenue_for_outreach"] == 5000
+            assert data["revenue_config"]["high_value_threshold"] == 30000
+
+    def test_global_data_includes_connect_exports(self, app):
+        """Should include connect exports with AI summaries."""
+        from datetime import date as date_type
+        from app.models import db, ConnectExport
+        from app.services.backup import _global_data_to_dict
+
+        with app.app_context():
+            ce = ConnectExport(
+                name='Q1 Export',
+                start_date=date_type(2025, 1, 1),
+                end_date=date_type(2025, 3, 31),
+                note_count=42,
+                customer_count=10,
+                ai_summary='Strong Q1 performance',
+            )
+            db.session.add(ce)
+            db.session.commit()
+
+            data = _global_data_to_dict()
+            exports = [e for e in data["connect_exports"] if e["name"] == "Q1 Export"]
+            assert len(exports) == 1
+            assert exports[0]["note_count"] == 42
+            assert exports[0]["ai_summary"] == "Strong Q1 performance"
+
+
+class TestRestoreGlobalData:
+    """Tests for restore_global_data."""
+
+    def _make_global_backup(self, **overrides) -> dict:
+        """Helper to build a global backup payload."""
+        base = {
+            "_notehelper_global_backup": True,
+            "_version": 4,
+            "_exported_at": datetime.now(timezone.utc).isoformat(),
+            "note_templates": [],
+            "user_preferences": None,
+            "specialties": [],
+            "revenue_config": None,
+            "connect_exports": [],
+        }
+        base.update(overrides)
+        return base
+
+    def test_restore_creates_templates(self, app):
+        """Should create note templates that don't exist."""
+        from app.models import db, NoteTemplate
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            data = self._make_global_backup(
+                note_templates=[
+                    {"name": "New Template", "content": "<p>Hello</p>", "is_builtin": False},
+                    {"name": "Built-in", "content": "<p>Default</p>", "is_builtin": True},
+                ],
+            )
+
+            result = restore_global_data(data)
+            assert result["note_templates"]["created"] == 2
+            assert result["note_templates"]["skipped"] == 0
+
+            tmpl = NoteTemplate.query.filter_by(name="New Template").first()
+            assert tmpl is not None
+            assert tmpl.content == "<p>Hello</p>"
+
+    def test_restore_skips_existing_templates(self, app):
+        """Should not create duplicate templates."""
+        from app.models import db, NoteTemplate
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            existing = NoteTemplate(name="Existing", content="<p>Original</p>")
+            db.session.add(existing)
+            db.session.commit()
+
+            data = self._make_global_backup(
+                note_templates=[
+                    {"name": "Existing", "content": "<p>Backup</p>", "is_builtin": False},
+                    {"name": "Brand New", "content": "<p>New</p>", "is_builtin": False},
+                ],
+            )
+
+            result = restore_global_data(data)
+            assert result["note_templates"]["created"] == 1
+            assert result["note_templates"]["skipped"] == 1
+
+            # Original content should be preserved
+            db.session.refresh(existing)
+            assert existing.content == "<p>Original</p>"
+
+    def test_restore_creates_specialties(self, app):
+        """Should create specialties that don't exist."""
+        from app.models import db, Specialty
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            data = self._make_global_backup(
+                specialties=[
+                    {"name": "Azure AI", "description": "AI on Azure"},
+                    {"name": "Networking", "description": "Azure Networking"},
+                ],
+            )
+
+            result = restore_global_data(data)
+            assert result["specialties"]["created"] == 2
+
+            spec = Specialty.query.filter_by(name="Azure AI").first()
+            assert spec.description == "AI on Azure"
+
+    def test_restore_enriches_existing_specialty_description(self, app):
+        """Should add description to existing specialty if missing."""
+        from app.models import db, Specialty
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            spec = Specialty(name="Azure AI")
+            db.session.add(spec)
+            db.session.commit()
+
+            data = self._make_global_backup(
+                specialties=[
+                    {"name": "Azure AI", "description": "AI services on Azure"},
+                ],
+            )
+
+            result = restore_global_data(data)
+            assert result["specialties"]["skipped"] == 1
+
+            db.session.refresh(spec)
+            assert spec.description == "AI services on Azure"
+
+    def test_restore_preferences(self, app):
+        """Should restore user preferences."""
+        from app.models import db, UserPreference
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            data = self._make_global_backup(
+                user_preferences={
+                    "dark_mode": False,
+                    "customer_view_grouped": True,
+                    "customer_sort_by": "recent",
+                    "topic_sort_by_calls": True,
+                    "territory_view_accounts": True,
+                    "show_customers_without_calls": False,
+                    "workiq_summary_prompt": "Summarize the key points",
+                    "workiq_connect_impact": False,
+                    "ai_enabled": True,
+                    "default_template_customer_name": None,
+                    "default_template_noncustomer_name": None,
+                },
+            )
+
+            result = restore_global_data(data)
+            assert result["user_preference"] == "restored"
+
+            pref = UserPreference.query.first()
+            assert pref is not None
+            assert pref.dark_mode is False
+            assert pref.customer_view_grouped is True
+            assert pref.customer_sort_by == "recent"
+            assert pref.workiq_summary_prompt == "Summarize the key points"
+
+    def test_restore_preferences_with_template_links(self, app):
+        """Should resolve default template FKs by name."""
+        from app.models import db, NoteTemplate, UserPreference
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            tmpl = NoteTemplate(name="My Call Template", content="<p>Template</p>")
+            db.session.add(tmpl)
+            db.session.commit()
+
+            data = self._make_global_backup(
+                user_preferences={
+                    "dark_mode": True,
+                    "default_template_customer_name": "My Call Template",
+                    "default_template_noncustomer_name": None,
+                },
+            )
+
+            result = restore_global_data(data)
+            assert result["user_preference"] == "restored"
+
+            pref = UserPreference.query.first()
+            assert pref.default_template_customer_id == tmpl.id
+
+    def test_restore_revenue_config(self, app):
+        """Should restore revenue config thresholds."""
+        from app.models import db, RevenueConfig
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            data = self._make_global_backup(
+                revenue_config={
+                    "min_revenue_for_outreach": 5000,
+                    "min_dollar_impact": 2000,
+                    "dollar_at_risk_override": 3000,
+                    "dollar_opportunity_override": 2500,
+                    "high_value_threshold": 30000,
+                    "strategic_threshold": 60000,
+                    "volatile_min_revenue": 7000,
+                    "recent_drop_threshold": -0.20,
+                    "expansion_growth_threshold": 0.10,
+                },
+            )
+
+            result = restore_global_data(data)
+            assert result["revenue_config"] == "restored"
+
+            rc = RevenueConfig.query.first()
+            assert rc is not None
+            assert rc.min_revenue_for_outreach == 5000
+            assert rc.high_value_threshold == 30000
+            assert rc.recent_drop_threshold == -0.20
+
+    def test_restore_connect_exports(self, app):
+        """Should create connect exports that don't exist."""
+        from app.models import db, ConnectExport
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            data = self._make_global_backup(
+                connect_exports=[
+                    {
+                        "name": "Q1 Export",
+                        "start_date": "2025-01-01",
+                        "end_date": "2025-03-31",
+                        "note_count": 42,
+                        "customer_count": 10,
+                        "ai_summary": "Strong Q1",
+                    },
+                ],
+            )
+
+            result = restore_global_data(data)
+            assert result["connect_exports"]["created"] == 1
+
+            ce = ConnectExport.query.filter_by(name="Q1 Export").first()
+            assert ce is not None
+            assert ce.note_count == 42
+            assert ce.ai_summary == "Strong Q1"
+
+    def test_restore_deduplicates_connect_exports(self, app):
+        """Should skip connect exports that already exist (by name+start_date)."""
+        from datetime import date as date_type
+        from app.models import db, ConnectExport
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            existing = ConnectExport(
+                name="Q1 Export",
+                start_date=date_type(2025, 1, 1),
+                end_date=date_type(2025, 3, 31),
+                note_count=42,
+                customer_count=10,
+            )
+            db.session.add(existing)
+            db.session.commit()
+
+            data = self._make_global_backup(
+                connect_exports=[
+                    {
+                        "name": "Q1 Export",
+                        "start_date": "2025-01-01",
+                        "end_date": "2025-03-31",
+                        "note_count": 100,
+                        "customer_count": 20,
+                        "ai_summary": "Overwrite attempt",
+                    },
+                    {
+                        "name": "Q2 Export",
+                        "start_date": "2025-04-01",
+                        "end_date": "2025-06-30",
+                        "note_count": 50,
+                        "customer_count": 15,
+                        "ai_summary": "New export",
+                    },
+                ],
+            )
+
+            result = restore_global_data(data)
+            assert result["connect_exports"]["created"] == 1
+            assert result["connect_exports"]["skipped"] == 1
+
+            # Original should be preserved
+            db.session.refresh(existing)
+            assert existing.note_count == 42
+
+    def test_restore_empty_global_data(self, app):
+        """Should handle empty global backup gracefully."""
+        from app.services.backup import restore_global_data
+
+        with app.app_context():
+            data = self._make_global_backup()
+            result = restore_global_data(data)
+            assert result["note_templates"]["created"] == 0
+            assert result["specialties"]["created"] == 0
+            assert result["user_preference"] == "not_in_backup"
+            assert result["revenue_config"] == "not_in_backup"
+            assert result["connect_exports"]["created"] == 0
