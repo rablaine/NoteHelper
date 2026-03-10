@@ -23,9 +23,9 @@
     </div>
 </div>
 
-<div class="row">
+<div class="row" style="height: 600px;">
     <!-- Left column: Details + Customers -->
-    <div class="col-lg-4">
+    <div class="col-lg-4 d-flex flex-column" style="height: 100%;">
         <!-- Details Card -->
         <div class="card mb-3">
             <div class="card-header">
@@ -34,9 +34,6 @@
             <div class="card-body">
                 {% if seller.alias %}
                     <p><strong>Email:</strong> <a href="mailto:{{ seller.alias }}@microsoft.com">{{ seller.alias }}@microsoft.com</a></p>
-                {% endif %}
-                {% if seller.seller_type %}
-                    <p><strong>Type:</strong> <span class="badge bg-secondary">{{ seller.seller_type }}</span></p>
                 {% endif %}
                 
                 {% set pods = [] %}
@@ -47,7 +44,12 @@
                         {% endif %}
                     {% endfor %}
                 {% endif %}
-                <p><strong>PODs:</strong>
+                <p>
+                    {% if seller.seller_type %}
+                        <strong>Type:</strong> <span class="badge bg-secondary">{{ seller.seller_type }}</span>
+                    {% endif %}
+                    {% if seller.seller_type and pods|length > 0 %}&nbsp; {% endif %}
+                    <strong>POD:</strong>
                     {% if pods|length > 0 %}
                         {% for pod in pods|sort(attribute='name') %}
                             <a href="{{ url_for('pods.pod_view', id=pod.id) }}" class="badge bg-info text-dark text-decoration-none">
@@ -70,20 +72,19 @@
                         <span class="text-muted">None</span>
                     {% endif %}
                 </p>
-                <p><strong>Total Customers:</strong> {{ customers|length }}</p>
             </div>
         </div>
         
         <!-- Customers Card (compact, scrollable) -->
-        <div class="card mb-3">
+        <div class="card mb-3 flex-grow-1 d-flex flex-column" style="min-height: 0;">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-building"></i> Customers <span class="badge bg-secondary">{{ customers|length }}</span></h5>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0 ps-2 flex-grow-1" style="overflow-y: auto; min-height: 0;">
                 {% if customers %}
-                <div style="max-height: 280px; overflow-y: auto;">
-                    <table class="table table-hover table-sm mb-0">
-                        <thead class="sticky-top bg-body">
+                <div>
+                    <table class="table table-hover table-sm mb-0" style="--bs-table-bg: transparent;">
+                        <thead class="sticky-top" style="background: var(--bs-card-bg, var(--bs-body-bg));">
                             <tr>
                                 <th style="font-size: 0.8rem;">Customer</th>
                                 <th style="font-size: 0.8rem;">Last Note</th>
@@ -125,50 +126,49 @@
     </div>
 
     <!-- Middle column: Revenue Analyzer -->
-    <div class="col-lg-4">
+    <div class="col-lg-4 d-flex flex-column" style="height: 100%;">
         {% if revenue_alerts %}
-        <div class="card mb-3 border-warning">
+        <div class="card mb-3 border-warning flex-grow-1 d-flex flex-column" style="min-height: 0;">
             <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Revenue Analyzer</h5>
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Revenue Analyzer <span class="badge bg-dark">{{ revenue_alerts|length }}</span></h5>
                 <a href="{{ url_for('revenue.revenue_seller_view', seller_name=seller.name) }}" class="btn btn-sm btn-outline-dark">
                     <i class="bi bi-eye"></i> Full View
                 </a>
             </div>
-            <div class="card-body">
-                {% for alert in revenue_alerts[:5] %}
-                    <div class="{% if not loop.last %}mb-3 pb-3 border-bottom{% endif %}">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                            <strong>{{ alert.customer_name }}</strong>
-                            <span class="badge 
-                                {% if alert.category == 'CHURN_RISK' %}bg-danger
-                                {% elif alert.category == 'RECENT_DIP' %}bg-warning text-dark
-                                {% elif alert.category == 'EXPANSION_OPPORTUNITY' %}bg-success
-                                {% elif alert.category == 'VOLATILE' %}bg-info
-                                {% else %}bg-secondary{% endif %}"
-                                style="font-size: 0.7em;">
-                                {{ alert.category|replace('_', ' ')|title }}
-                            </span>
+            <div class="card-body p-0 flex-grow-1" style="overflow-y: auto; min-height: 0;">
+                <div class="list-group list-group-flush">
+                {% for alert in revenue_alerts %}
+                    <div class="list-group-item p-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="text-truncate me-2" style="min-width: 0;">
+                                <div class="fw-semibold text-truncate" style="font-size: 0.85rem;">{{ alert.customer_name }}</div>
+                                <div class="text-muted text-truncate" style="font-size: 0.75rem;">{{ alert.bucket }}</div>
+                            </div>
+                            <div class="text-end flex-shrink-0">
+                                <span class="badge
+                                    {% if alert.category == 'CHURN_RISK' %}bg-danger
+                                    {% elif alert.category == 'RECENT_DIP' %}bg-warning text-dark
+                                    {% elif alert.category == 'EXPANSION_OPPORTUNITY' %}bg-success
+                                    {% elif alert.category == 'VOLATILE' %}bg-info
+                                    {% else %}bg-secondary{% endif %}"
+                                    style="font-size: 0.65rem;">
+                                    {{ alert.category|replace('_', ' ')|title }}
+                                </span>
+                                {% if alert.dollars_at_risk and alert.dollars_at_risk > 0 %}
+                                <div class="text-danger" style="font-size: 0.7rem;">${{ "{:,.0f}".format(alert.dollars_at_risk) }} at risk</div>
+                                {% else %}
+                                <div style="font-size: 0.7rem;">&nbsp;</div>
+                                {% endif %}
+                            </div>
                         </div>
-                        <div class="small text-muted">{{ alert.bucket }}</div>
                         {% if alert.recommended_action and alert.recommended_action != 'NO ACTION' %}
-                            <div class="small mt-1">
-                                <i class="bi bi-arrow-right"></i> {{ alert.recommended_action }}
-                            </div>
-                        {% endif %}
-                        {% if alert.dollars_at_risk and alert.dollars_at_risk > 0 %}
-                            <div class="small text-danger mt-1">
-                                ${{ "{:,.0f}".format(alert.dollars_at_risk) }} at risk
-                            </div>
+                        <div class="text-muted mt-1" style="font-size: 0.75rem;">
+                            <i class="bi bi-arrow-right"></i> {{ alert.recommended_action }}
+                        </div>
                         {% endif %}
                     </div>
                 {% endfor %}
-                {% if revenue_alerts|length > 5 %}
-                    <div class="text-center mt-2">
-                        <a href="{{ url_for('revenue.revenue_seller_view', seller_name=seller.name) }}" class="btn btn-sm btn-warning">
-                            View all {{ revenue_alerts|length }} insights
-                        </a>
-                    </div>
-                {% endif %}
+                </div>
             </div>
         </div>
         {% else %}
@@ -185,39 +185,36 @@
     </div>
 
     <!-- Right column: Milestones -->
-    <div class="col-lg-4">
+    <div class="col-lg-4 d-flex flex-column" style="height: 100%;">
         {% if milestones %}
-        <div class="card mb-3 border-info">
+        <div class="card mb-3 border-info flex-grow-1 d-flex flex-column" style="min-height: 0;">
             <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-flag"></i> Milestones <span class="badge bg-dark">{{ milestones|length }}</span></h5>
                 <a href="{{ url_for('milestones.milestone_tracker') }}?seller={{ seller.id }}" class="btn btn-sm btn-outline-dark">
                     <i class="bi bi-eye"></i> Full View
                 </a>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0 flex-grow-1" style="overflow-y: auto; min-height: 0;">
                 <div class="list-group list-group-flush">
-                    {% for ms in milestones[:10] %}
+                    {% for ms in milestones %}
                     <a href="{{ url_for('milestones.milestone_view', id=ms.id) }}" class="list-group-item list-group-item-action p-2">
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="text-truncate me-2" style="min-width: 0;">
                                 <div class="fw-semibold text-truncate" style="font-size: 0.85rem;">{{ ms.title }}</div>
-                                <div class="text-muted small text-truncate">{{ ms.customer_name }}</div>
+                                <div class="text-muted text-truncate" style="font-size: 0.75rem;">{{ ms.customer_name }}</div>
                             </div>
                             <div class="text-end flex-shrink-0">
                                 <span class="badge {% if ms.status == 'On Track' %}bg-success{% elif ms.status == 'At Risk' %}bg-warning text-dark{% else %}bg-danger{% endif %}" style="font-size: 0.65rem;">{{ ms.status }}</span>
                                 {% if ms.due_date %}
-                                <div class="small {% if ms.urgency == 'past_due' %}text-danger fw-bold{% elif ms.urgency == 'this_week' %}text-warning{% else %}text-muted{% endif %}" style="font-size: 0.75rem;">
-                                    {{ ms.due_date.strftime('%b %d') }}
-                                    {% if ms.days_until_due is not none %}
-                                        {% if ms.days_until_due < 0 %}({{ -ms.days_until_due }}d overdue){% elif ms.days_until_due == 0 %}(today){% else %}({{ ms.days_until_due }}d){% endif %}
-                                    {% endif %}
+                                <div class="{% if ms.urgency == 'past_due' %}text-danger fw-bold{% elif ms.urgency == 'this_week' %}text-warning{% else %}text-muted{% endif %}" style="font-size: 0.7rem;">
+                                    {{ ms.due_date.strftime('%b %d') }}{% if ms.days_until_due is not none %} {% if ms.days_until_due < 0 %}({{ -ms.days_until_due }}d){% elif ms.days_until_due == 0 %}(today){% else %}({{ ms.days_until_due }}d){% endif %}{% endif %}
                                 </div>
                                 {% endif %}
                             </div>
                         </div>
                         {% if ms.monthly_usage and ms.monthly_usage > 0 %}
                         <div class="small text-muted mt-1" style="font-size: 0.75rem;">
-                            <i class="bi bi-graph-up"></i> ${{ "{:,.0f}".format(ms.monthly_usage) }}/mo
+                            <span class="text-success"><i class="bi bi-graph-up"></i> ${{ "{:,.0f}".format(ms.monthly_usage) }}/mo</span>
                             {% if ms.workload %}&middot; {{ ms.workload }}{% endif %}
                         </div>
                         {% elif ms.workload %}
@@ -226,13 +223,6 @@
                     </a>
                     {% endfor %}
                 </div>
-                {% if milestones|length > 10 %}
-                <div class="text-center py-2">
-                    <a href="{{ url_for('milestones.milestone_tracker') }}?seller={{ seller.id }}" class="btn btn-sm btn-info">
-                        View all {{ milestones|length }} milestones
-                    </a>
-                </div>
-                {% endif %}
             </div>
         </div>
         {% else %}
@@ -249,190 +239,17 @@
     </div>
 </div>
 
-<!-- Full-width Engagements section -->
+<!-- Engagements section -->
 <div class="row">
     <div class="col-12">
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h5 class="mb-0"><i class="bi bi-kanban"></i> Engagements <span class="badge bg-secondary" id="engCount" style="display:none;"></span></h5>
-                <div class="d-flex align-items-center gap-2">
-                    <div class="btn-group btn-group-sm" id="engStatusFilter" role="group" aria-label="Status filter">
-                        <button type="button" class="btn btn-outline-secondary active" data-status="">All</button>
-                        <button type="button" class="btn btn-outline-success" data-status="Active">Active</button>
-                        <button type="button" class="btn btn-outline-warning" data-status="On Hold">On Hold</button>
-                    </div>
-                    <select class="form-select form-select-sm" id="engSortSelect" style="width:auto;">
-                        <option value="updated">Last Updated</option>
-                        <option value="target">Target Date</option>
-                    </select>
-                </div>
-            </div>
-            <div class="card-body p-2" id="engagementsBody">
-                <div class="text-center py-4">
-                    <div class="spinner-border spinner-border-sm" role="status"></div> Loading engagements...
-                </div>
-            </div>
-        </div>
+        {% set eng_api_url = '/api/seller/' ~ seller.id ~ '/engagements' %}
+        {% set eng_auto_load = true %}
+        {% set eng_show_seller = false %}
+        {% set eng_empty_msg = 'No engagements found for this seller.' %}
+        {% include 'partials/engagements_panel.html' %}
     </div>
 </div>
 
-<script>
-// ===== SELLER ENGAGEMENTS =====
-const SELLER_ID = {{ seller.id }};
-let engagementsData = null;
-let engStatusFilter = '';
-let engSortBy = 'updated';
-
-// Load on page ready
-document.addEventListener('DOMContentLoaded', loadEngagements);
-
-// Status filter buttons
-document.querySelectorAll('#engStatusFilter button').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('#engStatusFilter button').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        engStatusFilter = this.dataset.status;
-        if (engagementsData) renderEngagements();
-    });
-});
-
-// Sort select
-document.getElementById('engSortSelect').addEventListener('change', function() {
-    engSortBy = this.value;
-    if (engagementsData) renderEngagements();
-});
-
-function loadEngagements() {
-    const body = document.getElementById('engagementsBody');
-    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm" role="status"></div> Loading engagements...</div>';
-
-    fetch(`/api/seller/${SELLER_ID}/engagements`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                engagementsData = data.engagements;
-                const badge = document.getElementById('engCount');
-                if (badge && data.count > 0) {
-                    badge.textContent = data.count;
-                    badge.style.display = 'inline';
-                }
-                renderEngagements();
-            } else {
-                body.innerHTML = '<div class="text-center py-4 text-danger">Error loading engagements</div>';
-            }
-        })
-        .catch(err => {
-            console.error('Error loading engagements:', err);
-            body.innerHTML = '<div class="text-center py-4 text-danger">Error loading engagements</div>';
-        });
-}
-
-function renderEngagements() {
-    const body = document.getElementById('engagementsBody');
-    let items = engagementsData.slice();
-
-    // Filter by status
-    if (engStatusFilter) {
-        items = items.filter(e => e.status === engStatusFilter);
-    }
-
-    // Sort
-    if (engSortBy === 'updated') {
-        items.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
-    } else if (engSortBy === 'target') {
-        items.sort((a, b) => (a.target_date || '9999').localeCompare(b.target_date || '9999'));
-    }
-
-    if (items.length === 0) {
-        body.innerHTML = '<div class="text-center py-4 text-muted">No engagements found for this seller.</div>';
-        return;
-    }
-
-    function escapeHtml(text) {
-        if (!text) return '';
-        const d = document.createElement('div');
-        d.textContent = text;
-        return d.innerHTML;
-    }
-
-    // Group by customer
-    const groups = new Map();
-    items.forEach(eng => {
-        const key = eng.customer_id || 0;
-        if (!groups.has(key)) {
-            groups.set(key, { name: eng.customer_name, id: eng.customer_id, favicon: eng.customer_favicon, items: [] });
-        }
-        groups.get(key).items.push(eng);
-    });
-
-    // Sort groups by most-recently-updated engagement
-    const sortedGroups = [...groups.values()].sort((a, b) => {
-        const aMax = Math.max(...a.items.map(e => new Date(e.updated_at || 0).getTime()));
-        const bMax = Math.max(...b.items.map(e => new Date(e.updated_at || 0).getTime()));
-        return bMax - aMax;
-    });
-
-    body.innerHTML = sortedGroups.map(group => {
-        const cards = group.items.map(eng => {
-            const statusClass = eng.status === 'Active' ? 'bg-success' : 'bg-warning text-dark';
-            const completeness = eng.story_completeness || 0;
-            const barClass = completeness >= 80 ? 'bg-success' : completeness >= 40 ? 'bg-warning' : 'bg-danger';
-
-            let targetDisplay = '';
-            if (eng.target_date) {
-                const d = new Date(eng.target_date + 'T00:00:00');
-                if (!isNaN(d)) targetDisplay = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-            }
-            let updatedDisplay = '';
-            if (eng.updated_at) {
-                const d = new Date(eng.updated_at);
-                if (!isNaN(d)) updatedDisplay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            }
-
-            const stats = [];
-            if (eng.linked_note_count > 0) stats.push('<i class="bi bi-journal-text"></i> ' + eng.linked_note_count);
-            if (eng.opportunity_count > 0) stats.push('<i class="bi bi-briefcase"></i> ' + eng.opportunity_count);
-            if (eng.milestone_count > 0) stats.push('<i class="bi bi-flag"></i> ' + eng.milestone_count);
-
-            return `<div class="col"><div class="card h-100 border" style="cursor:pointer;" onclick="if(!event.target.closest('a')){window.location='/engagement/${eng.id}'}">
-                <div class="card-body p-2">
-                    <div class="d-flex justify-content-between align-items-start mb-1">
-                        <div class="d-flex align-items-center gap-1" style="min-width:0;">
-                            <strong class="text-truncate" style="font-size:0.9rem;">${escapeHtml(eng.title)}</strong>
-                            <span class="badge ${statusClass} flex-shrink-0" style="font-size:0.65rem;">${escapeHtml(eng.status)}</span>
-                        </div>
-                        ${updatedDisplay ? '<span class="text-muted text-nowrap flex-shrink-0 ms-2" style="font-size:0.7rem;"><i class="bi bi-clock"></i> ' + updatedDisplay + '</span>' : ''}
-                    </div>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="text-muted" style="font-size:0.7rem;">Story ${completeness}%</span>
-                        <div class="progress flex-grow-1" style="height:3px;max-width:80px;">
-                            <div class="progress-bar ${barClass}" style="width:${completeness}%"></div>
-                        </div>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 text-muted" style="font-size:0.75rem;">
-                        ${stats.length ? '<span>' + stats.join('</span><span>') + '</span>' : ''}
-                        ${eng.estimated_acr ? '<span><i class="bi bi-currency-dollar"></i> ' + escapeHtml(eng.estimated_acr) + '</span>' : ''}
-                        ${targetDisplay ? '<span><i class="bi bi-calendar"></i> ' + targetDisplay + '</span>' : ''}
-                    </div>
-                </div>
-            </div></div>`;
-        }).join('');
-
-        const iconHtml = group.favicon
-            ? '<img src="data:image/png;base64,' + group.favicon + '" width="16" height="16" alt="" style="vertical-align:middle;">'
-            : '<i class="bi bi-building text-muted"></i>';
-
-        return `<div class="mb-3">
-            <div class="d-flex align-items-center gap-2 mb-1 px-1">
-                ${iconHtml}
-                <a href="/customer/${group.id}" class="fw-semibold text-decoration-none" style="font-size:0.95rem;">${escapeHtml(group.name)}</a>
-                <span class="badge bg-secondary" style="font-size:0.65rem;">${group.items.length}</span>
-            </div>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-2">${cards}</div>
-        </div>`;
-    }).join('');
-}
-</script>
 {% endblock %}
 
 

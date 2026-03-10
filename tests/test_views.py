@@ -414,8 +414,8 @@ class TestSellerEngagementsUI:
         assert response.status_code == 200
         html = response.data.decode()
         assert 'Engagements' in html
-        assert 'engStatusFilter' in html
-        assert 'engSortSelect' in html
+        assert '_statusFilter' in html
+        assert '_sortSelect' in html
         assert 'Loading engagements...' in html
 
     def test_engagements_js_uses_correct_api_url(self, client, sample_data):
@@ -423,8 +423,7 @@ class TestSellerEngagementsUI:
         seller_id = sample_data['seller1_id']
         response = client.get(f'/seller/{seller_id}')
         html = response.data.decode()
-        assert f'const SELLER_ID = {seller_id};' in html
-        assert '/api/seller/${SELLER_ID}/engagements' in html
+        assert f'/api/seller/{seller_id}/engagements' in html
 
 
 def test_territory_view_loads(client, sample_data):

@@ -3,7 +3,7 @@ Seller routes for NoteHelper.
 Handles seller listing, creation, viewing, and editing.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import joinedload, subqueryload
 
 from app.models import db, Seller, Territory, Customer, Milestone, Engagement
@@ -93,7 +93,7 @@ def seller_view(id):
     from app.services.revenue_analysis import get_seller_alerts
     revenue_alerts = get_seller_alerts(seller.name)
     
-    # Get active milestones for this seller's customers (top 10 by monthly usage)
+    # Get active milestones for this seller's customers
     customer_ids = [c.id for c in seller.customers]
     milestones_data = []
     if customer_ids:
@@ -112,12 +112,16 @@ def seller_view(id):
         )
         
         now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=60)  # exclude milestones more than 2 months overdue
         for ms in milestones:
             days_until = None
             if ms.due_date:
                 due = ms.due_date if ms.due_date.tzinfo else ms.due_date.replace(
                     tzinfo=timezone.utc
                 )
+                # Skip if more than 2 months overdue
+                if due < cutoff:
+                    continue
                 days_until = (due - now).days
             
             milestones_data.append({
