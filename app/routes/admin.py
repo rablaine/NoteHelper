@@ -33,6 +33,19 @@ admin_bp = Blueprint('admin', __name__)
 def admin_panel():
     """Admin control panel for system-wide operations."""
     import os
+    from datetime import timedelta, timezone
+    
+    # Get favicon sync status and check if actively in progress
+    favicon_sync = SyncStatus.get_status('favicons')
+    favicon_sync['in_progress'] = False
+    if favicon_sync['state'] == 'incomplete' and favicon_sync['started_at']:
+        # Consider "in progress" if started within last 10 minutes
+        # Make started_at timezone-aware if it's naive (SQLite returns naive datetimes)
+        started_at = favicon_sync['started_at']
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        age = utc_now() - started_at
+        favicon_sync['in_progress'] = age < timedelta(minutes=10)
     
     # Get system-wide statistics
     stats = {
@@ -53,6 +66,7 @@ def admin_panel():
             Customer.website.isnot(None), Customer.website != '').count(),
         'customers_with_favicon': Customer.query.filter(
             Customer.favicon_b64.isnot(None), Customer.favicon_b64 != '').count(),
+        'favicon_sync_status': favicon_sync,
     }
     
     return render_template('admin_panel.html', stats=stats)

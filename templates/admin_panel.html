@@ -226,10 +226,22 @@
                     <div class="card-header">
                         <h5 class="mb-0 d-flex justify-content-between align-items-center">
                             <span><i class="bi bi-image"></i> Customer Favicons</span>
+                            {% if stats.favicon_sync_status.in_progress %}
+                            <span class="badge bg-warning text-dark">
+                                <span class="spinner-border spinner-border-sm" role="status"></span> Syncing...
+                            </span>
+                            {% else %}
                             <span class="badge bg-secondary">{{ stats.customers_with_favicon }}/{{ stats.customers_with_website }} fetched</span>
+                            {% endif %}
                         </h5>
                     </div>
                     <div class="card-body">
+                        {% if stats.favicon_sync_status.in_progress %}
+                        <div class="alert alert-info py-2 mb-2">
+                            <i class="bi bi-hourglass-split"></i> Favicon sync in progress... This runs in the background after account sync.
+                            <a href="{{ url_for('admin.admin_panel') }}" class="alert-link">Refresh</a> to check status.
+                        </div>
+                        {% endif %}
                         <p class="text-muted small mb-2">
                             Favicons are fetched from Google's favicon service for customers with a website domain.
                             Websites are populated during MSX account sync. Favicons auto-fetch after each account sync.
