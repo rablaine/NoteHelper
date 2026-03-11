@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Solid purple note document - Dynamics 365 branding -->
+  <!-- Solid purple note document - OneNote purple refined -->
   
   <!-- Document shadow -->
-  <rect x="10" y="6" width="42" height="54" rx="3" fill="#3a0e3a" opacity="0.3"/>
+  <rect x="10" y="6" width="42" height="54" rx="3" fill="#5A1785" opacity="0.4"/>
   
-  <!-- Main document body - solid purple -->
-  <rect x="7" y="3" width="42" height="54" rx="3" fill="#742774"/>
+  <!-- Main document body - saturated purple -->
+  <rect x="7" y="3" width="42" height="54" rx="3" fill="#9226D4"/>
   
   <!-- Folded corner -->
-  <path d="M37 3 L49 3 L49 15 Z" fill="#5a1d5a"/>
-  <path d="M37 3 L37 15 L49 15" fill="#9b4d9b"/>
+  <path d="M37 3 L49 3 L49 15 Z" fill="#7318A8"/>
+  <path d="M37 3 L37 15 L49 15" fill="#AD4DEF"/>
   
   <!-- Text lines - white -->
   <line x1="14" y1="16" x2="36" y2="16" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
