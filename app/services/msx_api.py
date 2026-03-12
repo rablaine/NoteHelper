@@ -34,6 +34,12 @@ REQUEST_TIMEOUT = 45
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = [1, 3, 5]  # Wait between retries
 
+# Thread-local storage for optional retry callback.
+# Callers can set msx_retry_state.callback to a function(attempt, max_retries, wait_secs, error_type)
+# to receive notifications when _msx_request retries a transient failure.
+import threading
+msx_retry_state = threading.local()
+
 # Standard headers for OData requests
 def _get_headers(token: str) -> Dict[str, str]:
     return {
@@ -108,6 +114,7 @@ def _msx_request(
             return False
     
     # Retry loop for transient failures (timeouts, connection errors)
+    retry_cb = getattr(msx_retry_state, 'callback', None)
     last_exception = None
     for attempt in range(MAX_RETRIES):
         try:
@@ -122,6 +129,8 @@ def _msx_request(
                     f"MSX request {method} attempt {attempt + 1}/{MAX_RETRIES} failed "
                     f"({type(e).__name__}), retrying in {wait}s..."
                 )
+                if retry_cb:
+                    retry_cb(attempt + 1, MAX_RETRIES, wait, type(e).__name__)
                 time.sleep(wait)
             else:
                 logger.error(

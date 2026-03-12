@@ -1203,7 +1203,23 @@ def import_stream():
             # ----------------------------------------------------------
             phase = "fetching account assignments"
             yield _sse({"message": "Fetching your account assignments from MSX...", "progress": 1})
-            init_result = scan_init()
+
+            # Wire up retry callback so SSE stream can report timeouts/retries
+            from app.services.msx_api import msx_retry_state
+            retry_messages = []  # Collect retry events from the callback
+            def _on_retry(attempt, max_retries, wait_secs, error_type):
+                retry_messages.append(
+                    f"MSX timed out (attempt {attempt}/{max_retries}), retrying in {wait_secs}s..."
+                )
+            msx_retry_state.callback = _on_retry
+            try:
+                init_result = scan_init()
+            finally:
+                msx_retry_state.callback = None
+
+            # Flush any retry messages as SSE events
+            for msg in retry_messages:
+                yield _sse({"message": msg, "progress": 1})
             if not init_result.get("success"):
                 error_msg = init_result.get("error", "Failed to initialize scan")
                 if init_result.get("vpn_blocked") or is_vpn_blocked():
@@ -1495,7 +1511,7 @@ def import_stream():
                     if csam_done > 0 and csam_done % 3 == 0:
                         yield _sse({
                             "message": f"Querying CSAMs batch {csam_done}/{csam_total}...",
-                            "progress": 85,
+                            "progress": 85 + round((csam_done / max(csam_total, 1)) * 1),
                         })
                 for evt in _drain(progress_q):
                     csam_done += 1
@@ -1506,7 +1522,7 @@ def import_stream():
 
             yield _sse({
                 "message": f"Found {len(csams_seen)} CSAMs",
-                "progress": 85,
+                "progress": 86,
             })
 
             # ----------------------------------------------------------
@@ -1516,6 +1532,9 @@ def import_stream():
             yield _sse({"message": "Querying DSSs...", "progress": 86})
 
             dss_chunks = _split_chunks(all_ids, _PARALLEL_WORKERS)
+            dss_batch_total = sum(
+                math.ceil(len(c) / _DSS_BATCH) for c in dss_chunks if c
+            )
             dss_done = 0
 
             account_dss: dict = {}    # account_id -> [{name, specialty, user_id}]
@@ -1534,7 +1553,7 @@ def import_stream():
                     if dss_done > 0 and dss_done % 3 == 0:
                         yield _sse({
                             "message": f"Querying DSSs batch {dss_done}...",
-                            "progress": 86,
+                            "progress": 86 + round((dss_done / max(dss_batch_total, 1)) * 1),
                         })
                 for evt in _drain(progress_q):
                     dss_done += 1
@@ -1798,7 +1817,7 @@ def import_stream():
                 if dss_idx % 5 == 0 or dss_idx == dss_total:
                     yield _sse({
                         "message": f"Syncing DSSs ({dss_idx}/{dss_total})...",
-                        "progress": 95,
+                        "progress": 95 + round((dss_idx / max(dss_total, 1)) * 1),
                     })
             db.session.flush()
 
@@ -1817,7 +1836,7 @@ def import_stream():
 
             yield _sse({
                 "message": f"Created {dss_created} new DSSs, linked to territories",
-                "progress": 95,
+                "progress": 96,
             })
 
             # CSAMs
@@ -1849,13 +1868,13 @@ def import_stream():
                 if csam_idx % 5 == 0 or csam_idx == csam_total:
                     yield _sse({
                         "message": f"Syncing CSAMs ({csam_idx}/{csam_total})...",
-                        "progress": 96,
+                        "progress": 96 + round((csam_idx / max(csam_total, 1)) * 1),
                     })
             db.session.flush()
 
             yield _sse({
                 "message": f"Created {csams_created} new CSAMs",
-                "progress": 96,
+                "progress": 97,
             })
 
             # Resolve DAE aliases for accounts that have an owner_id.
@@ -1876,11 +1895,11 @@ def import_stream():
                 if dae_idx % 5 == 0 or dae_idx == dae_total:
                     yield _sse({
                         "message": f"Resolving account owner aliases ({dae_idx}/{dae_total})...",
-                        "progress": 97,
+                        "progress": 97 + round((dae_idx / max(dae_total, 1)) * 1),
                     })
 
             # Verticals
-            yield _sse({"message": "Creating verticals...", "progress": 97})
+            yield _sse({"message": "Creating verticals...", "progress": 98})
             verticals_map = {}
             verticals_created = 0
             for vn in verticals_seen:
@@ -1897,7 +1916,7 @@ def import_stream():
 
             yield _sse({
                 "message": f"Created {verticals_created} new verticals",
-                "progress": 97,
+                "progress": 98,
             })
 
             # Customers
@@ -1934,7 +1953,7 @@ def import_stream():
                     if idx % 50 == 0:
                         yield _sse({
                             "message": f"Processing customer {idx}/{len(accounts_data)}...",
-                            "progress": 98 + int((idx / len(accounts_data)) * 1),
+                            "progress": 98 + round((idx / len(accounts_data)) * 1),
                         })
 
                     tpid = ad.get("tpid")
