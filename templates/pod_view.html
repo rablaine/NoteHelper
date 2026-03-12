@@ -97,7 +97,7 @@
     </div>
 </div>
 
-{% if territory_dss %}
+{% if territory_dss_grouped %}
 <div class="row mt-3">
     <div class="col-12">
         <div class="card mb-3">
@@ -105,30 +105,41 @@
                 <h5 class="mb-0"><i class="bi bi-diagram-2"></i> Digital Solution Specialists</h5>
             </div>
             <div class="card-body">
-                {% for terr_name, dss_list in territory_dss.items() %}
+                {% for territory, specialties in territory_dss_grouped.items() %}
                     {% if not loop.first %}
                         <hr class="my-3">
                     {% endif %}
                     <h6 class="mb-2 fw-bold">
-                        <i class="bi bi-geo-alt"></i> {{ terr_name }}
+                        <i class="bi bi-geo-alt"></i> {{ territory.name }}
                     </h6>
-                    <ul class="list-group list-group-flush mb-2">
-                        {% for dss in dss_list %}
-                            <li class="list-group-item" style="cursor: pointer;" onclick="window.location='{{ url_for('solution_engineers.solution_engineer_view', id=dss.id) }}'">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <strong>{{ dss.name }}</strong>
-                                        {% if dss.alias %}
-                                            <br><small class="text-muted"><i class="bi bi-envelope"></i> {{ dss.alias }}@microsoft.com</small>
-                                        {% endif %}
-                                    </div>
-                                    {% if dss.specialty %}
-                                        <span class="badge bg-warning text-dark">{{ dss.specialty }}</span>
+                    {% for spec, info in specialties.items() %}
+                        <div class="mb-2" id="dssSection_{{ territory.id }}_{{ spec|replace(' ', '_')|replace('-', '_') }}">
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-warning text-dark me-2">{{ spec }}</span>
+                                <div id="dssValue_{{ territory.id }}_{{ spec|replace(' ', '_')|replace('-', '_') }}">
+                                    {% if info.selected_id %}
+                                        {% for dss in info.dss_list if dss.id == info.selected_id %}
+                                            <a href="{{ url_for('solution_engineers.solution_engineer_view', id=dss.id) }}" class="badge bg-secondary text-decoration-none">
+                                                <i class="bi bi-person"></i> {{ dss.name }}
+                                            </a>
+                                        {% endfor %}
+                                    {% elif info.dss_list|length == 1 %}
+                                        <a href="{{ url_for('solution_engineers.solution_engineer_view', id=info.dss_list[0].id) }}" class="badge bg-secondary text-decoration-none">
+                                            <i class="bi bi-person"></i> {{ info.dss_list[0].name }}
+                                        </a>
+                                    {% else %}
+                                        <select class="form-select form-select-sm d-inline-block" style="width: auto; min-width: 200px;"
+                                                onchange="saveDssSelection({{ territory.id }}, '{{ spec }}', this.value, this)">
+                                            <option value="" disabled selected>— Select {{ spec }} —</option>
+                                            {% for dss in info.dss_list %}
+                                                <option value="{{ dss.id }}">{{ dss.name }}</option>
+                                            {% endfor %}
+                                        </select>
                                     {% endif %}
                                 </div>
-                            </li>
-                        {% endfor %}
-                    </ul>
+                            </div>
+                        </div>
+                    {% endfor %}
                 {% endfor %}
             </div>
         </div>
@@ -136,6 +147,28 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+function saveDssSelection(territoryId, specialty, seId, selectEl) {
+    fetch('/territory/' + territoryId + '/dss-selection', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({specialty: specialty, solution_engineer_id: seId})
+    }).then(r => r.json()).then(data => {
+        if (data.success && seId) {
+            var name = selectEl.options[selectEl.selectedIndex].text;
+            var container = selectEl.parentElement;
+            var badge = document.createElement('span');
+            badge.className = 'badge bg-secondary';
+            badge.innerHTML = '<i class="bi bi-person"></i> ' + name;
+            container.textContent = '';
+            container.appendChild(badge);
+        }
+    }).catch(() => {});
+}
+</script>
 {% endblock %}
 
 

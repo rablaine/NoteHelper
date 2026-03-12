@@ -5,7 +5,7 @@ filtering cloud SEs vs DSSs, batch_query_account_dss API, and template rendering
 """
 import pytest
 from unittest.mock import patch, MagicMock
-from app.models import db, SolutionEngineer, Territory, POD
+from app.models import db, SolutionEngineer, Territory, POD, TerritoryDSSSelection
 
 
 @pytest.fixture
@@ -141,13 +141,30 @@ class TestDSSPodGrouping:
         assert 'Modern Work' in html
         assert 'Azure Infrastructure' in html
 
-    def test_pod_view_dss_shows_email(self, client, dss_data):
-        """Test DSS email is displayed."""
+    def test_pod_view_dss_shows_dropdown_for_specialty(self, client, dss_data):
+        """Test DSS section shows dropdown when multiple DSSs share a specialty."""
+        with client.application.app_context():
+            # Add a second Security DSS to territory1 so dropdown appears
+            t1 = db.session.get(Territory, dss_data['territory1_id'])
+            dss_extra = SolutionEngineer(name='DSS Frank', alias='dssf', specialty='Security')
+            db.session.add(dss_extra)
+            db.session.flush()
+            t1.solution_engineers.append(dss_extra)
+            db.session.commit()
         resp = client.get(f'/pod/{dss_data["pod_id"]}')
         html = resp.data.decode()
-        assert 'dssc@microsoft.com' in html
-        assert 'dssd@microsoft.com' in html
-        assert 'dsse@microsoft.com' in html
+        assert 'Select Security' in html
+        assert 'DSS Carol' in html
+        assert 'DSS Frank' in html
+
+    def test_pod_view_single_dss_shows_badge(self, client, dss_data):
+        """Test single DSS per specialty shows as badge, not dropdown."""
+        resp = client.get(f'/pod/{dss_data["pod_id"]}')
+        html = resp.data.decode()
+        # Modern Work has only DSS Dave - should show as badge
+        assert 'DSS Dave' in html
+        # Should NOT show a dropdown for Modern Work
+        assert 'Select Modern Work' not in html
 
     def test_pod_view_excludes_cloud_ses_from_dss(self, client, dss_data):
         """Test cloud SEs do NOT appear in the DSS card section."""
@@ -178,6 +195,130 @@ class TestDSSPodGrouping:
         resp = client.get(f'/pod/{pod_id}')
         assert resp.status_code == 200
         assert b'Digital Solution Specialists' not in resp.data
+
+
+class TestDSSSelection:
+    """Tests for DSS specialty selection AJAX endpoint."""
+
+    def test_save_dss_selection(self, app, client, dss_data):
+        """Test saving a DSS selection for a territory + specialty."""
+        resp = client.post(
+            f'/territory/{dss_data["territory1_id"]}/dss-selection',
+            json={'specialty': 'Security', 'solution_engineer_id': dss_data['dss1_id']},
+            headers={'X-Requested-With': 'XMLHttpRequest'}
+        )
+        assert resp.status_code == 200
+        assert resp.json['success'] is True
+        with app.app_context():
+            sel = TerritoryDSSSelection.query.filter_by(
+                territory_id=dss_data['territory1_id'], specialty='Security'
+            ).first()
+            assert sel is not None
+            assert sel.solution_engineer_id == dss_data['dss1_id']
+
+    def test_update_dss_selection(self, app, client, dss_data):
+        """Test updating an existing DSS selection."""
+        with app.app_context():
+            # Add a second Security DSS
+            t1 = db.session.get(Territory, dss_data['territory1_id'])
+            dss_extra = SolutionEngineer(name='DSS Gary', alias='dssg', specialty='Security')
+            db.session.add(dss_extra)
+            db.session.flush()
+            t1.solution_engineers.append(dss_extra)
+            # Set initial selection
+            sel = TerritoryDSSSelection(
+                territory_id=dss_data['territory1_id'],
+                specialty='Security',
+                solution_engineer_id=dss_data['dss1_id']
+            )
+            db.session.add(sel)
+            db.session.commit()
+            extra_id = dss_extra.id
+        # Update to the new DSS
+        resp = client.post(
+            f'/territory/{dss_data["territory1_id"]}/dss-selection',
+            json={'specialty': 'Security', 'solution_engineer_id': extra_id},
+            headers={'X-Requested-With': 'XMLHttpRequest'}
+        )
+        assert resp.status_code == 200
+        assert resp.json['success'] is True
+        with app.app_context():
+            sel = TerritoryDSSSelection.query.filter_by(
+                territory_id=dss_data['territory1_id'], specialty='Security'
+            ).first()
+            assert sel.solution_engineer_id == extra_id
+
+    def test_clear_dss_selection(self, app, client, dss_data):
+        """Test clearing a DSS selection."""
+        with app.app_context():
+            sel = TerritoryDSSSelection(
+                territory_id=dss_data['territory1_id'],
+                specialty='Security',
+                solution_engineer_id=dss_data['dss1_id']
+            )
+            db.session.add(sel)
+            db.session.commit()
+        resp = client.post(
+            f'/territory/{dss_data["territory1_id"]}/dss-selection',
+            json={'specialty': 'Security', 'solution_engineer_id': 'none'},
+            headers={'X-Requested-With': 'XMLHttpRequest'}
+        )
+        assert resp.status_code == 200
+        with app.app_context():
+            sel = TerritoryDSSSelection.query.filter_by(
+                territory_id=dss_data['territory1_id'], specialty='Security'
+            ).first()
+            assert sel is None
+
+    def test_invalid_dss_selection(self, client, dss_data):
+        """Test selecting a DSS not linked to the territory."""
+        resp = client.post(
+            f'/territory/{dss_data["territory1_id"]}/dss-selection',
+            json={'specialty': 'Security', 'solution_engineer_id': dss_data['dss3_id']},
+            headers={'X-Requested-With': 'XMLHttpRequest'}
+        )
+        assert resp.status_code == 400
+        assert resp.json['success'] is False
+
+    def test_missing_specialty(self, client, dss_data):
+        """Test request without specialty returns 400."""
+        resp = client.post(
+            f'/territory/{dss_data["territory1_id"]}/dss-selection',
+            json={'solution_engineer_id': dss_data['dss1_id']},
+            headers={'X-Requested-With': 'XMLHttpRequest'}
+        )
+        assert resp.status_code == 400
+
+    def test_pod_view_shows_selected_badge(self, app, client, dss_data):
+        """Test pod view shows badge for selected DSS instead of dropdown."""
+        with app.app_context():
+            # Add second Security DSS so it would normally show dropdown
+            t1 = db.session.get(Territory, dss_data['territory1_id'])
+            dss_extra = SolutionEngineer(name='DSS Hank', alias='dssh', specialty='Security')
+            db.session.add(dss_extra)
+            db.session.flush()
+            t1.solution_engineers.append(dss_extra)
+            # Set selection
+            sel = TerritoryDSSSelection(
+                territory_id=dss_data['territory1_id'],
+                specialty='Security',
+                solution_engineer_id=dss_data['dss1_id']
+            )
+            db.session.add(sel)
+            db.session.commit()
+        resp = client.get(f'/pod/{dss_data["pod_id"]}')
+        html = resp.data.decode()
+        # Should show badge, not dropdown
+        assert 'Select Security' not in html
+        assert 'DSS Carol' in html  # badge text
+
+    def test_pod_edit_shows_dss_dropdowns(self, client, dss_data):
+        """Test edit form shows DSS specialty dropdowns."""
+        resp = client.get(f'/pod/{dss_data["pod_id"]}/edit')
+        html = resp.data.decode()
+        assert 'Digital Solution Specialist Assignments' in html
+        assert 'Security' in html
+        assert 'DSS Carol' in html
 
 
 class TestBatchQueryAccountDSS:

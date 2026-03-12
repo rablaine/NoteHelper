@@ -231,6 +231,31 @@ class SolutionEngineer(db.Model):
         return None
 
 
+class TerritoryDSSSelection(db.Model):
+    """Tracks which DSS is selected per territory per specialty.
+
+    Similar to how CustomerCSAM tracks the user-selected primary CSAM for a
+    customer, this records which Digital Solution Specialist the user has
+    chosen for a given specialty within a territory.
+    """
+    __tablename__ = 'territory_dss_selections'
+
+    id = db.Column(db.Integer, primary_key=True)
+    territory_id = db.Column(db.Integer, db.ForeignKey('territories.id'), nullable=False)
+    specialty = db.Column(db.String(100), nullable=False)
+    solution_engineer_id = db.Column(db.Integer, db.ForeignKey('solution_engineers.id'), nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('territory_id', 'specialty', name='uq_territory_specialty'),
+    )
+
+    territory = db.relationship('Territory', back_populates='dss_selections')
+    solution_engineer = db.relationship('SolutionEngineer')
+
+    def __repr__(self) -> str:
+        return f'<TerritoryDSSSelection territory={self.territory_id} specialty={self.specialty}>'
+
+
 class Vertical(db.Model):
     """Industry vertical for customer classification."""
     __tablename__ = 'verticals'
@@ -274,6 +299,12 @@ class Territory(db.Model):
         secondary=solution_engineers_territories,
         back_populates='territories',
         lazy='select'
+    )
+    dss_selections = db.relationship(
+        'TerritoryDSSSelection',
+        back_populates='territory',
+        lazy='select',
+        cascade='all, delete-orphan'
     )
     
     def __repr__(self) -> str:
