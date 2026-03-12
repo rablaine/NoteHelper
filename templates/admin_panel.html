@@ -88,12 +88,12 @@
                     <div class="card-body">
                         <!-- Auth Status Row -->
                         <div id="msxAuthStatus" class="d-inline-flex align-items-center gap-2 p-2 px-3 rounded border mb-3">
-                            <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
-                            <span class="text-muted">Checking connection...</span>
+                            <i class="bi bi-question-circle fs-5 text-muted"></i>
+                            <span class="text-muted">Click <strong>Check Status</strong> to check your connection.</span>
                         </div>
                         
-                        <!-- Action buttons (shown when connected) -->
-                        <div id="msxConnectedActions" class="d-none">
+                        <!-- Action buttons (always visible so user can check status) -->
+                        <div id="msxConnectedActions">
                             <div class="d-flex gap-2 mb-3">
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="msxRefreshBtn">
                                     <i class="bi bi-arrow-clockwise"></i> Check Status
@@ -815,7 +815,6 @@ function updateMsxStatusDisplay(state, detail) {
             <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
             <span class="text-muted">${detail || 'Checking connection...'}</span>
         `;
-        connectedActions.classList.add('d-none');
         signInSection.classList.add('d-none');
     } else if (state === 'connected') {
         statusDiv.className = 'd-inline-flex align-items-center gap-2 p-2 px-3 rounded border border-success mb-3';
@@ -1196,8 +1195,8 @@ document.getElementById('msxTestBtn').addEventListener('click', async function()
     }
 });
 
-// Load MSX status and auth state on page load
-loadMsxStatus();
+// MSX status is NOT auto-checked on page load.
+// User clicks "Check Status" to find out.
 
 // Setup Wizard - Re-run
 document.getElementById('adminRerunWizardBtn').addEventListener('click', async function() {
