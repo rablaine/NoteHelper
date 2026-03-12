@@ -114,29 +114,23 @@
                     </h6>
                     {% for spec, info in specialties.items() %}
                         <div class="mb-2" id="dssSection_{{ territory.id }}_{{ spec|replace(' ', '_')|replace('-', '_') }}">
-                            <div class="d-flex align-items-center">
-                                <span class="badge bg-warning text-dark me-2">{{ spec }}</span>
-                                <div id="dssValue_{{ territory.id }}_{{ spec|replace(' ', '_')|replace('-', '_') }}">
-                                    {% if info.selected_id %}
-                                        {% for dss in info.dss_list if dss.id == info.selected_id %}
-                                            <a href="{{ url_for('solution_engineers.solution_engineer_view', id=dss.id) }}" class="badge bg-secondary text-decoration-none">
-                                                <i class="bi bi-person"></i> {{ dss.name }}
-                                            </a>
+                            <div class="text-muted small">{{ spec }}</div>
+                            <div id="dssValue_{{ territory.id }}_{{ spec|replace(' ', '_')|replace('-', '_') }}">
+                                {% if info.selected_id %}
+                                    {% for dss in info.dss_list if dss.id == info.selected_id %}
+                                        <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ dss.name }}</span>
+                                    {% endfor %}
+                                {% elif info.dss_list|length == 1 %}
+                                    <span class="badge bg-secondary"><i class="bi bi-person"></i> {{ info.dss_list[0].name }}</span>
+                                {% else %}
+                                    <select class="form-select form-select-sm d-inline-block" style="width: auto; min-width: 200px;"
+                                            onchange="saveDssSelection({{ territory.id }}, '{{ spec }}', this.value, this)">
+                                        <option value="" disabled selected>— Select {{ spec }} —</option>
+                                        {% for dss in info.dss_list %}
+                                            <option value="{{ dss.id }}">{{ dss.name }}</option>
                                         {% endfor %}
-                                    {% elif info.dss_list|length == 1 %}
-                                        <a href="{{ url_for('solution_engineers.solution_engineer_view', id=info.dss_list[0].id) }}" class="badge bg-secondary text-decoration-none">
-                                            <i class="bi bi-person"></i> {{ info.dss_list[0].name }}
-                                        </a>
-                                    {% else %}
-                                        <select class="form-select form-select-sm d-inline-block" style="width: auto; min-width: 200px;"
-                                                onchange="saveDssSelection({{ territory.id }}, '{{ spec }}', this.value, this)">
-                                            <option value="" disabled selected>— Select {{ spec }} —</option>
-                                            {% for dss in info.dss_list %}
-                                                <option value="{{ dss.id }}">{{ dss.name }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    {% endif %}
-                                </div>
+                                    </select>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}
@@ -159,12 +153,15 @@ function saveDssSelection(territoryId, specialty, seId, selectEl) {
     }).then(r => r.json()).then(data => {
         if (data.success && seId) {
             var name = selectEl.options[selectEl.selectedIndex].text;
-            var container = selectEl.parentElement;
+            var valueDiv = selectEl.parentElement;
             var badge = document.createElement('span');
             badge.className = 'badge bg-secondary';
-            badge.innerHTML = '<i class="bi bi-person"></i> ' + name;
-            container.textContent = '';
-            container.appendChild(badge);
+            var icon = document.createElement('i');
+            icon.className = 'bi bi-person';
+            badge.appendChild(icon);
+            badge.appendChild(document.createTextNode(' ' + name));
+            valueDiv.textContent = '';
+            valueDiv.appendChild(badge);
         }
     }).catch(() => {});
 }
