@@ -1471,6 +1471,8 @@ def import_stream():
             # Phase 4b: Parallel CSAM queries (3 workers)
             # ----------------------------------------------------------
             phase = "querying CSAMs"
+            yield _sse({"message": "Querying CSAMs...", "progress": 85})
+
             csam_chunks = _split_chunks(all_ids, _PARALLEL_WORKERS)
             csam_total = sum(
                 math.ceil(len(c) / _CSAM_BATCH) for c in csam_chunks if c
@@ -1490,6 +1492,11 @@ def import_stream():
                     time.sleep(0.3)
                     for evt in _drain(progress_q):
                         csam_done += 1
+                    if csam_done > 0 and csam_done % 3 == 0:
+                        yield _sse({
+                            "message": f"Querying CSAMs batch {csam_done}/{csam_total}...",
+                            "progress": 85,
+                        })
                 for evt in _drain(progress_q):
                     csam_done += 1
                 for f in futures:
@@ -1497,10 +1504,17 @@ def import_stream():
                     account_csams.update(r["account_csams"])
                     csams_seen.update(r["unique_csams"])
 
+            yield _sse({
+                "message": f"Found {len(csams_seen)} CSAMs",
+                "progress": 85,
+            })
+
             # ----------------------------------------------------------
             # Phase 4c: Parallel DSS queries (3 workers)
             # ----------------------------------------------------------
             phase = "querying DSSs"
+            yield _sse({"message": "Querying DSSs...", "progress": 86})
+
             dss_chunks = _split_chunks(all_ids, _PARALLEL_WORKERS)
             dss_done = 0
 
@@ -1517,6 +1531,11 @@ def import_stream():
                     time.sleep(0.3)
                     for evt in _drain(progress_q):
                         dss_done += 1
+                    if dss_done > 0 and dss_done % 3 == 0:
+                        yield _sse({
+                            "message": f"Querying DSSs batch {dss_done}...",
+                            "progress": 86,
+                        })
                 for evt in _drain(progress_q):
                     dss_done += 1
                 for f in futures:
@@ -1579,14 +1598,14 @@ def import_stream():
                     f"{len(dss_seen)} DSSs for "
                     f"{accounts_with_sellers}/{len(accounts_data)} accounts"
                 ),
-                "progress": 86,
+                "progress": 87,
             })
 
             # ----------------------------------------------------------
             # Phase 5: Database writes (sequential, same as original)
             # ----------------------------------------------------------
             phase = "creating database records"
-            yield _sse({"message": "Creating PODs...", "progress": 87})
+            yield _sse({"message": "Creating PODs...", "progress": 88})
 
             pods_map = {}
             pods_created = 0
