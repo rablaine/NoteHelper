@@ -14,10 +14,12 @@ Flow:
 6. Recipient processes data locally (upsert) → done
 """
 import logging
+import threading
 import time
-from functools import wraps
 
 import jwt
+import requests
+from jwt import PyJWKClient
 from flask import request
 from flask_socketio import Namespace, emit, disconnect
 
@@ -27,31 +29,55 @@ logger = logging.getLogger(__name__)
 _MS_TENANT = "72f988bf-86f1-41af-91ab-2d7cd011db47"
 # Gateway Entra app ID (audience)
 _AUDIENCE = "api://0f6db4af-332c-4fd5-b894-77fadb181e5c"
+# Microsoft OIDC JWKS endpoint for key rotation
+_JWKS_URL = f"https://login.microsoftonline.com/{_MS_TENANT}/discovery/v2.0/keys"
 
 # Online users: sid → {name, email, connected_at}
 _online_users: dict[str, dict] = {}
 
+# JWKS client — caches signing keys, thread-safe
+_jwks_client: PyJWKClient | None = None
+_jwks_lock = threading.Lock()
+
+
+def _get_jwks_client() -> PyJWKClient:
+    """Lazily initialize and cache the JWKS client."""
+    global _jwks_client
+    if _jwks_client is None:
+        with _jwks_lock:
+            if _jwks_client is None:
+                _jwks_client = PyJWKClient(_JWKS_URL, cache_keys=True)
+    return _jwks_client
+
 
 def _decode_jwt_claims(token: str) -> dict | None:
-    """Decode a JWT without signature validation (APIM already validated).
+    """Decode and verify a JWT using Microsoft's JWKS signing keys.
 
-    We only need the claims for identity — the transport is trusted.
-    Returns the claims dict or None if the token is unparseable.
+    Validates:
+    - Signature (RSA, from Microsoft's published JWKS keys)
+    - Audience (must match our Entra app registration)
+    - Expiration (must not be expired)
+    - Issuer (must be from Microsoft corp tenant)
+    - Tenant ID (must match _MS_TENANT)
+
+    Returns the claims dict or None if validation fails.
     """
     try:
+        client = _get_jwks_client()
+        signing_key = client.get_signing_key_from_jwt(token)
         claims = jwt.decode(
             token,
-            options={
-                "verify_signature": False,
-                "verify_aud": False,
-                "verify_exp": False,
-            },
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=_AUDIENCE,
+            issuer=f"https://sts.windows.net/{_MS_TENANT}/",
         )
-        # Must be from Microsoft corp tenant
+        # Belt-and-suspenders: verify tenant claim matches
         if claims.get("tid") != _MS_TENANT:
             return None
         return claims
-    except Exception:
+    except Exception as e:
+        logger.warning(f"share: JWT validation failed — {e}")
         return None
 
 

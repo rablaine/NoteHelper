@@ -1,6 +1,7 @@
 flask>=3.0
 flask-socketio>=5.3
-PyJWT>=2.8
+PyJWT[crypto]>=2.8
+requests>=2.31
 gunicorn>=21.2
 openai>=1.0
 azure-identity>=1.15
