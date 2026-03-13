@@ -693,6 +693,58 @@
     </div>
 </div>
 
+<!-- Archive Explorer Modal -->
+<div class="modal fade" id="archiveExplorerModal" tabindex="-1" data-bs-backdrop="static" aria-labelledby="archiveExplorerLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="archiveExplorerLabel">
+                    <i class="bi bi-archive"></i> Archive Explorer: <span id="archiveExplorerFYLabel"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0" style="height: 78vh; overflow: hidden;">
+                <div class="d-flex h-100">
+                    <!-- Left: Tree panel -->
+                    <div class="border-end d-flex flex-column" style="width: 340px; min-width: 340px;">
+                        <div class="p-2 border-bottom">
+                            <input type="text" id="archiveTreeSearch" class="form-control form-control-sm"
+                                   placeholder="Search customers, notes, engagements...">
+                        </div>
+                        <div id="archiveTreeContainer" class="flex-grow-1 overflow-auto p-2" style="font-size: 0.875rem;">
+                            <div class="text-center text-muted py-4">
+                                <span class="spinner-border spinner-border-sm"></span> Loading...
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Right: Detail panel -->
+                    <div id="archiveDetailPanel" class="flex-grow-1 overflow-auto p-3">
+                        <div class="text-muted text-center py-5">
+                            <i class="bi bi-arrow-left-circle" style="font-size: 2rem;"></i>
+                            <p class="mt-2">Select an item from the tree to view details</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .archive-node { cursor: pointer; padding: 2px 4px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .archive-node:hover { background: var(--bs-light, #f8f9fa); }
+    .archive-node.active { background: var(--bs-primary); color: #fff; }
+    .archive-node.active:hover { background: var(--bs-primary); }
+    .archive-children { padding-left: 1rem; display: none; }
+    .archive-children.show { display: block; }
+    .archive-chevron { display: inline-block; width: 1em; text-align: center; transition: transform 0.15s; }
+    .archive-chevron.open { transform: rotate(90deg); }
+    .archive-detail-link { cursor: pointer; color: var(--bs-primary); text-decoration: underline; }
+    .archive-detail-link:hover { text-decoration: none; }
+    [data-bs-theme="dark"] .archive-node:hover { background: rgba(255,255,255,0.1); }
+    [data-bs-theme="dark"] .archive-node.active { background: var(--bs-primary); }
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -2154,7 +2206,12 @@ function loadFYStatus() {
                 list.innerHTML = data.archives.map(a =>
                     `<div class="d-flex justify-content-between align-items-center border-bottom py-2">
                         <span><i class="bi bi-file-earmark-zip"></i> <strong>${a.fy_label}</strong></span>
-                        <span class="text-muted small">${a.size_mb} MB &middot; ${new Date(a.archived_at).toLocaleDateString()}</span>
+                        <span>
+                            <span class="text-muted small me-2">${a.size_mb} MB &middot; ${new Date(a.archived_at).toLocaleDateString()}</span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="openArchiveExplorer('${a.fy_label}')">
+                                <i class="bi bi-folder2-open"></i> Browse
+                            </button>
+                        </span>
                     </div>`
                 ).join('');
             }
@@ -2487,6 +2544,542 @@ function cancelFYTransition() {
             if (data.success) location.reload();
         });
 }
+
+// =========================================================================
+// Archive Explorer
+// =========================================================================
+
+let _archiveLabel = null;
+let _archiveTreeData = null;
+let _archiveModal = null;
+
+function openArchiveExplorer(label) {
+    _archiveLabel = label;
+    document.getElementById('archiveExplorerFYLabel').textContent = label;
+    document.getElementById('archiveTreeSearch').value = '';
+    document.getElementById('archiveTreeContainer').innerHTML =
+        '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading...</div>';
+    document.getElementById('archiveDetailPanel').innerHTML =
+        '<div class="text-muted text-center py-5"><i class="bi bi-arrow-left-circle" style="font-size: 2rem;"></i><p class="mt-2">Select an item from the tree to view details</p></div>';
+
+    if (!_archiveModal) {
+        _archiveModal = new bootstrap.Modal(document.getElementById('archiveExplorerModal'));
+    }
+    _archiveModal.show();
+
+    fetch(`/api/admin/fy/archive/${encodeURIComponent(label)}/tree`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('archiveTreeContainer').innerHTML =
+                    `<div class="text-danger p-2"><i class="bi bi-exclamation-triangle"></i> ${data.error}</div>`;
+                return;
+            }
+            _archiveTreeData = data;
+            renderArchiveTree(data);
+            // Show summary by default
+            showArchiveSummary(data.summary);
+        })
+        .catch(err => {
+            document.getElementById('archiveTreeContainer').innerHTML =
+                `<div class="text-danger p-2"><i class="bi bi-exclamation-triangle"></i> Failed to load archive</div>`;
+        });
+}
+
+function renderArchiveTree(data, filter) {
+    const container = document.getElementById('archiveTreeContainer');
+    const f = (filter || '').toLowerCase();
+    let html = '';
+
+    // Summary node
+    html += `<div class="archive-node${!filter ? ' active' : ''}" data-type="summary" onclick="archiveNodeClick(this, 'summary')">
+        <i class="bi bi-bar-chart"></i> Summary
+    </div>`;
+
+    // Sellers
+    for (const seller of data.sellers) {
+        const sellerMatch = !f || seller.name.toLowerCase().includes(f);
+        const filteredCustomers = f ? seller.customers.filter(c => customerMatchesFilter(c, f)) : seller.customers;
+        if (!sellerMatch && filteredCustomers.length === 0) continue;
+
+        const expanded = f && filteredCustomers.length > 0;
+        html += renderSellerNode(seller, filteredCustomers, expanded, f);
+    }
+
+    // Unassigned
+    if (data.unassigned.length > 0) {
+        const filteredUnassigned = f ? data.unassigned.filter(c => customerMatchesFilter(c, f)) : data.unassigned;
+        if (!f || filteredUnassigned.length > 0) {
+            html += renderSellerNode(
+                {id: '_unassigned', name: 'Unassigned', alias: null, customer_count: data.unassigned.length, customers: data.unassigned},
+                f ? filteredUnassigned : data.unassigned,
+                !!f && filteredUnassigned.length > 0,
+                f
+            );
+        }
+    }
+
+    container.innerHTML = html || '<div class="text-muted p-2">No matches found</div>';
+}
+
+function customerMatchesFilter(c, f) {
+    if (c.name.toLowerCase().includes(f)) return true;
+    if (c.tpid && String(c.tpid).includes(f)) return true;
+    for (const n of c.notes) { if (n.title.toLowerCase().includes(f)) return true; }
+    for (const e of c.engagements) { if (e.title.toLowerCase().includes(f)) return true; }
+    for (const m of c.milestones) { if (m.title.toLowerCase().includes(f)) return true; }
+    return false;
+}
+
+function renderSellerNode(seller, customers, expanded, f) {
+    const sid = seller.id;
+    const icon = sid === '_unassigned' ? 'bi-clipboard' : 'bi-person';
+    const chevron = customers.length > 0
+        ? `<span class="archive-chevron${expanded ? ' open' : ''}" id="chev-s-${sid}">&#9654;</span>`
+        : '<span style="width:1em;display:inline-block"></span>';
+
+    let html = `<div class="archive-node" data-type="seller" data-id="${sid}" onclick="archiveNodeClick(this, 'seller', '${sid}')">
+        ${chevron} <i class="bi ${icon}"></i> ${escArchive(seller.name)} <span class="text-muted small">(${seller.customer_count})</span>
+    </div>`;
+    html += `<div class="archive-children${expanded ? ' show' : ''}" id="children-s-${sid}">`;
+    for (const c of customers) {
+        html += renderCustomerNode(c, sid, f);
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderCustomerNode(c, sellerId, f) {
+    const custExpanded = !!f;
+    const hasChildren = c.notes.length > 0 || c.engagements.length > 0 || c.milestones.length > 0;
+    const chevron = hasChildren
+        ? `<span class="archive-chevron${custExpanded ? ' open' : ''}" id="chev-c-${c.id}">&#9654;</span>`
+        : '<span style="width:1em;display:inline-block"></span>';
+
+    let html = `<div class="archive-node" data-type="customer" data-id="${c.id}" data-seller="${sellerId}" onclick="archiveNodeClick(this, 'customer', ${c.id})">
+        ${chevron} <i class="bi bi-building"></i> ${escArchive(c.name)} ${c.tpid ? '<span class=&quot;text-muted small&quot;>(' + c.tpid + ')</span>' : ''}
+    </div>`;
+    html += `<div class="archive-children${custExpanded ? ' show' : ''}" id="children-c-${c.id}">`;
+
+    // Notes category
+    if (c.notes.length > 0) {
+        const noteMatch = f && c.notes.some(n => n.title.toLowerCase().includes(f));
+        html += `<div class="archive-node" data-type="category" data-category="notes" data-customer="${c.id}" onclick="archiveNodeClick(this, 'category', ${c.id}, 'notes')">
+            <span class="archive-chevron${noteMatch ? ' open' : ''}" id="chev-cat-notes-${c.id}">&#9654;</span>
+            <i class="bi bi-journal-text"></i> Notes <span class="text-muted small">(${c.notes.length})</span>
+        </div>`;
+        html += `<div class="archive-children${noteMatch ? ' show' : ''}" id="children-cat-notes-${c.id}">`;
+        for (const n of c.notes) {
+            if (f && !n.title.toLowerCase().includes(f) && !c.name.toLowerCase().includes(f)) continue;
+            const dateStr = n.call_date ? new Date(n.call_date).toLocaleDateString() : '';
+            html += `<div class="archive-node" data-type="note" data-id="${n.id}" data-customer="${c.id}" onclick="archiveNodeClick(this, 'note', ${n.id})">
+                <span style="width:1em;display:inline-block"></span> <i class="bi bi-file-text"></i> ${escArchive(n.title)} ${dateStr ? '&mdash; ' + dateStr : ''}
+            </div>`;
+        }
+        html += '</div>';
+    }
+
+    // Engagements category
+    if (c.engagements.length > 0) {
+        const engMatch = f && c.engagements.some(e => e.title.toLowerCase().includes(f));
+        html += `<div class="archive-node" data-type="category" data-category="engagements" data-customer="${c.id}" onclick="archiveNodeClick(this, 'category', ${c.id}, 'engagements')">
+            <span class="archive-chevron${engMatch ? ' open' : ''}" id="chev-cat-eng-${c.id}">&#9654;</span>
+            <i class="bi bi-handshake"></i> Engagements <span class="text-muted small">(${c.engagements.length})</span>
+        </div>`;
+        html += `<div class="archive-children${engMatch ? ' show' : ''}" id="children-cat-eng-${c.id}">`;
+        for (const e of c.engagements) {
+            if (f && !e.title.toLowerCase().includes(f) && !c.name.toLowerCase().includes(f)) continue;
+            html += `<div class="archive-node" data-type="engagement" data-id="${e.id}" data-customer="${c.id}" onclick="archiveNodeClick(this, 'engagement', ${e.id})">
+                <span style="width:1em;display:inline-block"></span> <i class="bi bi-briefcase"></i> ${escArchive(e.title)}
+            </div>`;
+        }
+        html += '</div>';
+    }
+
+    // Milestones category
+    if (c.milestones.length > 0) {
+        const milMatch = f && c.milestones.some(m => m.title.toLowerCase().includes(f));
+        html += `<div class="archive-node" data-type="category" data-category="milestones" data-customer="${c.id}" onclick="archiveNodeClick(this, 'category', ${c.id}, 'milestones')">
+            <span class="archive-chevron${milMatch ? ' open' : ''}" id="chev-cat-mil-${c.id}">&#9654;</span>
+            <i class="bi bi-flag"></i> Milestones <span class="text-muted small">(${c.milestones.length})</span>
+        </div>`;
+        html += `<div class="archive-children${milMatch ? ' show' : ''}" id="children-cat-mil-${c.id}">`;
+        for (const m of c.milestones) {
+            if (f && !m.title.toLowerCase().includes(f) && !c.name.toLowerCase().includes(f)) continue;
+            html += `<div class="archive-node" data-type="milestone" data-id="${m.id}" data-customer="${c.id}" onclick="archiveNodeClick(this, 'milestone', ${m.id})">
+                <span style="width:1em;display:inline-block"></span> <i class="bi bi-trophy"></i> ${escArchive(m.title)}
+            </div>`;
+        }
+        html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
+function escArchive(text) {
+    if (!text) return '';
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+}
+
+function archiveNodeClick(el, type, id, category) {
+    // Highlight active node
+    document.querySelectorAll('#archiveTreeContainer .archive-node.active').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+
+    // Toggle expand/collapse for nodes with children
+    if (type === 'seller') {
+        toggleArchiveChildren('s-' + id);
+    } else if (type === 'customer') {
+        toggleArchiveChildren('c-' + id);
+    } else if (type === 'category') {
+        const suffix = category === 'notes' ? 'notes' : category === 'engagements' ? 'eng' : 'mil';
+        toggleArchiveChildren('cat-' + suffix + '-' + id);
+    }
+
+    // Load detail panel
+    const panel = document.getElementById('archiveDetailPanel');
+
+    if (type === 'summary') {
+        showArchiveSummary(_archiveTreeData.summary);
+    } else if (type === 'seller') {
+        showSellerDetail(id);
+    } else if (type === 'customer') {
+        showCustomerDetail(id);
+    } else if (type === 'category') {
+        showCategoryDetail(id, category);
+    } else if (type === 'note' || type === 'engagement' || type === 'milestone') {
+        showItemDetail(type, id);
+    }
+}
+
+function toggleArchiveChildren(key) {
+    const children = document.getElementById('children-' + key);
+    const chevron = document.getElementById('chev-' + key);
+    if (children) children.classList.toggle('show');
+    if (chevron) chevron.classList.toggle('open');
+}
+
+function expandToNode(type, id, sellerId, customerId) {
+    // Expand parent nodes in the tree to reveal a specific node, then click it
+    if (sellerId) {
+        const sellerChildren = document.getElementById('children-s-' + sellerId);
+        const sellerChevron = document.getElementById('chev-s-' + sellerId);
+        if (sellerChildren && !sellerChildren.classList.contains('show')) {
+            sellerChildren.classList.add('show');
+            if (sellerChevron) sellerChevron.classList.add('open');
+        }
+    }
+    if (customerId) {
+        const custChildren = document.getElementById('children-c-' + customerId);
+        const custChevron = document.getElementById('chev-c-' + customerId);
+        if (custChildren && !custChildren.classList.contains('show')) {
+            custChildren.classList.add('show');
+            if (custChevron) custChevron.classList.add('open');
+        }
+        // Expand the relevant category
+        if (type === 'note') {
+            const catChildren = document.getElementById('children-cat-notes-' + customerId);
+            const catChevron = document.getElementById('chev-cat-notes-' + customerId);
+            if (catChildren && !catChildren.classList.contains('show')) {
+                catChildren.classList.add('show');
+                if (catChevron) catChevron.classList.add('open');
+            }
+        } else if (type === 'engagement') {
+            const catChildren = document.getElementById('children-cat-eng-' + customerId);
+            const catChevron = document.getElementById('chev-cat-eng-' + customerId);
+            if (catChildren && !catChildren.classList.contains('show')) {
+                catChildren.classList.add('show');
+                if (catChevron) catChevron.classList.add('open');
+            }
+        } else if (type === 'milestone') {
+            const catChildren = document.getElementById('children-cat-mil-' + customerId);
+            const catChevron = document.getElementById('chev-cat-mil-' + customerId);
+            if (catChildren && !catChildren.classList.contains('show')) {
+                catChildren.classList.add('show');
+                if (catChevron) catChevron.classList.add('open');
+            }
+        }
+    }
+
+    // Find and click the target node
+    const targetNode = document.querySelector(`#archiveTreeContainer .archive-node[data-type="${type}"][data-id="${id}"]`);
+    if (targetNode) {
+        document.querySelectorAll('#archiveTreeContainer .archive-node.active').forEach(n => n.classList.remove('active'));
+        targetNode.classList.add('active');
+        targetNode.scrollIntoView({block: 'nearest'});
+    }
+}
+
+function showArchiveSummary(summary) {
+    const panel = document.getElementById('archiveDetailPanel');
+    panel.innerHTML = `
+        <h5><i class="bi bi-bar-chart"></i> Archive Summary</h5>
+        <hr>
+        <div class="row g-3">
+            <div class="col-sm-6 col-md-4"><div class="border rounded p-3 text-center"><div class="fs-3 fw-bold">${summary.sellers}</div><div class="text-muted">Sellers</div></div></div>
+            <div class="col-sm-6 col-md-4"><div class="border rounded p-3 text-center"><div class="fs-3 fw-bold">${summary.customers}</div><div class="text-muted">Customers</div></div></div>
+            <div class="col-sm-6 col-md-4"><div class="border rounded p-3 text-center"><div class="fs-3 fw-bold">${summary.notes}</div><div class="text-muted">Notes</div></div></div>
+            <div class="col-sm-6 col-md-4"><div class="border rounded p-3 text-center"><div class="fs-3 fw-bold">${summary.engagements}</div><div class="text-muted">Engagements</div></div></div>
+            <div class="col-sm-6 col-md-4"><div class="border rounded p-3 text-center"><div class="fs-3 fw-bold">${summary.milestones}</div><div class="text-muted">Milestones</div></div></div>
+            <div class="col-sm-6 col-md-4"><div class="border rounded p-3 text-center"><div class="fs-3 fw-bold">${summary.territories}</div><div class="text-muted">Territories</div></div></div>
+            <div class="col-sm-6 col-md-4"><div class="border rounded p-3 text-center"><div class="fs-3 fw-bold">${summary.opportunities}</div><div class="text-muted">Opportunities</div></div></div>
+        </div>`;
+}
+
+function showSellerDetail(sellerId) {
+    const panel = document.getElementById('archiveDetailPanel');
+    let seller;
+    if (sellerId === '_unassigned') {
+        seller = {name: 'Unassigned', alias: null, customers: _archiveTreeData.unassigned};
+    } else {
+        seller = _archiveTreeData.sellers.find(s => s.id == sellerId);
+    }
+    if (!seller) { panel.innerHTML = '<div class="text-muted">Seller not found</div>'; return; }
+
+    let html = `<h5><i class="bi bi-person"></i> ${escArchive(seller.name)}</h5>`;
+    if (seller.alias) html += `<p class="text-muted">${escArchive(seller.alias)}</p>`;
+    html += `<hr><h6>Customers (${seller.customers.length})</h6>`;
+    html += '<div class="list-group list-group-flush">';
+    for (const c of seller.customers) {
+        html += `<a href="#" class="list-group-item list-group-item-action archive-detail-link" onclick="event.preventDefault(); navigateToCustomer(${c.id}, '${sellerId}')">
+            <i class="bi bi-building"></i> ${escArchive(c.name)} ${c.tpid ? '<span class=&quot;text-muted small&quot;>(' + c.tpid + ')</span>' : ''}
+            <span class="float-end text-muted small">${c.notes.length} notes, ${c.engagements.length} eng, ${c.milestones.length} mil</span>
+        </a>`;
+    }
+    html += '</div>';
+    panel.innerHTML = html;
+}
+
+function showCustomerDetail(customerId) {
+    const panel = document.getElementById('archiveDetailPanel');
+    panel.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span> Loading customer...</div>';
+
+    fetch(`/api/admin/fy/archive/${encodeURIComponent(_archiveLabel)}/customer/${customerId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { panel.innerHTML = `<div class="text-danger">${data.error}</div>`; return; }
+            let html = `<h5><i class="bi bi-building"></i> ${escArchive(data.name)}</h5>`;
+            if (data.nickname) html += `<p class="text-muted">${escArchive(data.nickname)}</p>`;
+            html += '<table class="table table-sm"><tbody>';
+            if (data.tpid) html += `<tr><td class="text-muted">TPID</td><td>${data.tpid}</td></tr>`;
+            if (data.territory) html += `<tr><td class="text-muted">Territory</td><td>${escArchive(data.territory)}</td></tr>`;
+            if (data.seller) html += `<tr><td class="text-muted">Seller</td><td>${escArchive(data.seller)}</td></tr>`;
+            if (data.verticals && data.verticals.length) html += `<tr><td class="text-muted">Verticals</td><td>${data.verticals.map(v => escArchive(v)).join(', ')}</td></tr>`;
+            html += `<tr><td class="text-muted">Notes</td><td>${data.notes.length}</td></tr>`;
+            html += `<tr><td class="text-muted">Engagements</td><td>${data.engagements.length}</td></tr>`;
+            html += `<tr><td class="text-muted">Milestones</td><td>${data.milestones.length}</td></tr>`;
+            html += '</tbody></table>';
+
+            // Quick links to notes
+            if (data.notes.length) {
+                html += `<h6 class="mt-3"><i class="bi bi-journal-text"></i> Notes</h6><div class="list-group list-group-flush">`;
+                for (const n of data.notes) {
+                    const dateStr = n.call_date ? new Date(n.call_date).toLocaleDateString() : '';
+                    const title = stripHtml(n.content || '').split('\n')[0].substring(0, 80) || 'Untitled';
+                    html += `<a href="#" class="list-group-item list-group-item-action py-1 archive-detail-link" onclick="event.preventDefault(); navigateToItem('note', ${n.id}, ${customerId})">
+                        <i class="bi bi-file-text"></i> ${escArchive(title)} ${dateStr ? '<span class=&quot;text-muted small&quot;>&mdash; ' + dateStr + '</span>' : ''}
+                    </a>`;
+                }
+                html += '</div>';
+            }
+
+            // Quick links to engagements
+            if (data.engagements.length) {
+                html += `<h6 class="mt-3"><i class="bi bi-handshake"></i> Engagements</h6><div class="list-group list-group-flush">`;
+                for (const e of data.engagements) {
+                    html += `<a href="#" class="list-group-item list-group-item-action py-1 archive-detail-link" onclick="event.preventDefault(); navigateToItem('engagement', ${e.id}, ${customerId})">
+                        <i class="bi bi-briefcase"></i> ${escArchive(e.title)} <span class="badge bg-secondary">${escArchive(e.status || '')}</span>
+                    </a>`;
+                }
+                html += '</div>';
+            }
+
+            // Quick links to milestones
+            if (data.milestones.length) {
+                html += `<h6 class="mt-3"><i class="bi bi-flag"></i> Milestones</h6><div class="list-group list-group-flush">`;
+                for (const m of data.milestones) {
+                    html += `<a href="#" class="list-group-item list-group-item-action py-1 archive-detail-link" onclick="event.preventDefault(); navigateToItem('milestone', ${m.id}, ${customerId})">
+                        <i class="bi bi-trophy"></i> ${escArchive(m.title)} <span class="badge bg-secondary">${escArchive(m.status || '')}</span>
+                    </a>`;
+                }
+                html += '</div>';
+            }
+
+            panel.innerHTML = html;
+        })
+        .catch(() => { panel.innerHTML = '<div class="text-danger">Failed to load customer</div>'; });
+}
+
+function showCategoryDetail(customerId, category) {
+    // Find the customer in cached tree data
+    let customer = null;
+    for (const s of _archiveTreeData.sellers) {
+        customer = s.customers.find(c => c.id == customerId);
+        if (customer) break;
+    }
+    if (!customer) customer = _archiveTreeData.unassigned.find(c => c.id == customerId);
+    if (!customer) return;
+
+    const panel = document.getElementById('archiveDetailPanel');
+    let items, icon, label;
+    if (category === 'notes') { items = customer.notes; icon = 'bi-file-text'; label = 'Notes'; }
+    else if (category === 'engagements') { items = customer.engagements; icon = 'bi-briefcase'; label = 'Engagements'; }
+    else { items = customer.milestones; icon = 'bi-trophy'; label = 'Milestones'; }
+
+    let html = `<h5><i class="bi ${icon === 'bi-file-text' ? 'bi-journal-text' : icon === 'bi-briefcase' ? 'bi-handshake' : 'bi-flag'}"></i> ${label} for ${escArchive(customer.name)}</h5><hr>`;
+    html += '<div class="list-group list-group-flush">';
+    for (const item of items) {
+        const type = category === 'notes' ? 'note' : category === 'engagements' ? 'engagement' : 'milestone';
+        const dateStr = item.call_date ? ' &mdash; ' + new Date(item.call_date).toLocaleDateString() : '';
+        const statusBadge = item.status ? ` <span class="badge bg-secondary">${escArchive(item.status)}</span>` : '';
+        html += `<a href="#" class="list-group-item list-group-item-action archive-detail-link" onclick="event.preventDefault(); navigateToItem('${type}', ${item.id}, ${customerId})">
+            <i class="bi ${icon}"></i> ${escArchive(item.title)}${dateStr}${statusBadge}
+        </a>`;
+    }
+    html += '</div>';
+    panel.innerHTML = html;
+}
+
+function showItemDetail(type, id) {
+    const panel = document.getElementById('archiveDetailPanel');
+    panel.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span> Loading...</div>';
+
+    fetch(`/api/admin/fy/archive/${encodeURIComponent(_archiveLabel)}/detail/${type}/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { panel.innerHTML = `<div class="text-danger">${data.error}</div>`; return; }
+            if (type === 'note') renderNoteDetail(data);
+            else if (type === 'engagement') renderEngagementDetail(data);
+            else if (type === 'milestone') renderMilestoneDetail(data);
+        })
+        .catch(() => { panel.innerHTML = '<div class="text-danger">Failed to load detail</div>'; });
+}
+
+function renderNoteDetail(data) {
+    const panel = document.getElementById('archiveDetailPanel');
+    const dateStr = data.call_date ? new Date(data.call_date).toLocaleDateString() : 'No date';
+    let html = `<h5><i class="bi bi-journal-text"></i> Note</h5>`;
+    html += `<div class="text-muted mb-2">${dateStr}`;
+    if (data.customer_name) html += ` &mdash; <span class="archive-detail-link" onclick="navigateToCustomerById(${data.customer_id})">${escArchive(data.customer_name)}</span>`;
+    html += '</div>';
+    if (data.topics && data.topics.length) {
+        html += '<div class="mb-2">' + data.topics.map(t => `<span class="badge bg-warning text-dark me-1"><i class="bi bi-tag"></i> ${escArchive(t)}</span>`).join('') + '</div>';
+    }
+    if (data.partners && data.partners.length) {
+        html += '<div class="mb-2">' + data.partners.map(p => `<span class="badge bg-success me-1">${escArchive(p)}</span>`).join('') + '</div>';
+    }
+    html += `<hr><div class="archive-note-content">${data.content || '<em>No content</em>'}</div>`;
+    panel.innerHTML = html;
+}
+
+function renderEngagementDetail(data) {
+    const panel = document.getElementById('archiveDetailPanel');
+    let html = `<h5><i class="bi bi-handshake"></i> ${escArchive(data.title)}</h5>`;
+    if (data.customer_name) html += `<div class="text-muted mb-2"><span class="archive-detail-link" onclick="navigateToCustomerById(${data.customer_id})">${escArchive(data.customer_name)}</span></div>`;
+    html += '<table class="table table-sm"><tbody>';
+    if (data.status) html += `<tr><td class="text-muted">Status</td><td><span class="badge bg-secondary">${escArchive(data.status)}</span></td></tr>`;
+    if (data.estimated_acr) html += `<tr><td class="text-muted">Est. ACR</td><td>$${Number(data.estimated_acr).toLocaleString()}</td></tr>`;
+    html += '</tbody></table>';
+    if (data.technical_problem) html += `<h6>Technical Problem</h6><p>${escArchive(data.technical_problem)}</p>`;
+    if (data.business_impact) html += `<h6>Business Impact</h6><p>${escArchive(data.business_impact)}</p>`;
+    if (data.solution_resources) html += `<h6>Solution / Resources</h6><p>${escArchive(data.solution_resources)}</p>`;
+    if (data.linked_notes && data.linked_notes.length) {
+        html += '<hr><h6><i class="bi bi-journal-text"></i> Linked Notes</h6><div class="list-group list-group-flush">';
+        for (const n of data.linked_notes) {
+            const dateStr = n.call_date ? new Date(n.call_date).toLocaleDateString() : '';
+            html += `<a href="#" class="list-group-item list-group-item-action py-1 archive-detail-link" onclick="event.preventDefault(); navigateToItem('note', ${n.id}, ${data.customer_id})">
+                <i class="bi bi-file-text"></i> ${escArchive(n.title || 'Note')} ${dateStr ? '&mdash; ' + dateStr : ''}
+            </a>`;
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+function renderMilestoneDetail(data) {
+    const panel = document.getElementById('archiveDetailPanel');
+    let html = `<h5><i class="bi bi-flag"></i> ${escArchive(data.title)}</h5>`;
+    if (data.customer_name) html += `<div class="text-muted mb-2"><span class="archive-detail-link" onclick="navigateToCustomerById(${data.customer_id})">${escArchive(data.customer_name)}</span></div>`;
+    html += '<table class="table table-sm"><tbody>';
+    if (data.status) html += `<tr><td class="text-muted">Status</td><td><span class="badge bg-secondary">${escArchive(data.status)}</span></td></tr>`;
+    if (data.dollar_value) html += `<tr><td class="text-muted">Value</td><td>$${Number(data.dollar_value).toLocaleString()}</td></tr>`;
+    if (data.due_date) html += `<tr><td class="text-muted">Due Date</td><td>${new Date(data.due_date).toLocaleDateString()}</td></tr>`;
+    if (data.workload) html += `<tr><td class="text-muted">Workload</td><td>${escArchive(data.workload)}</td></tr>`;
+    if (data.monthly_usage) html += `<tr><td class="text-muted">Monthly Usage</td><td>$${Number(data.monthly_usage).toLocaleString()}</td></tr>`;
+    html += '</tbody></table>';
+    if (data.tasks && data.tasks.length) {
+        html += '<h6><i class="bi bi-list-task"></i> Tasks</h6><div class="list-group list-group-flush">';
+        for (const t of data.tasks) {
+            html += `<div class="list-group-item py-1">
+                <strong>${escArchive(t.subject)}</strong>
+                ${t.category ? '<span class=&quot;badge bg-info text-dark ms-1&quot;>' + escArchive(t.category) + '</span>' : ''}
+                ${t.duration ? '<span class=&quot;text-muted small ms-1&quot;>' + t.duration + ' min</span>' : ''}
+                ${t.is_hok ? '<span class=&quot;badge bg-warning text-dark ms-1&quot;>HOK</span>' : ''}
+            </div>`;
+        }
+        html += '</div>';
+    }
+    if (data.linked_notes && data.linked_notes.length) {
+        html += '<hr><h6><i class="bi bi-journal-text"></i> Linked Notes</h6><div class="list-group list-group-flush">';
+        for (const n of data.linked_notes) {
+            const dateStr = n.call_date ? new Date(n.call_date).toLocaleDateString() : '';
+            html += `<a href="#" class="list-group-item list-group-item-action py-1 archive-detail-link" onclick="event.preventDefault(); navigateToItem('note', ${n.id}, ${data.customer_id})">
+                <i class="bi bi-file-text"></i> Note ${dateStr ? '&mdash; ' + dateStr : ''}
+            </a>`;
+        }
+        html += '</div>';
+    }
+    panel.innerHTML = html;
+}
+
+function stripHtml(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    return d.textContent || '';
+}
+
+// Cross-panel navigation helpers
+function navigateToCustomer(customerId, sellerId) {
+    expandToNode('customer', customerId, sellerId, null);
+    showCustomerDetail(customerId);
+}
+
+function navigateToCustomerById(customerId) {
+    // Find the seller for this customer in cached data
+    let sellerId = null;
+    for (const s of _archiveTreeData.sellers) {
+        if (s.customers.find(c => c.id == customerId)) { sellerId = s.id; break; }
+    }
+    if (!sellerId && _archiveTreeData.unassigned.find(c => c.id == customerId)) {
+        sellerId = '_unassigned';
+    }
+    expandToNode('customer', customerId, sellerId, null);
+    showCustomerDetail(customerId);
+}
+
+function navigateToItem(type, itemId, customerId) {
+    // Find seller for this customer
+    let sellerId = null;
+    for (const s of _archiveTreeData.sellers) {
+        if (s.customers.find(c => c.id == customerId)) { sellerId = s.id; break; }
+    }
+    if (!sellerId && _archiveTreeData.unassigned.find(c => c.id == customerId)) {
+        sellerId = '_unassigned';
+    }
+    expandToNode(type, itemId, sellerId, customerId);
+    showItemDetail(type, itemId);
+}
+
+// Search handler
+document.getElementById('archiveTreeSearch').addEventListener('input', function() {
+    if (!_archiveTreeData) return;
+    const val = this.value.trim();
+    renderArchiveTree(_archiveTreeData, val || null);
+    if (!val) showArchiveSummary(_archiveTreeData.summary);
+});
 
 // Load FY status on page load
 loadFYStatus();

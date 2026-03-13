@@ -1182,3 +1182,65 @@ def api_fy_exit_transition():
     exit_transition_mode()
     return jsonify({'success': True})
 
+
+@admin_bp.route('/api/admin/fy/archive/<label>/tree')
+def api_fy_archive_tree(label):
+    """Return the full tree skeleton for an archive."""
+    from app.services.fy_cutover import get_archive_tree, list_archives
+
+    # Validate label exists in known archives
+    known = {a['fy_label'] for a in list_archives()}
+    if label not in known:
+        return jsonify({'error': 'Archive not found'}), 404
+
+    try:
+        tree = get_archive_tree(label)
+        return jsonify(tree)
+    except FileNotFoundError:
+        return jsonify({'error': 'Archive file not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/fy/archive/<label>/customer/<int:cid>')
+def api_fy_archive_customer(label, cid):
+    """Return full customer detail from an archive."""
+    from app.services.fy_cutover import get_archive_customer, list_archives
+
+    known = {a['fy_label'] for a in list_archives()}
+    if label not in known:
+        return jsonify({'error': 'Archive not found'}), 404
+
+    try:
+        customer = get_archive_customer(label, cid)
+        if not customer:
+            return jsonify({'error': 'Customer not found in archive'}), 404
+        return jsonify(customer)
+    except FileNotFoundError:
+        return jsonify({'error': 'Archive file not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/fy/archive/<label>/detail/<item_type>/<int:item_id>')
+def api_fy_archive_detail(label, item_type, item_id):
+    """Return a single note, engagement, or milestone from an archive."""
+    from app.services.fy_cutover import get_archive_detail, list_archives
+
+    if item_type not in ('note', 'engagement', 'milestone'):
+        return jsonify({'error': 'Invalid type'}), 400
+
+    known = {a['fy_label'] for a in list_archives()}
+    if label not in known:
+        return jsonify({'error': 'Archive not found'}), 404
+
+    try:
+        detail = get_archive_detail(label, item_type, item_id)
+        if not detail:
+            return jsonify({'error': f'{item_type.title()} not found in archive'}), 404
+        return jsonify(detail)
+    except FileNotFoundError:
+        return jsonify({'error': 'Archive file not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+

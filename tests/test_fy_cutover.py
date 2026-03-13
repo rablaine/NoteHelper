@@ -358,6 +358,240 @@ class TestNavbarReorg:
         # Customers should NOT have a top-level nav item anymore
         assert 'id="navCustomers"' not in html
 
+
+class TestArchiveExplorer:
+    """Tests for FY Archive Explorer API endpoints."""
+
+    def _create_archive(self, app, label='FY25'):
+        """Helper: create a minimal archive .db with test data."""
+        import sqlite3
+        from app.services.fy_cutover import _get_data_dir
+
+        with app.app_context():
+            data_dir = _get_data_dir()
+            archive_path = data_dir / f'{label}.db'
+
+            conn = sqlite3.connect(str(archive_path))
+            c = conn.cursor()
+
+            # Create minimal schema matching the app's models
+            c.executescript("""
+                CREATE TABLE IF NOT EXISTS sellers (
+                    id INTEGER PRIMARY KEY, name TEXT, alias TEXT, seller_type TEXT, territory_id INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS territories (
+                    id INTEGER PRIMARY KEY, name TEXT, pod_id INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS customers (
+                    id INTEGER PRIMARY KEY, name TEXT, tpid INTEGER, nickname TEXT,
+                    territory_id INTEGER, seller_id INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS notes (
+                    id INTEGER PRIMARY KEY, customer_id INTEGER, content TEXT,
+                    call_date TEXT, created_at TEXT, updated_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS engagements (
+                    id INTEGER PRIMARY KEY, customer_id INTEGER, title TEXT,
+                    status TEXT, technical_problem TEXT, business_impact TEXT,
+                    solution_resources TEXT, estimated_acr REAL, key_individuals TEXT, target_date TEXT
+                );
+                CREATE TABLE IF NOT EXISTS milestones (
+                    id INTEGER PRIMARY KEY, customer_id INTEGER, title TEXT,
+                    msx_status TEXT, dollar_value REAL, due_date TEXT,
+                    workload TEXT, monthly_usage REAL,
+                    msx_milestone_id TEXT, milestone_number TEXT, url TEXT,
+                    msx_status_code INTEGER, opportunity_name TEXT,
+                    opportunity_id INTEGER, on_my_team INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS opportunities (
+                    id INTEGER PRIMARY KEY, customer_id INTEGER, name TEXT
+                );
+                CREATE TABLE IF NOT EXISTS msx_tasks (
+                    id INTEGER PRIMARY KEY, milestone_id INTEGER, subject TEXT,
+                    task_category TEXT, duration_minutes INTEGER, is_hok INTEGER,
+                    msx_task_id TEXT, msx_task_url TEXT, description TEXT, due_date TEXT, note_id INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS topics (
+                    id INTEGER PRIMARY KEY, name TEXT, description TEXT
+                );
+                CREATE TABLE IF NOT EXISTS notes_topics (
+                    note_id INTEGER, topic_id INTEGER, PRIMARY KEY (note_id, topic_id)
+                );
+                CREATE TABLE IF NOT EXISTS notes_engagements (
+                    note_id INTEGER, engagement_id INTEGER, PRIMARY KEY (note_id, engagement_id)
+                );
+                CREATE TABLE IF NOT EXISTS notes_milestones (
+                    note_id INTEGER, milestone_id INTEGER, PRIMARY KEY (note_id, milestone_id)
+                );
+                CREATE TABLE IF NOT EXISTS partners (
+                    id INTEGER PRIMARY KEY, name TEXT
+                );
+                CREATE TABLE IF NOT EXISTS notes_partners (
+                    note_id INTEGER, partner_id INTEGER, PRIMARY KEY (note_id, partner_id)
+                );
+                CREATE TABLE IF NOT EXISTS verticals (
+                    id INTEGER PRIMARY KEY, name TEXT
+                );
+                CREATE TABLE IF NOT EXISTS customers_verticals (
+                    customer_id INTEGER, vertical_id INTEGER, PRIMARY KEY (customer_id, vertical_id)
+                );
+
+                -- Insert test data
+                INSERT INTO sellers (id, name, alias) VALUES (1, 'Alice Seller', 'alice@ms.com');
+                INSERT INTO territories (id, name) VALUES (1, 'West Region');
+                INSERT INTO customers (id, name, tpid, seller_id, territory_id) VALUES (1, 'Acme Corp', 1001, 1, 1);
+                INSERT INTO customers (id, name, tpid, seller_id, territory_id) VALUES (2, 'Globex Inc', 1002, 1, 1);
+                INSERT INTO customers (id, name, tpid, seller_id) VALUES (3, 'No-Seller Co', 1003, NULL);
+                INSERT INTO notes (id, customer_id, content, call_date) VALUES (1, 1, '<p>Discussed Azure migration</p>', '2025-01-15');
+                INSERT INTO notes (id, customer_id, content, call_date) VALUES (2, 1, '<p>Follow-up on Cosmos DB</p>', '2025-02-10');
+                INSERT INTO engagements (id, customer_id, title, status) VALUES (1, 1, 'Cloud Migration', 'Active');
+                INSERT INTO milestones (id, customer_id, title, msx_status) VALUES (1, 1, 'POC Complete', 'Approved');
+                INSERT INTO topics (id, name) VALUES (1, 'Azure');
+                INSERT INTO notes_topics (note_id, topic_id) VALUES (1, 1);
+                INSERT INTO notes_engagements (note_id, engagement_id) VALUES (1, 1);
+                INSERT INTO notes_milestones (note_id, milestone_id) VALUES (1, 1);
+                INSERT INTO msx_tasks (id, milestone_id, subject, task_category, duration_minutes) VALUES (1, 1, 'Review POC', 'Technical', 60);
+                INSERT INTO verticals (id, name) VALUES (1, 'Healthcare');
+                INSERT INTO customers_verticals (customer_id, vertical_id) VALUES (1, 1);
+            """)
+            conn.commit()
+            conn.close()
+            return archive_path
+
+    def test_archive_tree_endpoint(self, client, app):
+        """GET /api/admin/fy/archive/<label>/tree returns tree data."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/tree')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert 'summary' in data
+            assert 'sellers' in data
+            assert 'unassigned' in data
+            assert data['summary']['customers'] == 3
+            assert data['summary']['sellers'] == 1
+            assert data['summary']['notes'] == 2
+            assert len(data['sellers']) == 1
+            assert data['sellers'][0]['name'] == 'Alice Seller'
+            assert len(data['sellers'][0]['customers']) == 2
+            assert len(data['unassigned']) == 1
+            assert data['unassigned'][0]['name'] == 'No-Seller Co'
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_tree_not_found(self, client):
+        """GET /api/admin/fy/archive/<label>/tree returns 404 for missing archive."""
+        resp = client.get('/api/admin/fy/archive/FY99/tree')
+        assert resp.status_code == 404
+
+    def test_archive_customer_endpoint(self, client, app):
+        """GET /api/admin/fy/archive/<label>/customer/<id> returns customer detail."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/customer/1')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data['name'] == 'Acme Corp'
+            assert data['tpid'] == 1001
+            assert data['territory'] == 'West Region'
+            assert data['seller'] == 'Alice Seller'
+            assert len(data['notes']) == 2
+            assert len(data['engagements']) == 1
+            assert data['engagements'][0]['title'] == 'Cloud Migration'
+            assert len(data['milestones']) == 1
+            assert data['milestones'][0]['title'] == 'POC Complete'
+            assert 'Healthcare' in data['verticals']
+            # Check note topics (notes ordered by call_date DESC, note 1 is second)
+            note_with_topics = [n for n in data['notes'] if n['topics']]
+            assert len(note_with_topics) == 1
+            assert 'Azure' in note_with_topics[0]['topics']
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_customer_not_found(self, client, app):
+        """GET customer endpoint returns 404 for missing customer."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/customer/999')
+            assert resp.status_code == 404
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_detail_note(self, client, app):
+        """GET /api/admin/fy/archive/<label>/detail/note/<id> returns note detail."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/detail/note/1')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data['type'] == 'note'
+            assert 'Azure migration' in data['content']
+            assert data['customer_name'] == 'Acme Corp'
+            assert 'Azure' in data['topics']
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_detail_engagement(self, client, app):
+        """GET engagement detail returns engagement with linked notes."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/detail/engagement/1')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data['type'] == 'engagement'
+            assert data['title'] == 'Cloud Migration'
+            assert len(data['linked_notes']) == 1
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_detail_milestone(self, client, app):
+        """GET milestone detail returns milestone with tasks."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/detail/milestone/1')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data['type'] == 'milestone'
+            assert data['title'] == 'POC Complete'
+            assert len(data['tasks']) == 1
+            assert data['tasks'][0]['subject'] == 'Review POC'
+            assert len(data['linked_notes']) == 1
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_detail_invalid_type(self, client, app):
+        """GET detail with invalid type returns 400."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/detail/badtype/1')
+            assert resp.status_code == 400
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_detail_not_found(self, client, app):
+        """GET detail for missing item returns 404."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/api/admin/fy/archive/FY25/detail/note/999')
+            assert resp.status_code == 404
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+    def test_archive_browse_button_in_admin_panel(self, client, app):
+        """Admin panel archive list should include Browse button."""
+        archive_path = self._create_archive(app, 'FY25')
+        try:
+            resp = client.get('/admin')
+            html = resp.data.decode()
+            assert 'openArchiveExplorer' in html
+            assert 'archiveExplorerModal' in html
+        finally:
+            archive_path.unlink(missing_ok=True)
+
+
+class TestNavbarReorgExtended:
+    """Additional navbar reorganization tests."""
+
     def test_pods_in_more_menu(self, client):
         """PODs should be inside the More dropdown."""
         resp = client.get('/')
