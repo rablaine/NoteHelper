@@ -1012,6 +1012,26 @@
         </div>
     </div>
     
+    <!-- Page Help Modal (F1) -->
+    <div class="modal fade" id="pageHelpModal" tabindex="-1" aria-labelledby="pageHelpModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pageHelpModalLabel">
+                        <i class="bi bi-question-circle"></i> Help
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="pageHelpBody">
+                </div>
+                <div class="modal-footer">
+                    <small class="text-muted me-auto">Press <span class="kbd">F1</span> on any page for contextual help</small>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Keyboard Shortcuts Help Modal -->
     <div class="modal fade" id="keyboardShortcutsModal" tabindex="-1" aria-labelledby="keyboardShortcutsModalLabel" aria-hidden="true">
         <div class="modal-dialog">
@@ -1036,6 +1056,10 @@
                             <tr>
                                 <td><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span></td>
                                 <td>Submit form</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">F1</span></td>
+                                <td>Page help</td>
                             </tr>
                             <tr>
                                 <td><span class="kbd">/</span> or <span class="kbd">?</span></td>
@@ -1086,6 +1110,32 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
     <!-- Driver.js for guided product tour -->
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js" defer></script>
+    <!-- Socket.IO client for partner sharing -->
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js" defer></script>
+    <script src="{{ url_for('static', filename='js/partner-share.js') }}" defer></script>
+    <!-- Contextual page help (F1) -->
+    <script src="{{ url_for('static', filename='js/page-help.js') }}" defer></script>
+    <script>document.addEventListener('DOMContentLoaded', () => PartnerShare.init());</script>
+
+    <!-- Share Partner Modal (global — used by partners_list and partner_view) -->
+    <div class="modal fade" id="sharePartnerModal" tabindex="-1" aria-labelledby="sharePartnerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="sharePartnerModalLabel">
+                        <i class="bi bi-share"></i> Share with Teammate
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="shareModalBody">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">Loading online users...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- Navbar hover dropdown: click on the main link navigates, hover opens menu -->
     <script>
@@ -2357,6 +2407,13 @@
     <script defer>
         window.addEventListener('load', () => {
             document.addEventListener('keydown', function(e) {
+                // F1: Contextual page help (always works, even when typing)
+                if (e.key === 'F1') {
+                    e.preventDefault();
+                    if (typeof PageHelp !== 'undefined') PageHelp.show();
+                    return;
+                }
+
                 // Don't trigger shortcuts when typing in inputs/textareas
                 const tag = e.target.tagName.toLowerCase();
                 const isTyping = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
