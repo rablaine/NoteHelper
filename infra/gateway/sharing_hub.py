@@ -14,6 +14,7 @@ Flow:
 6. Recipient processes data locally (upsert) → done
 """
 import logging
+import os
 import threading
 import time
 
@@ -34,6 +35,14 @@ _JWKS_URL = f"https://login.microsoftonline.com/{_MS_TENANT}/discovery/v2.0/keys
 
 # Online users: sid → {name, email, connected_at}
 _online_users: dict[str, dict] = {}
+
+# Sharing allowlist — if set, only these emails can connect.
+# Env var: comma-separated emails. Empty/unset = everyone allowed.
+_ALLOWED_EMAILS: set[str] = set(
+    e.strip().lower()
+    for e in os.environ.get("SHARE_ALLOWED_EMAILS", "").split(",")
+    if e.strip()
+)
 
 # JWKS client — caches signing keys, thread-safe
 _jwks_client: PyJWKClient | None = None
@@ -147,6 +156,13 @@ class ShareNamespace(Namespace):
             or claims.get("email")
             or "unknown"
         )
+
+        # Allowlist check (if configured)
+        if _ALLOWED_EMAILS and email.lower() not in _ALLOWED_EMAILS:
+            logger.info(f"share: {email} not in allowlist — rejecting")
+            emit("not_allowed", {})
+            disconnect()
+            return False
 
         _online_users[request.sid] = {
             "name": name,

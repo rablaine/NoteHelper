@@ -12,6 +12,7 @@
 const PartnerShare = (function () {
   let socket = null;
   let connected = false;
+  let shareEnabled = false;  // true only after successful connect (passes allowlist)
   let onlineUsers = [];
   let pendingShareType = null;   // "directory" or "partner"
   let pendingPartnerId = null;   // set when sharing a single partner
@@ -36,6 +37,7 @@ const PartnerShare = (function () {
 
       socket.on('connect', () => {
         connected = true;
+        shareEnabled = true;
         _updateBadges();
         socket.emit('get_online_users');
       });
@@ -43,6 +45,12 @@ const PartnerShare = (function () {
       socket.on('disconnect', () => {
         connected = false;
         onlineUsers = [];
+        _updateBadges();
+      });
+
+      // Not on the allowlist — hide sharing UI entirely
+      socket.on('not_allowed', () => {
+        shareEnabled = false;
         _updateBadges();
       });
 
@@ -307,15 +315,15 @@ const PartnerShare = (function () {
   }
 
   function _updateBadges() {
+    // Hide share buttons entirely if not on allowlist
+    document.querySelectorAll('.btn-share-partner').forEach(btn => {
+      btn.style.display = shareEnabled ? '' : 'none';
+    });
+
     // Update any online count badges on the page
     document.querySelectorAll('.share-online-count').forEach(el => {
       el.textContent = onlineUsers.length;
-      el.style.display = onlineUsers.length > 0 ? '' : 'none';
-    });
-
-    // Update share button state
-    document.querySelectorAll('.btn-share-partner').forEach(btn => {
-      btn.disabled = !connected;
+      el.style.display = (shareEnabled && onlineUsers.length > 0) ? '' : 'none';
     });
   }
 
