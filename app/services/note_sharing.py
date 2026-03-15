@@ -103,9 +103,11 @@ def import_shared_note(note_data: dict, sender_name: str) -> dict:
 
     customer_data = note_data.get("customer")
     customer = None
+    created = []  # Track what entities were created
 
     if customer_data and customer_data.get("tpid"):
-        customer = _find_or_create_customer(customer_data)
+        customer, customer_created = _find_or_create_customer(customer_data)
+        created.extend(customer_created)
 
     # Create the note
     note = Note(
@@ -142,15 +144,21 @@ def import_shared_note(note_data: dict, sender_name: str) -> dict:
         "success": True,
         "customer_name": customer.name if customer else None,
         "note_id": note.id,
+        "created": created,
     }
 
 
-def _find_or_create_customer(customer_data: dict) -> Customer:
-    """Find a customer by TPID, or create with full context if not found."""
+def _find_or_create_customer(customer_data: dict) -> tuple[Customer, list[str]]:
+    """Find a customer by TPID, or create with full context if not found.
+
+    Returns (customer, created_list) where created_list tracks new entities.
+    """
     tpid = customer_data["tpid"]
     customer = Customer.query.filter_by(tpid=tpid).first()
     if customer:
-        return customer
+        return customer, []
+
+    created = []
 
     # Need to create — first ensure territory and seller exist
     territory = None
@@ -163,6 +171,7 @@ def _find_or_create_customer(customer_data: dict) -> Customer:
             territory = Territory(name=territory_name)
             db.session.add(territory)
             db.session.flush()
+            created.append(f"territory: {territory_name}")
 
     seller = None
     seller_name = customer_data.get("seller_name")
@@ -185,6 +194,7 @@ def _find_or_create_customer(customer_data: dict) -> Customer:
             )
             db.session.add(seller)
             db.session.flush()
+            created.append(f"seller: {seller_name}")
         # Link seller to territory via M:M
         if territory and territory not in seller.territories:
             seller.territories.append(territory)
@@ -200,8 +210,9 @@ def _find_or_create_customer(customer_data: dict) -> Customer:
     )
     db.session.add(customer)
     db.session.flush()
+    created.append(f"customer: {customer_data['name']}")
     logger.info(f"Created customer '{customer.name}' (TPID {tpid}) from shared note")
-    return customer
+    return customer, created
 
 
 def _find_or_create_topic(name: str) -> Topic:

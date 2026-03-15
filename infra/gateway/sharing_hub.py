@@ -36,6 +36,10 @@ _JWKS_URL = f"https://login.microsoftonline.com/{_MS_TENANT}/discovery/v2.0/keys
 # Online users: sid → {name, email, connected_at}
 _online_users: dict[str, dict] = {}
 
+# Pending share sessions: (sender_email, recipient_email) → {sender_sid, recipient_sid}
+# Gateway tracks both sides so the client never needs to handle SIDs.
+_pending_shares: dict[tuple[str, str], dict] = {}
+
 # Sharing allowlist — if set, only these emails can connect.
 # Env var: comma-separated emails. Empty/unset = everyone allowed.
 _ALLOWED_EMAILS: set[str] = set(
@@ -170,13 +174,15 @@ class ShareNamespace(Namespace):
             "connected_at": time.time(),
         }
         logger.info(f"share: {name} ({email}) connected — sid {request.sid}")
+        logger.info(f"share: online_users keys = {list(_online_users.keys())}")
         self._broadcast_online()
 
     def on_disconnect(self):
         """Remove user from online list and broadcast."""
         user = _online_users.pop(request.sid, None)
         if user:
-            logger.info(f"share: {user['name']} disconnected")
+            logger.info(f"share: {user['name']} disconnected — sid {request.sid}")
+            logger.info(f"share: online_users keys after disconnect = {list(_online_users.keys())}")
         self._broadcast_online()
 
     def on_get_online_users(self):
@@ -191,7 +197,7 @@ class ShareNamespace(Namespace):
         """Sender wants to share with a specific recipient.
 
         data: {recipient_email, share_type: "directory"|"partner"|"note",
-               partner_name?: str, note_title?: str}
+               item_name?: str}
         """
         recipient_email = data.get("recipient_email", "")
         recipient_sids = self._sids_for_email(recipient_email)
@@ -202,33 +208,50 @@ class ShareNamespace(Namespace):
         sender = _online_users.get(request.sid, {})
         sender_email = sender.get("email", "")
 
-        # Notify ALL of recipient's tabs
+        # Store sender's SID — recipient_sid filled in when they accept
+        key = (sender_email.lower(), recipient_email.lower())
+        _pending_shares[key] = {"sender_sid": request.sid}
+        logger.info(f"share: request stored — key={key}, sender_sid={request.sid}")
+
+        # Notify ALL of recipient's tabs (any tab can accept)
         self._emit_to_user("share_offer", {
             "sender_email": sender_email,
             "sender_name": sender.get("name", "Unknown"),
             "share_type": data.get("share_type", "partner"),
-            "partner_name": data.get("partner_name"),
-            "note_title": data.get("note_title"),
+            "item_name": data.get("item_name"),
         }, recipient_email)
 
     def on_share_accept(self, data):
         """Recipient accepts a share offer."""
         sender_email = data.get("sender_email", "")
-        sender_sids = self._sids_for_email(sender_email)
-        if not sender_sids:
+        recipient = _online_users.get(request.sid, {})
+        recipient_email = recipient.get("email", "")
+
+        # Look up the pending share and store the accepter's SID
+        key = (sender_email.lower(), recipient_email.lower())
+        pending = _pending_shares.get(key)
+        if not pending:
+            emit("share_error", {"error": "Share session not found"})
+            return
+
+        sender_sid = pending["sender_sid"]
+        if sender_sid not in _online_users:
+            _pending_shares.pop(key, None)
             emit("share_error", {"error": "Sender is no longer online"})
             return
 
-        recipient = _online_users.get(request.sid, {})
+        # Store recipient's accepting SID for when sender sends data
+        pending["recipient_sid"] = request.sid
+        logger.info(f"share: accept — key={key}, sender_sid={sender_sid}, "
+                    f"recipient_sid={request.sid}")
 
-        # Notify ALL of sender's tabs
-        self._emit_to_user("share_accepted", {
-            "recipient_email": recipient.get("email", ""),
+        # Notify ONLY the sender's originating tab (no SIDs in payload)
+        emit("share_accepted", {
+            "recipient_email": recipient_email,
             "recipient_name": recipient.get("name", "Unknown"),
-        }, sender_email)
+        }, to=sender_sid)
 
         # Dismiss the offer on other recipient tabs
-        recipient_email = recipient.get("email", "")
         for sid in self._sids_for_email(recipient_email):
             if sid != request.sid:
                 emit("share_offer_handled", {}, to=sid)
@@ -236,19 +259,21 @@ class ShareNamespace(Namespace):
     def on_share_decline(self, data):
         """Recipient declines a share offer."""
         sender_email = data.get("sender_email", "")
-        sender_sids = self._sids_for_email(sender_email)
-        if not sender_sids:
-            return
-
         recipient = _online_users.get(request.sid, {})
+        recipient_email = recipient.get("email", "")
 
-        # Notify ALL of sender's tabs
-        self._emit_to_user("share_declined", {
-            "recipient_name": recipient.get("name", "Unknown"),
-        }, sender_email)
+        # Look up and clean up the pending share
+        key = (sender_email.lower(), recipient_email.lower())
+        pending = _pending_shares.pop(key, None)
+
+        if pending:
+            sender_sid = pending["sender_sid"]
+            if sender_sid in _online_users:
+                emit("share_declined", {
+                    "recipient_name": recipient.get("name", "Unknown"),
+                }, to=sender_sid)
 
         # Dismiss the offer on other recipient tabs
-        recipient_email = recipient.get("email", "")
         for sid in self._sids_for_email(recipient_email):
             if sid != request.sid:
                 emit("share_offer_handled", {}, to=sid)
@@ -257,20 +282,33 @@ class ShareNamespace(Namespace):
         """Sender transmits share payload to the recipient.
 
         data: {recipient_email, share_type, ...payload fields}
-        The gateway relays without inspecting the payload.
+        The gateway looks up the recipient SID from the pending share
+        session — the client never handles SIDs.
         """
+        sender = _online_users.get(request.sid, {})
+        sender_email = sender.get("email", "")
         recipient_email = data.get("recipient_email", "")
-        recipient_sids = self._sids_for_email(recipient_email)
-        if not recipient_sids:
+
+        # Look up the pending share to find the recipient's accepting SID
+        key = (sender_email.lower(), recipient_email.lower())
+        pending = _pending_shares.pop(key, None)
+        logger.info(f"share: share_data — key={key}, pending={pending}, "
+                    f"online={list(_online_users.keys())}")
+
+        if not pending or "recipient_sid" not in pending:
+            emit("share_error", {"error": "Share session expired or not accepted"})
+            return
+
+        recipient_sid = pending["recipient_sid"]
+        if recipient_sid not in _online_users:
             emit("share_error", {"error": "Recipient is no longer online"})
             return
 
-        sender = _online_users.get(request.sid, {})
-
-        # Forward everything except recipient_email, add sender info
+        # Forward everything except routing field, add sender info
         payload = {k: v for k, v in data.items() if k != "recipient_email"}
         payload["sender_name"] = sender.get("name", "Unknown")
-        payload["sender_email"] = sender.get("email", "")
+        payload["sender_email"] = sender_email
 
-        # Send to ALL recipient tabs — the client deduplicates the upsert
-        self._emit_to_user("share_payload", payload, recipient_email)
+        # Send ONLY to the tab that accepted
+        emit("share_payload", payload, to=recipient_sid)
+        logger.info(f"share: payload delivered to {recipient_sid}")
