@@ -1,5 +1,5 @@
 """
-Customer routes for NoteHelper.
+Customer routes for Sales Buddy.
 Handles customer listing, creation, viewing, editing, and TPID workflow.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g

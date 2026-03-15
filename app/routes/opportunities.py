@@ -1,5 +1,5 @@
 """
-Opportunity routes for NoteHelper.
+Opportunity routes for Sales Buddy.
 Handles viewing opportunity details (fetched fresh from MSX) and posting comments.
 """
 import json

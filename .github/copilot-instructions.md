@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Project Name:** NoteHelper
+**Project Name:** Sales Buddy
 
 **Description:** A note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
 
@@ -130,7 +130,7 @@
 **Real-Time Communication:** Flask-SocketIO for partner sharing hub
 - Socket.IO server runs on the AI gateway (`infra/gateway/sharing_hub.py`)
 - Client-side connects from the local Flask app (`app/services/partner_sharing.py`)
-- Used for sharing partner directories between NoteHelper instances
+- Used for sharing partner directories between Sales Buddy instances
 
 **Database Migrations:** Custom idempotent migrations (NOT Flask-Migrate/Alembic)
 - Located in `app/migrations.py`
@@ -148,7 +148,6 @@
 
 **Required Environment Variables:**
 ```
-DATABASE_URL=sqlite:///data/notehelper.db
 SECRET_KEY=your-secret-key-here
 FLASK_ENV=development
 FLASK_DEBUG=True
@@ -191,9 +190,9 @@ flask run
 
 **IMPORTANT - Virtual Environment:**
 - **ALWAYS activate venv before running Flask or any Python commands**
-- Use `& C:\dev\NoteHelper\venv\Scripts\Activate.ps1` before Flask commands
+- Use `& C:\dev\SalesBuddy\venv\Scripts\Activate.ps1` before Flask commands
 - Never run `flask run` or `python` without activating venv first
-- When running Flask in background, combine: `& C:\dev\NoteHelper\venv\Scripts\Activate.ps1 ; flask run`
+- When running Flask in background, combine: `& C:\dev\SalesBuddy\venv\Scripts\Activate.ps1 ; flask run`
 
 **Testing:**
 ```powershell
@@ -227,14 +226,14 @@ pytest --cov=app tests/  # with coverage
 
 **Development Environment:**
 - Local machine running Flask development server
-- Local SQLite database (data/notehelper.db)
+- Local SQLite database (data/salesbuddy.db)
 - Environment: `FLASK_ENV=development`, `FLASK_DEBUG=True`
 - Used for developing and testing new features
 - Safe to experiment and break things
 
 **Production Environment:**
-- NoteHelper Flask app runs locally via `flask run` or `start.bat`
-- SQLite database (persisted in `data/notehelper.db`)
+- Sales Buddy Flask app runs locally via `flask run` or `start.bat`
+- SQLite database (persisted in `data/salesbuddy.db`)
 - `update.bat` backs up the database before deploying/running migrations
 - Real user data - handle with care
 
@@ -401,7 +400,7 @@ az login --tenant 72f988bf-86f1-41af-91ab-2d7cd011db47
 az account get-access-token --resource "api://0f6db4af-332c-4fd5-b894-77fadb181e5c" 2>&1
 
 # 7. (Optional) Reset the DB flag too if testing the full wizard
-# Move data/notehelper.db to data/notehelper.db.bak
+# Move data/salesbuddy.db to data/salesbuddy.db.bak
 ```
 
 **Key detail:** The consent grant's `clientId` is the gateway SP ID (not `resourceId`). The `resourceId` on the grant points to the Microsoft Graph SP.

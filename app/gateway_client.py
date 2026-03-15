@@ -1,5 +1,5 @@
 """
-Gateway client for calling the NoteHelper AI Gateway via APIM.
+Gateway client for calling the Sales Buddy AI Gateway via APIM.
 
 All AI calls are routed through the centralized APIM → App Service →
 Azure OpenAI pipeline.  The gateway URL is hardcoded — no configuration

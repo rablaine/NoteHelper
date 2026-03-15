@@ -871,7 +871,7 @@ def add_opportunity_comment(
         if not user_id:
             return {"success": False, "error": "Could not get current user ID"}
 
-        user_name = "NoteHelper"
+        user_name = "Sales Buddy"
         try:
             name_resp = _msx_request(
                 'GET',
@@ -971,11 +971,11 @@ def get_msx_user_display_name() -> str:
     """Get the current user's display name from MSX.
 
     Returns:
-        Display name string, or 'NoteHelper' as fallback.
+        Display name string, or 'Sales Buddy' as fallback.
     """
     user_id = get_current_user_id()
     if not user_id:
-        return "NoteHelper"
+        return "Sales Buddy"
 
     try:
         name_resp = _msx_request(
@@ -983,10 +983,10 @@ def get_msx_user_display_name() -> str:
             f"{CRM_BASE_URL}/systemusers({user_id})?$select=fullname",
         )
         if name_resp.status_code == 200:
-            return name_resp.json().get("fullname") or "NoteHelper"
+            return name_resp.json().get("fullname") or "Sales Buddy"
     except Exception:
         pass
-    return "NoteHelper"
+    return "Sales Buddy"
 
 
 def upsert_milestone_comment(
@@ -999,7 +999,7 @@ def upsert_milestone_comment(
     """Insert or update a comment on a milestone, matched by ref tag.
 
     Reads the current comments array, searches for an existing comment
-    authored by the current user (via NoteHelper) whose text contains the
+    authored by the current user (via Sales Buddy) whose text contains the
     given ref tag.  If found the comment is updated in-place; otherwise a
     new comment is appended.
 
@@ -1036,11 +1036,11 @@ def upsert_milestone_comment(
 
         # Step 2: Get current user display name
         user_name = get_msx_user_display_name()
-        display_name = f"{user_name} via NoteHelper"
+        display_name = f"{user_name} via Sales Buddy"
 
         # Step 3: Find existing comment by matching the current user's
         # display_name AND ref tag in comment body.  This supports multiple
-        # NoteHelper users on the same milestone — each user's comments
+        # Sales Buddy users on the same milestone — each user's comments
         # are separate because the userId differs per person.
         existing_idx = None
         ref_marker = f"· {ref_tag} ·"
@@ -1132,7 +1132,7 @@ def add_milestone_comment(
 
         now = dt.now(tz.utc)
         new_comment = {
-            "userId": f"{user_name} via NoteHelper",
+            "userId": f"{user_name} via Sales Buddy",
             "modifiedOn": now.isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
             "comment": comment_text,
         }

@@ -1,5 +1,5 @@
 """
-Call log routes for NoteHelper.
+Call log routes for Sales Buddy.
 Handles call log listing, creation, viewing, editing, and Fill My Day bulk import.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify

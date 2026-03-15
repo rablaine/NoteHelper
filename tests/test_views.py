@@ -13,7 +13,7 @@ def test_home_page_loads(client):
     """Test that home page loads successfully."""
     response = client.get('/')
     assert response.status_code == 200
-    assert b'Welcome to NoteHelper' in response.data
+    assert b'Welcome to Sales Buddy' in response.data
 
 
 def test_home_page_with_data(client, sample_data):

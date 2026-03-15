@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Milestone Tracker - NoteHelper{% endblock %}
+{% block title %}Milestone Tracker - Sales Buddy{% endblock %}
 
 {% block content %}
 {% include 'partials/msx_auth_banner.html' %}
@@ -299,7 +299,7 @@ function syncMilestones() {
 // =============================================================================
 // Client-side Filtering
 // =============================================================================
-const FILTER_STORAGE_KEY = 'notehelper_milestone_filters';
+const FILTER_STORAGE_KEY = 'salesbuddy_milestone_filters';
 
 function saveFilters() {
     const selectedQuarters = Array.from(document.querySelectorAll('.quarter-checkbox:checked')).map(cb => cb.value);

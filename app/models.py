@@ -1,5 +1,5 @@
 """
-Database models for NoteHelper application.
+Database models for Sales Buddy application.
 All SQLAlchemy models and association tables.
 """
 from datetime import datetime, timezone, date
@@ -982,7 +982,7 @@ class CustomerRevenueData(db.Model):
     seller_name = db.Column(db.String(200), nullable=True)  # From territory alignment in CSV
     bucket = db.Column(db.String(50), nullable=False)  # Core DBs, Analytics, Modern DBs
     
-    # Link to NoteHelper customer (nullable until matched)
+    # Link to Sales Buddy customer (nullable until matched)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
     
     # Month identifier
@@ -1026,7 +1026,7 @@ class ProductRevenueData(db.Model):
     bucket = db.Column(db.String(50), nullable=False)  # Core DBs, Analytics, Modern DBs
     product = db.Column(db.String(200), nullable=False, index=True)  # ServiceLevel4 from CSV
     
-    # Link to NoteHelper customer (nullable until matched)
+    # Link to Sales Buddy customer (nullable until matched)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
     
     # Month identifier

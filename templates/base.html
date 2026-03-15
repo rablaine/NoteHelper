@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}NoteHelper{% endblock %}</title>
+    <title>{% block title %}Sales Buddy{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#742774">
@@ -342,7 +342,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
         <div class="container-fluid px-4">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
-                <img src="{{ url_for('static', filename='favicon.svg') }}" alt="NoteHelper" width="28" height="28" style="position:relative;top:1px;margin-right:2px;filter:drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);"><span class="ms-2">NoteHelper</span>
+                <img src="{{ url_for('static', filename='favicon.svg') }}" alt="Sales Buddy" width="28" height="28" style="position:relative;top:1px;margin-right:2px;filter:drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);"><span class="ms-2">Sales Buddy</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -621,7 +621,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="welcomeModalLabel">
-                        <i class="bi bi-rocket-takeoff"></i> Welcome to NoteHelper!
+                        <i class="bi bi-rocket-takeoff"></i> Welcome to Sales Buddy!
                     </h5>
                     <!-- Step indicator -->
                     <span class="badge bg-secondary ms-auto me-2" id="onboardingStepBadge">Step 1 of 5</span>
@@ -680,7 +680,7 @@
                                 <div id="signInWaiting" class="d-none text-center">
                                     <p class="mb-2 text-primary fw-bold" id="signInBrowserHint">Select your Microsoft corporate account, then approve the consent prompt.</p>
                                     <p class="mb-2 small text-muted">This page will update automatically once you're signed in.</p>
-                                    <p class="mb-2 small text-warning d-none" id="signInConsentHint"><i class="bi bi-window-stack"></i> <strong>Still waiting?</strong> Try minimizing your foreground windows. The consent prompt may be behind them. Look for <strong>"Permissions requested"</strong> for <strong>NoteHelper-AI-Gateway</strong> (with the NoteHelper icon).</p>
+                                    <p class="mb-2 small text-warning d-none" id="signInConsentHint"><i class="bi bi-window-stack"></i> <strong>Still waiting?</strong> Try minimizing your foreground windows. The consent prompt may be behind them. Look for <strong>"Permissions requested"</strong> for <strong>NoteHelper-AI-Gateway</strong> (with the Sales Buddy icon).</p>
                                     <div class="mb-2">
                                         <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
                                         <span class="text-muted ms-2" id="signInStatus">Waiting for sign-in...</span>
@@ -1101,7 +1101,7 @@
     {% if not request.args.get('embed') %}
     <footer class="bg-light text-center text-muted py-3 mt-5">
         <div class="container">
-            <small>&copy; 2026 NoteHelper - Your Azure Sales Companion</small>
+            <small>&copy; 2026 Sales Buddy - Your Azure Sales Companion</small>
         </div>
     </footer>
     {% endif %}
@@ -1307,7 +1307,7 @@
                         // Only trigger guided tour if it hasn't been completed (DB-backed flag)
                         var tourCompleted = {{ 'true' if guided_tour_completed else 'false' }};
                         if (!tourCompleted) {
-                            localStorage.setItem('notehelper_start_tour', '1');
+                            localStorage.setItem('salesbuddy_start_tour', '1');
                         }
                     } catch (err) {
                         console.error('Failed to dismiss onboarding:', err);
@@ -2591,9 +2591,9 @@
     <!-- Guided Product Tour (triggered once after first wizard dismissal) -->
     <script defer>
     window.addEventListener('load', function() {
-        if (localStorage.getItem('notehelper_start_tour') !== '1') return;
+        if (localStorage.getItem('salesbuddy_start_tour') !== '1') return;
         if (typeof driver === 'undefined') return;
-        localStorage.removeItem('notehelper_start_tour');
+        localStorage.removeItem('salesbuddy_start_tour');
 
         // Small delay so the page is fully rendered
         setTimeout(function() {
@@ -2601,13 +2601,13 @@
                 showProgress: true,
                 animate: true,
                 overlayColor: 'rgba(0, 0, 0, 0.65)',
-                popoverClass: 'notehelper-tour',
+                popoverClass: 'salesbuddy-tour',
                 nextBtnText: 'Next',
                 prevBtnText: 'Back',
                 doneBtnText: 'Got it!',
                 onDestroyStarted: function() {
                     // Mark tour as completed in localStorage and database
-                    localStorage.setItem('notehelper_tour_completed', '1');
+                    localStorage.setItem('salesbuddy_tour_completed', '1');
                     fetch('/api/preferences/guided-tour-complete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' }

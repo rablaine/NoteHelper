@@ -1,7 +1,7 @@
 """Tests for revenue import customer name matching logic.
 
 Tests the progressive word-level prefix matching system that links revenue CSV
-customer names to NoteHelper customers.
+customer names to Sales Buddy customers.
 """
 import pytest
 

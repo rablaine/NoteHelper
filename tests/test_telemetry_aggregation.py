@@ -396,7 +396,7 @@ class TestInstanceId:
                 instance_id = get_instance_id()
                 assert len(instance_id) == 36  # UUID format
                 # File should have been created
-                id_file = Path(tmpdir) / '.notehelper_instance_id'
+                id_file = Path(tmpdir) / '.salesbuddy_instance_id'
                 assert id_file.exists()
                 assert id_file.read_text().strip() == instance_id
 
@@ -419,31 +419,31 @@ class TestTelemetryOptOut:
     def test_enabled_by_default(self):
         """Telemetry should be enabled when env var is not set."""
         with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('NOTEHELPER_TELEMETRY_OPT_OUT', None)
+            os.environ.pop('SALESBUDDY_TELEMETRY_OPT_OUT', None)
             from app.services.telemetry_shipper import is_telemetry_enabled
             assert is_telemetry_enabled() is True
 
     def test_opt_out_true(self):
-        """Should be disabled when NOTEHELPER_TELEMETRY_OPT_OUT=true."""
-        with patch.dict(os.environ, {'NOTEHELPER_TELEMETRY_OPT_OUT': 'true'}):
+        """Should be disabled when SALESBUDDY_TELEMETRY_OPT_OUT=true."""
+        with patch.dict(os.environ, {'SALESBUDDY_TELEMETRY_OPT_OUT': 'true'}):
             from app.services.telemetry_shipper import is_telemetry_enabled
             assert is_telemetry_enabled() is False
 
     def test_opt_out_yes(self):
-        """Should be disabled when NOTEHELPER_TELEMETRY_OPT_OUT=yes."""
-        with patch.dict(os.environ, {'NOTEHELPER_TELEMETRY_OPT_OUT': 'yes'}):
+        """Should be disabled when SALESBUDDY_TELEMETRY_OPT_OUT=yes."""
+        with patch.dict(os.environ, {'SALESBUDDY_TELEMETRY_OPT_OUT': 'yes'}):
             from app.services.telemetry_shipper import is_telemetry_enabled
             assert is_telemetry_enabled() is False
 
     def test_opt_out_one(self):
-        """Should be disabled when NOTEHELPER_TELEMETRY_OPT_OUT=1."""
-        with patch.dict(os.environ, {'NOTEHELPER_TELEMETRY_OPT_OUT': '1'}):
+        """Should be disabled when SALESBUDDY_TELEMETRY_OPT_OUT=1."""
+        with patch.dict(os.environ, {'SALESBUDDY_TELEMETRY_OPT_OUT': '1'}):
             from app.services.telemetry_shipper import is_telemetry_enabled
             assert is_telemetry_enabled() is False
 
     def test_opt_out_false(self):
         """Should remain enabled when env var is set to 'false'."""
-        with patch.dict(os.environ, {'NOTEHELPER_TELEMETRY_OPT_OUT': 'false'}):
+        with patch.dict(os.environ, {'SALESBUDDY_TELEMETRY_OPT_OUT': 'false'}):
             from app.services.telemetry_shipper import is_telemetry_enabled
             assert is_telemetry_enabled() is True
 
@@ -514,7 +514,7 @@ class TestQueueEvent:
         with ts._buffer_lock:
             assert len(ts._buffer) == 1
             env = ts._buffer[0]
-            assert env['data']['baseData']['name'] == 'NoteHelper.FeatureUsage'
+            assert env['data']['baseData']['name'] == 'SalesBuddy.FeatureUsage'
             assert env['data']['baseData']['properties']['category'] == 'Call Logs'
             assert env['data']['baseData']['measurements']['status_code'] == 200.0
         self._reset_buffer()

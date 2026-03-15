@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Edit' if note else 'New' }} Note - NoteHelper{% endblock %}
+{% block title %}{{ 'Edit' if note else 'New' }} Note - Sales Buddy{% endblock %}
 
 {% block extra_css %}
 <!-- Quill Rich Text Editor -->
@@ -1862,7 +1862,7 @@ function aiMatchMilestone() {
 }
 
 // ===== AUTO-SAVE FUNCTIONALITY =====
-const DRAFT_KEY_PREFIX = 'notehelper_draft_';
+const DRAFT_KEY_PREFIX = 'salesbuddy_draft_';
 const MAX_DRAFTS = 5;
 const DEBOUNCE_DELAY = 1500; // 1.5 seconds after user stops typing
 let autoSaveTimeout = null;

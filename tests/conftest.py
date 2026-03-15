@@ -1,5 +1,5 @@
 """
-Pytest configuration and fixtures for NoteHelper tests.
+Pytest configuration and fixtures for Sales Buddy tests.
 """
 import pytest
 import tempfile

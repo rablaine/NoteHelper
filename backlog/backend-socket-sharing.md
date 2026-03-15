@@ -2,7 +2,7 @@
 
 ## Overview
 
-Move the Socket.IO connection from the browser (client-side JS) to the Flask backend so that NoteHelper instances are "online" whenever the server is running, not just when a browser tab is open. This enables fire-and-forget sharing: a user can initiate a share, close their browser, and the data transfers automatically when the recipient comes online and accepts.
+Move the Socket.IO connection from the browser (client-side JS) to the Flask backend so that Sales Buddy instances are "online" whenever the server is running, not just when a browser tab is open. This enables fire-and-forget sharing: a user can initiate a share, close their browser, and the data transfers automatically when the recipient comes online and accepts.
 
 ## Current Architecture (Browser-Only)
 

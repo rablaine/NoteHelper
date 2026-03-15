@@ -1,5 +1,5 @@
 """
-Services module for NoteHelper.
+Services module for Sales Buddy.
 Contains business logic services separate from routes.
 """
 

@@ -1,6 +1,6 @@
 {
-  "name": "NoteHelper",
-  "short_name": "NoteHelper",
+  "name": "Sales Buddy",
+  "short_name": "Sales Buddy",
   "description": "Your Azure Sales Companion - capture and retrieve customer call notes",
   "start_url": "/",
   "scope": "/",

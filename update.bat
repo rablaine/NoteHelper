@@ -1,5 +1,5 @@
 @echo off
-REM NoteHelper Update - pulls latest code, installs deps, restarts server
+REM Sales Buddy Update - pulls latest code, installs deps, restarts server
 REM Auto-elevates (admin) only if PORT in .env is below 1024 (e.g. port 80)
 cd /d "%~dp0"
 

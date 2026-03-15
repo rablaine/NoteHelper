@@ -206,7 +206,7 @@ class TestOldModalRemoval:
         """Index should work without the old show_first_time_modal template var."""
         response = client.get('/')
         assert response.status_code == 200
-        assert b'NoteHelper' in response.data
+        assert b'Sales Buddy' in response.data
 
 
 class TestResetOnboarding:

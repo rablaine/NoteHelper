@@ -1,5 +1,5 @@
 """
-Update checker service for NoteHelper.
+Update checker service for Sales Buddy.
 
 Periodically checks if new commits are available on the remote main branch
 and caches the result. Used to show an update notification in the UI.

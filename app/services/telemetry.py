@@ -1,5 +1,5 @@
 """
-Local usage telemetry service for NoteHelper.
+Local usage telemetry service for Sales Buddy.
 
 Captures every HTTP request/response cycle and logs it to the
 ``usage_events`` table. No PII is stored -- no IP addresses, user-agents,

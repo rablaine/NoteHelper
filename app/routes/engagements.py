@@ -1,5 +1,5 @@
 """
-Engagement routes for NoteHelper.
+Engagement routes for Sales Buddy.
 Handles CRUD operations for customer engagement threads.
 """
 import logging

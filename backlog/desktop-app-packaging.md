@@ -1,14 +1,14 @@
 # Desktop App Packaging — MSI Installer + Edge App Mode
 
 ## Goal
-Let users install NoteHelper like a native desktop app: download an MSI, double-click to install, launch from Start Menu. No terminal, no `flask run`, no Python install required.
+Let users install Sales Buddy like a native desktop app: download an MSI, double-click to install, launch from Start Menu. No terminal, no `flask run`, no Python install required.
 
 ## Architecture
 
 ```
-NoteHelper-Setup.msi
-  └─ installs to C:\Program Files\NoteHelper\
-      ├── notehelper.exe          ← Tiny launcher (PyInstaller-built)
+SalesBuddy-Setup.msi
+  └─ installs to C:\Program Files\SalesBuddy\
+      ├── salesbuddy.exe          ← Tiny launcher (PyInstaller-built)
       ├── python311\              ← Embedded Python (no system install needed)
       │   ├── python.exe
       │   └── Lib\site-packages\ ← All pip deps pre-installed
@@ -19,21 +19,21 @@ NoteHelper-Setup.msi
       └── data\                   ← Empty (DB created at runtime in AppData)
 
 Runtime data lives in:
-  %APPDATA%\NoteHelper\
-      ├── data\notehelper.db      ← User's database (persists across updates)
+  %APPDATA%\SalesBuddy\
+      ├── data\salesbuddy.db      ← User's database (persists across updates)
       ├── .env                    ← User's config
       └── logs\                   ← App logs
 ```
 
 ## How It Works
 
-### Launcher (`notehelper.exe`)
+### Launcher (`salesbuddy.exe`)
 A small Python script bundled with PyInstaller that:
-1. Ensures `%APPDATA%\NoteHelper\` exists, copies default `.env` if first run
+1. Ensures `%APPDATA%\SalesBuddy\` exists, copies default `.env` if first run
 2. Sets `DATABASE_URL` to point at the AppData DB path
 3. Starts Flask on `localhost:5000` (or first available port) in a background thread
 4. Waits for Flask to respond on `/health` (quick self-check)
-5. Opens Edge in app mode: `msedge.exe --app=http://localhost:5000 --user-data-dir=%APPDATA%\NoteHelper\edge-profile`
+5. Opens Edge in app mode: `msedge.exe --app=http://localhost:5000 --user-data-dir=%APPDATA%\SalesBuddy\edge-profile`
 6. Monitors the Edge process — when the user closes the window, shuts down Flask and exits
 
 ```python
@@ -62,8 +62,8 @@ def main():
 
 ### Edge App Mode
 - `--app=URL` removes all browser chrome (no tabs, address bar, bookmarks)
-- `--user-data-dir=...` gives NoteHelper its own Edge profile (no interference with the user's regular Edge sessions, no "restore tabs" prompts)
-- User sees a clean window with just NoteHelper content and a title bar
+- `--user-data-dir=...` gives Sales Buddy its own Edge profile (no interference with the user's regular Edge sessions, no "restore tabs" prompts)
+- User sees a clean window with just Sales Buddy content and a title bar
 - Gets its own taskbar icon and Alt+Tab entry
 - Right-click context menu still shows "Inspect Element" but users won't notice
 
@@ -88,7 +88,7 @@ build\python\python.exe -m pip install -r requirements.txt --target build\python
 ### Step 2: PyInstaller Launcher
 ```powershell
 # Build the launcher exe (one-file mode)
-pyinstaller --onefile --windowed --name notehelper --icon static/icon.ico launcher.py
+pyinstaller --onefile --windowed --name salesbuddy --icon static/icon.ico launcher.py
 ```
 
 `--windowed` prevents a console window from flashing on launch.
@@ -99,7 +99,7 @@ WiX Toolset v4 builds the MSI. Key features:
 - Create Start Menu shortcut
 - Register in Add/Remove Programs
 - Check for Azure CLI as a prerequisite (warn if missing, don't block)
-- Set file associations if desired (e.g., `.notehelper` backup files)
+- Set file associations if desired (e.g., `.salesbuddy` backup files)
 
 Alternatively, use **MSIX** for a more modern installer that supports auto-update via App Installer.
 
@@ -107,7 +107,7 @@ Alternatively, use **MSIX** for a more modern installer that supports auto-updat
 ```powershell
 # Full build (could be a GitHub Action or local script)
 scripts/build-installer.ps1
-# Outputs: dist/NoteHelper-Setup-1.x.x.msi
+# Outputs: dist/SalesBuddy-Setup-1.x.x.msi
 ```
 
 ## Azure CLI / Auth Dependency
@@ -120,10 +120,10 @@ scripts/build-installer.ps1
 
 ## Database Location Change
 
-Currently the DB lives at `data/notehelper.db` relative to the project root. For an installed app, it needs to live in a user-writable location:
+Currently the DB lives at `data/salesbuddy.db` relative to the project root. For an installed app, it needs to live in a user-writable location:
 
-- **Install time:** Create `%APPDATA%\NoteHelper\data\`
-- **Launcher:** Set `DATABASE_URL=sqlite:///%APPDATA%/NoteHelper/data/notehelper.db` before starting Flask
+- **Install time:** Create `%APPDATA%\SalesBuddy\data\`
+- **Launcher:** Set `DATABASE_URL=sqlite:///%APPDATA%/SalesBuddy/data/salesbuddy.db` before starting Flask
 - **Migrations:** Run on every launch (already idempotent)
 - **Backup/restore:** Update `backup.ps1` / `restore.ps1` to use the AppData path
 
@@ -147,10 +147,10 @@ Recommendation: Start with Option A, add auto-update later if adoption grows.
 
 For existing users who run from source:
 1. Install the MSI
-2. Copy `data/notehelper.db` from their repo folder to `%APPDATA%\NoteHelper\data\`
+2. Copy `data/salesbuddy.db` from their repo folder to `%APPDATA%\SalesBuddy\data\`
 3. Done — all data preserved
 
-Could automate this with a one-time migration prompt on first launch: "Found an existing NoteHelper database at [path]. Import it?"
+Could automate this with a one-time migration prompt on first launch: "Found an existing Sales Buddy database at [path]. Import it?"
 
 ## Open Questions
 

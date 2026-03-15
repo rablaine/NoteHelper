@@ -1,9 +1,9 @@
 """
-AI routes for NoteHelper.
+AI routes for Sales Buddy.
 Handles AI-powered topic suggestion and related features.
 
 All AI calls go through the centralized APIM gateway
-(NoteHelper -> APIM -> App Service gateway -> Azure OpenAI).
+(Sales Buddy -> APIM -> App Service gateway -> Azure OpenAI).
 No direct Azure OpenAI credentials are needed locally.
 
 AI is always enabled -- the onboarding wizard enforces gateway

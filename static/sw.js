@@ -1,4 +1,4 @@
-// NoteHelper Service Worker - minimal, no offline caching
+// Sales Buddy Service Worker - minimal, no offline caching
 // This exists solely to satisfy PWA installability requirements
 
 self.addEventListener('install', (event) => {

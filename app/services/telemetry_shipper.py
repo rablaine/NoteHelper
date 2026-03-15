@@ -1,5 +1,5 @@
 """
-Central telemetry shipper for NoteHelper.
+Central telemetry shipper for Sales Buddy.
 
 Buffers anonymous, category-level custom events in memory and flushes them
 to a shared Application Insights workspace every ~30 seconds.  This lets
@@ -25,7 +25,7 @@ NOT sent (ever):
     - User-agent strings
 
 **Opt-out:**
-    Set the environment variable ``NOTEHELPER_TELEMETRY_OPT_OUT=true`` to
+    Set the environment variable ``SALESBUDDY_TELEMETRY_OPT_OUT=true`` to
     disable all central telemetry shipping.  Local telemetry still works.
 
 Usage::
@@ -80,7 +80,7 @@ FLUSH_INTERVAL_SECONDS = 30
 MAX_BUFFER_SIZE = 200
 
 # File to persist the random instance ID across restarts.
-_INSTANCE_ID_FILENAME = '.notehelper_instance_id'
+_INSTANCE_ID_FILENAME = '.salesbuddy_instance_id'
 
 
 # ===========================================================================
@@ -89,7 +89,7 @@ _INSTANCE_ID_FILENAME = '.notehelper_instance_id'
 
 def _get_data_dir() -> Path:
     """Return the data directory (same parent as the database)."""
-    db_url = os.environ.get('DATABASE_URL', 'sqlite:///data/notehelper.db')
+    db_url = os.environ.get('DATABASE_URL') or 'sqlite:///data/salesbuddy.db'
     # Extract path from sqlite:///path
     if db_url.startswith('sqlite:///'):
         db_path = Path(db_url.replace('sqlite:///', ''))
@@ -100,7 +100,7 @@ def _get_data_dir() -> Path:
 def get_instance_id() -> str:
     """Return (or create) a stable anonymous instance ID.
 
-    Stored as a plain UUID in ``data/.notehelper_instance_id``.
+    Stored as a plain UUID in ``data/.salesbuddy_instance_id``.
     """
     data_dir = _get_data_dir()
     id_file = data_dir / _INSTANCE_ID_FILENAME
@@ -122,9 +122,9 @@ def get_instance_id() -> str:
 def is_telemetry_enabled() -> bool:
     """Check whether central telemetry shipping is enabled.
 
-    Disabled when ``NOTEHELPER_TELEMETRY_OPT_OUT`` is set to a truthy value.
+    Disabled when ``SALESBUDDY_TELEMETRY_OPT_OUT`` is set to a truthy value.
     """
-    opt_out = os.environ.get('NOTEHELPER_TELEMETRY_OPT_OUT', '').lower()
+    opt_out = os.environ.get('SALESBUDDY_TELEMETRY_OPT_OUT', '').lower()
     return opt_out not in ('true', '1', 'yes')
 
 
@@ -143,7 +143,7 @@ def _build_custom_event(
         'time': datetime.now(timezone.utc).isoformat(),
         'iKey': _INSTRUMENTATION_KEY,
         'tags': {
-            'ai.cloud.roleInstance': 'notehelper',
+            'ai.cloud.roleInstance': 'salesbuddy',
         },
         'data': {
             'baseType': 'EventData',
@@ -202,7 +202,7 @@ def queue_event(
         return
 
     envelope = _build_custom_event(
-        name='NoteHelper.FeatureUsage',
+        name='SalesBuddy.FeatureUsage',
         properties={
             'instance_id': _instance_id or get_instance_id(),
             'app_version': _app_version,
@@ -311,7 +311,7 @@ def start_flush_thread(
     global _flush_thread, _app_version, _instance_id
 
     if not is_telemetry_enabled():
-        logger.info('Central telemetry disabled (NOTEHELPER_TELEMETRY_OPT_OUT)')
+        logger.info('Central telemetry disabled (SALESBUDDY_TELEMETRY_OPT_OUT)')
         return
 
     if _flush_thread is not None and _flush_thread.is_alive():

@@ -178,7 +178,7 @@ def compute_signals(
         month_names: List of fiscal month names matching revenues
         tpid: Optional TPID
         seller_name: Optional assigned seller
-        customer_id: Optional NoteHelper customer ID
+        customer_id: Optional Sales Buddy customer ID
         
     Returns:
         CustomerSignals object, or None if insufficient data
@@ -709,7 +709,7 @@ def _run_analysis_generator(exclude_latest_month: bool = True):
     
     # Build customer_id lookup from revenue data (set during import with fuzzy matching)
     # This is more accurate than name matching since import uses progressive word-prefix
-    # and acronym matching to link CSV customer names to NoteHelper customers
+    # and acronym matching to link CSV customer names to Sales Buddy customers
     customer_id_pairs = db.session.query(
         CustomerRevenueData.customer_name,
         db.func.max(CustomerRevenueData.customer_id)

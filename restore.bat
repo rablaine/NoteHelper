@@ -1,5 +1,5 @@
 @echo off
-REM NoteHelper Restore - interactive database restore from backup
+REM Sales Buddy Restore - interactive database restore from backup
 REM Auto-elevates (admin) only if PORT in .env is below 1024 (e.g. port 80)
 cd /d "%~dp0"
 

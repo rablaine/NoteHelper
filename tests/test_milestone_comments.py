@@ -160,7 +160,7 @@ class TestUpsertMilestoneComment:
                 payload = patch_call[1]["json_data"]
                 comments = json.loads(payload["msp_forecastcommentsjsonfield"])
                 assert len(comments) == 1
-                assert comments[0]["userId"] == "Alex Blaine via NoteHelper"
+                assert comments[0]["userId"] == "Alex Blaine via Sales Buddy"
                 assert "· note-1 ·" in comments[0]["comment"]
 
     def test_updates_existing_comment_by_ref_tag(self, app):
@@ -170,7 +170,7 @@ class TestUpsertMilestoneComment:
             existing = [
                 {"userId": "Some Manager", "modifiedOn": "2026-01-01T00:00:00Z",
                  "comment": "Manual comment from MSX UI"},
-                {"userId": "Alex Blaine via NoteHelper", "modifiedOn": "2026-03-01T00:00:00Z",
+                {"userId": "Alex Blaine via Sales Buddy", "modifiedOn": "2026-03-01T00:00:00Z",
                  "comment": "Old summary\n\n· note-5 ·"},
             ]
             with patch('app.services.msx_api.get_milestone_comments') as mock_read, \
@@ -197,7 +197,7 @@ class TestUpsertMilestoneComment:
                 assert comments[0]["userId"] == "Some Manager"
                 # Second updated
                 assert "Updated summary" in comments[1]["comment"]
-                assert comments[1]["userId"] == "Alex Blaine via NoteHelper"
+                assert comments[1]["userId"] == "Alex Blaine via Sales Buddy"
 
     def test_returns_existing_comments_for_ai_context(self, app):
         """Upsert returns other comment texts for AI context."""
@@ -205,7 +205,7 @@ class TestUpsertMilestoneComment:
             existing = [
                 {"userId": "Manager", "modifiedOn": "2026-01-01T00:00:00Z",
                  "comment": "FY26 review note"},
-                {"userId": "Alex Blaine via NoteHelper", "modifiedOn": "2026-03-01T00:00:00Z",
+                {"userId": "Alex Blaine via Sales Buddy", "modifiedOn": "2026-03-01T00:00:00Z",
                  "comment": "Our comment\n\n· note-10 ·"},
                 {"userId": "Teammate", "modifiedOn": "2026-02-01T00:00:00Z",
                  "comment": "PoC update from field team"},
@@ -230,11 +230,11 @@ class TestUpsertMilestoneComment:
                 assert len(result["existing_comments"]) == 2
 
     def test_multi_user_same_milestone(self, app):
-        """Two NoteHelper users each maintain separate comments for same note ID."""
+        """Two Sales Buddy users each maintain separate comments for same note ID."""
         with app.app_context():
             import json
             existing = [
-                {"userId": "Alice Smith via NoteHelper", "modifiedOn": "2026-03-01T00:00:00Z",
+                {"userId": "Alice Smith via Sales Buddy", "modifiedOn": "2026-03-01T00:00:00Z",
                  "comment": "Alice's summary\n\n· note-7 ·"},
             ]
             with patch('app.services.msx_api.get_milestone_comments') as mock_read, \
@@ -259,8 +259,8 @@ class TestUpsertMilestoneComment:
                 payload = mock_req.call_args[1]["json_data"]
                 comments = json.loads(payload["msp_forecastcommentsjsonfield"])
                 user_ids = [c["userId"] for c in comments]
-                assert "Alice Smith via NoteHelper" in user_ids
-                assert "Bob Jones via NoteHelper" in user_ids
+                assert "Alice Smith via Sales Buddy" in user_ids
+                assert "Bob Jones via Sales Buddy" in user_ids
 
     def test_pin_to_top_uses_future_date(self, app):
         """Pin mode sets modifiedOn to 2099-01-01."""

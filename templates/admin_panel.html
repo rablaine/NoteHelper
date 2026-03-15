@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Panel - NoteHelper{% endblock %}
+{% block title %}Admin Panel - Sales Buddy{% endblock %}
 
 {# Determine if FY card should be expanded: during FY season or active transition #}
 {% set fy_expanded = fy_season or fy_transition_active %}
@@ -582,7 +582,7 @@
                     </div>
                     <p class="text-muted small mb-2">
                         Anonymous feature usage events are buffered and flushed to App Insights every 30s.
-                        Set <code>NOTEHELPER_TELEMETRY_OPT_OUT=true</code> to disable.
+                        Set <code>SALESBUDDY_TELEMETRY_OPT_OUT=true</code> to disable.
                     </p>
                     <div id="shippingStatus" class="small">
                         <span class="text-muted">Loading status...</span>
@@ -653,7 +653,7 @@
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <h6><i class="bi bi-power"></i> Shut Down Server</h6>
-                            <p class="small text-muted mb-2">Stop the NoteHelper server. You will need to restart it manually (double-click <code>start.bat</code>).</p>
+                            <p class="small text-muted mb-2">Stop the Sales Buddy server. You will need to restart it manually (double-click <code>start.bat</code>).</p>
                             <button class="btn btn-sm btn-danger" id="shutdownServerBtn">
                                 <i class="bi bi-power"></i> Shut Down Server
                             </button>
@@ -1583,7 +1583,7 @@ function applyUpdate() {
     card.innerHTML = `
         <div class="text-center py-3">
             <div class="spinner-border text-primary mb-3" role="status"></div>
-            <div class="fw-bold">Updating NoteHelper...</div>
+            <div class="fw-bold">Updating Sales Buddy...</div>
             <div class="text-muted small mt-1" id="updateProgressMsg">Stopping server and pulling latest code...</div>
         </div>
     `;

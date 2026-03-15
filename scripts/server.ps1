@@ -1,4 +1,4 @@
-# NoteHelper - Server Management Script
+# Sales Buddy - Server Management Script
 # Handles first-run setup, starting the server, and pulling updates.
 #
 # Usage:
@@ -157,12 +157,22 @@ function Start-Server {
     }
 }
 
+# One-time rename from legacy database filename
+function Migrate-DatabaseName {
+    $oldDb = Join-Path $RepoRoot 'data\notehelper.db'
+    $newDb = Join-Path $RepoRoot 'data\salesbuddy.db'
+    if ((Test-Path $oldDb) -and -not (Test-Path $newDb)) {
+        Move-Item $oldDb $newDb
+        Write-Host "  [OK] Renamed database: notehelper.db -> salesbuddy.db" -ForegroundColor Green
+    }
+}
+
 # Backup the database
 function Backup-Database {
-    $dbFile = Join-Path $RepoRoot 'data\notehelper.db'
+    $dbFile = Join-Path $RepoRoot 'data\salesbuddy.db'
     if (Test-Path $dbFile) {
         $timestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
-        $backupFile = Join-Path $RepoRoot "data\notehelper_backup_$timestamp.db"
+        $backupFile = Join-Path $RepoRoot "data\salesbuddy_backup_$timestamp.db"
         Copy-Item $dbFile $backupFile
         Write-Host "  [OK] Database backed up." -ForegroundColor Green
     }
@@ -226,7 +236,7 @@ function Run-Migrations {
 # ==============================================================================
 
 Write-Host ""
-Write-Host "  NoteHelper" -ForegroundColor Cyan
+Write-Host "  Sales Buddy" -ForegroundColor Cyan
 Write-Host "  ==========" -ForegroundColor Cyan
 Write-Host ""
 
@@ -305,7 +315,7 @@ if ($hasGit) {
     # Re-check after potential install
     try { if (Get-Command git -ErrorAction SilentlyContinue) { $hasGit = $true } } catch {}
     if (-not $hasGit) {
-        Write-Host "            NoteHelper will still run, but you won't be able to pull updates." -ForegroundColor Gray
+        Write-Host "            Sales Buddy will still run, but you won't be able to pull updates." -ForegroundColor Gray
         Write-Host ""
     }
 }
@@ -323,7 +333,7 @@ if ($hasAz) {
     # Re-check after potential install
     try { if (Get-Command az -ErrorAction SilentlyContinue) { $hasAz = $true } } catch {}
     if (-not $hasAz) {
-        Write-Host "            NoteHelper will still run, but Azure features won't work." -ForegroundColor Gray
+        Write-Host "            Sales Buddy will still run, but Azure features won't work." -ForegroundColor Gray
         Write-Host ""
     }
 }
@@ -342,7 +352,7 @@ if ($hasNode) {
     # Re-check after potential install
     try { if (Get-Command node -ErrorAction SilentlyContinue) { $hasNode = $true } } catch {}
     if (-not $hasNode) {
-        Write-Host "            NoteHelper will still run, but meeting import won't work." -ForegroundColor Gray
+        Write-Host "            Sales Buddy will still run, but meeting import won't work." -ForegroundColor Gray
         Write-Host ""
     }
 }
@@ -447,7 +457,7 @@ if ($backupConfigExists) {
 if (-not $backupConfigExists -and -not $Force) {
     $businessOneDrive = Find-OneDriveBusinessPath
     if ($businessOneDrive) {
-        $backupDir = Join-Path $businessOneDrive 'Backups\NoteHelper'
+        $backupDir = Join-Path $businessOneDrive 'Backups\SalesBuddy'
         Write-Host ""
         Write-Host "  Detected OneDrive for Business: $businessOneDrive" -ForegroundColor Green
         Write-Host "  Enabling automatic backups -> $backupDir" -ForegroundColor Yellow
@@ -471,7 +481,7 @@ if (-not $backupConfigExists -and -not $Force) {
         $newBackupConfig | ConvertTo-Json -Depth 3 | Set-Content $backupConfigFile -Encoding UTF8
 
         # Register scheduled task for daily backups
-        $BackupTaskName = 'NoteHelper-DailyBackup'
+        $BackupTaskName = 'SalesBuddy-DailyBackup'
         $backupScript = Join-Path $PSScriptRoot 'backup.ps1'
         $action = New-ScheduledTaskAction `
             -Execute 'powershell.exe' `
@@ -495,7 +505,7 @@ if (-not $backupConfigExists -and -not $Force) {
             Register-ScheduledTask `
                 -TaskName $BackupTaskName -Action $action -Trigger $trigger `
                 -Principal $principal -Settings $settings `
-                -Description 'Daily backup of NoteHelper database to OneDrive' `
+                -Description 'Daily backup of Sales Buddy database to OneDrive' `
                 -ErrorAction Stop | Out-Null
             $taskRegistered = $true
         } catch {
@@ -505,7 +515,7 @@ if (-not $backupConfigExists -and -not $Force) {
                 Register-ScheduledTask `
                     -TaskName $BackupTaskName -Action $action -Trigger $trigger `
                     -Principal $principal -Settings $settings `
-                    -Description 'Daily backup of NoteHelper database to OneDrive' `
+                    -Description 'Daily backup of Sales Buddy database to OneDrive' `
                     -ErrorAction Stop | Out-Null
                 $taskRegistered = $true
             } catch {
@@ -533,7 +543,7 @@ if (-not $backupConfigExists -and -not $Force) {
 }
 
 # -- Step 12: Register autostart scheduled task --------------------------------
-$AutoStartTaskName = 'NoteHelper-AutoStart'
+$AutoStartTaskName = 'SalesBuddy-AutoStart'
 $autoStartTask = Get-ScheduledTask -TaskName $AutoStartTaskName -ErrorAction SilentlyContinue
 
 if (-not $autoStartTask -and -not $Force) {
@@ -562,7 +572,7 @@ if (-not $autoStartTask -and -not $Force) {
         Register-ScheduledTask `
             -TaskName $AutoStartTaskName -Action $asAction -Trigger $asTrigger `
             -Principal $asPrincipal -Settings $asSettings `
-            -Description 'Start NoteHelper web server automatically at login' `
+            -Description 'Start Sales Buddy web server automatically at login' `
             -ErrorAction Stop | Out-Null
         $asRegistered = $true
     } catch {
@@ -571,7 +581,7 @@ if (-not $autoStartTask -and -not $Force) {
     }
 
     if ($asRegistered) {
-        Write-Host "  [OK] NoteHelper will start automatically at login." -ForegroundColor Green
+        Write-Host "  [OK] Sales Buddy will start automatically at login." -ForegroundColor Green
         Write-Host "       Task name: $AutoStartTaskName (remove with uninstall.bat)" -ForegroundColor Gray
     }
 } elseif ($autoStartTask) {
@@ -588,6 +598,7 @@ if ($Force) {
     Write-Host "  Updating..." -ForegroundColor Cyan
 
     if ($serverRunning) { Stop-Server -Port $Port }
+    Migrate-DatabaseName
     Backup-Database
 
     if ($isGitRepo) {
@@ -634,6 +645,7 @@ if ($hasUpdates) {
     Write-Host "  Applying updates..." -ForegroundColor Cyan
 
     if ($serverRunning) { Stop-Server -Port $Port }
+    Migrate-DatabaseName
     Backup-Database
 
     if (-not (Pull-Updates)) {
@@ -655,7 +667,7 @@ if ($hasUpdates) {
 # Start server
 Start-Server -Port $Port
 Write-Host ""
-Write-Host "  NoteHelper is running! Open in your browser:" -ForegroundColor Green
+Write-Host "  Sales Buddy is running! Open in your browser:" -ForegroundColor Green
 Write-Host ""
 Write-Host "  http://localhost:$Port" -ForegroundColor Cyan
 Write-Host ""

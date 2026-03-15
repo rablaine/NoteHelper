@@ -1,5 +1,5 @@
 """
-Scheduled milestone sync for NoteHelper.
+Scheduled milestone sync for Sales Buddy.
 
 Runs milestone import on a configurable daily schedule using a background
 daemon thread. The sync hour is configured via the MILESTONE_SYNC_HOUR

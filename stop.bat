@@ -1,5 +1,5 @@
 @echo off
-REM NoteHelper Stop - kills the running server on the configured PORT
+REM Sales Buddy Stop - kills the running server on the configured PORT
 REM Auto-elevates (admin) only if PORT < 1024 (e.g. port 80)
 cd /d "%~dp0"
 

@@ -1,5 +1,5 @@
 """
-Solution Engineer routes for NoteHelper.
+Solution engineer routes for Sales Buddy.
 Handles solution engineer listing, viewing, and editing.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash

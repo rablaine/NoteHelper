@@ -58,9 +58,9 @@ _LEGACY_NOTES_DIR = "call_logs"
 _ONEDRIVE_ORG_NAME = "Microsoft"
 
 # Subfolder path we create/look for inside the OneDrive root.
-# Changed from "NoteHelper_Backups" to "Backups/NoteHelper" for cleaner
+# Changed from "SalesBuddy_Backups" to "Backups/SalesBuddy" for cleaner
 # organization under a shared Backups umbrella.
-_NOTEHELPER_BACKUPS_DIR = os.path.join("Backups", "NoteHelper")
+_SALESBUDDY_BACKUPS_DIR = os.path.join("Backups", "SalesBuddy")
 
 # DB backup config filename (written by scripts/server.ps1 and backup.ps1)
 _DB_BACKUP_CONFIG = "backup_config.json"
@@ -113,7 +113,7 @@ def detect_onedrive_paths(*, business_only: bool = True) -> List[Dict[str, Any]]
     3. Registry ``HKCU\\Software\\Microsoft\\OneDrive\\Accounts\\Business1``
     4. Folder scan of ``%USERPROFILE%`` for ``OneDrive*`` directories
 
-    Each returned entry includes whether a ``Backups/NoteHelper`` folder
+    Each returned entry includes whether a ``Backups/SalesBuddy`` folder
     already exists inside it, which lets the caller auto-select if there's
     an obvious winner.
 
@@ -139,7 +139,7 @@ def detect_onedrive_paths(*, business_only: bool = True) -> List[Dict[str, Any]]
         is_biz = _is_business_path(normalized, source)
         if business_only and not is_biz:
             return
-        suggested = os.path.join(normalized, _NOTEHELPER_BACKUPS_DIR)
+        suggested = os.path.join(normalized, _SALESBUDDY_BACKUPS_DIR)
         candidates.append({
             "path": normalized,
             "source": source,
@@ -184,7 +184,7 @@ def detect_onedrive_paths(*, business_only: bool = True) -> List[Dict[str, Any]]
         except OSError:
             pass
 
-    # Sort: paths with existing Backups/NoteHelper folder first
+    # Sort: paths with existing Backups/SalesBuddy folder first
     candidates.sort(key=lambda c: (not c["has_backups"], c["source"]))
 
     return candidates
@@ -193,7 +193,7 @@ def detect_onedrive_paths(*, business_only: bool = True) -> List[Dict[str, Any]]
 def get_auto_detected_backup_path() -> Optional[str]:
     """Return the best auto-detected backup path, or None.
 
-    If exactly one candidate has an existing ``Backups/NoteHelper`` folder
+    If exactly one candidate has an existing ``Backups/SalesBuddy`` folder
     inside it, return that path directly.  Otherwise return None (caller
     should present choices to the user).
     """
@@ -339,7 +339,7 @@ def _customer_to_dict(customer: Customer) -> Dict[str, Any]:
                 })
 
     return {
-        "_notehelper_backup": True,
+        "_salesbuddy_backup": True,
         "_version": 4,
         "_exported_at": datetime.now(timezone.utc).isoformat(),
         "customer": {
@@ -403,7 +403,7 @@ def _customer_to_dict(customer: Customer) -> Dict[str, Any]:
 def _partner_to_dict(partner: Partner) -> Dict[str, Any]:
     """Serialize a partner to a standalone backup dict."""
     return {
-        "_notehelper_partner_backup": True,
+        "_salesbuddy_partner_backup": True,
         "_version": 1,
         "_exported_at": datetime.now(timezone.utc).isoformat(),
         "partner": {
@@ -427,7 +427,7 @@ def _partner_to_dict(partner: Partner) -> Dict[str, Any]:
 def _template_to_dict(template: NoteTemplate) -> Dict[str, Any]:
     """Serialize a note template to a standalone backup dict."""
     return {
-        "_notehelper_template_backup": True,
+        "_salesbuddy_template_backup": True,
         "_version": 1,
         "_exported_at": datetime.now(timezone.utc).isoformat(),
         "template": {
@@ -851,7 +851,7 @@ def _global_data_to_dict() -> Dict[str, Any]:
     ]
 
     return {
-        "_notehelper_global_backup": True,
+        "_salesbuddy_global_backup": True,
         "_version": 5,
         "_exported_at": datetime.now(timezone.utc).isoformat(),
         "note_templates": templates_data,
@@ -955,7 +955,7 @@ def restore_all_from_folder(notes_dir: Optional[str] = None) -> Dict[str, Any]:
         try:
             with open(global_path, "r", encoding="utf-8-sig") as f:
                 global_data = json.load(f)
-            if global_data.get("_notehelper_global_backup"):
+            if global_data.get("_salesbuddy_global_backup"):
                 restore_global_data(global_data)
                 logger.info("Global data restored from %s", global_path)
         except Exception as exc:
@@ -1040,7 +1040,7 @@ def restore_from_backup(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     from app.models import Milestone, Opportunity, Partner, Topic
 
-    if not data.get("_notehelper_backup"):
+    if not data.get("_salesbuddy_backup"):
         return {"success": False, "error": "Invalid backup payload"}
 
     cust_data = data.get("customer", {})

@@ -742,7 +742,7 @@ Without it, MSX might not load the correct app context.
 
 ## Appendix: Device Code Flow with MSAL
 
-> **Not currently implemented** — NoteHelper uses `az login` for MSX auth. This section documents MSAL device code flow as a future alternative if we need long-lived refresh tokens or want to remove the `az` CLI dependency.
+> **Not currently implemented** — Sales Buddy uses `az login` for MSX auth. This section documents MSAL device code flow as a future alternative if we need long-lived refresh tokens or want to remove the `az` CLI dependency.
 
 ### Overview
 
@@ -754,7 +754,7 @@ The OAuth 2.0 Device Code Flow via MSAL for Python gives you:
 ### Prerequisites — Azure AD App Registration
 
 1. Azure Portal > App Registrations > New registration
-2. Name: `NoteHelper CRM`, Single tenant (Microsoft corporate)
+2. Name: `Sales Buddy CRM`, Single tenant (Microsoft corporate)
 3. Redirect URI: leave blank
 4. Authentication > Enable "Allow public client flows" → Yes
 5. API Permissions > Dynamics CRM > Delegated > `user_impersonation`

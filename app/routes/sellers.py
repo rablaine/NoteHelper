@@ -1,5 +1,5 @@
 """
-Seller routes for NoteHelper.
+Seller routes for Sales Buddy.
 Handles seller listing, creation, viewing, and editing.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify

@@ -628,7 +628,7 @@ def import_revenue_csv(
         if bucket.lower() == 'total':
             continue
         
-        # Try to match to existing NoteHelper customer
+        # Try to match to existing Sales Buddy customer
         customer_id = _resolve_customer_id(exact_lookup, cleaned_names, customer_name, acronym_lookup)
         
         # Get seller from territory alignments if provided
@@ -824,7 +824,7 @@ def import_revenue_csv_streaming(
         if bucket.lower() == 'total':
             continue
         
-        # Try to match to existing NoteHelper customer
+        # Try to match to existing Sales Buddy customer
         customer_id = _resolve_customer_id(exact_lookup, cleaned_names, customer_name, acronym_lookup)
         
         # Get seller from territory alignments if provided
@@ -1003,7 +1003,7 @@ def get_customer_revenue_history(
     Args:
         customer_name: Customer name to look up (from CSV)
         bucket: Optional bucket filter (Core DBs, Analytics, Modern DBs)
-        customer_id: NoteHelper customer ID (preferred over customer_name)
+        customer_id: Sales Buddy customer ID (preferred over customer_name)
         
     Returns:
         List of CustomerRevenueData records ordered by month
@@ -1034,7 +1034,7 @@ def get_product_revenue_history(
         customer_name: Customer name to look up (from CSV)
         bucket: Bucket name (Core DBs, Analytics, Modern DBs)
         product: Optional specific product filter
-        customer_id: NoteHelper customer ID (preferred over customer_name)
+        customer_id: Sales Buddy customer ID (preferred over customer_name)
         
     Returns:
         List of ProductRevenueData records ordered by product then month
@@ -1069,7 +1069,7 @@ def get_products_for_bucket(
     Args:
         customer_name: Customer name (from CSV)
         bucket: Bucket name
-        customer_id: NoteHelper customer ID (preferred over customer_name)
+        customer_id: Sales Buddy customer ID (preferred over customer_name)
         
     Returns:
         List of dicts with product name and total revenue

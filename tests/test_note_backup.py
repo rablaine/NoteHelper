@@ -195,7 +195,7 @@ class TestCustomerToDict:
             customer = Customer.query.get(customer_with_logs["customer_id"])
             result = _customer_to_dict(customer)
 
-            assert result["_notehelper_backup"] is True
+            assert result["_salesbuddy_backup"] is True
             assert result["_version"] == 4
             assert "_exported_at" in result
 
@@ -245,7 +245,7 @@ class TestBackupCustomer:
 
             with open(filepath, encoding="utf-8") as f:
                 data = json.load(f)
-            assert data["_notehelper_backup"] is True
+            assert data["_salesbuddy_backup"] is True
             assert data["customer"]["tpid"] == 99999
 
     def test_returns_false_when_disabled(self, app, customer_with_logs, monkeypatch):
@@ -382,7 +382,7 @@ class TestRestoreFromBackup:
             db.session.commit()
 
             backup_data = {
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "_version": 2,
                 "customer": {
                     "name": "Restore Corp",
@@ -445,7 +445,7 @@ class TestRestoreFromBackup:
             db.session.commit()
 
             backup_data = {
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "_version": 2,
                 "customer": {"tpid": 33333},
                 "notes": [
@@ -481,13 +481,13 @@ class TestRestoreFromBackup:
 
     def test_rejects_missing_tpid(self, app):
         with app.app_context():
-            result = restore_from_backup({"_notehelper_backup": True, "customer": {}})
+            result = restore_from_backup({"_salesbuddy_backup": True, "customer": {}})
             assert result["success"] is False
 
     def test_rejects_unknown_tpid(self, app):
         with app.app_context():
             result = restore_from_backup({
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "customer": {"tpid": 111111},
                 "notes": [],
             })
@@ -547,7 +547,7 @@ class TestBackupRoutes:
             customer_id = customer.id
 
         payload = {
-            "_notehelper_backup": True,
+            "_salesbuddy_backup": True,
             "_version": 2,
             "customer": {"tpid": 66666},
             "notes": [
@@ -585,7 +585,7 @@ class TestBackupRoutes:
 
     def test_restore_unknown_tpid_returns_404(self, client):
         payload = {
-            "_notehelper_backup": True,
+            "_salesbuddy_backup": True,
             "customer": {"tpid": 999999},
             "notes": [],
         }
@@ -696,9 +696,9 @@ class TestOneDriveDetection:
         assert results[0]["has_backups"] is False
 
     def test_detect_with_existing_backups_folder(self, tmp_path, monkeypatch):
-        """If Backups/NoteHelper exists, has_backups should be True."""
+        """If Backups/SalesBuddy exists, has_backups should be True."""
         od_path = str(tmp_path / "OneDrive - Microsoft")
-        os.makedirs(os.path.join(od_path, "Backups", "NoteHelper"))
+        os.makedirs(os.path.join(od_path, "Backups", "SalesBuddy"))
         monkeypatch.setenv("OneDriveCommercial", od_path)
         monkeypatch.delenv("OneDrive", raising=False)
         monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
@@ -707,7 +707,7 @@ class TestOneDriveDetection:
         assert len(results) >= 1
         assert results[0]["has_backups"] is True
         assert results[0]["suggested_path"] == os.path.join(
-            os.path.normpath(od_path), "Backups", "NoteHelper"
+            os.path.normpath(od_path), "Backups", "SalesBuddy"
         )
 
     def test_detect_deduplicates(self, tmp_path, monkeypatch):
@@ -749,16 +749,16 @@ class TestOneDriveDetection:
     def test_auto_detected_path_with_single_match(self, tmp_path, monkeypatch):
         """get_auto_detected_backup_path returns the path when one has backups."""
         od_path = str(tmp_path / "OneDrive - Microsoft")
-        os.makedirs(os.path.join(od_path, "Backups", "NoteHelper"))
+        os.makedirs(os.path.join(od_path, "Backups", "SalesBuddy"))
         monkeypatch.setenv("OneDriveCommercial", od_path)
         monkeypatch.delenv("OneDrive", raising=False)
         monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
 
         result = get_auto_detected_backup_path()
-        assert result == os.path.join(os.path.normpath(od_path), "Backups", "NoteHelper")
+        assert result == os.path.join(os.path.normpath(od_path), "Backups", "SalesBuddy")
 
     def test_auto_detected_path_with_no_backups_folder(self, tmp_path, monkeypatch):
-        """Returns None when OneDrive exists but no Backups/NoteHelper subfolder."""
+        """Returns None when OneDrive exists but no Backups/SalesBuddy subfolder."""
         od_path = str(tmp_path / "OneDrive - Microsoft")
         os.makedirs(od_path)
         monkeypatch.setenv("OneDriveCommercial", od_path)
@@ -791,7 +791,7 @@ class TestDetectOneDriveRoute:
     def test_detect_route_returns_candidates(self, client, tmp_path, monkeypatch):
         """The route returns detected candidates."""
         od_path = str(tmp_path / "OneDrive - Microsoft")
-        os.makedirs(os.path.join(od_path, "Backups", "NoteHelper"))
+        os.makedirs(os.path.join(od_path, "Backups", "SalesBuddy"))
         monkeypatch.setenv("OneDriveCommercial", od_path)
         monkeypatch.delenv("OneDrive", raising=False)
         monkeypatch.setenv("USERPROFILE", str(tmp_path / "nonexistent"))
@@ -871,7 +871,7 @@ class TestRestoreAllFromFolder:
         os.makedirs(seller_dir, exist_ok=True)
         filepath = os.path.join(seller_dir, f"{tpid}.json")
         data = {
-            "_notehelper_backup": True,
+            "_salesbuddy_backup": True,
             "_version": 2,
             "_exported_at": datetime.now(timezone.utc).isoformat(),
             "customer": {
@@ -1135,7 +1135,7 @@ class TestCustomerNotesBackupIntegration:
             assert customer.account_context is None
 
             backup_data = {
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "_version": 2,
                 "customer": {
                     "name": "Notes Restore Corp",
@@ -1170,7 +1170,7 @@ class TestCustomerNotesBackupIntegration:
             db.session.commit()
 
             backup_data = {
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "_version": 2,
                 "customer": {
                     "name": "Existing Notes Corp",
@@ -1202,7 +1202,7 @@ class TestCustomerNotesBackupIntegration:
             db.session.commit()
 
             backup_data = {
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "_version": 2,
                 "customer": {
                     "name": "No Notes Corp",

@@ -13,7 +13,7 @@ const PageHelp = (function () {
   const helpMap = [
     // ── Home ──
     { pattern: /^\/$/, title: 'Dashboard', content: `
-      <p>Your home base — a quick overview of recent activity across NoteHelper.</p>
+      <p>Your home base — a quick overview of recent activity across Sales Buddy.</p>
       <h6>Quick actions</h6>
       <ul>
         <li>Use <span class="kbd">Ctrl</span>+<span class="kbd">K</span> to jump to any customer</li>
@@ -157,7 +157,7 @@ const PageHelp = (function () {
         <li>Rate partners (1-5 stars) based on your experience</li>
         <li>Add <strong>specialties</strong> to track what each partner is good at</li>
         <li>Add <strong>contacts</strong> with email and phone for quick reference</li>
-        <li><strong>Share Directory</strong> — send your partner list and saved details to another NoteHelper user who is currently online (both users must be running NoteHelper at the same time)</li>
+        <li><strong>Share Directory</strong> — send your partner list and saved details to another Sales Buddy user who is currently online (both users must be running Sales Buddy at the same time)</li>
       </ul>
     `},
     { pattern: /^\/partners\/new/, title: 'New Partner', content: `
@@ -299,7 +299,7 @@ const PageHelp = (function () {
 
     // ── Settings ──
     { pattern: /^\/preferences/, title: 'Settings', content: `
-      <p>Your personal NoteHelper preferences — display options, defaults, and account settings.</p>
+      <p>Your personal Sales Buddy preferences — display options, defaults, and account settings.</p>
     `},
 
     // ── Fill My Day ──
@@ -332,9 +332,9 @@ const PageHelp = (function () {
   // ── Fallback help ───────────────────────────────────────────────────
 
   const fallbackHelp = {
-    title: 'NoteHelper Help',
+    title: 'Sales Buddy Help',
     content: `
-      <p>NoteHelper helps Azure technical sellers capture and retrieve customer call notes.</p>
+      <p>Sales Buddy helps Azure technical sellers capture and retrieve customer call notes.</p>
       <h6>Keyboard Shortcuts</h6>
       <table class="table table-sm mb-3">
         <tbody>

@@ -1,5 +1,5 @@
 """
-Partner routes for NoteHelper.
+Partner routes for Sales Buddy.
 Handles partner management, contacts, and specialties.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g

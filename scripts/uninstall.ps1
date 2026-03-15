@@ -1,5 +1,5 @@
-# NoteHelper - Uninstall Script
-# Removes all NoteHelper scheduled tasks and stops the running server.
+# Sales Buddy - Uninstall Script
+# Removes all Sales Buddy scheduled tasks and stops the running server.
 # Does NOT delete the app files, database, or OneDrive backups.
 #
 # Usage:
@@ -10,7 +10,7 @@ $RepoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $RepoRoot
 
 Write-Host ""
-Write-Host "  NoteHelper Uninstall" -ForegroundColor Cyan
+Write-Host "  Sales Buddy Uninstall" -ForegroundColor Cyan
 Write-Host "  ====================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -45,7 +45,7 @@ if ($conn) {
 }
 
 # -- Remove scheduled tasks ----------------------------------------------------
-$taskNames = @('NoteHelper-AutoStart', 'NoteHelper-DailyBackup')
+$taskNames = @('SalesBuddy-AutoStart', 'SalesBuddy-DailyBackup')
 $removedAny = $false
 
 foreach ($taskName in $taskNames) {
@@ -70,14 +70,14 @@ Write-Host "  Uninstall complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "  What was removed:" -ForegroundColor Gray
 Write-Host "    - Server process (stopped)" -ForegroundColor Gray
-Write-Host "    - Scheduled tasks (NoteHelper-AutoStart, NoteHelper-DailyBackup)" -ForegroundColor Gray
+Write-Host "    - Scheduled tasks (SalesBuddy-AutoStart, SalesBuddy-DailyBackup)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  What was NOT removed:" -ForegroundColor Gray
 Write-Host "    - App files (this folder: $RepoRoot)" -ForegroundColor Gray
-Write-Host "    - Database (data\notehelper.db)" -ForegroundColor Gray
+Write-Host "    - Database (data\salesbuddy.db)" -ForegroundColor Gray
 Write-Host "    - OneDrive backups" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  To fully remove NoteHelper, delete this folder:" -ForegroundColor Gray
+Write-Host "  To fully remove Sales Buddy, delete this folder:" -ForegroundColor Gray
 Write-Host "    $RepoRoot" -ForegroundColor Yellow
 Write-Host ""
 

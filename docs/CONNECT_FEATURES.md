@@ -1,6 +1,6 @@
 # Connect Features
 
-NoteHelper includes features designed to help you prepare for Microsoft Connect self-evaluations by surfacing customer impact data from your call logs.
+Sales Buddy includes features designed to help you prepare for Microsoft Connect self-evaluations by surfacing customer impact data from your call logs.
 
 ## Connect Export
 
@@ -34,11 +34,11 @@ All generated exports are saved and can be viewed or deleted from the same page.
 
 ## Connect Impact Signals
 
-When importing a meeting via WorkIQ (either "Import from Meeting" or "Auto-fill"), NoteHelper can ask WorkIQ to identify **customer impact signals** from the meeting transcript. These are concrete examples of customer outcomes, adoption milestones, technical wins, or business value that you can reference in Connect self-evaluations.
+When importing a meeting via WorkIQ (either "Import from Meeting" or "Auto-fill"), Sales Buddy can ask WorkIQ to identify **customer impact signals** from the meeting transcript. These are concrete examples of customer outcomes, adoption milestones, technical wins, or business value that you can reference in Connect self-evaluations.
 
 ### How It Works
 
-When enabled, NoteHelper appends an extra instruction to the WorkIQ summary prompt asking it to look for impact signals. The AI identifies relevant signals and returns them in a structured format. They appear in your call log content under an **Impact Signals** heading, separated by a horizontal rule.
+When enabled, Sales Buddy appends an extra instruction to the WorkIQ summary prompt asking it to look for impact signals. The AI identifies relevant signals and returns them in a structured format. They appear in your call log content under an **Impact Signals** heading, separated by a horizontal rule.
 
 Example signals:
 - "Customer committed to migrating 3 production workloads to AKS by Q2"

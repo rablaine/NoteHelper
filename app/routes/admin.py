@@ -1,5 +1,5 @@
 """
-Admin routes for NoteHelper.
+Admin routes for Sales Buddy.
 Handles admin panel, user management, and domain whitelisting.
 """
 import base64
@@ -651,7 +651,7 @@ def _list_backup_files(backup_dir: str, limit: int = 10) -> list[dict]:
     if not backup_dir or not os.path.isdir(backup_dir):
         return backups
 
-    for f in sorted(Path(backup_dir).glob('notehelper_*.db'), reverse=True):
+    for f in sorted(Path(backup_dir).glob('salesbuddy_*.db'), reverse=True):
         stat = f.stat()
         size_mb = stat.st_size / (1024 * 1024)
         backups.append({
@@ -668,7 +668,7 @@ def _list_backup_files(backup_dir: str, limit: int = 10) -> list[dict]:
 
 
 # Scheduled task name (must match scripts/backup.ps1 and scripts/server.ps1)
-_BACKUP_TASK_NAME = 'NoteHelper-DailyBackup'
+_BACKUP_TASK_NAME = 'SalesBuddy-DailyBackup'
 
 
 def _check_scheduled_task() -> dict:
@@ -737,14 +737,14 @@ def api_backup_run():
         }), 400
 
     app_root = Path(current_app.root_path).parent
-    db_path = app_root / 'data' / 'notehelper.db'
+    db_path = app_root / 'data' / 'salesbuddy.db'
     if not db_path.exists():
         return jsonify({'success': False, 'error': 'Database file not found.'}), 404
 
     try:
         os.makedirs(backup_dir, exist_ok=True)
         timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M%S')
-        dest = os.path.join(backup_dir, f'notehelper_{timestamp}.db')
+        dest = os.path.join(backup_dir, f'salesbuddy_{timestamp}.db')
         shutil.copy2(str(db_path), dest)
 
         # Update last_backup in config
@@ -754,8 +754,8 @@ def api_backup_run():
         size_mb = os.path.getsize(dest) / (1024 * 1024)
         return jsonify({
             'success': True,
-            'message': f'Backup created: notehelper_{timestamp}.db ({size_mb:.1f} MB)',
-            'file': f'notehelper_{timestamp}.db',
+            'message': f'Backup created: salesbuddy_{timestamp}.db ({size_mb:.1f} MB)',
+            'file': f'salesbuddy_{timestamp}.db',
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1078,7 +1078,7 @@ def api_telemetry_flush():
     if not is_telemetry_enabled():
         return jsonify({
             'success': False,
-            'reason': 'Telemetry shipping is disabled (NOTEHELPER_TELEMETRY_OPT_OUT)',
+            'reason': 'Telemetry shipping is disabled (SALESBUDDY_TELEMETRY_OPT_OUT)',
         })
 
     result = flush_buffer()

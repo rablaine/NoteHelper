@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from 'partials/customer_favicon.html' import customer_favicon %}
 
-{% block title %}Customers - NoteHelper{% endblock %}
+{% block title %}Customers - Sales Buddy{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -299,14 +299,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show draft indicators for customers with unsaved drafts
     function showDraftIndicators() {
-        const DRAFT_KEY_PREFIX = 'notehelper_draft_';
+        const DRAFT_KEY_PREFIX = 'salesbuddy_draft_';
         
         // Find all drafts in localStorage
         const customerDrafts = new Set();
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && key.startsWith(DRAFT_KEY_PREFIX)) {
-                // Extract customer ID from key (e.g., "notehelper_draft_123" -> "123")
+                // Extract customer ID from key (e.g., "salesbuddy_draft_123" -> "123")
                 const customerId = key.replace(DRAFT_KEY_PREFIX, '');
                 if (customerId) {
                     customerDrafts.add(customerId);
@@ -342,7 +342,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Listen for storage changes from other tabs
     window.addEventListener('storage', function(e) {
-        if (e.key && e.key.startsWith('notehelper_draft_')) {
+        if (e.key && e.key.startsWith('salesbuddy_draft_')) {
             // A draft was added or removed in another tab - update indicators
             document.querySelectorAll('.draft-indicator').forEach(el => el.remove());
             showDraftIndicators();
@@ -350,7 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Seller group collapse state persistence via localStorage
-    const STORAGE_KEY = 'notehelper_expanded_sellers';
+    const STORAGE_KEY = 'salesbuddy_expanded_sellers';
 
     function getExpandedSellers() {
         try {

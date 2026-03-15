@@ -62,7 +62,7 @@ class TestFYCutoverService:
             next_fy = labels['next_fy']
 
             # Create a fake DB file in tmp
-            fake_db = tmp_path / 'notehelper.db'
+            fake_db = tmp_path / 'salesbuddy.db'
             fake_db.write_text('test database content')
 
             with patch('app.services.fy_cutover._get_data_dir', return_value=tmp_path):
@@ -88,7 +88,7 @@ class TestFYCutoverService:
 
             current_fy = get_fiscal_year_labels()['current_fy']
 
-            fake_db = tmp_path / 'notehelper.db'
+            fake_db = tmp_path / 'salesbuddy.db'
             fake_db.write_text('test db')
             onedrive_root = tmp_path / 'OneDrive'
             onedrive_root.mkdir()

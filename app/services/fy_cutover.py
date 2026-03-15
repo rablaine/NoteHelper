@@ -95,13 +95,13 @@ def exit_transition_mode() -> None:
 
 
 def _get_data_dir() -> Path:
-    """Return the directory where notehelper.db lives."""
+    """Return the directory where salesbuddy.db lives."""
     db_url = str(db.engine.url)
-    # sqlite:///data/notehelper.db -> data/notehelper.db
+    # sqlite:///data/salesbuddy.db -> data/salesbuddy.db
     if ":///" in db_url:
         db_path = db_url.split(":///", 1)[1]
     else:
-        db_path = "data/notehelper.db"
+        db_path = "data/salesbuddy.db"
     return Path(db_path).parent
 
 
@@ -150,7 +150,7 @@ def start_new_fiscal_year() -> dict:
     next_label = labels["next_fy"]
 
     data_dir = _get_data_dir()
-    db_path = data_dir / "notehelper.db"
+    db_path = data_dir / "salesbuddy.db"
 
     if not db_path.exists():
         raise FileNotFoundError(f"Database not found at {db_path}")

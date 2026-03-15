@@ -1,5 +1,5 @@
 """
-Milestone sync service for NoteHelper.
+Milestone sync service for Sales Buddy.
 
 Pulls active (uncommitted) milestones from MSX for all customers
 and upserts them into the local database. Uses 3 concurrent workers

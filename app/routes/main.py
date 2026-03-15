@@ -1,5 +1,5 @@
 """
-Main routes for NoteHelper.
+Main routes for Sales Buddy.
 Handles index, search, preferences, and API endpoints.
 """
 from flask import (Blueprint, render_template, request, redirect, url_for,

@@ -851,7 +851,7 @@ def explore_metadata(entity_name: str):
 @msx_bp.route('/import-accounts', methods=['POST'])
 def import_accounts():
     """
-    Import accounts from MSX into NoteHelper database.
+    Import accounts from MSX into Sales Buddy database.
     
     Creates territories, sellers, and customers based on the provided data.
     
@@ -1168,7 +1168,7 @@ def _par_query_dss(account_ids, batch_size, progress_q, worker_id):
 @msx_bp.route('/import-stream')
 def import_stream():
     """
-    Stream import all accounts/data from MSX into NoteHelper database.
+    Stream import all accounts/data from MSX into Sales Buddy database.
 
     Uses 3 concurrent workers for the API query phases (accounts,
     territories, teams) then writes to the database sequentially.

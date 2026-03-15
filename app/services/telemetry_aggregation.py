@@ -1,5 +1,5 @@
 """
-Telemetry aggregation service for NoteHelper.
+Telemetry aggregation service for Sales Buddy.
 
 Rolls up raw ``UsageEvent`` rows into compact ``DailyFeatureStats`` records
 and computes feature-health metrics (popularity ranking, dead features,

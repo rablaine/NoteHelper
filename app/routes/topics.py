@@ -1,5 +1,5 @@
 """
-Topic routes for NoteHelper.
+Topic routes for Sales Buddy.
 Handles topic listing, creation, viewing, editing, and deletion.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g

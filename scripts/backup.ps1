@@ -1,4 +1,4 @@
-# NoteHelper - Database Backup Script
+# Sales Buddy - Database Backup Script
 # Copies the database to OneDrive with daily/weekly/monthly rotation.
 #
 # Usage:
@@ -9,7 +9,7 @@
 #
 # Configuration lives in data/backup_config.json. Defaults:
 #   - 7 daily backups, 4 weekly backups, 3 monthly backups
-#   - Backups go to OneDrive - Microsoft/Backups/NoteHelper/
+#   - Backups go to OneDrive - Microsoft/Backups/SalesBuddy/
 #
 # Entry points:
 #   backup.bat              Double-click to run a backup now
@@ -25,8 +25,8 @@ param(
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $DataDir = Join-Path $RepoRoot 'data'
 $ConfigFile = Join-Path $DataDir 'backup_config.json'
-$DbFile = Join-Path $DataDir 'notehelper.db'
-$TaskName = 'NoteHelper-DailyBackup'
+$DbFile = Join-Path $DataDir 'salesbuddy.db'
+$TaskName = 'SalesBuddy-DailyBackup'
 
 # ==============================================================================
 # Helper Functions
@@ -167,7 +167,7 @@ function Get-BackupFiles {
 
     if (-not $BackupDir -or -not (Test-Path $BackupDir)) { return @() }
 
-    return Get-ChildItem $BackupDir -Filter 'notehelper_*.db' -File |
+    return Get-ChildItem $BackupDir -Filter 'salesbuddy_*.db' -File |
         Sort-Object LastWriteTime -Descending
 }
 
@@ -253,7 +253,7 @@ function Run-Backup {
     }
 
     $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
-    $backupFile = Join-Path $backupDir "notehelper_$timestamp.db"
+    $backupFile = Join-Path $backupDir "salesbuddy_$timestamp.db"
 
     try {
         Copy-Item $DbFile $backupFile -Force
@@ -291,7 +291,7 @@ function Run-Backup {
 
 if ($Setup) {
     Write-Host ""
-    Write-Host "  NoteHelper Backup Setup" -ForegroundColor Cyan
+    Write-Host "  Sales Buddy Backup Setup" -ForegroundColor Cyan
     Write-Host "  =======================" -ForegroundColor Cyan
     Write-Host ""
 
@@ -305,7 +305,7 @@ if ($Setup) {
         exit 1
     }
 
-    $defaultBackupDir = Join-Path $onedrivePath 'Backups\NoteHelper'
+    $defaultBackupDir = Join-Path $onedrivePath 'Backups\SalesBuddy'
     Write-Host "  Detected OneDrive: $onedrivePath" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Backups will be saved to:" -ForegroundColor White
@@ -366,7 +366,7 @@ if ($Setup) {
             -Trigger $trigger `
             -Principal $principal `
             -Settings $settings `
-            -Description 'Daily backup of NoteHelper database to OneDrive' `
+            -Description 'Daily backup of Sales Buddy database to OneDrive' `
             -ErrorAction Stop | Out-Null
         $registered = $true
         Write-Host "  [OK] Scheduled task '$TaskName' registered (runs as SYSTEM)." -ForegroundColor Green
@@ -381,7 +381,7 @@ if ($Setup) {
                 -Trigger $trigger `
                 -Principal $principal `
                 -Settings $settings `
-                -Description 'Daily backup of NoteHelper database to OneDrive' `
+                -Description 'Daily backup of Sales Buddy database to OneDrive' `
                 -ErrorAction Stop | Out-Null
             $registered = $true
             Write-Host "  [OK] Scheduled task '$TaskName' registered (runs while logged in)." -ForegroundColor Green
@@ -424,7 +424,7 @@ if ($Setup) {
 
 if ($Remove) {
     Write-Host ""
-    Write-Host "  Removing NoteHelper backup scheduled task..." -ForegroundColor Yellow
+    Write-Host "  Removing Sales Buddy backup scheduled task..." -ForegroundColor Yellow
     try {
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
         Write-Host "  [OK] Scheduled task removed." -ForegroundColor Green
@@ -449,7 +449,7 @@ if ($Remove) {
 
 if ($Status) {
     Write-Host ""
-    Write-Host "  NoteHelper Backup Status" -ForegroundColor Cyan
+    Write-Host "  Sales Buddy Backup Status" -ForegroundColor Cyan
     Write-Host "  ========================" -ForegroundColor Cyan
     Write-Host ""
 
@@ -504,7 +504,7 @@ if ($Status) {
 # ==============================================================================
 
 Write-Host ""
-Write-Host "  NoteHelper Backup" -ForegroundColor Cyan
+Write-Host "  Sales Buddy Backup" -ForegroundColor Cyan
 Write-Host "  =================" -ForegroundColor Cyan
 Write-Host ""
 

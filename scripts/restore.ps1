@@ -1,4 +1,4 @@
-# NoteHelper - Database Restore Script
+# Sales Buddy - Database Restore Script
 # Interactive terminal UI to browse backups and restore one.
 #
 # Usage:
@@ -18,7 +18,7 @@
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $DataDir = Join-Path $RepoRoot 'data'
 $ConfigFile = Join-Path $DataDir 'backup_config.json'
-$DbFile = Join-Path $DataDir 'notehelper.db'
+$DbFile = Join-Path $DataDir 'salesbuddy.db'
 
 Set-Location $RepoRoot
 
@@ -134,13 +134,13 @@ function Get-AllBackupFiles {
     # OneDrive backups
     $config = Get-BackupConfig
     if ($config -and $config.backup_dir -and (Test-Path $config.backup_dir)) {
-        $files += Get-ChildItem $config.backup_dir -Filter 'notehelper_*.db' -File |
+        $files += Get-ChildItem $config.backup_dir -Filter 'salesbuddy_*.db' -File |
             ForEach-Object { $_ | Add-Member -NotePropertyName Source -NotePropertyValue 'OneDrive' -PassThru }
     }
 
     # Local data/ backups (from deploy/update cycle)
     if (Test-Path $DataDir) {
-        $localFiles = Get-ChildItem $DataDir -Filter 'notehelper_backup_*.db' -File |
+        $localFiles = Get-ChildItem $DataDir -Filter 'salesbuddy_backup_*.db' -File |
             ForEach-Object { $_ | Add-Member -NotePropertyName Source -NotePropertyValue 'Local' -PassThru }
         $files += $localFiles
     }
@@ -163,7 +163,7 @@ function Get-AllBackupFiles {
 # ==============================================================================
 
 Write-Host ""
-Write-Host "  NoteHelper Restore" -ForegroundColor Cyan
+Write-Host "  Sales Buddy Restore" -ForegroundColor Cyan
 Write-Host "  ==================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -298,7 +298,7 @@ if (Test-ServerRunning -Port $Port) {
 # Step 2: Safety backup of current database
 if (Test-Path $DbFile) {
     $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
-    $safetyBackup = Join-Path $DataDir "notehelper_pre_restore_$timestamp.db"
+    $safetyBackup = Join-Path $DataDir "salesbuddy_pre_restore_$timestamp.db"
     Copy-Item $DbFile $safetyBackup -Force
     Write-Host "  [OK] Current database backed up to: $($safetyBackup | Split-Path -Leaf)" -ForegroundColor Green
 }

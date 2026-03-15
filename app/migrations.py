@@ -1,5 +1,5 @@
 """
-Idempotent database migrations for NoteHelper.
+Idempotent database migrations for Sales Buddy.
 
 This module provides safe, repeatable schema migrations that can run on every
 deployment without risk of data loss. Each migration checks if it needs to run

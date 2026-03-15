@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Home - NoteHelper{% endblock %}
+{% block title %}Home - Sales Buddy{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-md-12">
         <div class="mb-4">
-            <h1 class="mb-2">Welcome to NoteHelper</h1>
-            <p class="lead mb-0">Track and manage your customer call notes efficiently.</p>
+            <h1 class="mb-2">Welcome to Sales Buddy</h1>
+            <p class="lead mb-0">Everything you need to stay on top of your accounts.</p>
         </div>
     </div>
 </div>
@@ -371,7 +371,7 @@
     }
     
     // ===== DRAFT MANAGEMENT =====
-    const DRAFT_KEY_PREFIX = 'notehelper_draft_';
+    const DRAFT_KEY_PREFIX = 'salesbuddy_draft_';
     
     // Load drafts on page load
     function loadDrafts() {
@@ -489,8 +489,8 @@
     });
     
     // ===== CALENDAR VIEW =====
-    const CAL_MONTH_KEY = 'notehelper_cal_month';
-    const CAL_YEAR_KEY = 'notehelper_cal_year';
+    const CAL_MONTH_KEY = 'salesbuddy_cal_month';
+    const CAL_YEAR_KEY = 'salesbuddy_cal_year';
     let calendarYear = parseInt(localStorage.getItem(CAL_YEAR_KEY)) || new Date().getFullYear();
     let calendarMonth = parseInt(localStorage.getItem(CAL_MONTH_KEY)) || (new Date().getMonth() + 1);
     let calendarLoaded = false;
@@ -501,7 +501,7 @@
     }
     
     // Tab persistence with localStorage
-    const TAB_STORAGE_KEY = 'notehelper_home_tab';
+    const TAB_STORAGE_KEY = 'salesbuddy_home_tab';
     
     // Apply saved tab after Bootstrap is loaded
     window.addEventListener('DOMContentLoaded', function() {
@@ -766,8 +766,8 @@
 
     {% if has_milestones %}
     // ===== MILESTONE CALENDAR VIEW =====
-    const MS_MONTH_KEY = 'notehelper_ms_cal_month';
-    const MS_YEAR_KEY = 'notehelper_ms_cal_year';
+    const MS_MONTH_KEY = 'salesbuddy_ms_cal_month';
+    const MS_YEAR_KEY = 'salesbuddy_ms_cal_year';
     let msCalYear = parseInt(localStorage.getItem(MS_YEAR_KEY)) || new Date().getFullYear();
     let msCalMonth = parseInt(localStorage.getItem(MS_MONTH_KEY)) || (new Date().getMonth() + 1);
     let msCalLoaded = false;

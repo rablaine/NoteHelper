@@ -1,10 +1,10 @@
 # App Insights Telemetry Integration
 
-NoteHelper ships anonymous, category-level usage telemetry to Azure Application Insights so maintainers can understand which features are actually used across all instances.
+Sales Buddy ships anonymous, category-level usage telemetry to Azure Application Insights so maintainers can understand which features are actually used across all instances.
 
 ## What Gets Sent
 
-Each HTTP request generates one custom event (`NoteHelper.FeatureUsage`) with:
+Each HTTP request generates one custom event (`SalesBuddy.FeatureUsage`) with:
 
 | Field | Type | Example | Description |
 |-------|------|---------|-------------|
@@ -37,7 +37,7 @@ Each HTTP request generates one custom event (`NoteHelper.FeatureUsage`) with:
 Set the environment variable to disable all central telemetry:
 
 ```
-NOTEHELPER_TELEMETRY_OPT_OUT=true
+SALESBUDDY_TELEMETRY_OPT_OUT=true
 ```
 
 Local telemetry (the `usage_events` table in SQLite) still works regardless.
@@ -63,7 +63,7 @@ This connection string is hardcoded (not a secret per Microsoft docs -- it's a w
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | extend category = tostring(customDimensions.category),
          method = tostring(customDimensions.method),
          instance_id = tostring(customDimensions.instance_id),
@@ -79,7 +79,7 @@ customEvents
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | summarize count() by tostring(customDimensions.category)
 | order by count_ desc
 ```
@@ -88,7 +88,7 @@ customEvents
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | summarize
     total = count(),
     errors = countif(todouble(customMeasurements.is_error) == 1)
@@ -101,7 +101,7 @@ customEvents
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | summarize
     avg_ms = round(avg(todouble(customMeasurements.response_time_ms)), 1),
     p95_ms = round(percentile(todouble(customMeasurements.response_time_ms), 95), 1),
@@ -114,7 +114,7 @@ customEvents
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | where timestamp > ago(30d)
 | summarize events = count() by bin(timestamp, 1d), tostring(customDimensions.category)
 | render timechart
@@ -124,7 +124,7 @@ customEvents
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | summarize
     instances = dcount(tostring(customDimensions.instance_id)),
     events = count()
@@ -141,7 +141,7 @@ let known_categories = dynamic([
     "Pods", "Revenue", "Sellers", "Solution Engineers", "Territories", "Topics"
 ]);
 let active = customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | where timestamp > ago(30d)
 | distinct tostring(customDimensions.category);
 print dead_features = set_difference(known_categories, active)
@@ -151,7 +151,7 @@ print dead_features = set_difference(known_categories, active)
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | where timestamp > ago(14d)
 | extend category = tostring(customDimensions.category)
 | summarize
@@ -166,7 +166,7 @@ customEvents
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | where todouble(customMeasurements.is_error) == 1
 | summarize count() by
     tostring(customDimensions.category),
@@ -178,7 +178,7 @@ customEvents
 
 ```kusto
 customEvents
-| where name == "NoteHelper.FeatureUsage"
+| where name == "SalesBuddy.FeatureUsage"
 | where timestamp > ago(7d)
 | summarize
     events = count(),

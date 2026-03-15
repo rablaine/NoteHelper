@@ -1,4 +1,4 @@
-# WorkIQ Integration Guide for NoteHelper
+# WorkIQ Integration Guide for Sales Buddy
 
 This document explains how we integrate with Microsoft WorkIQ to auto-populate call logs from Teams meeting transcripts and summaries. The goal: click a button, select a meeting, get a pre-filled call log with customer, date, discussion summary, and Azure topics extracted.
 
@@ -11,7 +11,7 @@ This document explains how we integrate with Microsoft WorkIQ to auto-populate c
 5. [Data Available from WorkIQ](#data-available-from-workiq)
 6. [Integration Options](#integration-options)
 7. [Sample Queries](#sample-queries)
-8. [Mapping to NoteHelper](#mapping-to-notehelper)
+8. [Mapping to Sales Buddy](#mapping-to-sales-buddy)
 9. [What Didn't Work (Graph API)](#what-didnt-work-graph-api)
 10. [Next Steps](#next-steps)
 
@@ -28,7 +28,7 @@ This document explains how we integrate with Microsoft WorkIQ to auto-populate c
 - **Documents** - SharePoint/OneDrive documents
 - **Teams Messages** - Channel and chat messages
 
-For NoteHelper, we primarily care about **meetings** and **transcripts** to auto-populate call logs.
+For Sales Buddy, we primarily care about **meetings** and **transcripts** to auto-populate call logs.
 
 ---
 
@@ -183,11 +183,11 @@ npx -y @microsoft/workiq ask -q "From the 'Customer X' meeting, extract all Azur
 
 ---
 
-## Mapping to NoteHelper
+## Mapping to Sales Buddy
 
 ### Data Mapping
 
-| WorkIQ Data | NoteHelper Field | Notes |
+| WorkIQ Data | Sales Buddy Field | Notes |
 |-------------|------------------|-------|
 | Meeting date | Call date | Direct mapping |
 | External company | Customer | Match by name or create new |

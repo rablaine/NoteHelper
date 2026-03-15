@@ -16,7 +16,7 @@ Posts two types of comments to MSX milestones:
 
 Both comment types are matched for updates via a ref tag in the footer
 (e.g. ``· note-42 ·`` or ``· eng-15 ·``).  The userId is set to
-``{display name} via NoteHelper`` so multiple NoteHelper users can each
+``{display name} via Sales Buddy`` so multiple Sales Buddy users can each
 maintain their own comments on the same milestone.
 
 All MSX and AI calls run in a background thread so the user isn't blocked.
@@ -179,7 +179,7 @@ def _build_engagement_story(engagement) -> str:
 
 
 def _add_footer(content: str, ref_tag: str) -> str:
-    """Append a NoteHelper ref-tag footer to a comment."""
+    """Append a Sales Buddy ref-tag footer to a comment."""
     return f"{content}\n\n· {ref_tag} ·"
 
 

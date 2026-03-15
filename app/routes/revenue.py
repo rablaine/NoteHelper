@@ -1,5 +1,5 @@
 """
-Revenue routes for NoteHelper.
+Revenue routes for Sales Buddy.
 Handles revenue data import, analysis, and attention dashboard.
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g, Response, stream_with_context
@@ -214,7 +214,7 @@ def revenue_seller_view(seller_name: str):
     total_at_risk = sum(a.dollars_at_risk or 0 for a in alerts)
     total_opportunity = sum(a.dollars_opportunity or 0 for a in alerts)
     
-    # Try to match to a NoteHelper Seller
+    # Try to match to a Sales Buddy Seller
     seller = Seller.query.filter(
         db.func.lower(Seller.name) == seller_name.lower()
     ).first()
@@ -334,7 +334,7 @@ def revenue_seller_products(seller_name: str):
         sort = 'revenue'
         products = sorted(products, key=lambda x: x['total_revenue'], reverse=True)
     
-    # Try to match to a NoteHelper Seller
+    # Try to match to a Sales Buddy Seller
     seller = Seller.query.filter(
         db.func.lower(Seller.name) == seller_name.lower()
     ).first()
@@ -424,7 +424,7 @@ def revenue_seller_product_view(seller_name: str, product: str):
             'month_revenues': month_revenues
         })
     
-    # Try to match to a NoteHelper Seller
+    # Try to match to a Sales Buddy Seller
     seller = Seller.query.filter(
         db.func.lower(Seller.name) == seller_name.lower()
     ).first()
@@ -445,14 +445,14 @@ def revenue_seller_product_view(seller_name: str, product: str):
 @revenue_bp.route('/revenue/customer/<int:customer_id>')
 def revenue_customer_view(customer_id: int):
     """View revenue history and analysis for a specific customer."""
-    # Get the NoteHelper customer
+    # Get the Sales Buddy customer
     customer = db.session.get(Customer, customer_id)
     if not customer:
         flash('Customer not found.', 'danger')
         return redirect(url_for('revenue.revenue_dashboard'))
     
     # Query revenue data by customer_id (set during import with fuzzy matching)
-    # Display the NoteHelper customer name in the UI
+    # Display the Sales Buddy customer name in the UI
     customer_name = customer.name
     
     # Get all analyses for this customer (all buckets)
@@ -527,7 +527,7 @@ def revenue_customer_view(customer_id: int):
 @revenue_bp.route('/revenue/customer/<int:customer_id>/bucket/<bucket>')
 def revenue_bucket_products(customer_id: int, bucket: str):
     """View product-level revenue breakdown for a customer/bucket."""
-    # Get the NoteHelper customer
+    # Get the Sales Buddy customer
     customer = db.session.get(Customer, customer_id)
     if not customer:
         flash('Customer not found.', 'danger')

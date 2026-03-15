@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ product }} - Products - NoteHelper{% endblock %}
+{% block title %}{{ product }} - Products - Sales Buddy{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -93,7 +93,7 @@
                                 <a href="{{ url_for('revenue.revenue_customer_view', customer_id=c.customer_id) }}">
                                     {{ c.customer_name }}
                                 </a>
-                                <a href="{{ url_for('customers.customer_view', id=c.customer_id) }}" class="text-muted ms-1" title="View in NoteHelper">
+                                <a href="{{ url_for('customers.customer_view', id=c.customer_id) }}" class="text-muted ms-1" title="View in Sales Buddy">
                                     <i class="bi bi-box-arrow-up-right"></i>
                                 </a>
                                 {% else %}

@@ -151,7 +151,7 @@ class TestIsBusinessOneDrivePath:
     def test_path_under_business_dir(self, tmp_path):
         biz_dir = tmp_path / "OneDrive - Microsoft"
         biz_dir.mkdir()
-        backup_path = biz_dir / "Backups" / "NoteHelper"
+        backup_path = biz_dir / "Backups" / "SalesBuddy"
         backup_path.mkdir(parents=True)
 
         with patch.dict(os.environ, {
@@ -166,7 +166,7 @@ class TestIsBusinessOneDrivePath:
     def test_path_under_personal_dir(self, tmp_path):
         personal_dir = tmp_path / "OneDrive"
         personal_dir.mkdir()
-        backup_path = personal_dir / "Backups" / "NoteHelper"
+        backup_path = personal_dir / "Backups" / "SalesBuddy"
         backup_path.mkdir(parents=True)
 
         with patch.dict(os.environ, {
@@ -215,7 +215,7 @@ class TestBackupHelpers:
             config_data = {
                 'enabled': True,
                 'onedrive_path': 'C:\\Users\\test\\OneDrive',
-                'backup_dir': 'C:\\Users\\test\\OneDrive\\Backups\\NoteHelper',
+                'backup_dir': 'C:\\Users\\test\\OneDrive\\Backups\\SalesBuddy',
                 'retention': {'daily': 7, 'weekly': 4, 'monthly': 3},
                 'last_backup': '2025-01-15T10:30:00+00:00',
                 'task_registered': True,
@@ -230,7 +230,7 @@ class TestBackupHelpers:
                 result = mock_get()
 
             assert result['enabled'] is True
-            assert result['backup_dir'] == 'C:\\Users\\test\\OneDrive\\Backups\\NoteHelper'
+            assert result['backup_dir'] == 'C:\\Users\\test\\OneDrive\\Backups\\SalesBuddy'
             assert result['task_registered'] is True
 
     def test_get_backup_config_handles_corrupt_json(self, app):
@@ -254,15 +254,15 @@ class TestBackupHelpers:
         with app.app_context():
             from app.routes.admin import _list_backup_files
             # Create some fake backup files
-            (tmp_path / 'notehelper_2025-01-10_100000.db').write_bytes(b'x' * 1024)
-            (tmp_path / 'notehelper_2025-01-15_100000.db').write_bytes(b'x' * 2048)
+            (tmp_path / 'salesbuddy_2025-01-10_100000.db').write_bytes(b'x' * 1024)
+            (tmp_path / 'salesbuddy_2025-01-15_100000.db').write_bytes(b'x' * 2048)
             (tmp_path / 'other_file.txt').write_text('not a backup')
 
             result = _list_backup_files(str(tmp_path))
             assert len(result) == 2
             # Newest first (sorted by filename descending)
-            assert result[0]['name'] == 'notehelper_2025-01-15_100000.db'
-            assert result[1]['name'] == 'notehelper_2025-01-10_100000.db'
+            assert result[0]['name'] == 'salesbuddy_2025-01-15_100000.db'
+            assert result[1]['name'] == 'salesbuddy_2025-01-10_100000.db'
             assert 'size_display' in result[0]
             assert 'modified_iso' in result[0]
 
@@ -271,7 +271,7 @@ class TestBackupHelpers:
         with app.app_context():
             from app.routes.admin import _list_backup_files
             for i in range(15):
-                (tmp_path / f'notehelper_2025-01-{i+1:02d}_100000.db').write_bytes(b'x' * 512)
+                (tmp_path / f'salesbuddy_2025-01-{i+1:02d}_100000.db').write_bytes(b'x' * 512)
 
             result = _list_backup_files(str(tmp_path), limit=5)
             assert len(result) == 5
@@ -298,7 +298,7 @@ class TestCheckScheduledTask:
         """Should parse schtasks CSV output when task exists."""
         with app.app_context():
             from app.routes.admin import _check_scheduled_task
-            csv_output = '"\\NoteHelper-DailyBackup","3/8/2026 11:00:00 AM","Ready"\n'
+            csv_output = '"\\SalesBuddy-DailyBackup","3/8/2026 11:00:00 AM","Ready"\n'
             with patch('app.routes.admin.subprocess.run') as mock_run:
                 mock_run.return_value = type('R', (), {
                     'returncode': 0, 'stdout': csv_output, 'stderr': ''
@@ -366,7 +366,7 @@ class TestBackupStatusAPI:
     def test_backup_status_configured(self, client, app, tmp_path):
         """Should return configured status with backup list."""
         # Create a fake backup file
-        (tmp_path / 'notehelper_2025-01-15_100000.db').write_bytes(b'x' * 4096)
+        (tmp_path / 'salesbuddy_2025-01-15_100000.db').write_bytes(b'x' * 4096)
 
         with patch('app.routes.admin._get_backup_config') as mock_config, \
              patch('app.routes.admin._check_scheduled_task') as mock_task:
@@ -390,7 +390,7 @@ class TestBackupStatusAPI:
         assert data['task_status'] == 'Ready'
         assert data['last_backup'] == '2025-01-15T10:30:00+00:00'
         assert len(data['recent_backups']) == 1
-        assert data['recent_backups'][0]['name'] == 'notehelper_2025-01-15_100000.db'
+        assert data['recent_backups'][0]['name'] == 'salesbuddy_2025-01-15_100000.db'
 
     def test_backup_status_task_missing_but_config_says_registered(self, client, app):
         """task_exists should be False even when task_registered is True."""
@@ -449,7 +449,7 @@ class TestBackupRunAPI:
         backup_dir.mkdir()
 
         # Create a fake DB file
-        fake_db = tmp_path / 'notehelper.db'
+        fake_db = tmp_path / 'salesbuddy.db'
         fake_db.write_bytes(b'SQLite DB content' * 100)
 
         config = {
@@ -466,7 +466,7 @@ class TestBackupRunAPI:
 
             def patched_truediv(self, other):
                 result = original_truediv(self, other)
-                if str(other) == 'notehelper.db' and 'data' in str(self):
+                if str(other) == 'salesbuddy.db' and 'data' in str(self):
                     return fake_db
                 return result
 
@@ -483,7 +483,7 @@ class TestBackupRunAPI:
         backup_dir = tmp_path / 'backups'
         backup_dir.mkdir()
 
-        fake_db = tmp_path / 'notehelper.db'
+        fake_db = tmp_path / 'salesbuddy.db'
         fake_db.write_bytes(b'test database content')
 
         config = {
@@ -499,7 +499,7 @@ class TestBackupRunAPI:
 
             def patched(self, other):
                 result = original_init(self, other)
-                if str(other) == 'notehelper.db' and 'data' in str(self):
+                if str(other) == 'salesbuddy.db' and 'data' in str(self):
                     return fake_db
                 return result
 
@@ -507,7 +507,7 @@ class TestBackupRunAPI:
                 response = client.post('/api/admin/backup/run')
 
         assert response.status_code == 200
-        backup_files = list(backup_dir.glob('notehelper_*.db'))
+        backup_files = list(backup_dir.glob('salesbuddy_*.db'))
         assert len(backup_files) == 1
         assert backup_files[0].read_bytes() == b'test database content'
 
@@ -549,7 +549,7 @@ class TestCustomerToDict:
 
             data = _customer_to_dict(customer)
             assert data["_version"] == 4
-            assert data["_notehelper_backup"] is True
+            assert data["_salesbuddy_backup"] is True
             assert "engagements" in data
             assert "notes" in data
             assert "partners" in data
@@ -850,7 +850,7 @@ class TestRestoreFromBackup:
     ) -> dict:
         """Helper to build a v3 backup payload."""
         return {
-            "_notehelper_backup": True,
+            "_salesbuddy_backup": True,
             "_version": 3,
             "_exported_at": datetime.now(timezone.utc).isoformat(),
             "customer": {
@@ -881,7 +881,7 @@ class TestRestoreFromBackup:
         from app.services.backup import restore_from_backup
 
         with app.app_context():
-            data = {"_notehelper_backup": True, "customer": {}}
+            data = {"_salesbuddy_backup": True, "customer": {}}
             result = restore_from_backup(data)
             assert result["success"] is False
             assert "TPID" in result["error"]
@@ -1253,7 +1253,7 @@ class TestRestoreFromBackup:
             db.session.commit()
 
             data = {
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "_version": 2,
                 "customer": {
                     "name": "V2 Compat",
@@ -1516,7 +1516,7 @@ class TestRestoreV4PerCustomer:
             "verticals": [],
         }
         return {
-            "_notehelper_backup": True,
+            "_salesbuddy_backup": True,
             "_version": 4,
             "_exported_at": datetime.now(timezone.utc).isoformat(),
             "customer": cust,
@@ -1771,7 +1771,7 @@ class TestRestoreV4PerCustomer:
             db.session.commit()
 
             data = {
-                "_notehelper_backup": True,
+                "_salesbuddy_backup": True,
                 "_version": 3,
                 "customer": {
                     "name": "V3 Compat",
@@ -1806,7 +1806,7 @@ class TestGlobalDataExport:
 
         with app.app_context():
             data = _global_data_to_dict()
-            assert data["_notehelper_global_backup"] is True
+            assert data["_salesbuddy_global_backup"] is True
             assert data["_version"] == 5
             assert "note_templates" in data
             assert "user_preferences" in data
@@ -1964,7 +1964,7 @@ class TestRestoreGlobalData:
     def _make_global_backup(self, **overrides) -> dict:
         """Helper to build a global backup payload."""
         base = {
-            "_notehelper_global_backup": True,
+            "_salesbuddy_global_backup": True,
             "_version": 5,
             "_exported_at": datetime.now(timezone.utc).isoformat(),
             "note_templates": [],
@@ -2367,7 +2367,7 @@ class TestPartnerBackup:
             db.session.commit()
 
             data = _partner_to_dict(partner)
-            assert data["_notehelper_partner_backup"] is True
+            assert data["_salesbuddy_partner_backup"] is True
             assert data["_version"] == 1
             p = data["partner"]
             assert p["name"] == "Contoso"
@@ -2466,7 +2466,7 @@ class TestTemplateBackup:
             db.session.commit()
 
             data = _template_to_dict(tmpl)
-            assert data["_notehelper_template_backup"] is True
+            assert data["_salesbuddy_template_backup"] is True
             assert data["_version"] == 1
             t = data["template"]
             assert t["name"] == "Call Summary"

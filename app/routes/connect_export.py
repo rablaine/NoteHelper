@@ -1,5 +1,5 @@
 """
-Connect Export routes for NoteHelper.
+Connect export routes for Sales Buddy.
 
 Provides functionality to export call log data for writing Microsoft Connects
 (self-evaluations). Generates structured summaries and JSON exports scoped to

@@ -1,4 +1,4 @@
-# NoteHelper
+# Sales Buddy
 
 A single-user note-taking application for Azure technical sellers to capture and retrieve customer call notes. Enables searching and filtering notes by customer, seller, technologies discussed, and other criteria.
 
@@ -7,7 +7,7 @@ A single-user note-taking application for Azure technical sellers to capture and
 ### Prerequisites
 
 - **Python 3.13+** (the launcher can install this for you)
-- **Git** (required for updates; the launcher can install this for you. Without it you can still [download the ZIP](https://github.com/rablaine/NoteHelper/archive/refs/heads/main.zip) to get started, but updates won't work)
+- **Git** (required for updates; the launcher can install this for you. Without it you can still [download the ZIP](https://github.com/rablaine/SalesBuddy/archive/refs/heads/main.zip) to get started, but updates won't work)
 - **Azure CLI** (optional - required for MSX and AI features; the launcher can install this too)
 - **Node.js 18+** (optional - required for WorkIQ meeting import; the launcher can install this too)
 - **VPN connection** - required for MSX integration (account imports, milestones)
@@ -16,15 +16,15 @@ A single-user note-taking application for Azure technical sellers to capture and
 
 The fastest way to get running — clone (or download and extract the ZIP) and run `start.bat`. It checks for prerequisites, offers to install anything missing via `winget`, then sets up the app:
 
-> **Recommended:** Install to a local path like `C:\prod\NoteHelper` rather than your Desktop or Documents folder. OneDrive will try to sync the Python virtual environment (~100MB+), which slows things down and wastes space.
+> **Recommended:** Install to a local path like `C:\prod\SalesBuddy` rather than your Desktop or Documents folder. OneDrive will try to sync the Python virtual environment (~100MB+), which slows things down and wastes space.
 
 ```powershell
 # Option A: Clone with Git
-git clone https://github.com/rablaine/NoteHelper.git C:\prod\NoteHelper
-cd C:\prod\NoteHelper
+git clone https://github.com/rablaine/SalesBuddy.git C:\prod\SalesBuddy
+cd C:\prod\SalesBuddy
 start.bat
 
-# Option B: Download ZIP from GitHub, extract to C:\prod\NoteHelper, then run start.bat
+# Option B: Download ZIP from GitHub, extract to C:\prod\SalesBuddy, then run start.bat
 ```
 
 The script will:
@@ -46,8 +46,8 @@ If you prefer to set things up yourself:
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/rablaine/NoteHelper.git
-cd NoteHelper
+git clone https://github.com/rablaine/SalesBuddy.git
+cd SalesBuddy
 ```
 
 2. **Create virtual environment:**
@@ -75,13 +75,13 @@ flask run
 
 6. **Visit** `http://localhost:5151` in your browser
 
-> **Note:** The database will be created automatically in `data/notehelper.db` on first run.
+> **Note:** The database will be created automatically in `data/salesbuddy.db` on first run.
 
 ### Initial Setup (First Run)
 
-When you first launch NoteHelper, a **guided setup wizard** walks you through connecting your data:
+When you first launch Sales Buddy, a **guided setup wizard** walks you through connecting your data:
 
-1. **Welcome** — quick overview of NoteHelper and what it does
+1. **Welcome** — quick overview of Sales Buddy and what it does
 2. **Authenticate with Azure** — the wizard checks for an existing `az login` session and prompts you to authenticate if needed. This is required for MSX integration (accounts, milestones).
 3. **Import Accounts** — pulls your customer accounts from MSX with one click
 4. **Import Milestones (recommended)** — syncs milestone data for your accounts from MSX. It's a single click and gives you milestone tracking right away.
@@ -100,7 +100,7 @@ pytest --cov=app tests/  # with coverage
 
 ## Starting & Updating
 
-NoteHelper uses a single smart script (`scripts/server.ps1`) that handles everything: first-run setup, starting the server, checking for updates, and applying new versions.
+Sales Buddy uses a single smart script (`scripts/server.ps1`) that handles everything: first-run setup, starting the server, checking for updates, and applying new versions.
 
 ### Quick start
 
@@ -117,7 +117,7 @@ On subsequent runs, it checks for updates from GitHub and applies them automatic
 Double-click `update.bat` to update. This runs the full update cycle:
 
 1. Stops the running server
-2. **Backs up your database** to `data/notehelper_backup_YYYY-MM-DD_HHMMSS.db`
+2. **Backs up your database** to `data/salesbuddy_backup_YYYY-MM-DD_HHMMSS.db`
 3. Pulls the latest code from GitHub
 4. Installs any new/updated dependencies
 5. Runs database migrations
@@ -141,7 +141,7 @@ You can also run it from PowerShell:
 | `update.bat` | Update shortcut that runs `scripts/server.ps1 -Force` |
 | `backup.bat` | Run a backup now or set up automatic backups |
 | `restore.bat` | Interactive restore from a backup |
-| `uninstall.bat` | Remove all NoteHelper scheduled tasks and stop the server |
+| `uninstall.bat` | Remove all Sales Buddy scheduled tasks and stop the server |
 | `scripts/server.ps1` | The brain - handles setup, updates, and server management |
 | `scripts/backup.ps1` | Backup engine - copy, rotate, schedule |
 | `scripts/restore.ps1` | Restore engine - browse, compare, swap |
@@ -151,20 +151,20 @@ You can also run it from PowerShell:
 
 ## Scheduled Tasks
 
-NoteHelper registers Windows Scheduled Tasks during first-run setup. These run under your user account (inheriting your `az login` session and OneDrive access):
+Sales Buddy registers Windows Scheduled Tasks during first-run setup. These run under your user account (inheriting your `az login` session and OneDrive access):
 
 | Task Name | Trigger | Purpose |
 |-----------|---------|--------|
-| `NoteHelper-AutoStart` | At login | Starts the web server automatically when you sign in |
-| `NoteHelper-DailyBackup` | Daily at 11:00 AM | Backs up the database to OneDrive |
+| `SalesBuddy-AutoStart` | At login | Starts the web server automatically when you sign in |
+| `SalesBuddy-DailyBackup` | Daily at 11:00 AM | Backs up the database to OneDrive |
 
 To remove all scheduled tasks: double-click `uninstall.bat` or run `scripts\uninstall.ps1`.
 
-To view registered tasks in Task Scheduler, search for "NoteHelper" in the Task Scheduler Library.
+To view registered tasks in Task Scheduler, search for "SalesBuddy" in the Task Scheduler Library.
 
 ## Backups
 
-NoteHelper can automatically back up your database to OneDrive daily. Backups are simple file copies with daily/weekly/monthly retention rotation.
+Sales Buddy can automatically back up your database to OneDrive daily. Backups are simple file copies with daily/weekly/monthly retention rotation.
 
 ### Setting Up Automatic Backups
 
@@ -189,7 +189,7 @@ Double-click `restore.bat` for an interactive restore. It will:
 
 ### What Gets Backed Up
 
-- **Database only** (`data/notehelper.db`) - contains all your call logs, customers, sellers, revenue data, etc.
+- **Database only** (`data/salesbuddy.db`) - contains all your call logs, customers, sellers, revenue data, etc.
 - **Configuration** (`data/backup_config.json`) is NOT backed up (it stays local so restore doesn't break the backup setup)
 
 ### Retention Policy (defaults)
@@ -206,7 +206,7 @@ The **Admin Panel** shows backup status, recent backups, and a "Backup Now" butt
 
 ## AI Features (Optional)
 
-NoteHelper can use Azure OpenAI to auto-suggest topics, match milestones, and auto-fill task descriptions. All AI calls route through a shared APIM gateway — no Azure OpenAI resource or env vars needed.
+Sales Buddy can use Azure OpenAI to auto-suggest topics, match milestones, and auto-fill task descriptions. All AI calls route through a shared APIM gateway — no Azure OpenAI resource or env vars needed.
 
 ### Prerequisites
 
@@ -231,7 +231,7 @@ The gateway URL and Entra app ID are built into the app. There are no AI-related
 
 ## WorkIQ Integration (Meeting Import)
 
-NoteHelper integrates with [WorkIQ](https://github.com/nicklhw/workiq) to import meeting summaries from Microsoft Teams. WorkIQ fetches meeting transcripts and generates structured summaries that can be imported directly into call logs.
+Sales Buddy integrates with [WorkIQ](https://github.com/nicklhw/workiq) to import meeting summaries from Microsoft Teams. WorkIQ fetches meeting transcripts and generates structured summaries that can be imported directly into call logs.
 
 ### Prerequisites
 
@@ -249,9 +249,9 @@ There are two ways to import meeting data:
 The flow:
 
 1. Click either button on the new call log form
-2. Select the date — NoteHelper queries WorkIQ for your meetings on that date
-3. Pick a meeting from the list (NoteHelper auto-selects the best match if a customer is chosen)
-4. NoteHelper fetches a ~250-word summary including discussion points, technologies, and action items
+2. Select the date — Sales Buddy queries WorkIQ for your meetings on that date
+3. Pick a meeting from the list (Sales Buddy auto-selects the best match if a customer is chosen)
+4. Sales Buddy fetches a ~250-word summary including discussion points, technologies, and action items
 5. The summary is inserted into the call log editor
 6. *(Auto-fill only)* AI analyzes the summary to suggest topics, a task, and the best-matching milestone
 
@@ -268,16 +268,16 @@ WorkIQ uses delegated auth — it authenticates through your browser session. No
 
 ## Connect Features (Self-Evaluation Support)
 
-NoteHelper includes tools to help you prepare for Microsoft Connect self-evaluations:
+Sales Buddy includes tools to help you prepare for Microsoft Connect self-evaluations:
 
 - **Connect Export** -- generate a structured summary of your customer engagement over a date range, with per-customer breakdowns and topic frequency. Available from the Admin Panel.
-- **Connect Impact Signals** -- when importing meetings via WorkIQ, NoteHelper can extract customer impact signals (adoption milestones, technical wins, business value) and include them in your call log notes.
+- **Connect Impact Signals** -- when importing meetings via WorkIQ, Sales Buddy can extract customer impact signals (adoption milestones, technical wins, business value) and include them in your call log notes.
 
 See [docs/CONNECT_FEATURES.md](docs/CONNECT_FEATURES.md) for full details, including how to toggle impact extraction on/off.
 
 ## Scheduled Milestone Sync (Optional — Server Must Be Running)
 
-NoteHelper can automatically sync milestones from MSX on a daily schedule. This keeps your milestone data fresh without manual intervention. **The NoteHelper server must be running at the scheduled time for the sync to execute.**
+Sales Buddy can automatically sync milestones from MSX on a daily schedule. This keeps your milestone data fresh without manual intervention. **The Sales Buddy server must be running at the scheduled time for the sync to execute.**
 
 ### Setup
 
@@ -316,11 +316,11 @@ If you prefer to use Windows Task Scheduler instead of the built-in background s
    ```
    powershell.exe -Command "Invoke-RestMethod -Method POST -Uri http://localhost:5151/api/milestone-tracker/sync"
    ```
-4. NoteHelper must be running when the task fires
+4. Sales Buddy must be running when the task fires
 
 ## Telemetry
 
-NoteHelper sends anonymous, aggregated feature usage data to Azure Application Insights to help maintainers understand which features are used and improve the app. **No personal data, customer names, IP addresses, or endpoint paths are ever sent** -- only the feature category (e.g. "Call Logs"), HTTP method, status code, and response time.
+Sales Buddy sends anonymous, aggregated feature usage data to Azure Application Insights to help maintainers understand which features are used and improve the app. **No personal data, customer names, IP addresses, or endpoint paths are ever sent** -- only the feature category (e.g. "Call Logs"), HTTP method, status code, and response time.
 
 See [APP_INSIGHTS.md](APP_INSIGHTS.md) for full details on what is sent, how it works, and Kusto queries for auditing.
 
@@ -329,7 +329,7 @@ See [APP_INSIGHTS.md](APP_INSIGHTS.md) for full details on what is sent, how it 
 To disable central telemetry, add this line to your `.env` file:
 
 ```
-NOTEHELPER_TELEMETRY_OPT_OUT=true
+SALESBUDDY_TELEMETRY_OPT_OUT=true
 ```
 
 Then restart the app. Local usage tracking (visible in Admin > Usage Telemetry) still works regardless of this setting.
@@ -340,16 +340,16 @@ This application stores customer account data locally. The SQLite database is **
 
 - **Must run on a Microsoft-managed device** (Intune-enrolled or domain-joined)
 - **Must reside on a BitLocker-encrypted drive** — this is your encryption-at-rest layer
-- Do not copy the database file (`data/notehelper.db`) to unmanaged devices or unencrypted storage
+- Do not copy the database file (`data/salesbuddy.db`) to unmanaged devices or unencrypted storage
 
 ## Uninstalling
 
-Double-click `uninstall.bat` (or run `scripts\uninstall.ps1`) to cleanly remove NoteHelper from your system. This will:
+Double-click `uninstall.bat` (or run `scripts\uninstall.ps1`) to cleanly remove Sales Buddy from your system. This will:
 
 1. **Stop the running server** on the configured port
-2. **Remove all scheduled tasks** (`NoteHelper-AutoStart`, `NoteHelper-DailyBackup`)
+2. **Remove all scheduled tasks** (`SalesBuddy-AutoStart`, `SalesBuddy-DailyBackup`)
 
-Your data is preserved. To fully remove NoteHelper, delete the app folder after running the uninstall script. Your OneDrive backups remain in the `Backups/NoteHelper` folder.
+Your data is preserved. To fully remove Sales Buddy, delete the app folder after running the uninstall script. Your OneDrive backups remain in the `Backups/SalesBuddy` folder.
 
 ## License
 
