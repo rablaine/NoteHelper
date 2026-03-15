@@ -7,7 +7,7 @@ from datetime import datetime
 import logging
 
 from app.models import db, Note, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask, UserPreference, NoteTemplate
-from app.services.msx_api import TASK_CATEGORIES
+from app.services.msx_api import TASK_CATEGORIES, add_user_to_milestone_team
 from app.services.backup import backup_customer as _backup_customer
 from app.services.milestone_tracking import track_note_on_milestones
 
@@ -85,6 +85,18 @@ def _handle_milestone_and_task(note):
     
     # Associate milestone with call log
     note.milestones = [milestone]
+    
+    # Auto-join the milestone access team (best-effort, non-blocking)
+    if milestone_msx_id and not milestone.on_my_team:
+        try:
+            join_result = add_user_to_milestone_team(milestone_msx_id)
+            if join_result.get('success') or 'already' in join_result.get('error', '').lower():
+                milestone.on_my_team = True
+                logger.info(f'Auto-joined milestone team for {milestone_msx_id}')
+            else:
+                logger.warning(f'Could not auto-join milestone team: {join_result.get("error")}')
+        except Exception as e:
+            logger.warning(f'Auto-join milestone team failed (non-blocking): {e}')
     
     # Check if a task was already created (via the "Create Task in MSX" button)
     created_task_id = request.form.get('created_task_id', '').strip()
@@ -937,6 +949,18 @@ def api_fill_my_day_save():
                     milestone.opportunity_name = milestone_data['opportunity_name']
             
             note.milestones = [milestone]
+            
+            # Auto-join the milestone access team (best-effort, non-blocking)
+            if not milestone.on_my_team:
+                try:
+                    join_result = add_user_to_milestone_team(msx_id)
+                    if join_result.get('success') or 'already' in join_result.get('error', '').lower():
+                        milestone.on_my_team = True
+                        logger.info(f'Fill My Day: auto-joined milestone team for {msx_id}')
+                    else:
+                        logger.warning(f'Fill My Day: could not auto-join milestone team: {join_result.get("error")}')
+                except Exception as e:
+                    logger.warning(f'Fill My Day: auto-join milestone team failed (non-blocking): {e}')
         
         # Link pre-created MSX task if provided
         if created_task_id and milestone_data and milestone_data.get('msx_milestone_id'):
