@@ -11,6 +11,51 @@ Prompts are copied from the NoteHelper codebase:
 """
 
 # ---------------------------------------------------------------------------
+# Common Azure abbreviation map for topic normalization
+# ---------------------------------------------------------------------------
+AZURE_ABBREVIATIONS = (
+    "AVD = Azure Virtual Desktop, "
+    "AKS = Azure Kubernetes Service, "
+    "ADF = Azure Data Factory, "
+    "ADB = Azure Databricks, "
+    "ADLS = Azure Data Lake Storage, "
+    "ADX = Azure Data Explorer, "
+    "AFD = Azure Front Door, "
+    "AGW = Application Gateway, "
+    "AML = Azure Machine Learning, "
+    "AOAI = Azure OpenAI, "
+    "APIM = API Management, "
+    "APM = Application Performance Monitoring, "
+    "ARO = Azure Red Hat OpenShift, "
+    "ASA = Azure Stream Analytics, "
+    "ASE = App Service Environment, "
+    "ASR = Azure Site Recovery, "
+    "CAF = Cloud Adoption Framework, "
+    "CDB = Cosmos DB, "
+    "CDN = Azure CDN, "
+    "DMS = Database Migration Service, "
+    "DNS = Azure DNS, "
+    "ER = ExpressRoute, "
+    "HCI = Azure Stack HCI, "
+    "HDI = HDInsight, "
+    "KV = Key Vault, "
+    "LAW = Log Analytics Workspace, "
+    "MDE = Microsoft Defender for Endpoint, "
+    "MDI = Microsoft Defender for Identity, "
+    "MDFC = Microsoft Defender for Cloud, "
+    "NVA = Network Virtual Appliance, "
+    "PE = Private Endpoint, "
+    "PLS = Private Link Service, "
+    "SQL DB = Azure SQL Database, "
+    "SQL MI = SQL Managed Instance, "
+    "SQL DW = Azure Synapse Analytics, "
+    "VA = Virtual Appliance, "
+    "VNET = Virtual Network, "
+    "VPN GW = VPN Gateway, "
+    "WAF = Web Application Firewall"
+)
+
+# ---------------------------------------------------------------------------
 # Topic suggestion  (from app/routes/ai.py)
 # ---------------------------------------------------------------------------
 TOPIC_SUGGESTION_PROMPT = (
@@ -19,6 +64,8 @@ TOPIC_SUGGESTION_PROMPT = (
     "that best describe the key technologies, products, or themes discussed. "
     "Prefer HIGHER-LEVEL abstractions over granular subtopics - for example, use "
     '"Azure Virtual Desktop" instead of separate tags for "AVD", "AVD Management", etc. '
+    "Normalize common Azure abbreviations to their full names using this reference: "
+    + AZURE_ABBREVIATIONS + ". "
     "Avoid near-duplicate or overlapping tags. "
     "If existing topics are provided, STRONGLY prefer reusing them over creating new ones. "
     "Only suggest a new topic if nothing in the existing list is a reasonable match. "
