@@ -1176,7 +1176,8 @@ function addPendingTopic(topicName) {
     if (isTopicNameSelected(topicName)) return;
     
     const badge = document.createElement('span');
-    badge.className = 'badge bg-warning text-dark d-flex align-items-center';
+    badge.className = 'badge bg-warning bg-opacity-50 text-dark d-flex align-items-center';
+    badge.style.border = '1px dashed var(--bs-warning)';
     badge.setAttribute('data-topic-name', topicName.toLowerCase());
     badge.setAttribute('data-pending', 'true');
     
