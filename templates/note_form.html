@@ -271,7 +271,7 @@
                         </div>
                         <div id="editor" style="height: 400px;">{{ note.content|safe if note else '' }}</div>
                         <textarea name="content" id="content" style="display:none;"></textarea>
-                        <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups</div>
+                        <div class="form-text">Use rich formatting to capture call details, action items, and follow-ups. Press <kbd>Esc</kbd> to exit editor and Tab to next field.</div>
                     </div>
                     
                     {% if not is_general_note %}
@@ -778,7 +778,18 @@ var quill = new Quill('#editor', {
             [{ 'indent': '-1'}, { 'indent': '+1' }],
             ['link'],
             ['clean']
-        ]
+        ],
+        keyboard: {
+            bindings: {
+                escape: {
+                    key: 'Escape',
+                    handler: function() {
+                        quill.blur();
+                        return false;
+                    }
+                }
+            }
+        }
     }
 });
 

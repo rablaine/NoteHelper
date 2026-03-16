@@ -806,7 +806,7 @@ def api_update_review(analysis_id: int):
     """Update the review status and notes on a revenue analysis."""
     from datetime import datetime, timezone
 
-    VALID_STATUSES = {'new', 'reviewed', 'actioned', 'dismissed'}
+    VALID_STATUSES = {'new', 'to_be_reviewed', 'reviewed', 'actioned', 'dismissed'}
 
     analysis = RevenueAnalysis.query.get_or_404(analysis_id)
     data = request.get_json() or {}

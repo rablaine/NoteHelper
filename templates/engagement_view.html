@@ -55,31 +55,31 @@
                 </div>
             </div>
             <div class="card-body">
-                {% macro story_field(label, prompt, value) %}
+                {% macro story_field(label, prompt, value, color='') %}
                 <div class="mb-3">
                     <div class="d-flex justify-content-between">
                         <strong class="small">{{ label }}</strong>
                     </div>
                     <small class="text-muted fst-italic">{{ prompt }}</small>
                     {% if value %}
-                    <p class="mb-0 mt-1" style="white-space: pre-wrap;">{{ value }}</p>
+                    <p class="mb-0 mt-1" style="white-space: pre-wrap;{% if color %} color: {{ color }};{% endif %}">{{ value }}</p>
                     {% else %}
-                    <p class="text-muted mb-0 mt-1 fst-italic small">Not yet filled in</p>
+                    <p class="mb-0 mt-1 fst-italic small" style="{% if color %}color: {{ color }}; opacity: 0.5;{% else %}color: var(--bs-secondary);{% endif %}">Not yet filled in</p>
                     {% endif %}
                 </div>
                 {% endmacro %}
 
-                {{ story_field("Key Individuals & Titles", '"I\'ve been working with..."', engagement.key_individuals) }}
-                {{ story_field("Technical/Business Problem", '"...they have run into..."', engagement.technical_problem) }}
-                {{ story_field("Business Process/Strategy Impact", '"...and it\'s impacting..."', engagement.business_impact) }}
-                {{ story_field("Solution Resources", '"We are addressing the Opportunity with..."', engagement.solution_resources) }}
+                {{ story_field("Key Individuals & Titles", '"I\'ve been working with..."', engagement.key_individuals, '#ffffff') }}
+                {{ story_field("Technical/Business Problem", '"...they have run into..."', engagement.technical_problem, '#b388ff') }}
+                {{ story_field("Business Process/Strategy Impact", '"...and it\'s impacting..."', engagement.business_impact, '#ff9800') }}
+                {{ story_field("Solution Resources", '"We are addressing the Opportunity with..."', engagement.solution_resources, '#ffe135') }}
 
                 <div class="row">
                     <div class="col-6">
                         <strong class="small">Business Outcome</strong>
                         <small class="text-muted d-block fst-italic">"...which will result in..."</small>
                         {% if engagement.estimated_acr %}
-                        <p class="mb-0 mt-1">{{ engagement.estimated_acr }}</p>
+                        <p class="mb-0 mt-1" style="color: #69f0ae;">{{ engagement.estimated_acr }}</p>
                         {% else %}
                         <p class="text-muted mb-0 mt-1 fst-italic small">Not yet filled in</p>
                         {% endif %}
@@ -88,7 +88,7 @@
                         <strong class="small">Target Date</strong>
                         <small class="text-muted d-block fst-italic">"...by..."</small>
                         {% if engagement.target_date %}
-                        <p class="mb-0 mt-1">{{ engagement.target_date.strftime('%b %d, %Y') }}</p>
+                        <p class="mb-0 mt-1" style="color: #64b5f6;">{{ engagement.target_date.strftime('%b %d, %Y') }}</p>
                         {% else %}
                         <p class="text-muted mb-0 mt-1 fst-italic small">Not yet set</p>
                         {% endif %}

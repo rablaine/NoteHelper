@@ -36,25 +36,25 @@
 
 {% if alerts %}
 <div class="table-responsive">
-    <table class="table table-hover table-sm align-middle mb-0">
+    <table class="table table-hover table-sm align-middle mb-0" id="alertsTable">
         <thead>
             <tr>
-                <th>Priority</th>
-                <th>Customer</th>
-                <th>Bucket</th>
-                <th>Category</th>
-                <th>Recommended Action</th>
-                <th>Avg Revenue</th>
-                <th>$ Impact</th>
-                {% if show_seller %}<th>Seller</th>{% endif %}
+                <th class="sortable" data-sort-type="number" style="cursor:pointer">Priority <i class="bi bi-chevron-expand text-muted"></i></th>
+                <th class="sortable" data-sort-type="text" style="cursor:pointer">Customer <i class="bi bi-chevron-expand text-muted"></i></th>
+                <th class="sortable" data-sort-type="text" style="cursor:pointer">Bucket <i class="bi bi-chevron-expand text-muted"></i></th>
+                <th class="sortable" data-sort-type="text" style="cursor:pointer">Category <i class="bi bi-chevron-expand text-muted"></i></th>
+                <th class="sortable" data-sort-type="text" style="cursor:pointer">Recommended Action <i class="bi bi-chevron-expand text-muted"></i></th>
+                <th class="sortable" data-sort-type="currency" style="cursor:pointer">Avg Revenue <i class="bi bi-chevron-expand text-muted"></i></th>
+                <th class="sortable" data-sort-type="currency" style="cursor:pointer">$ Impact <i class="bi bi-chevron-expand text-muted"></i></th>
+                {% if show_seller %}<th class="sortable" data-sort-type="text" style="cursor:pointer">Seller <i class="bi bi-chevron-expand text-muted"></i></th>{% endif %}
                 <th>Rationale</th>
-                <th>Status</th>
+                <th class="sortable" data-sort-type="text" style="cursor:pointer">Status <i class="bi bi-chevron-expand text-muted"></i></th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for a in alerts %}
-            <tr data-analysis-id="{{ a.id }}" {% if a.review_status != 'new' %}style="opacity: 0.6;"{% endif %}>
+            <tr data-analysis-id="{{ a.id }}" {% if a.review_status not in ('new', 'to_be_reviewed') %}style="opacity: 0.6;"{% endif %}>
                 <td>
                     <span class="badge {% if a.priority_score >= 80 %}bg-danger{% elif a.priority_score >= 60 %}bg-warning text-dark{% elif a.priority_score >= 40 %}bg-info{% else %}bg-secondary{% endif %}">
                         {{ a.priority_score }}
@@ -127,3 +127,77 @@
     <p class="text-muted mb-0">All customers are healthy or below thresholds.</p>
 </div>
 {% endif %}
+
+<script>
+(function() {
+    const table = document.getElementById('alertsTable');
+    if (!table) return;
+    const headers = table.querySelectorAll('th.sortable');
+    let currentSort = { col: null, asc: true };
+
+    function parseCurrency(text) {
+        const cleaned = text.replace(/[^\d.\-]/g, '');
+        return parseFloat(cleaned) || 0;
+    }
+
+    function getCellText(row, colIdx) {
+        const cell = row.cells[colIdx];
+        return (cell.textContent || '').trim();
+    }
+
+    function sortTable(colIdx, sortType) {
+        const tbody = table.tBodies[0];
+        const rows = Array.from(tbody.rows);
+        const asc = currentSort.col === colIdx ? !currentSort.asc : true;
+        currentSort = { col: colIdx, asc: asc };
+
+        rows.sort((a, b) => {
+            let va = getCellText(a, colIdx);
+            let vb = getCellText(b, colIdx);
+            let cmp = 0;
+            if (sortType === 'number') {
+                cmp = (parseFloat(va) || 0) - (parseFloat(vb) || 0);
+            } else if (sortType === 'currency') {
+                cmp = parseCurrency(va) - parseCurrency(vb);
+            } else {
+                cmp = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+            }
+            return asc ? cmp : -cmp;
+        });
+
+        rows.forEach(r => tbody.appendChild(r));
+
+        // Update header icons
+        headers.forEach(h => {
+            const icon = h.querySelector('i');
+            if (icon) {
+                icon.className = 'bi bi-chevron-expand text-muted';
+                icon.style.fontWeight = '';
+            }
+            h.style.color = '';
+        });
+        const activeHeader = table.querySelectorAll('th')[colIdx];
+        const activeIcon = activeHeader.querySelector('i');
+        if (activeIcon) {
+            activeIcon.className = asc ? 'bi bi-sort-up' : 'bi bi-sort-down';
+            activeIcon.classList.remove('text-muted');
+            activeIcon.style.fontWeight = 'bold';
+        }
+        activeHeader.style.color = 'var(--bs-primary)';
+    }
+
+    headers.forEach(h => {
+        h.addEventListener('click', () => {
+            const allTh = Array.from(table.querySelectorAll('thead th'));
+            const colIdx = allTh.indexOf(h);
+            sortTable(colIdx, h.dataset.sortType);
+        });
+    });
+
+    // Default sort: Priority descending (matches server-side order)
+    const allTh = Array.from(table.querySelectorAll('thead th'));
+    const priorityTh = allTh[0];
+    currentSort = { col: 0, asc: true };  // pretend asc so toggle flips to desc
+    sortTable(0, priorityTh.dataset.sortType);
+})();
+</script>

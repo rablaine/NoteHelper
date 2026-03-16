@@ -1115,6 +1115,7 @@ class RevenueAnalysis(db.Model):
     # Review/actioning status (user marks alerts as reviewed/actioned)
     review_status = db.Column(db.String(20), default='new', nullable=False)
     # new = not yet reviewed
+    # to_be_reviewed = flagged for review (triaged but not yet looked at)
     # reviewed = acknowledged, no action needed (explained away)
     # actioned = follow-up action taken or in progress
     # dismissed = false positive / not relevant

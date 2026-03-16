@@ -466,6 +466,15 @@ class TestReviewAPI:
         assert data['review_notes'] == 'Seasonal dip'
         assert data['reviewed_at'] is not None
 
+    def test_review_update_to_be_reviewed(self, app, client, test_user):
+        """Mark as to_be_reviewed."""
+        aid = self._create_analysis(app)
+        resp = client.patch(f'/api/revenue/analysis/{aid}/review',
+                            json={'review_status': 'to_be_reviewed',
+                                  'review_notes': 'Need to check with seller'})
+        assert resp.status_code == 200
+        assert resp.get_json()['review_status'] == 'to_be_reviewed'
+
     def test_review_update_actioned(self, app, client, test_user):
         """Mark as actioned with notes."""
         aid = self._create_analysis(app)

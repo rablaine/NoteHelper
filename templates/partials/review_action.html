@@ -4,7 +4,9 @@
 
 {# ── Jinja macros ── #}
 {% macro review_badge(analysis) %}
-{% if analysis.review_status == 'reviewed' %}
+{% if analysis.review_status == 'to_be_reviewed' %}
+<span class="badge bg-danger review-badge" title="{{ analysis.review_notes or '' }}"><i class="bi bi-hourglass-split"></i> To be reviewed</span>
+{% elif analysis.review_status == 'reviewed' %}
 <span class="badge bg-info review-badge" title="{{ analysis.review_notes or '' }}"><i class="bi bi-eye"></i> Reviewed</span>
 {% elif analysis.review_status == 'actioned' %}
 <span class="badge bg-success review-badge" title="{{ analysis.review_notes or '' }}"><i class="bi bi-check2-circle"></i> Actioned</span>
@@ -47,6 +49,9 @@
                     <div class="d-flex flex-wrap gap-2">
                         <input type="radio" class="btn-check" name="reviewStatus" id="rs_new" value="new" autocomplete="off">
                         <label class="btn btn-outline-secondary btn-sm" for="rs_new"><i class="bi bi-circle"></i> New</label>
+                        
+                        <input type="radio" class="btn-check" name="reviewStatus" id="rs_to_be_reviewed" value="to_be_reviewed" autocomplete="off">
+                        <label class="btn btn-outline-danger btn-sm" for="rs_to_be_reviewed"><i class="bi bi-hourglass-split"></i> To be reviewed</label>
                         
                         <input type="radio" class="btn-check" name="reviewStatus" id="rs_reviewed" value="reviewed" autocomplete="off">
                         <label class="btn btn-outline-info btn-sm" for="rs_reviewed"><i class="bi bi-eye"></i> Reviewed</label>
@@ -131,7 +136,7 @@ async function saveReview() {
         // Update the row styling
         const row = document.querySelector(`tr[data-analysis-id="${analysisId}"]`);
         if (row) {
-            if (data.review_status !== 'new') {
+            if (data.review_status !== 'new' && data.review_status !== 'to_be_reviewed') {
                 row.style.opacity = '0.6';
             } else {
                 row.style.opacity = '';
@@ -148,6 +153,8 @@ async function saveReview() {
 function _reviewBadgeHtml(status, notes) {
     const title = notes ? ` title="${notes.replace(/"/g, '&quot;')}"` : '';
     switch (status) {
+        case 'to_be_reviewed':
+            return `<span class="badge bg-danger review-badge"${title}><i class="bi bi-hourglass-split"></i> To be reviewed</span>`;
         case 'reviewed':
             return `<span class="badge bg-info review-badge"${title}><i class="bi bi-eye"></i> Reviewed</span>`;
         case 'actioned':
