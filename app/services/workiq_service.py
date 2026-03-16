@@ -33,8 +33,16 @@ _TASK_PROMPT_SUFFIX = (
 
 # Topic suggestion suffix - always appended server-side to get structured topic tags.
 _TOPIC_SUGGESTION_SUFFIX = (
-    ' Also list up to 6 short topic tags (1-3 words each) that describe the key '
+    ' Also list 5-6 short topic tags (1-3 words each) that describe the key '
     'technologies, products, services, or themes discussed in this meeting. '
+    'Normalize common Azure abbreviations to their full names: '
+    'AVD = Azure Virtual Desktop, AKS = Azure Kubernetes Service, '
+    'ADF = Azure Data Factory, ADB = Azure Databricks, ADLS = Azure Data Lake Storage, '
+    'ADX = Azure Data Explorer, AFD = Azure Front Door, AML = Azure Machine Learning, '
+    'AOAI = Azure OpenAI, APIM = API Management, ARO = Azure Red Hat OpenShift, '
+    'SQL MI = SQL Managed Instance, SQL DW = Azure Synapse Analytics, '
+    'HCI = Azure Stack HCI, MDFC = Microsoft Defender for Cloud, '
+    'WAF = Web Application Firewall. '
     'Format them as a comma-separated list on a single line starting with SUGGESTED_TOPICS:'
 )
 
