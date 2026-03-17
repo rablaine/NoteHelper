@@ -34,7 +34,7 @@
         <p class="text-muted mb-0">
             Active uncommitted milestones across all customers
             {% if last_sync %}
-                &middot; Last synced {{ last_sync.strftime('%b %d, %Y at %I:%M %p') }}
+                &middot; Last synced <span class="local-datetime" data-utc="{{ last_sync.isoformat() }}">{{ last_sync.strftime('%b %d, %Y at %I:%M %p') }}</span> <span class="timezone-label"></span>
             {% endif %}
         </p>
     </div>
@@ -314,5 +314,22 @@ function syncMilestones() {
         }
     });
 })();
+</script>
+<script>
+// Convert UTC timestamps to local time
+document.addEventListener('DOMContentLoaded', function() {
+    const now = new Date();
+    const shortTZ = now.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+    document.querySelectorAll('.local-datetime').forEach(function(el) {
+        const utcDate = new Date(el.getAttribute('data-utc'));
+        el.textContent = utcDate.toLocaleString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true
+        });
+    });
+    document.querySelectorAll('.timezone-label').forEach(function(el) {
+        el.textContent = '(' + shortTZ + ')';
+    });
+});
 </script>
 {% endblock %}
