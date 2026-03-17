@@ -440,26 +440,27 @@ function renderComments(ms) {
     `;
 
     if (comments.length > 0) {
+        const reversed = [...comments].reverse();
         html += '<div class="list-group">';
-        for (const c of [...comments].reverse()) {
-            const cId = btoa(c.modifiedOn + '|' + (c.userId || '')).replace(/=/g, '');
+        for (let i = 0; i < reversed.length; i++) {
+            const c = reversed[i];
             html += `
-                <div class="list-group-item" id="comment-${cId}">
+                <div class="list-group-item" id="comment-${i}">
                     <div class="d-flex w-100 justify-content-between mb-1">
                         <strong>${escapeHtml(c.displayName || c.userId || 'Unknown')}</strong>
                         <div>
                             <small class="text-muted me-2"><i class="bi bi-clock"></i> ${escapeHtml(c.modifiedOn || '')}</small>
                             <button class="btn btn-sm btn-outline-secondary py-0 px-1 me-1" title="Edit"
-                                onclick="startEditComment('${cId}', ${JSON.stringify(JSON.stringify(c.modifiedOn || ''))}, ${JSON.stringify(JSON.stringify(c.userId || ''))}, this)">
+                                data-action="edit" data-idx="${i}">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete"
-                                onclick="deleteComment(${JSON.stringify(JSON.stringify(c.modifiedOn || ''))}, ${JSON.stringify(JSON.stringify(c.userId || ''))}, this)">
+                                data-action="delete" data-idx="${i}">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
                     </div>
-                    <div id="comment-body-${cId}">
+                    <div id="comment-body-${i}">
                         <p class="mb-0" style="white-space:pre-wrap;">${escapeHtml(c.comment || '')}</p>
                     </div>
                 </div>`;
@@ -470,6 +471,23 @@ function renderComments(ms) {
     }
 
     el.innerHTML = html;
+
+    // Store comment data and bind edit/delete handlers via event delegation
+    const reversedComments = [...(ms.comments || [])].reverse();
+    el.querySelectorAll('[data-action="edit"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx);
+            const c = reversedComments[idx];
+            startEditComment(idx, c.modifiedOn, c.userId);
+        });
+    });
+    el.querySelectorAll('[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx);
+            const c = reversedComments[idx];
+            deleteComment(c.modifiedOn, c.userId, btn);
+        });
+    });
 }
 
 function renderError(errorMsg, vpnBlocked) {
@@ -551,26 +569,32 @@ function postComment(e) {
     return false;
 }
 
-function startEditComment(cId, modifiedOn, userId, btn) {
-    const bodyEl = document.getElementById('comment-body-' + cId);
+function startEditComment(idx, modifiedOn, userId) {
+    const bodyEl = document.getElementById('comment-body-' + idx);
     const currentText = bodyEl.querySelector('p').textContent;
     bodyEl.innerHTML = `
-        <textarea class="form-control mb-2" id="editText-${cId}" rows="3">${escapeHtml(currentText)}</textarea>
+        <textarea class="form-control mb-2" id="editText-${idx}" rows="3">${escapeHtml(currentText)}</textarea>
         <div>
-            <button class="btn btn-sm btn-primary me-1" onclick="saveEditComment('${cId}', ${JSON.stringify(modifiedOn)}, ${JSON.stringify(userId)})">
+            <button class="btn btn-sm btn-primary me-1" id="saveEdit-${idx}">
                 <i class="bi bi-check"></i> Save
             </button>
-            <button class="btn btn-sm btn-secondary" onclick="fetchMsxDetails(0)">Cancel</button>
+            <button class="btn btn-sm btn-secondary" id="cancelEdit-${idx}">Cancel</button>
         </div>
     `;
+    document.getElementById('saveEdit-' + idx).addEventListener('click', () => {
+        saveEditComment(idx, modifiedOn, userId);
+    });
+    document.getElementById('cancelEdit-' + idx).addEventListener('click', () => {
+        fetchMsxDetails(0);
+    });
 }
 
-function saveEditComment(cId, modifiedOn, userId) {
-    const textarea = document.getElementById('editText-' + cId);
+function saveEditComment(idx, modifiedOn, userId) {
+    const textarea = document.getElementById('editText-' + idx);
     const text = textarea.value.trim();
     if (!text) return;
 
-    const bodyEl = document.getElementById('comment-body-' + cId);
+    const bodyEl = document.getElementById('comment-body-' + idx);
     bodyEl.querySelectorAll('button').forEach(b => b.disabled = true);
 
     fetch(`/api/milestone/${MS_ID}/comment`, {
