@@ -211,7 +211,19 @@ const PageHelp = (function () {
       </ul>
     `},
     { pattern: /^\/milestone-tracker/, title: 'Milestone Tracker', content: `
-      <p>Board view of all milestones organized by status. Drag milestones or click to update.</p>
+      <p>Board view of all milestones across your customers, pulled from MSX.</p>
+      <h6>Sync Behavior</h6>
+      <ul>
+        <li>Click <strong>Sync from MSX</strong> to pull the latest data - every milestone and opportunity is refreshed each time</li>
+        <li>There is no automatic background sync - milestones only update when you manually trigger a sync</li>
+        <li>Sync covers all customers assigned to your sellers</li>
+      </ul>
+      <h6>Tips</h6>
+      <ul>
+        <li>Use the filters to narrow by seller, status, quarter, or workload area</li>
+        <li>Click any row to view milestone details</li>
+        <li>The MSX icon opens the milestone directly in MSX</li>
+      </ul>
     `},
     { pattern: /^\/milestone\/\d+/, title: 'Milestone Details', content: `
       <p>This milestone's tasks, linked engagements, and MSX sync status.</p>
