@@ -36,6 +36,10 @@ _JWKS_URL = f"https://login.microsoftonline.com/{_MS_TENANT}/discovery/v2.0/keys
 # Online users: sid → {name, email, connected_at}
 _online_users: dict[str, dict] = {}
 
+# Allow users to see/share with themselves (for staging/dev testing).
+# Set ALLOW_SELF_SHARE=true on the staging slot's app settings.
+_ALLOW_SELF_SHARE = os.environ.get("ALLOW_SELF_SHARE", "").strip().lower() == "true"
+
 # Pending share sessions: (sender_email, recipient_email) → {sender_sid, recipient_sid}
 # Gateway tracks both sides so the client never needs to handle SIDs.
 _pending_shares: dict[tuple[str, str], dict] = {}
@@ -115,12 +119,17 @@ class ShareNamespace(Namespace):
 
     @staticmethod
     def _unique_online_users(exclude_email: str) -> list[dict]:
-        """Build a deduplicated online user list, excluding a given email."""
+        """Build a deduplicated online user list, excluding a given email.
+
+        When ALLOW_SELF_SHARE is true (staging/dev), the requesting user
+        is included in the list so they can test sharing with themselves.
+        """
         seen = set()
         users = []
+        skip_self = not _ALLOW_SELF_SHARE
         for u in _online_users.values():
             email_lower = u["email"].lower()
-            if email_lower == exclude_email.lower():
+            if skip_self and email_lower == exclude_email.lower():
                 continue
             if email_lower in seen:
                 continue
