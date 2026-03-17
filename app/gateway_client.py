@@ -257,3 +257,21 @@ class GatewayError(Exception):
 class GatewayConsentError(GatewayError):
     """Raised when the user hasn't consented to the AI gateway app."""
     pass
+
+
+def get_user_name() -> str:
+    """Return the display name from the cached Azure AD JWT, or empty string."""
+    import base64
+    import json as _json
+
+    if not _cached_token:
+        return ''
+    try:
+        payload_b64 = _cached_token.split('.')[1]
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += '=' * padding
+        payload = _json.loads(base64.urlsafe_b64decode(payload_b64))
+        return payload.get('name', '')
+    except Exception:
+        return ''
