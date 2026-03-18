@@ -1047,6 +1047,165 @@ def add_opportunity_comment(
         return {"success": False, "error": str(e)}
 
 
+def get_opportunity_comments(opportunity_id: str) -> Dict[str, Any]:
+    """Read the current comments array from an opportunity.
+
+    Args:
+        opportunity_id: The opportunity GUID.
+
+    Returns:
+        Dict with:
+        - success: bool
+        - comments: list of comment dicts (userId, modifiedOn, comment)
+        - error: str if failed
+    """
+    import json as json_lib
+
+    try:
+        read_url = (
+            f"{CRM_BASE_URL}/opportunities({opportunity_id})"
+            f"?$select=msp_forecastcommentsjsonfield"
+        )
+        read_response = _msx_request('GET', read_url)
+
+        if read_response.status_code != 200:
+            return {
+                "success": False,
+                "comments": [],
+                "error": f"Failed to read comments: HTTP {read_response.status_code}",
+            }
+
+        resp_data = read_response.json()
+        current_json_str = resp_data.get("msp_forecastcommentsjsonfield") or "[]"
+        try:
+            comments = json_lib.loads(current_json_str)
+        except (json_lib.JSONDecodeError, TypeError):
+            comments = []
+
+        return {"success": True, "comments": comments}
+
+    except requests.exceptions.Timeout:
+        return {"success": False, "comments": [], "error": "Request timed out."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "comments": [], "error": f"Connection error: {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error reading comments for opportunity {opportunity_id}")
+        return {"success": False, "comments": [], "error": str(e)}
+
+
+def edit_opportunity_comment(
+    opportunity_id: str,
+    modified_on: str,
+    user_id: str,
+    new_text: str,
+) -> Dict[str, Any]:
+    """Edit an existing comment on an opportunity, matched by userId + modifiedOn.
+
+    Args:
+        opportunity_id: The opportunity GUID.
+        modified_on: The modifiedOn timestamp of the comment to edit.
+        user_id: The userId field of the comment to edit.
+        new_text: The new comment text.
+
+    Returns:
+        Dict with success bool and error string if failed.
+    """
+    if _is_writeback_disabled():
+        logger.info("MSX writeback disabled - skipping edit_opportunity_comment")
+        return dict(_WRITEBACK_BLOCKED)
+    import json as json_lib
+
+    try:
+        read_result = get_opportunity_comments(opportunity_id)
+        if not read_result["success"]:
+            return {"success": False, "error": read_result.get("error")}
+        comments = read_result["comments"]
+
+        found = False
+        for c in comments:
+            if c.get("modifiedOn") == modified_on and c.get("userId") == user_id:
+                c["comment"] = new_text
+                found = True
+                break
+
+        if not found:
+            return {"success": False, "error": "Comment not found in MSX."}
+
+        patch_url = f"{CRM_BASE_URL}/opportunities({opportunity_id})"
+        payload = {"msp_forecastcommentsjsonfield": json_lib.dumps(comments)}
+        patch_response = _msx_request('PATCH', patch_url, json_data=payload)
+
+        if patch_response.status_code < 400:
+            return {"success": True}
+        elif patch_response.status_code == 403 and is_vpn_blocked():
+            return {"success": False, "error": "IP blocked - connect to VPN."}
+        else:
+            return {"success": False, "error": f"PATCH failed: HTTP {patch_response.status_code}"}
+
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error: {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error editing comment on opportunity {opportunity_id}")
+        return {"success": False, "error": str(e)}
+
+
+def delete_opportunity_comment(
+    opportunity_id: str,
+    modified_on: str,
+    user_id: str,
+) -> Dict[str, Any]:
+    """Delete a comment from an opportunity, matched by userId + modifiedOn.
+
+    Args:
+        opportunity_id: The opportunity GUID.
+        modified_on: The modifiedOn timestamp of the comment to delete.
+        user_id: The userId field of the comment to delete.
+
+    Returns:
+        Dict with success bool and error string if failed.
+    """
+    if _is_writeback_disabled():
+        logger.info("MSX writeback disabled - skipping delete_opportunity_comment")
+        return dict(_WRITEBACK_BLOCKED)
+    import json as json_lib
+
+    try:
+        read_result = get_opportunity_comments(opportunity_id)
+        if not read_result["success"]:
+            return {"success": False, "error": read_result.get("error")}
+        comments = read_result["comments"]
+
+        original_len = len(comments)
+        comments = [
+            c for c in comments
+            if not (c.get("modifiedOn") == modified_on and c.get("userId") == user_id)
+        ]
+
+        if len(comments) == original_len:
+            return {"success": False, "error": "Comment not found in MSX."}
+
+        patch_url = f"{CRM_BASE_URL}/opportunities({opportunity_id})"
+        payload = {"msp_forecastcommentsjsonfield": json_lib.dumps(comments)}
+        patch_response = _msx_request('PATCH', patch_url, json_data=payload)
+
+        if patch_response.status_code < 400:
+            return {"success": True}
+        elif patch_response.status_code == 403 and is_vpn_blocked():
+            return {"success": False, "error": "IP blocked - connect to VPN."}
+        else:
+            return {"success": False, "error": f"PATCH failed: HTTP {patch_response.status_code}"}
+
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error: {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error deleting comment on opportunity {opportunity_id}")
+        return {"success": False, "error": str(e)}
+
+
 def get_milestone_comments(milestone_id: str) -> Dict[str, Any]:
     """Read the current comments array from a milestone.
 
