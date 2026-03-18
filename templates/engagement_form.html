@@ -79,7 +79,7 @@
                         <div class="col-md-6">
                             <label for="estimated_acr" class="form-label">
                                 Business Outcome / Estimated $ACR
-                                <small class="text-muted fw-normal ms-1">"...which will result in..."</small>
+                                <br><small class="text-muted fw-normal">"...which will result in..."</small>
                             </label>
                             <input type="text" class="form-control" id="estimated_acr" name="estimated_acr"
                                    value="{{ engagement.estimated_acr or '' if engagement else '' }}"
@@ -88,7 +88,7 @@
                         <div class="col-md-6">
                             <label for="target_date" class="form-label">
                                 Target Date/Timeline
-                                <small class="text-muted fw-normal ms-1">"...by..."</small>
+                                <br><small class="text-muted fw-normal">"...by..."</small>
                             </label>
                             <input type="date" class="form-control" id="target_date" name="target_date"
                                    value="{{ engagement.target_date.strftime('%Y-%m-%d') if engagement and engagement.target_date else '' }}">

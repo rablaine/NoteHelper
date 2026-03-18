@@ -195,6 +195,9 @@ def run_migrations(db):
     if _table_exists(inspector, 'sync_status'):
         _add_column_if_not_exists(db, inspector, 'sync_status', 'heartbeat_at', 'DATETIME')
 
+    # Data cleanup: Remove "Total" summary rows from revenue data (imported from spreadsheet)
+    _cleanup_total_revenue_rows(db, existing_tables)
+
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -1179,3 +1182,26 @@ def _migrate_se_territories(db, inspector):
             """))
             conn.commit()
         print("  Created table 'solution_engineers_territories'")
+
+
+def _cleanup_total_revenue_rows(db, existing_tables):
+    """Remove 'Total' summary rows that were imported from spreadsheets.
+
+    Deletes from customer_revenue_data, product_revenue_data, and revenue_analyses
+    where customer_name is 'Total'. Idempotent - safe to run multiple times.
+    """
+    tables_to_clean = [
+        'customer_revenue_data',
+        'product_revenue_data',
+        'revenue_analyses',
+    ]
+    for table in tables_to_clean:
+        if table not in existing_tables:
+            continue
+        with db.engine.connect() as conn:
+            result = conn.execute(
+                text(f"DELETE FROM {table} WHERE LOWER(customer_name) = 'total'")
+            )
+            conn.commit()
+            if result.rowcount > 0:
+                print(f"  Cleaned {result.rowcount} 'Total' summary rows from {table}")

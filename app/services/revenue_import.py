@@ -281,12 +281,10 @@ def consolidate_products_list(products: list[dict]) -> list[dict]:
         # if multiple sub-products have the same customer
         consolidated[display_name]['total_revenue'] += p.get('total_revenue', 0)
         consolidated[display_name]['_original_products'].append(p['product'])
-        # Note: customer_count may over-count if same customer uses multiple sub-products
-        # For now, we'll use the max of the individual counts as a rough estimate
-        consolidated[display_name]['customer_count'] = max(
-            consolidated[display_name]['customer_count'],
-            p.get('customer_count', 0)
-        )
+        # Sum customer counts across sub-products. May slightly overcount for
+        # consolidated products if the same customer+bucket appears in multiple
+        # sub-products, but consistency with the detail page matters more.
+        consolidated[display_name]['customer_count'] += p.get('customer_count', 0)
     
     return list(consolidated.values())
 
@@ -624,8 +622,10 @@ def import_revenue_csv(
         if not customer_name:
             continue
         
-        # Skip customer total rows (bucket = "Total")
+        # Skip summary/total rows
         if bucket.lower() == 'total':
+            continue
+        if customer_name.lower() == 'total':
             continue
         
         # Try to match to existing Sales Buddy customer
@@ -820,8 +820,10 @@ def import_revenue_csv_streaming(
         if not customer_name:
             continue
         
-        # Skip customer total rows (bucket = "Total")
+        # Skip summary/total rows
         if bucket.lower() == 'total':
+            continue
+        if customer_name.lower() == 'total':
             continue
         
         # Try to match to existing Sales Buddy customer
@@ -1110,17 +1112,32 @@ def get_products_for_bucket(
 def get_all_products() -> list[dict]:
     """Get all unique products in the database with usage stats.
     
+    Only counts customer+bucket pairs with positive total revenue,
+    matching the detail page filter.
+    
     Returns:
         List of dicts with product name, customer count, total revenue
     """
-    results = db.session.query(
+    # Subquery: customer+bucket pairs with positive revenue per product
+    positive_pairs = db.session.query(
         ProductRevenueData.product,
-        db.func.count(db.distinct(ProductRevenueData.customer_name)).label('customer_count'),
-        db.func.sum(ProductRevenueData.revenue).label('total_revenue')
+        db.func.sum(ProductRevenueData.revenue).label('pair_revenue')
     ).group_by(
-        ProductRevenueData.product
+        ProductRevenueData.product,
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket
+    ).having(
+        db.func.sum(ProductRevenueData.revenue) > 0
+    ).subquery()
+    
+    results = db.session.query(
+        positive_pairs.c.product,
+        db.func.count().label('customer_count'),
+        db.func.sum(positive_pairs.c.pair_revenue).label('total_revenue')
+    ).group_by(
+        positive_pairs.c.product
     ).order_by(
-        db.func.sum(ProductRevenueData.revenue).desc()
+        db.func.sum(positive_pairs.c.pair_revenue).desc()
     ).all()
     
     return [
@@ -1186,16 +1203,28 @@ def get_seller_products(seller_name: str) -> list[dict]:
         db.distinct(RevenueAnalysis.customer_name)
     ).filter_by(seller_name=seller_name).scalar_subquery()
     
-    results = db.session.query(
+    # Subquery: customer+bucket pairs with positive revenue per product
+    positive_pairs = db.session.query(
         ProductRevenueData.product,
-        db.func.count(db.distinct(ProductRevenueData.customer_name)).label('customer_count'),
-        db.func.sum(ProductRevenueData.revenue).label('total_revenue')
+        db.func.sum(ProductRevenueData.revenue).label('pair_revenue')
     ).filter(
         ProductRevenueData.customer_name.in_(seller_customers)
     ).group_by(
-        ProductRevenueData.product
+        ProductRevenueData.product,
+        ProductRevenueData.customer_name,
+        ProductRevenueData.bucket
+    ).having(
+        db.func.sum(ProductRevenueData.revenue) > 0
+    ).subquery()
+    
+    results = db.session.query(
+        positive_pairs.c.product,
+        db.func.count().label('customer_count'),
+        db.func.sum(positive_pairs.c.pair_revenue).label('total_revenue')
+    ).group_by(
+        positive_pairs.c.product
     ).order_by(
-        db.func.sum(ProductRevenueData.revenue).desc()
+        db.func.sum(positive_pairs.c.pair_revenue).desc()
     ).all()
     
     return [
