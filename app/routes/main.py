@@ -296,6 +296,12 @@ def api_active_engagements():
     if status_filter in ('Active', 'On Hold'):
         query = query.filter(Engagement.status == status_filter)
 
+    seller_mode_sid = get_seller_mode_seller_id()
+    if seller_mode_sid:
+        query = query.join(Customer, Engagement.customer_id == Customer.id).filter(
+            Customer.seller_id == seller_mode_sid
+        )
+
     # Eager-load relationships to avoid N+1
     from sqlalchemy.orm import joinedload, subqueryload
     query = query.options(
