@@ -5,7 +5,7 @@ Handles customer listing, creation, viewing, editing, and TPID workflow.
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, g
 from sqlalchemy import func, or_
 
-from app.models import db, Customer, CustomerCSAM, Seller, Territory, Note, UserPreference
+from app.models import db, Customer, CustomerCSAM, CustomerContact, Seller, Territory, Note, UserPreference
 from app.services.backup import backup_customer as _backup_customer
 
 # Create blueprint
@@ -416,3 +416,58 @@ def api_customers_autocomplete():
     
     return jsonify(results), 200
 
+
+@customers_bp.route('/api/customer/<int:customer_id>/contacts', methods=['GET'])
+def api_customer_contacts(customer_id):
+    """Get all contacts for a customer."""
+    customer = Customer.query.filter_by(id=customer_id).first_or_404()
+    contacts = [{'id': c.id, 'name': c.name, 'email': c.email or '', 'title': c.title or ''}
+                for c in customer.contacts]
+    return jsonify(contacts), 200
+
+
+@customers_bp.route('/api/customer/<int:customer_id>/contacts', methods=['POST'])
+def api_customer_contact_create(customer_id):
+    """Create a new contact for a customer."""
+    Customer.query.filter_by(id=customer_id).first_or_404()
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+
+    contact = CustomerContact(
+        customer_id=customer_id,
+        name=name,
+        email=(data.get('email') or '').strip() or None,
+        title=(data.get('title') or '').strip() or None,
+    )
+    db.session.add(contact)
+    db.session.commit()
+    return jsonify({'id': contact.id, 'name': contact.name,
+                    'email': contact.email or '', 'title': contact.title or ''}), 201
+
+
+@customers_bp.route('/api/customer/contact/<int:contact_id>', methods=['PUT'])
+def api_customer_contact_update(contact_id):
+    """Update an existing customer contact."""
+    contact = CustomerContact.query.filter_by(id=contact_id).first_or_404()
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+
+    contact.name = name
+    contact.email = (data.get('email') or '').strip() or None
+    contact.title = (data.get('title') or '').strip() or None
+    db.session.commit()
+    return jsonify({'id': contact.id, 'name': contact.name,
+                    'email': contact.email or '', 'title': contact.title or ''}), 200
+
+
+@customers_bp.route('/api/customer/contact/<int:contact_id>', methods=['DELETE'])
+def api_customer_contact_delete(contact_id):
+    """Delete a customer contact."""
+    contact = CustomerContact.query.filter_by(id=contact_id).first_or_404()
+    db.session.delete(contact)
+    db.session.commit()
+    return jsonify({'success': True}), 200

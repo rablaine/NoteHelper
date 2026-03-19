@@ -108,6 +108,62 @@
             </div>
         </div>
 
+        <!-- Contacts Card -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-people"></i> Contacts</h5>
+                <div id="editContactsBtn">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleContactEdit()">
+                        <i class="bi bi-pencil"></i> Edit
+                    </button>
+                </div>
+                <div id="editContactsDone" class="d-none gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cancelContactEdit()">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="saveAllContacts()">
+                        <i class="bi bi-check-lg"></i> Done
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="contactsCardBody">
+                <!-- Read-only display -->
+                <div id="contactsDisplay">
+                    {% if customer.contacts %}
+                        {% for contact in customer.contacts %}
+                        <div class="{% if not loop.last %}mb-1{% endif %}">
+                            <i class="bi bi-person-circle me-1"></i>{% if contact.email %}<a href="mailto:{{ contact.email }}" class="text-decoration-none">{{ contact.name }}</a>{% else %}{{ contact.name }}{% endif %}{% if contact.title %} <span class="text-muted">- {{ contact.title }}</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0" id="contactsEmpty">No contacts yet.</p>
+                    {% endif %}
+                </div>
+                <!-- Edit mode (hidden by default) -->
+                <div id="contactsEditMode" style="display: none;">
+                    <div id="contactsEditList">
+                        {% if customer.contacts %}
+                            {% for contact in customer.contacts %}
+                            <div class="card mb-2" id="contact-edit-{{ contact.id }}">
+                                <div class="card-body py-2 px-3">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <strong class="small"><i class="bi bi-person-circle me-1"></i>Edit Contact</strong>
+                                        <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteContactEdit({{ contact.id }})" title="Delete"><i class="bi bi-trash" style="font-size:0.75rem;"></i></button>
+                                    </div>
+                                    <div class="mb-1"><input type="text" class="form-control form-control-sm" value="{{ contact.name }}" data-field="name" placeholder="Name *"></div>
+                                    <div class="mb-1"><input type="text" class="form-control form-control-sm" value="{{ contact.title or '' }}" data-field="title" placeholder="Title"></div>
+                                    <div><input type="email" class="form-control form-control-sm" value="{{ contact.email or '' }}" data-field="email" placeholder="Email"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <div id="contactsNewRows"></div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addContactEditRow()">
+                        <i class="bi bi-plus"></i> Add Contact
+                    </button>
+                </div>
+            </div>
+        </div>
+
         {% if revenue_analyses %}
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -602,6 +658,110 @@ function cancelContextEdit() {
     sortSelect.addEventListener('change', applyFilterSort);
     applyFilterSort();
 })();
+
+// --- Contact editing ---
+let contactsToDelete = [];
+let editRowCounter = 0;
+
+function toggleContactEdit() {
+    document.getElementById('contactsDisplay').style.display = 'none';
+    document.getElementById('contactsEditMode').style.display = 'block';
+    document.getElementById('editContactsBtn').style.display = 'none';
+    document.getElementById('editContactsDone').classList.remove('d-none');
+    document.getElementById('editContactsDone').classList.add('d-flex');
+    contactsToDelete = [];
+    editRowCounter = 0;
+    document.getElementById('contactsNewRows').innerHTML = '';
+}
+
+function cancelContactEdit() {
+    // Restore deleted rows
+    contactsToDelete.forEach(id => {
+        const row = document.getElementById('contact-edit-' + id);
+        if (row) row.style.display = '';
+    });
+    contactsToDelete = [];
+    document.getElementById('contactsDisplay').style.display = '';
+    document.getElementById('contactsEditMode').style.display = 'none';
+    document.getElementById('editContactsBtn').style.display = '';
+    document.getElementById('editContactsDone').classList.remove('d-flex');
+    document.getElementById('editContactsDone').classList.add('d-none');
+    document.getElementById('contactsNewRows').innerHTML = '';
+}
+
+function addContactEditRow() {
+    editRowCounter++;
+    const container = document.getElementById('contactsNewRows');
+    const div = document.createElement('div');
+    div.className = 'card mb-2 border-primary';
+    div.id = 'contact-new-' + editRowCounter;
+    div.innerHTML = `
+        <div class="card-body py-2 px-3">
+            <div class="d-flex justify-content-between align-items-start mb-1">
+                <strong class="small"><i class="bi bi-person-circle me-1"></i>New Contact</strong>
+                <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.card').remove()" title="Remove"><i class="bi bi-trash" style="font-size:0.75rem;"></i></button>
+            </div>
+            <div class="mb-1"><input type="text" class="form-control form-control-sm" data-field="name" placeholder="Name *"></div>
+            <div class="mb-1"><input type="text" class="form-control form-control-sm" data-field="title" placeholder="Title"></div>
+            <div><input type="email" class="form-control form-control-sm" data-field="email" placeholder="Email"></div>
+        </div>
+    `;
+    container.appendChild(div);
+    div.querySelector('[data-field="name"]').focus();
+}
+
+function deleteContactEdit(id) {
+    contactsToDelete.push(id);
+    document.getElementById('contact-edit-' + id).style.display = 'none';
+}
+
+async function saveAllContacts() {
+    const customerId = {{ customer.id }};
+
+    // Delete removed contacts
+    for (const id of contactsToDelete) {
+        await fetch('/api/customer/contact/' + id, { method: 'DELETE' });
+    }
+
+    // Update existing contacts
+    const editRows = document.querySelectorAll('#contactsEditList > div[id^="contact-edit-"]');
+    for (const row of editRows) {
+        if (row.style.display === 'none') continue;
+        const id = row.id.replace('contact-edit-', '');
+        const name = row.querySelector('[data-field="name"]').value.trim();
+        if (!name) continue;
+        const data = {
+            name: name,
+            title: row.querySelector('[data-field="title"]').value.trim(),
+            email: row.querySelector('[data-field="email"]').value.trim()
+        };
+        await fetch('/api/customer/contact/' + id, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+    }
+
+    // Create new contacts
+    const newRows = document.querySelectorAll('#contactsNewRows > div');
+    for (const row of newRows) {
+        const name = row.querySelector('[data-field="name"]').value.trim();
+        if (!name) continue;
+        const data = {
+            name: name,
+            title: row.querySelector('[data-field="title"]').value.trim(),
+            email: row.querySelector('[data-field="email"]').value.trim()
+        };
+        await fetch('/api/customer/' + customerId + '/contacts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+    }
+
+    // Reload page to show updated contacts
+    location.reload();
+}
 </script>
 {% endblock %}
 

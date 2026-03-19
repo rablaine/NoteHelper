@@ -419,6 +419,8 @@ class Customer(db.Model):
         back_populates='customers',
         lazy='select'
     )
+    contacts = db.relationship('CustomerContact', back_populates='customer', lazy='select',
+                               order_by='CustomerContact.name')
     
     def __repr__(self) -> str:
         return f'<Customer {self.name} ({self.tpid})>'
@@ -443,6 +445,24 @@ class Customer(db.Model):
         if self.seller:
             return self.seller.seller_type
         return "Unknown"
+
+
+class CustomerContact(db.Model):
+    """Contact person at a customer organization."""
+    __tablename__ = 'customer_contacts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    email = db.Column(db.String(255), nullable=True)
+    title = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    # Relationships
+    customer = db.relationship('Customer', back_populates='contacts')
+
+    def __repr__(self) -> str:
+        return f'<CustomerContact {self.name} at {self.customer.name if self.customer else "Unknown"}>'
 
 
 class Topic(db.Model):

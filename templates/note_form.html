@@ -50,6 +50,12 @@
                 <div id="draftSaveIndicator" class="text-muted small" style="opacity: 0; transition: opacity 0.3s;">
                     <i class="bi bi-check-circle text-success"></i> Draft saved
                 </div>
+                {% if not is_general_note %}
+                <button type="button" class="btn btn-outline-secondary" id="contactsFlyoutBtn" onclick="openContactsFlyout()"
+                        {% if not preselect_customer_id and not (note and note.customer_id) %}style="display: none;"{% endif %}>
+                    <i class="bi bi-people"></i> Contacts
+                </button>
+                {% endif %}
                 {% if not note %}
                 <button type="button" class="btn btn-success" id="autoFillBtn" onclick="startAutoFill()" title="Auto-fill from meeting transcript">
                     <i class="bi bi-magic"></i> Auto-fill
@@ -614,7 +620,7 @@
 </div>
 
 <!-- Partner Creation Flyout -->
-<div class="offcanvas offcanvas-end" tabindex="-1" id="partnerFlyout" aria-labelledby="partnerFlyoutLabel" data-bs-backdrop="false" data-bs-scroll="true" style="width: 420px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="partnerFlyout" aria-labelledby="partnerFlyoutLabel" data-bs-backdrop="false" data-bs-scroll="true" style="width: 400px;">
     <div class="offcanvas-header py-2 border-bottom">
         <h6 class="offcanvas-title" id="partnerFlyoutLabel"><i class="bi bi-building"></i> New Partner</h6>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -681,7 +687,7 @@
 
 {% if not is_general_note %}
 <!-- Engagement Task Creation Flyout -->
-<div class="offcanvas offcanvas-end" tabindex="-1" id="engTaskFlyout" aria-labelledby="engTaskFlyoutLabel" data-bs-backdrop="false" data-bs-scroll="true" style="width: 380px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="engTaskFlyout" aria-labelledby="engTaskFlyoutLabel" data-bs-backdrop="false" data-bs-scroll="true" style="width: 400px;">
     <div class="offcanvas-header py-2 border-bottom">
         <h6 class="offcanvas-title" id="engTaskFlyoutLabel"><i class="bi bi-check2-square"></i> New Engagement Task</h6>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -720,7 +726,7 @@
 </div>
 
 <!-- Engagement Creation Flyout -->
-<div class="offcanvas offcanvas-end" tabindex="-1" id="engagementFlyout" aria-labelledby="engagementFlyoutLabel" data-bs-backdrop="false" data-bs-scroll="true" style="width: 420px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="engagementFlyout" aria-labelledby="engagementFlyoutLabel" data-bs-backdrop="false" data-bs-scroll="true" style="width: 400px;">
     <div class="offcanvas-header py-2 border-bottom">
         <h6 class="offcanvas-title" id="engagementFlyoutLabel"><i class="bi bi-briefcase"></i> New Engagement</h6>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -773,41 +779,74 @@
 </div>
 {% endif %}
 
-<!-- Flyout stacking: second flyout shifts left to sit beside the first -->
+{% if not is_general_note %}
+<!-- Customer Contacts Flyout -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="contactsFlyout" aria-labelledby="contactsFlyoutLabel" data-bs-backdrop="false" data-bs-scroll="true" style="width: 400px;">
+    <div class="offcanvas-header py-2 border-bottom">
+        <h6 class="offcanvas-title" id="contactsFlyoutLabel"><i class="bi bi-people"></i> Customer Contacts</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div id="contactsFlyoutLoading" class="text-center py-4">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+            <span class="ms-2 text-muted">Loading contacts...</span>
+        </div>
+        <div id="contactsFlyoutList"></div>
+        <div id="contactAddZone">
+            <div class="contact-add-ghost" onclick="activateContactGhost(this)">
+                <input type="text" class="form-control form-control-sm bg-transparent border-secondary text-muted"
+                       placeholder="+ Add contact..." onfocus="activateContactGhost(this.closest('.contact-add-ghost'))">
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Flyout stacking: multiple flyouts shift left so they don't overlap -->
 <style>
     .offcanvas.flyout-shifted {
-        transform: translateX(-418px) !important;
+        transform: translateX(-399px) !important;
+        z-index: 1044 !important;
+    }
+    .offcanvas.flyout-shifted-2 {
+        transform: translateX(-798px) !important;
+        z-index: 1043 !important;
     }
 </style>
 <script>
 (function() {
-    const partner = document.getElementById('partnerFlyout');
-    const engagement = document.getElementById('engagementFlyout');
-    if (!partner || !engagement) return;
-    
+    const ids = ['partnerFlyout', 'engagementFlyout', 'contactsFlyout'];
+    const flyouts = ids.map(id => document.getElementById(id)).filter(Boolean);
+    if (flyouts.length < 2) return;
+
+    // Track open order (most recent at end)
+    let openOrder = [];
+
     function adjustStack() {
-        const pOpen = partner.classList.contains('show');
-        const eOpen = engagement.classList.contains('show');
-        if (pOpen && eOpen) {
-            if (partner._openedLast) {
-                engagement.classList.add('flyout-shifted');
-                partner.classList.remove('flyout-shifted');
-            } else {
-                partner.classList.add('flyout-shifted');
-                engagement.classList.remove('flyout-shifted');
-            }
-        } else {
-            partner.classList.remove('flyout-shifted');
-            engagement.classList.remove('flyout-shifted');
+        const open = flyouts.filter(f => f.classList.contains('show'));
+        // Clear all shift classes
+        flyouts.forEach(f => { f.classList.remove('flyout-shifted', 'flyout-shifted-2'); });
+        if (open.length <= 1) return;
+        // The most recently opened stays in place; others shift left by their position
+        const sorted = open.sort((a, b) => openOrder.indexOf(a) - openOrder.indexOf(b));
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const shift = sorted.length - 1 - i;
+            if (shift === 1) sorted[i].classList.add('flyout-shifted');
+            else if (shift >= 2) sorted[i].classList.add('flyout-shifted-2');
         }
     }
-    
-    partner.addEventListener('show.bs.offcanvas', function() { partner._openedLast = true; engagement._openedLast = false; });
-    engagement.addEventListener('show.bs.offcanvas', function() { engagement._openedLast = true; partner._openedLast = false; });
-    partner.addEventListener('shown.bs.offcanvas', adjustStack);
-    engagement.addEventListener('shown.bs.offcanvas', adjustStack);
-    partner.addEventListener('hidden.bs.offcanvas', adjustStack);
-    engagement.addEventListener('hidden.bs.offcanvas', adjustStack);
+
+    flyouts.forEach(f => {
+        f.addEventListener('show.bs.offcanvas', function() {
+            openOrder = openOrder.filter(x => x !== f);
+            openOrder.push(f);
+        });
+        f.addEventListener('shown.bs.offcanvas', adjustStack);
+        f.addEventListener('hidden.bs.offcanvas', function() {
+            openOrder = openOrder.filter(x => x !== f);
+            adjustStack();
+        });
+    });
 })();
 </script>
 
@@ -852,6 +891,216 @@ function updateAiButtonState() {
 }
 quill.on('text-change', updateAiButtonState);
 updateAiButtonState();
+
+// ---- Customer Contacts Flyout ----
+var contactsFlyoutInstance = null;
+
+function getContactsFlyout() {
+    if (!contactsFlyoutInstance) {
+        var el = document.getElementById('contactsFlyout');
+        if (el) contactsFlyoutInstance = new bootstrap.Offcanvas(el);
+    }
+    return contactsFlyoutInstance;
+}
+
+function getSelectedCustomerId() {
+    var sel = document.getElementById('customer_id');
+    if (!sel) return null;
+    // If disabled, there's a hidden input with the value
+    if (sel.disabled) {
+        var hidden = document.querySelector('input[type="hidden"][name="customer_id"]');
+        return hidden ? hidden.value : sel.value;
+    }
+    return sel.value || null;
+}
+
+function openContactsFlyout() {
+    var custId = getSelectedCustomerId();
+    if (!custId) return;
+    var flyout = getContactsFlyout();
+    if (flyout) flyout.show();
+    loadFlyoutContacts(custId);
+}
+
+function loadFlyoutContacts(custId) {
+    var list = document.getElementById('contactsFlyoutList');
+    var loading = document.getElementById('contactsFlyoutLoading');
+    list.innerHTML = '';
+    loading.style.display = 'block';
+    fetch('/api/customer/' + custId + '/contacts')
+        .then(function(r) { return r.json(); })
+        .then(function(contacts) {
+            loading.style.display = 'none';
+            if (contacts.length === 0) {
+                list.innerHTML = '<p class="text-muted small">No contacts yet.</p>';
+                return;
+            }
+            contacts.forEach(function(c) { renderFlyoutContact(list, c); });
+        });
+}
+
+function renderFlyoutContact(container, c) {
+    var div = document.createElement('div');
+    div.className = 'card mb-2';
+    div.id = 'flyoutContact-' + c.id;
+    div.innerHTML = '<div class="card-body py-2 px-3">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+            '<div>' +
+                '<div class="fw-semibold"><i class="bi bi-person-circle me-1"></i>' + escHtmlNote(c.name) + '</div>' +
+                (c.title ? '<div class="text-muted small">' + escHtmlNote(c.title) + '</div>' : '') +
+                (c.email ? '<div class="small"><a href="mailto:' + escHtmlNote(c.email) + '">' + escHtmlNote(c.email) + '</a></div>' : '') +
+            '</div>' +
+            '<div class="d-flex gap-1">' +
+                '<button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="flyoutEditContact(' + c.id + ')" title="Edit"><i class="bi bi-pencil" style="font-size:0.75rem;"></i></button>' +
+                '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="flyoutDeleteContact(' + c.id + ')" title="Delete"><i class="bi bi-trash" style="font-size:0.75rem;"></i></button>' +
+            '</div>' +
+        '</div></div>';
+    container.appendChild(div);
+}
+
+var _ghostId = 0;
+
+function activateContactGhost(ghostEl) {
+    var id = 'cg' + (++_ghostId);
+    var card = document.createElement('div');
+    card.className = 'card mb-2 border-primary';
+    card.id = 'contactGhost-' + id;
+    card.innerHTML =
+        '<div class="card-body py-2 px-3">' +
+            '<div class="mb-1"><input type="text" class="form-control form-control-sm" id="gName' + id + '" placeholder="Name *"></div>' +
+            '<div class="mb-1"><input type="text" class="form-control form-control-sm" id="gTitle' + id + '" placeholder="Title"></div>' +
+            '<div class="mb-1"><input type="email" class="form-control form-control-sm" id="gEmail' + id + '" placeholder="Email"></div>' +
+            '<div class="d-flex gap-2">' +
+                '<button class="btn btn-sm btn-primary flex-grow-1" onclick="saveContactGhost(\'' + id + '\')">' +
+                    '<i class="bi bi-check-lg"></i> Save</button>' +
+                '<button class="btn btn-sm btn-outline-secondary" onclick="cancelContactGhost(\'' + id + '\')">' +
+                    '<i class="bi bi-x"></i></button>' +
+            '</div>' +
+        '</div>';
+    ghostEl.parentNode.insertBefore(card, ghostEl);
+    // Enter in any field saves this ghost; prevent bubbling to main form
+    card.querySelectorAll('input').forEach(function(inp) {
+        inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                saveContactGhost(id);
+            }
+        });
+    });
+    document.getElementById('gName' + id).focus();
+}
+
+function saveContactGhost(id) {
+    var name = document.getElementById('gName' + id).value.trim();
+    if (!name) { document.getElementById('gName' + id).classList.add('is-invalid'); return; }
+    var custId = getSelectedCustomerId();
+    if (!custId) return;
+    var data = {
+        name: name,
+        title: document.getElementById('gTitle' + id).value.trim(),
+        email: document.getElementById('gEmail' + id).value.trim()
+    };
+    var btn = document.querySelector('#contactGhost-' + id + ' .btn-primary');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    fetch('/api/customer/' + custId + '/contacts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); })
+    .then(function(c) {
+        if (c.error) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Save'; return; }
+        var list = document.getElementById('contactsFlyoutList');
+        var empty = list.querySelector('p.text-muted');
+        if (empty) empty.remove();
+        renderFlyoutContact(list, c);
+        var ghost = document.getElementById('contactGhost-' + id);
+        if (ghost) ghost.remove();
+    });
+}
+
+function cancelContactGhost(id) {
+    var ghost = document.getElementById('contactGhost-' + id);
+    if (ghost) ghost.remove();
+}
+
+function flyoutEditContact(id) {
+    var card = document.getElementById('flyoutContact-' + id);
+    var body = card.querySelector('.card-body');
+    var nameEl = body.querySelector('.fw-semibold');
+    var titleEl = body.querySelector('.text-muted.small');
+    var emailEl = body.querySelector('a[href^="mailto:"]');
+    var curName = nameEl ? nameEl.textContent.trim() : '';
+    var curTitle = titleEl ? titleEl.textContent.trim() : '';
+    var curEmail = emailEl ? emailEl.textContent.trim() : '';
+
+    body.dataset.originalHtml = body.innerHTML;
+    body.innerHTML =
+        '<div class="mb-1"><input type="text" class="form-control form-control-sm" id="fEditName' + id + '" value="' + escAttrNote(curName) + '" placeholder="Name *"></div>' +
+        '<div class="mb-1"><input type="text" class="form-control form-control-sm" id="fEditTitle' + id + '" value="' + escAttrNote(curTitle) + '" placeholder="Title"></div>' +
+        '<div class="mb-1"><input type="email" class="form-control form-control-sm" id="fEditEmail' + id + '" value="' + escAttrNote(curEmail) + '" placeholder="Email"></div>' +
+        '<div class="d-flex gap-2">' +
+            '<button class="btn btn-sm btn-primary" onclick="flyoutSaveEditContact(' + id + ')"><i class="bi bi-check-lg"></i> Save</button>' +
+            '<button class="btn btn-sm btn-outline-secondary" onclick="flyoutCancelEdit(' + id + ')">Cancel</button>' +
+        '</div>';
+    document.getElementById('fEditName' + id).focus();
+}
+
+function flyoutCancelEdit(id) {
+    var body = document.querySelector('#flyoutContact-' + id + ' .card-body');
+    body.innerHTML = body.dataset.originalHtml;
+}
+
+function flyoutSaveEditContact(id) {
+    var name = document.getElementById('fEditName' + id).value.trim();
+    if (!name) return;
+    var data = {
+        name: name,
+        title: document.getElementById('fEditTitle' + id).value.trim(),
+        email: document.getElementById('fEditEmail' + id).value.trim()
+    };
+    fetch('/api/customer/contact/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); })
+    .then(function(c) {
+        if (c.error) return;
+        var card = document.getElementById('flyoutContact-' + id);
+        var body = card.querySelector('.card-body');
+        body.innerHTML =
+            '<div class="d-flex justify-content-between align-items-start">' +
+                '<div>' +
+                    '<div class="fw-semibold"><i class="bi bi-person-circle me-1"></i>' + escHtmlNote(c.name) + '</div>' +
+                    (c.title ? '<div class="text-muted small">' + escHtmlNote(c.title) + '</div>' : '') +
+                    (c.email ? '<div class="small"><a href="mailto:' + escHtmlNote(c.email) + '">' + escHtmlNote(c.email) + '</a></div>' : '') +
+                '</div>' +
+                '<div class="d-flex gap-1">' +
+                    '<button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="flyoutEditContact(' + c.id + ')" title="Edit"><i class="bi bi-pencil" style="font-size:0.75rem;"></i></button>' +
+                    '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="flyoutDeleteContact(' + c.id + ')" title="Delete"><i class="bi bi-trash" style="font-size:0.75rem;"></i></button>' +
+                '</div>' +
+            '</div>';
+    });
+}
+
+function flyoutDeleteContact(id) {
+    if (!confirm('Delete this contact?')) return;
+    fetch('/api/customer/contact/' + id, {method: 'DELETE'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.success) return;
+            var card = document.getElementById('flyoutContact-' + id);
+            card.remove();
+            var list = document.getElementById('contactsFlyoutList');
+            if (!list.querySelector('.card')) {
+                list.innerHTML = '<p class="text-muted small">No contacts yet.</p>';
+            }
+        });
+}
+
+function escHtmlNote(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escAttrNote(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // Sync editor content to hidden textarea on form submit
 document.getElementById('noteForm').onsubmit = function(e) {
@@ -2222,6 +2471,9 @@ document.getElementById('customer_id').addEventListener('change', function() {
     loadMilestonesForCustomer(this.value);
     // Clear selected milestone when customer changes
     removeMilestone();
+    // Show/hide contacts button
+    var contactsBtn = document.getElementById('contactsFlyoutBtn');
+    if (contactsBtn) contactsBtn.style.display = this.value ? '' : 'none';
 });
 
 // Load milestones on page load if customer is already selected

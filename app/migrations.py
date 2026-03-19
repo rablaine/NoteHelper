@@ -198,6 +198,8 @@ def run_migrations(db):
     # Data cleanup: Remove "Total" summary rows from revenue data (imported from spreadsheet)
     _cleanup_total_revenue_rows(db, existing_tables)
 
+    # Note: customer_contacts table is created by db.create_all() - no migration needed
+
     # =========================================================================
     # End migrations
     # =========================================================================
