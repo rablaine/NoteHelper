@@ -331,7 +331,7 @@
         <div class="container-fluid px-4">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
                 <img src="{{ url_for('static', filename='favicon.svg') }}" alt="Sales Buddy" width="28" height="28" style="position:relative;top:1px;margin-right:2px;filter:drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);"><span class="ms-2">Sales Buddy</span>
-                {% if config.get('DEBUG') %}
+                {% if is_debug %}
                     <span class="badge {{ 'bg-warning text-dark' if user_role == 'dss' else 'bg-info text-dark' }} ms-2"
                           style="font-size: 0.6rem; vertical-align: middle; cursor: pointer;"
                           onclick="event.preventDefault(); fetch('/api/admin/dev-toggle-role', {method:'POST'}).then(r=>r.json()).then(()=>location.reload());"

@@ -1119,5 +1119,6 @@ def inject_preferences():
         user_role_set=user_role_set,
         seller_mode=seller_mode,
         seller_mode_seller=seller_mode_seller,
+        is_debug=current_app.debug,
     )
 
