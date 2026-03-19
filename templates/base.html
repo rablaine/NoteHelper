@@ -331,8 +331,11 @@
         <div class="container-fluid px-4">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
                 <img src="{{ url_for('static', filename='favicon.svg') }}" alt="Sales Buddy" width="28" height="28" style="position:relative;top:1px;margin-right:2px;filter:drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);"><span class="ms-2">Sales Buddy</span>
-                {% if config.get('DEBUG') and user_role == 'dss' %}
-                    <span class="badge bg-warning text-dark ms-2" style="font-size: 0.6rem; vertical-align: middle;">DSS MODE</span>
+                {% if config.get('DEBUG') %}
+                    <span class="badge {{ 'bg-warning text-dark' if user_role == 'dss' else 'bg-info text-dark' }} ms-2"
+                          style="font-size: 0.6rem; vertical-align: middle; cursor: pointer;"
+                          onclick="event.preventDefault(); fetch('/api/admin/dev-toggle-role', {method:'POST'}).then(r=>r.json()).then(()=>location.reload());"
+                          title="Click to swap role">{{ 'DSS' if user_role == 'dss' else 'SE' }} MODE</span>
                 {% endif %}
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
