@@ -805,6 +805,20 @@ def _run_analysis_generator(exclude_latest_month: bool = True):
                 analysis.previous_category = analysis.category
                 analysis.previous_priority_score = analysis.priority_score
                 analysis.status_changed_at = datetime.now(timezone.utc)
+            
+            # Auto-reset review if conditions changed significantly
+            # Only reset alerts that were already reviewed/actioned/dismissed
+            if analysis.review_status in ('reviewed', 'actioned', 'dismissed'):
+                category_changed = analysis.category != signals.category
+                priority_jumped = (signals.priority_score - analysis.priority_score) >= 15
+                if category_changed or priority_jumped:
+                    # Snapshot prior review so user can reference it
+                    analysis.previous_review_status = analysis.review_status
+                    analysis.previous_review_notes = analysis.review_notes
+                    # Reset to re-review
+                    analysis.review_status = 'to_be_reviewed'
+                    analysis.review_notes = None
+                    analysis.reviewed_at = datetime.now(timezone.utc)
         
         # Update fields
         analysis.customer_id = customer_id

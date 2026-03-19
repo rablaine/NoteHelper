@@ -1196,6 +1196,10 @@ class RevenueAnalysis(db.Model):
     review_notes = db.Column(db.Text, nullable=True)  # Why it was marked this way
     reviewed_at = db.Column(db.DateTime, nullable=True)  # When status was last changed
     
+    # Previous review snapshot (set when auto-reset triggers re-review)
+    previous_review_status = db.Column(db.String(20), nullable=True)
+    previous_review_notes = db.Column(db.Text, nullable=True)
+    
     # Relationships
     customer = db.relationship('Customer', backref='revenue_analyses')
     engagements = db.relationship('RevenueEngagement', back_populates='analysis', lazy='select')

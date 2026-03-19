@@ -2,7 +2,7 @@
 {# Usage: {% include 'partials/revenue_alerts_content.html' with context %} #}
 {# Required context: alerts (list of alert dicts) #}
 {# Optional context: summary (dict with count, total_at_risk, total_opportunity) #}
-{% from 'partials/review_action.html' import review_badge, action_buttons %}
+{% from 'partials/review_action.html' import review_badge, action_buttons, previous_review_hint %}
 
 {# Summary cards (shown when summary is provided) #}
 {% if summary %}
@@ -111,7 +111,7 @@
                 </td>
                 {% endif %}
                 <td><small>{{ a.engagement_rationale }}</small></td>
-                <td data-review-id="{{ a.id }}">{{ review_badge(a) }}</td>
+                <td data-review-id="{{ a.id }}">{{ review_badge(a) }}{{ previous_review_hint(a) }}</td>
                 <td>
                     {{ action_buttons(a) }}
                 </td>

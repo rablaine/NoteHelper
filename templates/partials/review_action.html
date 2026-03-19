@@ -17,6 +17,14 @@
 {% endif %}
 {% endmacro %}
 
+{% macro previous_review_hint(analysis) %}
+{% if analysis.previous_review_status %}
+<div class="small text-muted mt-1" title="{{ analysis.previous_review_notes or '' }}">
+    <i class="bi bi-arrow-return-right"></i> Previously: <em>{{ analysis.previous_review_status|replace('_', ' ')|title }}</em>{% if analysis.previous_review_notes %} - {{ analysis.previous_review_notes|truncate(60) }}{% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
 {% macro action_buttons(analysis) %}
 <div class="btn-group btn-group-sm">
     <button type="button" class="btn btn-sm btn-outline-primary review-action-btn" 

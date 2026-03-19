@@ -176,6 +176,8 @@ def run_migrations(db):
                                   "VARCHAR(20) NOT NULL DEFAULT 'new'")
         _add_column_if_not_exists(db, inspector, 'revenue_analyses', 'review_notes', 'TEXT')
         _add_column_if_not_exists(db, inspector, 'revenue_analyses', 'reviewed_at', 'DATETIME')
+        _add_column_if_not_exists(db, inspector, 'revenue_analyses', 'previous_review_status', 'VARCHAR(20)')
+        _add_column_if_not_exists(db, inspector, 'revenue_analyses', 'previous_review_notes', 'TEXT')
 
     # Migration: Add backup settings to user_preferences (replaces backup_config.json)
     _add_column_if_not_exists(db, inspector, 'user_preferences', 'onedrive_path', 'VARCHAR(500)')

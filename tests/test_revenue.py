@@ -558,6 +558,174 @@ class TestReviewAPI:
         assert resp.status_code == 200
         assert b'Status' in resp.data
 
+    def test_review_clears_previous_review_fields(self, app, client, test_user):
+        """Manual review clears previous_review_status/notes hint."""
+        aid = self._create_analysis(app)
+        with app.app_context():
+            a = RevenueAnalysis.query.get(aid)
+            a.previous_review_status = 'dismissed'
+            a.previous_review_notes = 'Old note'
+            db.session.commit()
+        resp = client.patch(f'/api/revenue/analysis/{aid}/review',
+                            json={'review_status': 'reviewed', 'review_notes': 'Re-reviewed'})
+        assert resp.status_code == 200
+        with app.app_context():
+            a = RevenueAnalysis.query.get(aid)
+            assert a.review_status == 'reviewed'
+            assert a.previous_review_status is None
+            assert a.previous_review_notes is None
+
+
+class TestAutoResetOnReimport:
+    """Test that reviewed/actioned/dismissed alerts auto-reset when conditions change."""
+
+    def _create_analysis(self, app, **overrides):
+        """Helper: create a RevenueAnalysis with sensible defaults."""
+        defaults = dict(
+            customer_name='Auto Reset Customer',
+            bucket='Core DBs',
+            category='CHURN_RISK',
+            recommended_action='CHECK-IN',
+            avg_revenue=5000,
+            latest_revenue=4000,
+            priority_score=50,
+            months_analyzed=6,
+            confidence='HIGH',
+            review_status='to_be_reviewed',
+        )
+        defaults.update(overrides)
+        with app.app_context():
+            a = RevenueAnalysis(**defaults)
+            db.session.add(a)
+            db.session.commit()
+            return a.id
+
+    def test_category_change_resets_reviewed(self, app):
+        """Reviewed alert resets to to_be_reviewed when category changes."""
+        aid = self._create_analysis(app, review_status='reviewed',
+                                    review_notes='Seasonal dip')
+        with app.app_context():
+            a = RevenueAnalysis.query.get(aid)
+            # Simulate upsert with category change
+            a.previous_review_status = None
+            old_status = a.review_status
+            old_notes = a.review_notes
+            category_changed = 'GROWTH_OPPORTUNITY' != a.category
+            priority_jumped = False
+            if old_status in ('reviewed', 'actioned', 'dismissed'):
+                if category_changed or priority_jumped:
+                    a.previous_review_status = old_status
+                    a.previous_review_notes = old_notes
+                    a.review_status = 'to_be_reviewed'
+                    a.review_notes = None
+            a.category = 'GROWTH_OPPORTUNITY'
+            db.session.commit()
+
+            a = RevenueAnalysis.query.get(aid)
+            assert a.review_status == 'to_be_reviewed'
+            assert a.review_notes is None
+            assert a.previous_review_status == 'reviewed'
+            assert a.previous_review_notes == 'Seasonal dip'
+
+    def test_priority_jump_resets_actioned(self, app):
+        """Actioned alert resets when priority jumps 15+ points."""
+        aid = self._create_analysis(app, review_status='actioned',
+                                    review_notes='Called customer',
+                                    priority_score=50)
+        with app.app_context():
+            a = RevenueAnalysis.query.get(aid)
+            old_status = a.review_status
+            old_notes = a.review_notes
+            new_priority = 66  # jump of 16
+            category_changed = False
+            priority_jumped = (new_priority - a.priority_score) >= 15
+            if old_status in ('reviewed', 'actioned', 'dismissed'):
+                if category_changed or priority_jumped:
+                    a.previous_review_status = old_status
+                    a.previous_review_notes = old_notes
+                    a.review_status = 'to_be_reviewed'
+                    a.review_notes = None
+            a.priority_score = new_priority
+            db.session.commit()
+
+            a = RevenueAnalysis.query.get(aid)
+            assert a.review_status == 'to_be_reviewed'
+            assert a.previous_review_status == 'actioned'
+            assert a.previous_review_notes == 'Called customer'
+
+    def test_small_priority_change_no_reset(self, app):
+        """Priority increase of less than 15 does not trigger reset."""
+        aid = self._create_analysis(app, review_status='dismissed',
+                                    review_notes='False positive',
+                                    priority_score=50)
+        with app.app_context():
+            a = RevenueAnalysis.query.get(aid)
+            old_status = a.review_status
+            new_priority = 60  # jump of 10, below threshold
+            category_changed = False
+            priority_jumped = (new_priority - a.priority_score) >= 15
+            if old_status in ('reviewed', 'actioned', 'dismissed'):
+                if category_changed or priority_jumped:
+                    a.previous_review_status = old_status
+                    a.previous_review_notes = a.review_notes
+                    a.review_status = 'to_be_reviewed'
+                    a.review_notes = None
+            a.priority_score = new_priority
+            db.session.commit()
+
+            a = RevenueAnalysis.query.get(aid)
+            assert a.review_status == 'dismissed'
+            assert a.review_notes == 'False positive'
+            assert a.previous_review_status is None
+
+    def test_new_status_not_reset(self, app):
+        """Alerts with 'new' or 'to_be_reviewed' status are never reset."""
+        aid = self._create_analysis(app, review_status='to_be_reviewed',
+                                    priority_score=50)
+        with app.app_context():
+            a = RevenueAnalysis.query.get(aid)
+            old_status = a.review_status
+            new_priority = 80  # big jump
+            category_changed = True
+            priority_jumped = (new_priority - a.priority_score) >= 15
+            if old_status in ('reviewed', 'actioned', 'dismissed'):
+                if category_changed or priority_jumped:
+                    a.previous_review_status = old_status
+                    a.previous_review_notes = a.review_notes
+                    a.review_status = 'to_be_reviewed'
+                    a.review_notes = None
+            a.priority_score = new_priority
+            db.session.commit()
+
+            a = RevenueAnalysis.query.get(aid)
+            assert a.review_status == 'to_be_reviewed'
+            assert a.previous_review_status is None
+
+    def test_dismissed_resets_on_category_change(self, app):
+        """Dismissed alert resets when category changes."""
+        aid = self._create_analysis(app, review_status='dismissed',
+                                    review_notes='Not our customer',
+                                    category='STABLE')
+        with app.app_context():
+            a = RevenueAnalysis.query.get(aid)
+            old_status = a.review_status
+            old_notes = a.review_notes
+            category_changed = 'CHURN_RISK' != a.category
+            priority_jumped = False
+            if old_status in ('reviewed', 'actioned', 'dismissed'):
+                if category_changed or priority_jumped:
+                    a.previous_review_status = old_status
+                    a.previous_review_notes = old_notes
+                    a.review_status = 'to_be_reviewed'
+                    a.review_notes = None
+            a.category = 'CHURN_RISK'
+            db.session.commit()
+
+            a = RevenueAnalysis.query.get(aid)
+            assert a.review_status == 'to_be_reviewed'
+            assert a.previous_review_status == 'dismissed'
+            assert a.previous_review_notes == 'Not our customer'
+
 
 # Fixtures
 

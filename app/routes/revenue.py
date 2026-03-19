@@ -817,6 +817,9 @@ def api_update_review(analysis_id: int):
 
     if review_status:
         analysis.review_status = review_status
+        # Clear previous review hint once user explicitly re-reviews
+        analysis.previous_review_status = None
+        analysis.previous_review_notes = None
     if 'review_notes' in data:
         analysis.review_notes = data['review_notes'].strip() if data['review_notes'] else None
     analysis.reviewed_at = datetime.now(timezone.utc)
