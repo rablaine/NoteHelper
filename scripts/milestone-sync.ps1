@@ -65,11 +65,13 @@ try {
     exit 0
 }
 
-# Trigger sync (JSON fallback, not SSE)
+# Trigger sync (fires in background on server, returns 202 immediately)
 try {
     Write-Log "Triggering milestone sync at $Url ..."
-    $response = Invoke-RestMethod -Uri $Url -Method POST -ContentType 'application/json' -TimeoutSec 600
-    if ($response.success) {
+    $response = Invoke-RestMethod -Uri $Url -Method POST -ContentType 'application/json' -TimeoutSec 30
+    if ($response.async) {
+        Write-Log 'Sync triggered successfully (running in background on server).' 'SUCCESS'
+    } elseif ($response.success) {
         Write-Log "Sync complete: $($response.customers_synced) customers, $($response.milestones_created) new, $($response.milestones_updated) updated." 'SUCCESS'
     } else {
         Write-Log "Sync returned partial results or failed: $($response | ConvertTo-Json -Compress)" 'WARN'

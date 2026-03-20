@@ -10,7 +10,7 @@ import calendar as cal
 from datetime import date, datetime, timezone
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    flash, g, jsonify, Response, stream_with_context,
+    flash, g, jsonify, Response, stream_with_context, current_app,
 )
 from app.models import db, Milestone, MsxTask, Note, Customer, Seller
 from app.services.seller_mode import get_seller_mode_seller_id
@@ -467,14 +467,29 @@ def api_sync_milestones():
             },
         )
 
-    # JSON fallback for non-SSE clients
-    try:
-        results = sync_all_customer_milestones()
-        status_code = 200 if results["success"] else 207
-        return jsonify(results), status_code
-    except Exception as e:
-        logger.exception("Milestone sync failed")
-        return jsonify({"success": False, "error": str(e)}), 500
+    # JSON fallback for non-SSE clients (e.g. scheduled task script).
+    # Fire-and-forget: start sync in a background thread and return 202
+    # immediately so the caller doesn't time out on long syncs.
+    import threading
+
+    def _run_sync(app):
+        with app.app_context():
+            try:
+                sync_all_customer_milestones()
+            except Exception:
+                logger.exception("Background milestone sync failed")
+
+    t = threading.Thread(
+        target=_run_sync,
+        args=(current_app._get_current_object(),),
+        daemon=True,
+    )
+    t.start()
+    return jsonify({
+        "success": True,
+        "message": "Milestone sync started in background.",
+        "async": True,
+    }), 202
 
 
 @bp.route('/api/milestone-tracker/sync-customer/<int:customer_id>', methods=['POST'])
