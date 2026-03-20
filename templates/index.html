@@ -44,7 +44,8 @@
                 {% else %}
                 <div class="text-center text-muted py-4">
                     <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
-                    <p class="mb-0 mt-2">All clear - no open tasks.</p>
+                    <p class="mb-0 mt-2">No open tasks yet.</p>
+                    <p class="small mb-0 mt-1">Go to an <a href="{{ url_for('engagements.engagements_hub') }}">engagement</a> to create tasks.</p>
                 </div>
                 {% endif %}
             </div>
@@ -107,7 +108,15 @@
                 {% if revenue_alerts %}<span class="badge bg-danger">{{ revenue_alerts|length }}</span>{% endif %}
             </div>
             <div class="card-body p-0" style="max-height: 360px; overflow-y: auto;">
-                {% if revenue_alerts %}
+                {% if not has_revenue %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-cloud-arrow-up" style="font-size: 2rem;"></i>
+                    <p class="mb-0 mt-2">Revenue not imported yet.</p>
+                    <a href="{{ url_for('revenue.revenue_import') }}" class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="bi bi-upload"></i> Import Revenue
+                    </a>
+                </div>
+                {% elif revenue_alerts %}
                 <div class="list-group list-group-flush">
                     {% for alert in revenue_alerts %}
                     <a href="{{ url_for('revenue.revenue_customer_view', customer_id=alert.customer_id) if alert.customer_id else url_for('revenue.revenue_dashboard') }}" class="list-group-item list-group-item-action py-2 px-3">
@@ -381,7 +390,7 @@
             <div class="tab-pane fade" id="engagements-view" role="tabpanel" aria-labelledby="engagements-tab">
                 {% set eng_api_url = '/api/engagements/active' %}
                 {% set eng_auto_load = false %}
-                {% set eng_show_seller = true %}
+                {% set eng_show_seller = not seller_mode %}
                 {% set eng_body_id = 'engagementsListBody' %}
                 {% set eng_count_id = 'eng-panel-count' %}
                 {% set eng_empty_msg = 'No engagements match the current filter.' %}

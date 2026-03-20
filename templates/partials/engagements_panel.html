@@ -32,11 +32,9 @@
                 <option value="story-desc">Story % (high first)</option>
                 <option value="target">Target Date</option>
             </select>
-            {% if eng_show_seller | default(false) %}
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="{{ body_id }}_groupToggle" title="Group by seller">
-                <i class="bi bi-people"></i>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="{{ body_id }}_groupToggle" title="{% if eng_show_seller | default(false) %}Group by seller{% else %}Group by customer{% endif %}">
+                <i class="bi bi-{% if eng_show_seller | default(false) %}people{% else %}building{% endif %}"></i>
             </button>
-            {% endif %}
         </div>
     </div>
     <div class="card-body p-2" id="{{ body_id }}">
@@ -261,7 +259,7 @@
             return;
         }
 
-        if (groupBySeller) {
+        if (groupBySeller && SHOW_SELLER_DEFAULT) {
             // Group by seller first, then customer within
             const sellerMap = new Map();
             items.forEach(eng => {
@@ -283,6 +281,12 @@
                     <div class="d-flex flex-wrap gap-3 align-items-start">${customerGroups.map(buildCustomerGroup).join('')}</div>
                 </div>`;
             }).join('');
+        } else if (groupBySeller) {
+            // Seller mode - group by customer only (no seller header)
+            const customerGroups = groupByCustomer(items);
+            body.innerHTML = '<div class="d-flex flex-wrap gap-3 align-items-start">' +
+                customerGroups.map(buildCustomerGroup).join('') +
+                '</div>';
         } else {
             // Flat list - no grouping, each card shows seller/customer
             body.innerHTML = '<div class="d-flex flex-wrap gap-2 align-items-start">' +

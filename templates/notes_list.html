@@ -56,7 +56,7 @@
                     {{ call.content|striptags|truncate(200, true) }}
                 </p>
                 <div>
-                    {% if call.seller %}
+                    {% if call.seller and not seller_mode %}
                         <a href="{{ url_for('sellers.seller_view', id=call.seller.id) }}" class="badge {{ get_seller_color(call.seller.id) }} text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-person"></i> {{ call.seller.name }}</a>
                     {% endif %}
                     {% if call.territory %}
@@ -67,6 +67,12 @@
                     {% endfor %}
                     {% for partner in call.partners %}
                         <a href="{{ url_for('partners.partner_view', id=partner.id) }}" class="badge text-decoration-none" style="background-color: #6f42c1;" onclick="event.stopPropagation();"><i class="bi bi-building"></i> {{ partner.name }}</a>
+                    {% endfor %}
+                    {% for opp in call.opportunities %}
+                        <a href="{{ url_for('opportunities.opportunity_view', id=opp.id) }}" class="badge bg-info text-dark text-decoration-none" onclick="event.stopPropagation();" title="{{ opp.name }}">
+                            <i class="bi bi-briefcase"></i> {{ opp.name[:30] }}{% if opp.name|length > 30 %}...{% endif %}
+                            {% if opp.state %}<small>({{ opp.state }})</small>{% endif %}
+                        </a>
                     {% endfor %}
                 </div>
             </div>

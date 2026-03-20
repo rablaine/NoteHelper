@@ -21,6 +21,7 @@ from prompts import (
     TOPIC_SUGGESTION_PROMPT,
     AZURE_ABBREVIATION_MAP,
     MILESTONE_MATCH_PROMPT,
+    OPPORTUNITY_MATCH_PROMPT,
     ANALYZE_CALL_PROMPT,
     ENGAGEMENT_SUMMARY_PROMPT,
     ENGAGEMENT_STORY_PROMPT,
@@ -331,6 +332,56 @@ def match_milestone():
 
     except Exception as exc:
         logger.exception("match-milestone error")
+        return _error(f"Internal error: {exc}", 500)
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/match-opportunity
+# ---------------------------------------------------------------------------
+@app.route("/v1/match-opportunity", methods=["POST"])
+def match_opportunity():
+    """Match call notes to the best opportunity.
+
+    Simpler than milestone matching - no status tiers. Just pick the best
+    content match from the full list of open opportunities.
+    """
+    try:
+        body = request.get_json(force=True)
+        call_notes = (body.get("call_notes") or "").strip()
+        opportunities = body.get("opportunities") or []
+
+        if not call_notes or len(call_notes) < 20:
+            return _error("call_notes is required (min 20 chars)")
+        if not opportunities:
+            return _error("opportunities list is required")
+
+        opp_list = "\n".join([
+            f"- ID: {o.get('id')}, Name: {o.get('name')}, "
+            f"Number: {o.get('number', '')}, "
+            f"Value: {o.get('estimated_value', '')}"
+            for o in opportunities
+        ])
+        user_prompt = (
+            f"Call Notes:\n{call_notes[:2000]}\n\n"
+            f"Available Opportunities:\n{opp_list}\n\n"
+            "Which opportunity best matches what was discussed in the call?"
+        )
+
+        result = chat_completion(
+            OPPORTUNITY_MATCH_PROMPT, user_prompt, max_tokens=150,
+        )
+        parsed = _parse_json_object(result["text"])
+        opp_id = parsed.get("opportunity_id")
+
+        return jsonify({
+            "success": True,
+            "opportunity_id": opp_id,
+            "reason": parsed.get("reason", ""),
+            "usage": result["usage"],
+        })
+
+    except Exception as exc:
+        logger.exception("match-opportunity error")
         return _error(f"Internal error: {exc}", 500)
 
 

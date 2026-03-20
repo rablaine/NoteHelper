@@ -45,6 +45,13 @@ notes_milestones = db.Table(
     db.Column('milestone_id', db.Integer, db.ForeignKey('milestones.id'), primary_key=True)
 )
 
+# Association table for many-to-many relationship between Note and Opportunity
+notes_opportunities = db.Table(
+    'notes_opportunities',
+    db.Column('note_id', db.Integer, db.ForeignKey('notes.id'), primary_key=True),
+    db.Column('opportunity_id', db.Integer, db.ForeignKey('opportunities.id'), primary_key=True)
+)
+
 # Association table for many-to-many relationship between Partner and Specialty
 partners_specialties = db.Table(
     'partners_specialties',
@@ -596,6 +603,12 @@ class Note(db.Model):
         back_populates='notes',
         lazy='select'
     )
+    opportunities = db.relationship(
+        'Opportunity',
+        secondary=notes_opportunities,
+        back_populates='notes',
+        lazy='select'
+    )
     engagements = db.relationship(
         'Engagement',
         secondary=notes_engagements,
@@ -773,6 +786,12 @@ class Opportunity(db.Model):
     # Relationships
     customer = db.relationship('Customer', backref=db.backref('opportunities', lazy='dynamic'))
     milestones = db.relationship('Milestone', back_populates='opportunity', lazy='dynamic')
+    notes = db.relationship(
+        'Note',
+        secondary=notes_opportunities,
+        back_populates='opportunities',
+        lazy='select'
+    )
     
     def __repr__(self) -> str:
         return f'<Opportunity {self.id}: {self.name[:50]}>'
@@ -959,12 +978,16 @@ class UserPreference(db.Model):
     backup_retention_daily = db.Column(db.Integer, default=7, nullable=False)  # Number of daily backups to keep
     backup_retention_weekly = db.Column(db.Integer, default=4, nullable=False)  # Number of weekly backups to keep
     backup_retention_monthly = db.Column(db.Integer, default=3, nullable=False)  # Number of monthly backups to keep
+    user_role = db.Column(db.String(10), nullable=True)  # 'se' or 'dss' - null until set during onboarding
+    my_seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)  # DSS's own Seller record
+    my_seller_alias = db.Column(db.String(100), nullable=True)  # DSS's az login alias (persisted for offline use)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
     # Relationships
     default_template_customer = db.relationship('NoteTemplate', foreign_keys=[default_template_customer_id])
     default_template_noncustomer = db.relationship('NoteTemplate', foreign_keys=[default_template_noncustomer_id])
+    my_seller = db.relationship('Seller', foreign_keys=[my_seller_id])
     
     def __repr__(self) -> str:
         return f'<UserPreference dark_mode={self.dark_mode} customer_view_grouped={self.customer_view_grouped} customer_sort_by={self.customer_sort_by} topic_sort_by_calls={self.topic_sort_by_calls} territory_view_accounts={self.territory_view_accounts} show_customers_without_calls={self.show_customers_without_calls} first_run_modal_dismissed={self.first_run_modal_dismissed}>'
@@ -1058,7 +1081,7 @@ class CustomerRevenueData(db.Model):
     customer_name = db.Column(db.String(500), nullable=False, index=True)
     tpid = db.Column(db.String(50), nullable=True, index=True)
     seller_name = db.Column(db.String(200), nullable=True)  # From territory alignment in CSV
-    bucket = db.Column(db.String(50), nullable=False)  # Core DBs, Analytics, Modern DBs
+    bucket = db.Column(db.String(50), nullable=False)  # e.g., Analytics, Core DBs
     
     # Link to Sales Buddy customer (nullable until matched)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, index=True)
@@ -1101,7 +1124,7 @@ class ProductRevenueData(db.Model):
     
     # Customer/bucket identification
     customer_name = db.Column(db.String(500), nullable=False, index=True)
-    bucket = db.Column(db.String(50), nullable=False)  # Core DBs, Analytics, Modern DBs
+    bucket = db.Column(db.String(50), nullable=False)  # e.g., Analytics, Core DBs
     product = db.Column(db.String(200), nullable=False, index=True)  # ServiceLevel4 from CSV
     
     # Link to Sales Buddy customer (nullable until matched)

@@ -173,7 +173,7 @@ def compute_signals(
     
     Args:
         customer_name: Customer name
-        bucket: Product bucket (Core DBs, Analytics, Modern DBs)
+        bucket: Product bucket (e.g., Analytics, Core DBs)
         revenues: List of monthly revenue values (chronological order)
         month_names: List of fiscal month names matching revenues
         tpid: Optional TPID

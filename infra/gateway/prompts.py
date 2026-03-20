@@ -105,6 +105,22 @@ MILESTONE_MATCH_PROMPT = (
 )
 
 # ---------------------------------------------------------------------------
+# Opportunity matching  (from app/routes/ai.py - DSS seller mode)
+# ---------------------------------------------------------------------------
+OPPORTUNITY_MATCH_PROMPT = (
+    "You are an expert at matching customer call notes to sales opportunities.\n"
+    "Your task is to identify which opportunity best matches the topics discussed "
+    "in the call notes.\n\n"
+    "Pick the best content match from the list. If none of the opportunities are "
+    "relevant to what was discussed in the call, respond with "
+    "opportunity_id null - do NOT force a match.\n\n"
+    'Respond with ONLY a JSON object in this exact format (no markdown, no explanation):\n'
+    '{"opportunity_id": "THE_MATCHED_ID", "reason": "Brief explanation of why this opportunity matches"}\n\n'
+    "If no opportunity is a good match, respond with:\n"
+    '{"opportunity_id": null, "reason": "No opportunity matches the call discussion"}'
+)
+
+# ---------------------------------------------------------------------------
 # Call analysis / topic extraction  (from app/routes/ai.py)
 # ---------------------------------------------------------------------------
 ANALYZE_CALL_PROMPT = (

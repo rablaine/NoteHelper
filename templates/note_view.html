@@ -45,6 +45,7 @@
                     {% endif %}
                 </p>
                 
+                {% if not seller_mode %}
                 <p><strong>Seller:</strong><br>
                     {% if note.seller %}
                         <a href="{{ url_for('sellers.seller_view', id=note.seller.id) }}" class="badge bg-primary text-decoration-none">
@@ -54,6 +55,7 @@
                         <span class="text-muted">Not specified</span>
                     {% endif %}
                 </p>
+                {% endif %}
                 
                 <p><strong>Territory:</strong><br>
                     {% if note.territory %}
@@ -128,6 +130,41 @@
                         </a>
                     {% endfor %}
                 </p>
+                {% endif %}
+                
+                {% if note.opportunities|length > 0 %}
+                <p class="mb-2"><strong>Opportunities:</strong></p>
+                {% for opp in note.opportunities %}
+                <div class="card border-info mb-2">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>
+                                    <i class="bi bi-briefcase me-1"></i>
+                                    <a href="{{ url_for('opportunities.opportunity_view', id=opp.id) }}">{{ opp.name }}</a>
+                                </strong>
+                                {% if opp.opportunity_number %}
+                                <span class="text-muted small">({{ opp.opportunity_number }})</span>
+                                {% endif %}
+                                {% if opp.state %}
+                                <span class="badge bg-info text-dark ms-1">{{ opp.state }}</span>
+                                {% endif %}
+                                {% if opp.estimated_value %}
+                                <span class="badge bg-success ms-1">${{ "{:,.0f}".format(opp.estimated_value) }}</span>
+                                {% endif %}
+                            </div>
+                            {% if opp.msx_url %}
+                            <a href="{{ opp.msx_url }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Open in MSX">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% if opp.owner_name %}
+                        <small class="text-muted">Owner: {{ opp.owner_name }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
                 {% endif %}
                 
                 {% if note.msx_tasks.count() > 0 %}

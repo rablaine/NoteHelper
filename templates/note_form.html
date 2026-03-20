@@ -148,10 +148,12 @@
                             {% if not note and preselect_customer_id %}
                                 <input type="hidden" name="customer_id" value="{{ preselect_customer_id }}">
                             {% endif %}
+                            {% if not seller_mode %}
                             {% if note and note.customer and note.customer.seller %}
                                 <div class="form-text">Seller: <strong>{{ note.customer.seller.name }}</strong></div>
                             {% elif preselect_customer and preselect_customer.seller %}
                                 <div class="form-text">Seller: <strong>{{ preselect_customer.seller.name }}</strong></div>
+                            {% endif %}
                             {% endif %}
                         </div>
                         <div class="col-md-5" id="engagementSection" {% if not preselect_customer_id and not (note and note.customer_id) %}style="display: none;"{% endif %}>
@@ -285,6 +287,7 @@
                     </div>
                     
                     {% if not is_general_note %}
+                    {% if user_role != 'dss' %}
                     <!-- Milestone Picker -->
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -442,6 +445,66 @@
                             </div>
                         </div>
                     </div>
+                    {% else %}
+                    <!-- Opportunity Picker (DSS users) -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label for="opportunity_search" class="form-label mb-0">
+                                <i class="bi bi-briefcase"></i> Opportunity (optional)
+                            </label>
+                            <div class="d-flex align-items-center gap-2">
+                                <div id="opportunity_loading" class="text-muted small" style="display: none;">
+                                    <span class="spinner-border spinner-border-sm me-1"></span> Loading opportunities...
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-info" id="aiMatchOpportunityBtn" style="display: none;" onclick="aiMatchOpportunity()">
+                                    <i class="bi bi-stars"></i> <span id="aiMatchOpportunityBtnText">Match Opportunity</span>
+                                </button>
+                            </div>
+                        </div>
+                        <input type="text" class="form-control" id="opportunity_search" 
+                               placeholder="Search opportunities..." autocomplete="off" disabled>
+                        <div id="opportunity_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 300px; overflow-y: auto;"></div>
+                        <div class="form-text" id="opportunity_help_text">Select a customer to load opportunities from MSX</div>
+                        
+                        <div id="selected_opportunity" class="mt-2">
+                            {% if note and note.opportunities %}
+                                {% for opp in note.opportunities %}
+                                <div class="card border-info mb-2" data-msx-opportunity-id="{{ opp.msx_opportunity_id }}">
+                                    <div class="card-body py-2 px-3">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <strong>
+                                                    <i class="bi bi-briefcase me-1"></i>
+                                                    {% if opp.msx_opportunity_id %}
+                                                        <a href="{{ opp.msx_url }}" target="_blank">{{ opp.name }}</a>
+                                                    {% else %}
+                                                        {{ opp.name }}
+                                                    {% endif %}
+                                                </strong>
+                                                {% if opp.opportunity_number %}
+                                                <span class="text-muted small">({{ opp.opportunity_number }})</span>
+                                                {% endif %}
+                                                {% if opp.state %}
+                                                <span class="badge bg-info text-dark ms-1">{{ opp.state }}</span>
+                                                {% endif %}
+                                                {% if opp.estimated_value %}
+                                                <span class="badge bg-success ms-1">${{ "{:,.0f}".format(opp.estimated_value) }}</span>
+                                                {% endif %}
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-danger opp-remove-btn"
+                                                data-msx-id="{{ opp.msx_opportunity_id }}">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" name="opportunity_msx_id" value="{{ opp.msx_opportunity_id }}">
+                                    <input type="hidden" name="opportunity_ids" value="{{ opp.id }}">
+                                </div>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}{# end user_role check #}
                     {% endif %}{# end not is_general_note #}
 
                     <div class="d-flex justify-content-between">
@@ -2232,11 +2295,13 @@ function saveEngagementFromFlyout() {
 }
 
 // ===== MILESTONE SEARCH AND SELECTION FUNCTIONALITY =====
+// Declare fallback globals used by saveDraft/restoreDraft
 let allMilestones = [];
+let selectedMilestones = [];
+{% if user_role != 'dss' %}
 let currentMilestoneMatches = [];
 let selectedMilestoneIndex = -1;
 let taskCategories = [];
-let selectedMilestones = [];
 
 const milestoneSearch = document.getElementById('milestone_search');
 const milestoneDropdown = document.getElementById('milestone_dropdown');
@@ -3018,6 +3083,349 @@ function aiMatchMilestone() {
         alert('Failed to match milestone. Please try again.');
     });
 }
+{% endif %}{# end milestone JS for non-DSS #}
+
+// ===== OPPORTUNITY SEARCH AND SELECTION (DSS MODE) =====
+{% if user_role == 'dss' %}
+let allOpportunities = [];
+let currentOpportunityMatches = [];
+let selectedOpportunityIndex = -1;
+let selectedOpportunities = [];
+
+const opportunitySearch = document.getElementById('opportunity_search');
+const opportunityDropdown = document.getElementById('opportunity_dropdown');
+const selectedOpportunityContainer = document.getElementById('selected_opportunity');
+const opportunityLoading = document.getElementById('opportunity_loading');
+const opportunityHelpText = document.getElementById('opportunity_help_text');
+
+// Initialize selectedOpportunities from server-rendered cards (edit mode)
+(function initExistingOpportunities() {
+    if (!selectedOpportunityContainer) return;
+    selectedOpportunityContainer.querySelectorAll('[data-msx-opportunity-id]').forEach(card => {
+        const msxId = card.dataset.msxOpportunityId;
+        if (msxId) {
+            selectedOpportunities.push({
+                id: msxId,
+                name: card.querySelector('strong')?.textContent?.trim() || '',
+                state: card.querySelector('.badge.bg-info')?.textContent?.trim() || '',
+            });
+        }
+    });
+    selectedOpportunityContainer.querySelectorAll('.opp-remove-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            removeOpportunity(this.dataset.msxId);
+        });
+    });
+})();
+
+function loadOpportunitiesForCustomer(customerId) {
+    if (!opportunitySearch) return;
+
+    if (!customerId) {
+        allOpportunities = [];
+        opportunitySearch.disabled = true;
+        opportunitySearch.placeholder = 'Search opportunities...';
+        opportunityHelpText.textContent = 'Select a customer to load opportunities from MSX';
+        return;
+    }
+
+    opportunityLoading.style.display = 'inline';
+    opportunitySearch.disabled = true;
+    opportunitySearch.placeholder = 'Loading opportunities...';
+    opportunityHelpText.textContent = 'Fetching opportunities from MSX...';
+
+    fetch(`/api/msx/opportunities-for-customer/${customerId}`)
+        .then(response => response.json())
+        .then(data => {
+            opportunityLoading.style.display = 'none';
+            const matchBtn = document.getElementById('aiMatchOpportunityBtn');
+
+            if (data.success && data.opportunities) {
+                allOpportunities = data.opportunities;
+                opportunitySearch.disabled = false;
+                if (allOpportunities.length <= 10) {
+                    opportunitySearch.placeholder = `${allOpportunities.length} opportunit${allOpportunities.length !== 1 ? 'ies' : 'y'} - click to browse`;
+                } else {
+                    opportunitySearch.placeholder = `Search ${allOpportunities.length} opportunities (or * to list all)...`;
+                }
+                opportunityHelpText.textContent = `Found ${allOpportunities.length} open opportunit${allOpportunities.length !== 1 ? 'ies' : 'y'} for this customer`;
+                if (matchBtn && allOpportunities.length > 0) {
+                    matchBtn.style.display = 'inline-block';
+                }
+            } else if (data.needs_tpid) {
+                opportunitySearch.placeholder = 'Link customer to MSX first';
+                opportunityHelpText.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Customer has no MSX account linked</span>';
+                if (matchBtn) matchBtn.style.display = 'none';
+            } else {
+                opportunitySearch.placeholder = 'Could not load opportunities';
+                opportunityHelpText.innerHTML = `<span class="text-danger">${data.error || 'Unknown error'}</span>`;
+            }
+        })
+        .catch(error => {
+            console.error('Failed to load opportunities:', error);
+            opportunityLoading.style.display = 'none';
+            opportunitySearch.placeholder = 'Error loading opportunities';
+            opportunityHelpText.innerHTML = '<span class="text-danger">Failed to connect to MSX</span>';
+        });
+}
+
+// Hook into customer dropdown change to load opportunities
+document.getElementById('customer_id').addEventListener('change', function() {
+    loadOpportunitiesForCustomer(this.value);
+    // Show/hide contacts button
+    var contactsBtn = document.getElementById('contactsFlyoutBtn');
+    if (contactsBtn) contactsBtn.style.display = this.value ? '' : 'none';
+});
+// Load on page load if customer already selected
+(function() {
+    const cid = document.getElementById('customer_id').value;
+    if (cid) loadOpportunitiesForCustomer(cid);
+})();
+
+if (opportunitySearch) {
+    opportunitySearch.addEventListener('input', function() {
+        const term = this.value.toLowerCase().trim();
+        if (term.length === 0) {
+            opportunityDropdown.style.display = 'none';
+            currentOpportunityMatches = [];
+            selectedOpportunityIndex = -1;
+            return;
+        }
+        if (term === '*') {
+            currentOpportunityMatches = allOpportunities.slice();
+        } else {
+            currentOpportunityMatches = allOpportunities.filter(o => {
+                const name = (o.name || '').toLowerCase();
+                const num = (o.number || '').toLowerCase();
+                const owner = (o.owner || '').toLowerCase();
+                return name.includes(term) || num.includes(term) || owner.includes(term);
+            });
+        }
+        if (currentOpportunityMatches.length > 0) {
+            selectedOpportunityIndex = 0;
+            renderOpportunityDropdown();
+            opportunityDropdown.style.display = 'block';
+            opportunityDropdown.style.width = opportunitySearch.offsetWidth + 'px';
+        } else {
+            opportunityDropdown.style.display = 'none';
+            currentOpportunityMatches = [];
+            selectedOpportunityIndex = -1;
+        }
+    });
+
+    opportunitySearch.addEventListener('focus', function() {
+        if (this.value.trim().length === 0 && allOpportunities.length > 0 && allOpportunities.length <= 10) {
+            currentOpportunityMatches = allOpportunities.slice();
+            selectedOpportunityIndex = 0;
+            renderOpportunityDropdown();
+            opportunityDropdown.style.display = 'block';
+            opportunityDropdown.style.width = opportunitySearch.offsetWidth + 'px';
+        }
+    });
+
+    opportunitySearch.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown' && currentOpportunityMatches.length > 0) {
+            e.preventDefault();
+            selectedOpportunityIndex = (selectedOpportunityIndex + 1) % currentOpportunityMatches.length;
+            renderOpportunityDropdown();
+        } else if (e.key === 'ArrowUp' && currentOpportunityMatches.length > 0) {
+            e.preventDefault();
+            selectedOpportunityIndex = selectedOpportunityIndex <= 0 ? currentOpportunityMatches.length - 1 : selectedOpportunityIndex - 1;
+            renderOpportunityDropdown();
+        } else if ((e.key === 'Tab' || e.key === 'Enter') && currentOpportunityMatches.length > 0) {
+            e.preventDefault();
+            if (selectedOpportunityIndex >= 0 && selectedOpportunityIndex < currentOpportunityMatches.length) {
+                selectOpportunity(currentOpportunityMatches[selectedOpportunityIndex]);
+            }
+        } else if (e.key === 'Escape') {
+            opportunityDropdown.style.display = 'none';
+            currentOpportunityMatches = [];
+            selectedOpportunityIndex = -1;
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!opportunitySearch.contains(e.target) && !opportunityDropdown.contains(e.target)) {
+            opportunityDropdown.style.display = 'none';
+            currentOpportunityMatches = [];
+            selectedOpportunityIndex = -1;
+        }
+    });
+}
+
+function renderOpportunityDropdown() {
+    opportunityDropdown.innerHTML = currentOpportunityMatches.map((opp, index) => {
+        const name = opp.name || 'Unnamed Opportunity';
+        const number = opp.number || '';
+        const state = opp.state || 'Open';
+        const owner = opp.owner || '';
+        const value = opp.estimated_value;
+        const usedIn = opp.used_in_notes || 0;
+        const valueDisplay = value ? '$' + Number(value).toLocaleString() : '';
+
+        return `<button type="button" class="list-group-item list-group-item-action ${index === selectedOpportunityIndex ? 'active' : ''}"
+            data-opp-index="${index}"
+            onmouseenter="handleOpportunityHover(${index})"
+            onclick="selectOpportunity(currentOpportunityMatches[${index}])">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <i class="bi bi-briefcase"></i> <strong>${name}</strong>
+                    ${number ? '<span class="text-muted small">(' + number + ')</span>' : ''}
+                    <span class="badge bg-info text-dark ms-1">${state}</span>
+                    ${usedIn > 0 ? '<span class="badge bg-secondary ms-1" title="Used in ' + usedIn + ' note(s)"><i class="bi bi-journal-text"></i> ' + usedIn + '</span>' : ''}
+                </div>
+                ${valueDisplay ? '<span class="badge bg-success">' + valueDisplay + '</span>' : ''}
+            </div>
+            ${owner ? '<small class="text-muted"><i class="bi bi-person"></i> ' + owner + '</small>' : ''}
+        </button>`;
+    }).join('');
+}
+
+function handleOpportunityHover(index) {
+    selectedOpportunityIndex = index;
+    opportunityDropdown.querySelectorAll('button').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+    });
+}
+
+function selectOpportunity(opp) {
+    if (selectedOpportunities.some(o => o.id === opp.id)) return;
+    selectedOpportunities.push(opp);
+    renderSelectedOpportunities();
+    opportunitySearch.value = '';
+    opportunityDropdown.style.display = 'none';
+    currentOpportunityMatches = [];
+    selectedOpportunityIndex = -1;
+    try { saveDraft(); } catch(e) { console.error('saveDraft error on opportunity add:', e); }
+}
+
+function renderSelectedOpportunities() {
+    let html = '';
+    for (const opp of selectedOpportunities) {
+        const msxId = opp.id;
+        const name = opp.name || 'Unnamed Opportunity';
+        const number = opp.number || '';
+        const state = opp.state || 'Open';
+        const owner = opp.owner || '';
+        const value = opp.estimated_value;
+        const url = opp.url || '';
+        const valueDisplay = value ? '$' + Number(value).toLocaleString() : '';
+        const closeDate = opp.estimated_close_date;
+        let dateDisplay = '';
+        if (closeDate) {
+            const d = new Date(closeDate);
+            if (!isNaN(d)) {
+                dateDisplay = 'Est. close ' + d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            }
+        }
+
+        html += `
+        <div class="card border-info mb-2" data-msx-opportunity-id="${msxId}">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong>
+                            <i class="bi bi-briefcase me-1"></i>
+                            ${url ? '<a href="' + url + '" target="_blank">' + name + '</a>' : name}
+                        </strong>
+                        ${number ? '<span class="text-muted small">(' + number + ')</span>' : ''}
+                        <span class="badge bg-info text-dark ms-1">${state}</span>
+                        ${valueDisplay ? '<span class="badge bg-success ms-1">' + valueDisplay + '</span>' : ''}
+                        ${dateDisplay ? '<span class="text-muted small ms-1"><i class="bi bi-calendar3"></i> ' + dateDisplay + '</span>' : ''}
+                        ${owner ? '<br><small class="text-muted"><i class="bi bi-person"></i> ' + owner + '</small>' : ''}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger opp-remove-btn" data-msx-id="${msxId}">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            </div>
+            <input type="hidden" name="opportunity_msx_id" value="${msxId}">
+            <input type="hidden" name="opportunity_name" value="${name}">
+            <input type="hidden" name="opportunity_number" value="${number}">
+            <input type="hidden" name="opportunity_state" value="${state}">
+            <input type="hidden" name="opportunity_estimated_value" value="${value || ''}">
+            <input type="hidden" name="opportunity_url" value="${url}">
+        </div>`;
+    }
+    selectedOpportunityContainer.innerHTML = html;
+    selectedOpportunityContainer.querySelectorAll('.opp-remove-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            removeOpportunity(this.dataset.msxId);
+        });
+    });
+}
+
+function removeOpportunity(msxId) {
+    selectedOpportunities = selectedOpportunities.filter(o => o.id !== msxId);
+    renderSelectedOpportunities();
+    try { saveDraft(); } catch(e) { console.error('saveDraft error on opportunity remove:', e); }
+}
+
+function aiMatchOpportunity() {
+    const btn = document.getElementById('aiMatchOpportunityBtn');
+    const btnText = document.getElementById('aiMatchOpportunityBtnText');
+    const originalText = btnText.textContent;
+
+    const callNotes = quill.getText().trim();
+    if (callNotes.length < 20) {
+        alert('Please add more call notes before matching opportunities.');
+        return;
+    }
+    if (!allOpportunities || allOpportunities.length === 0) {
+        alert('No opportunities loaded. Please select a customer first.');
+        return;
+    }
+
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Matching...';
+
+    const oppContext = allOpportunities.map(o => ({
+        id: o.id,
+        name: o.name,
+        number: o.number || '',
+        estimated_value: o.estimated_value || ''
+    }));
+
+    fetch('/api/ai/match-opportunity', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            call_notes: callNotes,
+            opportunities: oppContext
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btnText.textContent = originalText;
+
+        if (data.success && data.matched_opportunity_id) {
+            const matched = allOpportunities.find(o => o.id === data.matched_opportunity_id);
+            if (matched) {
+                const val = matched.estimated_value ? '$' + Number(matched.estimated_value).toLocaleString() : '';
+                const confirmMsg = `AI suggests opportunity:\n\n"${matched.name}"\n${val ? 'Value: ' + val : ''}\n\nReason: ${data.reason || 'Best match based on call notes'}\n\nAdd this opportunity to the note?`;
+                if (confirm(confirmMsg)) {
+                    selectOpportunity(matched);
+                    btnText.textContent = 'Opportunity added!';
+                    setTimeout(() => { btnText.textContent = originalText; }, 2000);
+                }
+            } else {
+                alert('Could not find the matched opportunity. Try selecting it manually.');
+            }
+        } else if (data.error) {
+            alert('AI Error: ' + data.error);
+        } else {
+            alert('AI could not find a matching opportunity. Please select one manually.');
+        }
+    })
+    .catch(error => {
+        console.error('AI opportunity match failed:', error);
+        btn.disabled = false;
+        btnText.textContent = originalText;
+        alert('Failed to match opportunity. Please try again.');
+    });
+}
+{% endif %}{# end DSS opportunity JS #}
 
 // ===== AUTO-SAVE FUNCTIONALITY =====
 const DRAFT_KEY_PREFIX = 'salesbuddy_draft_';
@@ -3072,17 +3480,17 @@ function saveDraft() {
         url: m.url
     }));
     
-    // Get task form data
-    const taskData = {
-        subject: document.getElementById('task_subject').value,
+    // Get task form data (only exists for non-DSS users)
+    const taskSubjectEl = document.getElementById('task_subject');
+    const taskData = taskSubjectEl ? {
+        subject: taskSubjectEl.value,
         category: document.getElementById('task_category').value,
         description: document.getElementById('task_description').value,
-        // Include created task info if task was already created
         created_task_id: document.getElementById('created_task_id').value,
         created_task_url: document.getElementById('created_task_url').value,
         created_task_category_name: document.getElementById('created_task_category_name').value,
         created_task_is_hok: document.getElementById('created_task_is_hok').value
-    };
+    } : {};
     
     const draftData = {
         customer_id: document.getElementById('customer_id').value,
@@ -3212,7 +3620,7 @@ function restoreDraft() {
 
         // Restore milestone selection (support both old single and new array format)
         const savedMilestones = draft.milestones || (draft.milestone ? [draft.milestone] : []);
-        if (savedMilestones.length > 0) {
+        if (savedMilestones.length > 0 && typeof selectMilestone === 'function') {
             savedMilestones.forEach(m => selectMilestone(m));
         }
         

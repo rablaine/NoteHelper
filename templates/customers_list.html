@@ -74,9 +74,11 @@
             <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'alphabetical' else 'btn-outline-secondary' }}" data-sort="alphabetical" title="Sort alphabetically">
                 <i class="bi bi-sort-alpha-down"></i> A-Z
             </button>
+            {% if not seller_mode %}
             <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'grouped' else 'btn-outline-secondary' }}" data-sort="grouped" title="Group by seller">
                 <i class="bi bi-people"></i> Grouped
             </button>
+            {% endif %}
             <button type="button" class="btn btn-sm {{ 'btn-primary' if sort_by == 'by_calls' else 'btn-outline-secondary' }}" data-sort="by_calls" title="Sort by number of notes">
                 <i class="bi bi-journal-text"></i> By Notes
             </button>
@@ -219,7 +221,7 @@
                         </div>
                     </div>
                     <div>
-                        {% if customer.seller %}
+                        {% if customer.seller and not seller_mode %}
                             <a href="{{ url_for('sellers.seller_view', id=customer.seller.id) }}" class="badge {{ get_seller_color(customer.seller.id) }} text-decoration-none"><i class="bi bi-person"></i> {{ customer.seller.name }}</a>
                             {% if customer.seller.seller_type %}
                                 <span class="badge {% if customer.seller.seller_type == 'Growth' %}bg-success{% else %}bg-info{% endif %}">{{ customer.seller.seller_type }}</span>

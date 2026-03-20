@@ -42,6 +42,7 @@ from app.services.msx_api import (
     test_connection,
     lookup_account_by_tpid,
     get_milestones_by_account,
+    get_opportunities_by_account,
     get_my_milestone_team_ids,
     extract_account_id_from_url,
     create_task,
@@ -69,7 +70,7 @@ from app.services.msx_api import (
     build_account_url,
     get_user_alias,
 )
-from app.models import Customer, CustomerCSAM, Milestone, Territory, Seller, POD, SolutionEngineer, SyncStatus, Vertical, db
+from app.models import Customer, CustomerCSAM, Milestone, Opportunity, Territory, Seller, POD, SolutionEngineer, SyncStatus, Vertical, db
 
 logger = logging.getLogger(__name__)
 
@@ -449,6 +450,55 @@ def get_milestones_for_customer(customer_id: int):
             else:
                 milestone_data["on_my_team"] = existing.on_my_team if existing else False
     
+    return jsonify(result)
+
+
+@msx_bp.route('/opportunities-for-customer/<int:customer_id>')
+def get_opportunities_for_customer(customer_id: int):
+    """
+    Get open opportunities for a customer using their TPID URL.
+
+    Extracts the account ID from the customer's tpid_url and fetches
+    open opportunities from MSX.
+    """
+    customer = db.session.get(Customer, customer_id)
+    if not customer:
+        return jsonify({"success": False, "error": "Customer not found"})
+
+    if not customer.tpid_url:
+        return jsonify({
+            "success": False,
+            "error": "Customer has no MSX account linked",
+            "needs_tpid": True
+        })
+
+    account_id = extract_account_id_from_url(customer.tpid_url)
+    if not account_id:
+        return jsonify({
+            "success": False,
+            "error": "Could not extract account ID from customer's MSX URL"
+        })
+
+    result = get_opportunities_by_account(account_id)
+
+    if not result.get("success"):
+        return jsonify(result)
+
+    # Enrich with local metadata (which opportunities are already linked to notes)
+    opportunities = result.get("opportunities", [])
+    for opp_data in opportunities:
+        msx_opp_id = opp_data.get("id")
+        if msx_opp_id:
+            existing = Opportunity.query.filter_by(
+                msx_opportunity_id=msx_opp_id
+            ).first()
+            if existing and existing.notes:
+                opp_data["used_in_notes"] = len(existing.notes)
+                opp_data["local_opportunity_id"] = existing.id
+            else:
+                opp_data["used_in_notes"] = 0
+                opp_data["local_opportunity_id"] = existing.id if existing else None
+
     return jsonify(result)
 
 
@@ -1061,67 +1111,97 @@ def _drain(q: queue.Queue) -> list:
 
 def _par_query_accounts(account_ids, batch_size, progress_q, worker_id):
     """Worker: query account details for a chunk of IDs."""
+    from app.services.msx_api import msx_retry_state
+
+    def _on_retry(attempt, max_retries, wait_secs, error_type):
+        progress_q.put({"retry": True, "message":
+            f"Querying accounts - timeout, retrying ({attempt}/{max_retries})..."})
+    msx_retry_state.callback = _on_retry
+
     accounts = {}
     batches = math.ceil(len(account_ids) / batch_size)
-    for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
-        batch = account_ids[i:i + batch_size]
-        filter_parts = [f"accountid eq {aid}" for aid in batch]
-        result = query_entity(
-            "accounts",
-            select=["accountid", "name", "msp_mstopparentid",
-                    "_territoryid_value", "msp_verticalcode",
-                    "msp_verticalcategorycode", "websiteurl",
-                    "msp_parentinglevelcode", "_ownerid_value"],
-            filter_query=" or ".join(filter_parts),
-            top=batch_size + 5,
-        )
-        if result.get("success"):
-            for rec in result.get("records", []):
-                aid = rec.get("accountid")
-                if aid:
-                    accounts[aid] = rec
-        progress_q.put({"worker": worker_id, "batch": batch_num,
-                        "total_batches": batches, "fetched": len(accounts)})
+    try:
+        for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
+            batch = account_ids[i:i + batch_size]
+            filter_parts = [f"accountid eq {aid}" for aid in batch]
+            result = query_entity(
+                "accounts",
+                select=["accountid", "name", "msp_mstopparentid",
+                        "_territoryid_value", "msp_verticalcode",
+                        "msp_verticalcategorycode", "websiteurl",
+                        "msp_parentinglevelcode", "_ownerid_value"],
+                filter_query=" or ".join(filter_parts),
+                top=batch_size + 5,
+            )
+            if result.get("success"):
+                for rec in result.get("records", []):
+                    aid = rec.get("accountid")
+                    if aid:
+                        accounts[aid] = rec
+            progress_q.put({"worker": worker_id, "batch": batch_num,
+                            "total_batches": batches, "fetched": len(accounts)})
+    finally:
+        msx_retry_state.callback = None
     return accounts
 
 
 def _par_query_territories(territory_ids, batch_size, progress_q, worker_id):
     """Worker: query territory details for a chunk of IDs."""
+    from app.services.msx_api import msx_retry_state
+
+    def _on_retry(attempt, max_retries, wait_secs, error_type):
+        progress_q.put({"retry": True, "message":
+            f"Querying territories - timeout, retrying ({attempt}/{max_retries})..."})
+    msx_retry_state.callback = _on_retry
+
     territories = {}
     batches = math.ceil(len(territory_ids) / batch_size) if territory_ids else 0
-    for batch_num, i in enumerate(range(0, len(territory_ids), batch_size), start=1):
-        batch = territory_ids[i:i + batch_size]
-        filter_parts = [f"territoryid eq {tid}" for tid in batch]
-        result = query_entity(
-            "territories",
-            select=["territoryid", "name", "msp_ownerid",
-                    "msp_salesunitname", "msp_accountteamunitname"],
-            filter_query=" or ".join(filter_parts),
-            top=batch_size + 5,
-        )
-        if result.get("success"):
-            for rec in result.get("records", []):
-                tid = rec.get("territoryid")
-                if tid:
-                    territories[tid] = rec
-        progress_q.put({"worker": worker_id, "batch": batch_num,
-                        "total_batches": batches, "fetched": len(territories)})
+    try:
+        for batch_num, i in enumerate(range(0, len(territory_ids), batch_size), start=1):
+            batch = territory_ids[i:i + batch_size]
+            filter_parts = [f"territoryid eq {tid}" for tid in batch]
+            result = query_entity(
+                "territories",
+                select=["territoryid", "name", "msp_ownerid",
+                        "msp_salesunitname", "msp_accountteamunitname"],
+                filter_query=" or ".join(filter_parts),
+                top=batch_size + 5,
+            )
+            if result.get("success"):
+                for rec in result.get("records", []):
+                    tid = rec.get("territoryid")
+                    if tid:
+                        territories[tid] = rec
+            progress_q.put({"worker": worker_id, "batch": batch_num,
+                            "total_batches": batches, "fetched": len(territories)})
+    finally:
+        msx_retry_state.callback = None
     return territories
 
 
 def _par_query_teams(account_ids, batch_size, progress_q, worker_id):
     """Worker: query account teams for a chunk of account IDs."""
+    from app.services.msx_api import msx_retry_state
+
+    def _on_retry(attempt, max_retries, wait_secs, error_type):
+        progress_q.put({"retry": True, "message":
+            f"Querying teams - timeout, retrying ({attempt}/{max_retries})..."})
+    msx_retry_state.callback = _on_retry
+
     account_sellers, unique_sellers, account_ses = {}, {}, {}
     batches = math.ceil(len(account_ids) / batch_size) if account_ids else 0
-    for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
-        batch = account_ids[i:i + batch_size]
-        teams_result = batch_query_account_teams(batch, batch_size=len(batch))
-        if teams_result.get("success"):
-            account_sellers.update(teams_result.get("account_sellers", {}))
-            unique_sellers.update(teams_result.get("unique_sellers", {}))
-            account_ses.update(teams_result.get("account_ses", {}))
-        progress_q.put({"worker": worker_id, "batch": batch_num,
-                        "total_batches": batches, "sellers_found": len(unique_sellers)})
+    try:
+        for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
+            batch = account_ids[i:i + batch_size]
+            teams_result = batch_query_account_teams(batch, batch_size=len(batch))
+            if teams_result.get("success"):
+                account_sellers.update(teams_result.get("account_sellers", {}))
+                unique_sellers.update(teams_result.get("unique_sellers", {}))
+                account_ses.update(teams_result.get("account_ses", {}))
+            progress_q.put({"worker": worker_id, "batch": batch_num,
+                            "total_batches": batches, "sellers_found": len(unique_sellers)})
+    finally:
+        msx_retry_state.callback = None
     return {"account_sellers": account_sellers,
             "unique_sellers": unique_sellers,
             "account_ses": account_ses}
@@ -1132,17 +1212,27 @@ _CSAM_BATCH = 10  # CSAMs are rare (~0-3 per account), safe to batch more
 
 def _par_query_csams(account_ids, batch_size, progress_q, worker_id):
     """Worker: query CSAM team members for a chunk of account IDs."""
+    from app.services.msx_api import msx_retry_state
+
+    def _on_retry(attempt, max_retries, wait_secs, error_type):
+        progress_q.put({"retry": True, "message":
+            f"Querying CSAMs - timeout, retrying ({attempt}/{max_retries})..."})
+    msx_retry_state.callback = _on_retry
+
     account_csams: dict = {}
     unique_csams: dict = {}
     batches = math.ceil(len(account_ids) / batch_size) if account_ids else 0
-    for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
-        batch = account_ids[i:i + batch_size]
-        csam_result = batch_query_account_csams(batch, batch_size=len(batch))
-        if csam_result.get("success"):
-            account_csams.update(csam_result.get("account_csams", {}))
-            unique_csams.update(csam_result.get("unique_csams", {}))
-        progress_q.put({"worker": worker_id, "batch": batch_num,
-                        "total_batches": batches, "csams_found": len(unique_csams)})
+    try:
+        for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
+            batch = account_ids[i:i + batch_size]
+            csam_result = batch_query_account_csams(batch, batch_size=len(batch))
+            if csam_result.get("success"):
+                account_csams.update(csam_result.get("account_csams", {}))
+                unique_csams.update(csam_result.get("unique_csams", {}))
+            progress_q.put({"worker": worker_id, "batch": batch_num,
+                            "total_batches": batches, "csams_found": len(unique_csams)})
+    finally:
+        msx_retry_state.callback = None
     return {"account_csams": account_csams, "unique_csams": unique_csams}
 
 
@@ -1151,17 +1241,27 @@ _DSS_BATCH = 10  # DSSs are sparse (~0-3 per account), safe to batch more
 
 def _par_query_dss(account_ids, batch_size, progress_q, worker_id):
     """Worker: query DSS team members for a chunk of account IDs."""
+    from app.services.msx_api import msx_retry_state
+
+    def _on_retry(attempt, max_retries, wait_secs, error_type):
+        progress_q.put({"retry": True, "message":
+            f"Querying DSSs - timeout, retrying ({attempt}/{max_retries})..."})
+    msx_retry_state.callback = _on_retry
+
     account_dss: dict = {}
     unique_dss: dict = {}
     batches = math.ceil(len(account_ids) / batch_size) if account_ids else 0
-    for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
-        batch = account_ids[i:i + batch_size]
-        dss_result = batch_query_account_dss(batch, batch_size=len(batch))
-        if dss_result.get("success"):
-            account_dss.update(dss_result.get("account_dss", {}))
-            unique_dss.update(dss_result.get("unique_dss", {}))
-        progress_q.put({"worker": worker_id, "batch": batch_num,
-                        "total_batches": batches, "dss_found": len(unique_dss)})
+    try:
+        for batch_num, i in enumerate(range(0, len(account_ids), batch_size), start=1):
+            batch = account_ids[i:i + batch_size]
+            dss_result = batch_query_account_dss(batch, batch_size=len(batch))
+            if dss_result.get("success"):
+                account_dss.update(dss_result.get("account_dss", {}))
+                unique_dss.update(dss_result.get("unique_dss", {}))
+            progress_q.put({"worker": worker_id, "batch": batch_num,
+                            "total_batches": batches, "dss_found": len(unique_dss)})
+    finally:
+        msx_retry_state.callback = None
     return {"account_dss": account_dss, "unique_dss": unique_dss}
 
 
@@ -1209,7 +1309,7 @@ def import_stream():
             retry_messages = []  # Collect retry events from the callback
             def _on_retry(attempt, max_retries, wait_secs, error_type):
                 retry_messages.append(
-                    f"MSX timed out (attempt {attempt}/{max_retries}), retrying in {wait_secs}s..."
+                    f"Fetching assignments - timeout, retrying ({attempt}/{max_retries})..."
                 )
             msx_retry_state.callback = _on_retry
             try:
@@ -1264,6 +1364,9 @@ def import_stream():
                 while not all(f.done() for f in futures):
                     time.sleep(0.3)
                     for evt in _drain(progress_q):
+                        if evt.get('retry'):
+                            yield _sse({"message": evt['message']})
+                            continue
                         completed += 1
                         pct = 3 + int((completed / max(total_batches, 1)) * 9)
                         yield _sse({
@@ -1271,6 +1374,9 @@ def import_stream():
                             "progress": min(pct, 12),
                         })
                 for evt in _drain(progress_q):
+                    if evt.get('retry'):
+                        yield _sse({"message": evt['message']})
+                        continue
                     completed += 1
                     pct = 3 + int((completed / max(total_batches, 1)) * 9)
                     yield _sse({
@@ -1318,6 +1424,9 @@ def import_stream():
                     while not all(f.done() for f in futures):
                         time.sleep(0.3)
                         for evt in _drain(progress_q):
+                            if evt.get('retry'):
+                                yield _sse({"message": evt['message']})
+                                continue
                             t_done += 1
                             pct = 14 + int((t_done / max(t_total, 1)) * 6)
                             yield _sse({
@@ -1325,6 +1434,9 @@ def import_stream():
                                 "progress": min(pct, 20),
                             })
                     for evt in _drain(progress_q):
+                        if evt.get('retry'):
+                            yield _sse({"message": evt['message']})
+                            continue
                         t_done += 1
                         pct = 14 + int((t_done / max(t_total, 1)) * 6)
                         yield _sse({
@@ -1465,6 +1577,9 @@ def import_stream():
                 while not all(f.done() for f in futures):
                     time.sleep(0.3)
                     for evt in _drain(progress_q):
+                        if evt.get('retry'):
+                            yield _sse({"message": evt['message']})
+                            continue
                         team_done += 1
                         pct = 25 + int((team_done / max(team_total, 1)) * 60)
                         if team_done % 3 == 0 or team_done == 1:
@@ -1473,6 +1588,9 @@ def import_stream():
                                 "progress": min(pct, 85),
                             })
                 for evt in _drain(progress_q):
+                    if evt.get('retry'):
+                        yield _sse({"message": evt['message']})
+                        continue
                     team_done += 1
                     pct = 25 + int((team_done / max(team_total, 1)) * 60)
                     yield _sse({
@@ -1509,6 +1627,9 @@ def import_stream():
                 while not all(f.done() for f in futures):
                     time.sleep(0.3)
                     for evt in _drain(progress_q):
+                        if evt.get('retry'):
+                            yield _sse({"message": evt['message']})
+                            continue
                         csam_done += 1
                     if csam_done > 0 and csam_done % 3 == 0:
                         yield _sse({
@@ -1516,6 +1637,9 @@ def import_stream():
                             "progress": 85 + round((csam_done / max(csam_total, 1)) * 1),
                         })
                 for evt in _drain(progress_q):
+                    if evt.get('retry'):
+                        yield _sse({"message": evt['message']})
+                        continue
                     csam_done += 1
                 for f in futures:
                     r = f.result()
@@ -1551,6 +1675,9 @@ def import_stream():
                 while not all(f.done() for f in futures):
                     time.sleep(0.3)
                     for evt in _drain(progress_q):
+                        if evt.get('retry'):
+                            yield _sse({"message": evt['message']})
+                            continue
                         dss_done += 1
                     if dss_done > 0 and dss_done % 3 == 0:
                         yield _sse({
@@ -1558,6 +1685,9 @@ def import_stream():
                             "progress": 86 + round((dss_done / max(dss_batch_total, 1)) * 1),
                         })
                 for evt in _drain(progress_q):
+                    if evt.get('retry'):
+                        yield _sse({"message": evt['message']})
+                        continue
                     dss_done += 1
                 for f in futures:
                     r = f.result()

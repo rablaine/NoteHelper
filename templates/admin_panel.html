@@ -748,6 +748,32 @@
         {% include 'partials/_fy_management_card.html' %}
         {% endif %}
 
+        <!-- DSS Mode Testing (dev only) -->
+        {% if config.DEBUG %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person-badge"></i> DSS Mode Testing</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="me-2">Current role:</span>
+                        <span class="badge {{ 'bg-warning text-dark' if user_role == 'dss' else 'bg-info text-dark' }} fs-6">
+                            {{ 'DSS' if user_role == 'dss' else 'SE' }}
+                        </span>
+                        {% if user_role == 'dss' and seller_mode_seller %}
+                        <span class="text-muted ms-2">Linked to: {{ seller_mode_seller.name }}</span>
+                        {% endif %}
+                    </div>
+                    <button class="btn btn-sm {{ 'btn-outline-info' if user_role == 'dss' else 'btn-outline-warning' }}" onclick="fetch('/api/admin/dev-toggle-role',{method:'POST'}).then(r=>r.json()).then(()=>location.reload());">
+                        <i class="bi bi-arrow-repeat"></i> Switch to {{ 'SE' if user_role == 'dss' else 'DSS' }} Mode
+                    </button>
+                </div>
+                <div class="form-text mt-2">Toggles between SE and DSS mode for testing. DSS mode links to seller ID 7.</div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Danger Zone (collapsed by default) -->
         <div class="card mb-4 border-danger">
             <div class="card-header bg-danger text-white collapsed" data-bs-toggle="collapse" data-bs-target="#dangerZoneCollapse" aria-expanded="false" role="button" style="cursor: pointer;">

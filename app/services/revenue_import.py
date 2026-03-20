@@ -11,8 +11,8 @@ Row 2+: CustomerName, Bucket, Product, $revenue, $revenue, ...
 
 Where:
 - Bucket = "Total" means customer total across all buckets
-- Bucket = "Analytics"/"Core DBs"/etc with Product = "Total" means bucket total
-- Bucket = "Analytics"/"Core DBs"/etc with Product = specific name means product detail
+- Bucket = a service grouping name with Product = "Total" means bucket total
+- Bucket = a service grouping name with Product = specific name means product detail
 
 Fiscal Month Format: "FY26-Jan" where FY26 = July 2025 - June 2026
 """
@@ -1004,7 +1004,7 @@ def get_customer_revenue_history(
     
     Args:
         customer_name: Customer name to look up (from CSV)
-        bucket: Optional bucket filter (Core DBs, Analytics, Modern DBs)
+        bucket: Optional bucket filter (e.g., your imported service groupings)
         customer_id: Sales Buddy customer ID (preferred over customer_name)
         
     Returns:
@@ -1034,7 +1034,7 @@ def get_product_revenue_history(
     
     Args:
         customer_name: Customer name to look up (from CSV)
-        bucket: Bucket name (Core DBs, Analytics, Modern DBs)
+        bucket: Bucket name (e.g., your imported service groupings)
         product: Optional specific product filter
         customer_id: Sales Buddy customer ID (preferred over customer_name)
         

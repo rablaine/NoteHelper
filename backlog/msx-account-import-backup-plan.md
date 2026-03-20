@@ -1,9 +1,9 @@
 # MSX Account Import via Access Team Query
 
-## Status: Backlog (Fallback - pending MSX fix for msp_accountteam)
+## Status: Archived (no longer needed)
 
 **Date:** March 18, 2026
-**Context:** MSX broke the `msp_accountteam` endpoint (support ticket open). This fallback uses the Account Access Team membership query discovered in Fiddler trace (frame 160 of accountsview.saz). It returns all accounts where a given user is on the Account Access Team.
+**Context:** This plan was created as a disaster measure because the `msp_accountteam` endpoint broke until a support request was opened to have it fixed. The endpoint is working again, so this fallback approach is no longer needed. Kept for reference in case it breaks again.
 
 ---
 

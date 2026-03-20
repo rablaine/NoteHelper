@@ -45,6 +45,9 @@
                         <div class="form-text">Link to this customer's account record in Microsoft Sales Experience (MSX)</div>
                     </div>
                     
+                    {% if seller_mode and seller_mode_seller %}
+                    <input type="hidden" name="seller_id" value="{{ seller_mode_seller.id }}">
+                    {% else %}
                     <div class="mb-3">
                         <label for="seller_id" class="form-label">Seller</label>
                         <select class="form-select" id="seller_id" name="seller_id">
@@ -68,6 +71,7 @@
                             Or <a href="#" data-bs-toggle="modal" data-bs-target="#newSellerModal">create a new seller</a>
                         </div>
                     </div>
+                    {% endif %}
                     
                     <div class="mb-3">
                         <label for="territory_id" class="form-label">Territory</label>
@@ -236,20 +240,35 @@ function filterSellers() {
 let sellerChangedByUser = false;
 let territoryChangedByUser = false;
 
-// Seller change handler
-document.getElementById('seller_id').addEventListener('change', function() {
-    sellerChangedByUser = true;
-    filterTerritories();
-});
+// Seller change handler (only when dropdown exists - not in seller mode)
+const sellerDropdown = document.getElementById('seller_id');
+if (sellerDropdown && sellerDropdown.tagName === 'SELECT') {
+    sellerDropdown.addEventListener('change', function() {
+        sellerChangedByUser = true;
+        filterTerritories();
+    });
+}
 
 // Territory change handler
 document.getElementById('territory_id').addEventListener('change', function() {
     territoryChangedByUser = true;
-    filterSellers();
+    if (sellerDropdown && sellerDropdown.tagName === 'SELECT') {
+        filterSellers();
+    }
 });
 
+// In seller mode, auto-select territory if only one exists
+if (!sellerDropdown || sellerDropdown.tagName !== 'SELECT') {
+    const territorySelect = document.getElementById('territory_id');
+    const realOptions = Array.from(territorySelect.options).filter(o => o.value);
+    if (realOptions.length === 1 && !territorySelect.value) {
+        territorySelect.value = realOptions[0].value;
+    }
+}
+
 function updateExistingCustomersList() {
-    const sellerId = document.getElementById('seller_id').value;
+    const sellerEl = document.getElementById('seller_id');
+    const sellerId = sellerEl ? sellerEl.value : '';
     const existingCard = document.getElementById('existingCustomersCard');
     const noSellerCard = document.getElementById('noSellerCard');
     const noSellerMessage = document.getElementById('noSellerMessage');
@@ -291,11 +310,11 @@ function updateExistingCustomersList() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    // Apply filters based on pre-selected values
-    if (document.getElementById('seller_id').value) {
+    // Apply filters based on pre-selected values (only when dropdowns exist)
+    if (sellerDropdown && sellerDropdown.tagName === 'SELECT' && sellerDropdown.value) {
         filterTerritories();
     }
-    if (document.getElementById('territory_id').value) {
+    if (sellerDropdown && sellerDropdown.tagName === 'SELECT' && document.getElementById('territory_id').value) {
         filterSellers();
     }
     updateExistingCustomersList();

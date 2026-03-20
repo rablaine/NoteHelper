@@ -166,19 +166,33 @@ def _ms_fetch_worker(
     Worker thread: fetch milestones from MSX for a batch of customers.
 
     Puts results onto progress_q as tuples of
-    ('fetched', cust_id, cust_name, msx_result) or
-    ('vpn', cust_id, cust_name, None).
+    ('fetched', cust_id, cust_name, msx_result),
+    ('retry', cust_id, cust_name, message_str),
+    or ('vpn', cust_id, cust_name, None).
     Sends ('done', None, None, None) when finished.
     """
+    from app.services.msx_api import msx_retry_state
+
     for cust_id, cust_name, account_id in tasks:
         if is_vpn_blocked():
             progress_q.put(('vpn', cust_id, cust_name, None))
             return
-        result = get_milestones_by_account(
-            account_id,
-            open_opportunities_only=True,
-            current_fy_only=True,
-        )
+
+        def _on_retry(attempt, max_retries, wait_secs, error_type,
+                      _cid=cust_id, _cn=cust_name):
+            progress_q.put((
+                'retry', _cid, _cn,
+                f"{_cn} - Timeout, retrying ({attempt}/{max_retries})..."
+            ))
+        msx_retry_state.callback = _on_retry
+        try:
+            result = get_milestones_by_account(
+                account_id,
+                open_opportunities_only=True,
+                current_fy_only=True,
+            )
+        finally:
+            msx_retry_state.callback = None
         progress_q.put(('fetched', cust_id, cust_name, result))
     progress_q.put(('done', None, None, None))
 
@@ -272,6 +286,14 @@ def sync_all_customer_milestones_stream(
                         'skipped': remaining,
                     })
                     break
+                elif evt == 'retry':
+                    yield _sse_event('progress', {
+                        'current': fetched,
+                        'total': total,
+                        'customer': result,
+                        'status': 'retrying',
+                        'progress': int((fetched / total) * 70),
+                    })
                 elif evt == 'fetched':
                     fetch_results[cust_id] = result
                     fetched += 1
@@ -339,17 +361,7 @@ def sync_all_customer_milestones_stream(
                 total_deactivated += wr['deactivated']
                 total_opps_created += wr['opportunities_created']
 
-                # Sync tasks for this customer's milestones
-                task_result = _sync_customer_tasks(customer)
-                total_tasks_created += task_result.get('tasks_created', 0)
-                total_tasks_updated += task_result.get('tasks_updated', 0)
-                if not task_result.get('success'):
-                    logger.warning(
-                        f"Task sync failed for {cust_name}: "
-                        f"{task_result.get('error')}"
-                    )
-
-                pct = 70 + int((i / write_count) * 25)
+                pct = 70 + int((i / write_count) * 20)  # 70-90%
                 yield _sse_event('progress', {
                     'current': fetched + i,
                     'total': total,
@@ -366,6 +378,22 @@ def sync_all_customer_milestones_stream(
             failed += 1
             errors.append(f"{cust_name}: {str(e)}")
             logger.exception(f"Error saving milestones for customer {cust_id}")
+
+    # -----------------------------------------------------------------
+    # Phase 2b: Batched task sync (one API call for all milestones)
+    # -----------------------------------------------------------------
+    yield _sse_event('progress', {
+        'current': total,
+        'total': total,
+        'customer': 'Syncing tasks...',
+        'status': 'ok',
+        'progress': 91,
+    })
+    task_result = _sync_all_tasks()
+    total_tasks_created = task_result.get('tasks_created', 0)
+    total_tasks_updated = task_result.get('tasks_updated', 0)
+    if not task_result.get('success'):
+        logger.warning(f"Batched task sync failed: {task_result.get('error')}")
 
     # -----------------------------------------------------------------
     # Phase 3: Team membership update (one API call)
@@ -581,6 +609,107 @@ def _apply_customer_milestones(
         result["error"] = f"Database error: {str(e)}"
         logger.exception(f"Error saving milestones for customer {customer.id}")
     
+    return result
+
+
+def _sync_all_tasks() -> Dict[str, Any]:
+    """
+    Batch-sync all MSX tasks in one API call instead of per-customer.
+
+    Collects all milestone MSX IDs across all customers, fetches tasks
+    in a single batched call (internally batched by 75 IDs per request),
+    then upserts all MsxTask records in one commit.
+
+    Returns:
+        Dict with success, tasks_created, tasks_updated, error.
+    """
+    result = {"success": False, "tasks_created": 0, "tasks_updated": 0, "error": ""}
+
+    # Collect all synced milestone MSX IDs -> local milestone ID
+    all_milestones = Milestone.query.filter(
+        Milestone.msx_milestone_id.isnot(None),
+    ).all()
+
+    if not all_milestones:
+        result["success"] = True
+        return result
+
+    ms_id_map: Dict[str, int] = {
+        ms.msx_milestone_id.lower(): ms.id for ms in all_milestones
+    }
+
+    # One batched API call for all milestone IDs
+    fetch_result = get_tasks_for_milestones(list(ms_id_map.keys()))
+    if not fetch_result.get("success"):
+        result["error"] = fetch_result.get("error", "Task fetch failed")
+        return result
+
+    msx_tasks = fetch_result.get("tasks", [])
+    if not msx_tasks:
+        result["success"] = True
+        return result
+
+    # Pre-load existing MsxTask records
+    existing_task_ids = [t["task_id"] for t in msx_tasks]
+    existing_tasks_map: Dict[str, MsxTask] = {}
+    for task in MsxTask.query.filter(
+        MsxTask.msx_task_id.in_(existing_task_ids)
+    ).all():
+        existing_tasks_map[task.msx_task_id] = task
+
+    cat_lookup = {
+        c["value"]: {"name": c["label"], "is_hok": c["is_hok"]}
+        for c in TASK_CATEGORIES
+    }
+
+    for t in msx_tasks:
+        task_id = t["task_id"]
+        milestone_msx_id = t.get("milestone_msx_id", "").lower()
+        local_milestone_id = ms_id_map.get(milestone_msx_id)
+        if not local_milestone_id:
+            continue
+
+        category_code = t.get("task_category")
+        cat_info = cat_lookup.get(category_code, {})
+        due_date = _parse_msx_date(t.get("due_date"))
+
+        existing = existing_tasks_map.get(task_id)
+        if existing:
+            existing.subject = t.get("subject") or existing.subject
+            existing.description = t.get("description")
+            existing.task_category = category_code or existing.task_category
+            existing.task_category_name = cat_info.get("name") or existing.task_category_name
+            existing.is_hok = cat_info.get("is_hok", existing.is_hok)
+            existing.duration_minutes = t.get("duration_minutes") or existing.duration_minutes
+            existing.due_date = due_date
+            existing.msx_task_url = t.get("task_url") or existing.msx_task_url
+            existing.milestone_id = local_milestone_id
+            result["tasks_updated"] += 1
+        else:
+            new_task = MsxTask(
+                msx_task_id=task_id,
+                msx_task_url=t.get("task_url"),
+                subject=t.get("subject", ""),
+                description=t.get("description"),
+                task_category=category_code or 0,
+                task_category_name=cat_info.get("name"),
+                is_hok=cat_info.get("is_hok", False),
+                duration_minutes=t.get("duration_minutes") or 60,
+                due_date=due_date,
+                milestone_id=local_milestone_id,
+            )
+            db.session.add(new_task)
+            existing_tasks_map[task_id] = new_task
+            result["tasks_created"] += 1
+
+    try:
+        db.session.commit()
+        result["success"] = True
+    except Exception as e:
+        db.session.rollback()
+        result["error"] = f"Database error saving tasks: {str(e)}"
+        logger.exception("Error saving batched tasks")
+
     return result
 
 

@@ -12,7 +12,8 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, g, jsonify, Response, stream_with_context,
 )
-from app.models import db, Milestone, MsxTask, Note, Customer
+from app.models import db, Milestone, MsxTask, Note, Customer, Seller
+from app.services.seller_mode import get_seller_mode_seller_id
 
 logger = logging.getLogger(__name__)
 
@@ -408,20 +409,30 @@ def milestone_tracker():
     dollar value and grouped by due date urgency. Provides a sync button
     to pull fresh data from MSX.
     """
-    from app.services.milestone_sync import get_milestone_tracker_data
+    from app.services.milestone_sync import (
+        get_milestone_tracker_data, get_milestone_tracker_data_for_seller
+    )
     from app.models import SyncStatus
     
-    tracker_data = get_milestone_tracker_data()
+    seller_mode_sid = get_seller_mode_seller_id()
+    locked_seller = None
+    if seller_mode_sid:
+        tracker_data = get_milestone_tracker_data_for_seller(seller_mode_sid)
+        locked_seller = Seller.query.get(seller_mode_sid)
+    else:
+        tracker_data = get_milestone_tracker_data()
+    
     sync_status = SyncStatus.get_status('milestones')
     return render_template(
         'milestone_tracker.html',
         milestones=tracker_data["milestones"],
         summary=tracker_data["summary"],
-        last_sync=tracker_data["last_sync"],
-        sellers=tracker_data["sellers"],
+        last_sync=tracker_data.get("last_sync"),
+        sellers=tracker_data.get("sellers", []),
         areas=tracker_data["areas"],
         quarters=tracker_data["quarters"],
         sync_status=sync_status,
+        locked_seller=locked_seller,
     )
 
 
@@ -529,7 +540,7 @@ def milestones_calendar_api():
     first_day = date(year, month, 1)
     last_day = date(year, month, cal.monthrange(year, month)[1])
 
-    milestones = (
+    milestones_q = (
         Milestone.query
         .filter(
             Milestone.msx_status.in_(ACTIVE_STATUSES),
@@ -539,9 +550,13 @@ def milestones_calendar_api():
         .options(
             db.joinedload(Milestone.customer).joinedload(Customer.seller),
         )
-        .order_by(Milestone.due_date)
-        .all()
     )
+    seller_mode_sid = get_seller_mode_seller_id()
+    if seller_mode_sid:
+        milestones_q = milestones_q.join(Customer, Milestone.customer_id == Customer.id).filter(
+            Customer.seller_id == seller_mode_sid
+        )
+    milestones = milestones_q.order_by(Milestone.due_date).all()
 
     days: dict = {}
     for ms in milestones:

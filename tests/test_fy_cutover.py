@@ -188,8 +188,12 @@ class TestFYAdminRoutes:
                            content_type='application/json')
         assert resp.status_code == 400
 
-    def test_fy_finalize_requires_sync_file(self, client):
+    def test_fy_finalize_requires_sync_file(self, client, app):
         """POST /api/admin/fy/finalize should reject when no sync file exists."""
+        # Ensure no leftover file from other tests
+        tpid_file = Path(app.instance_path).parent / 'data' / 'last_sync_tpids.json'
+        tpid_file.unlink(missing_ok=True)
+
         resp = client.post('/api/admin/fy/finalize',
                            content_type='application/json')
         assert resp.status_code == 400

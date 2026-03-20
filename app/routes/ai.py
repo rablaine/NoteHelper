@@ -141,6 +141,61 @@ def api_ai_match_milestone():
         return jsonify({'success': False, 'error': f'AI request failed: {e}'}), 500
 
 
+@ai_bp.route('/api/ai/match-opportunity', methods=['POST'])
+def api_ai_match_opportunity():
+    """Match call notes to the most relevant opportunity using AI."""
+
+    data = request.get_json()
+    call_notes = data.get('call_notes', '').strip()
+    opportunities = data.get('opportunities', [])
+
+    if not call_notes or len(call_notes) < 20:
+        return jsonify({'success': False, 'error': 'Call notes are too short to analyze'}), 400
+    if not opportunities or len(opportunities) == 0:
+        return jsonify({'success': False, 'error': 'No opportunities provided'}), 400
+
+    try:
+        result = gateway_call("/v1/match-opportunity", {
+            "call_notes": call_notes,
+            "opportunities": opportunities,
+        })
+        log_entry = AIQueryLog(
+            request_text=f"Match opportunity: {call_notes[:500]}...",
+            response_text=json.dumps(result)[:500],
+            success=True,
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'matched_opportunity_id': result.get('opportunity_id'),
+            'reason': result.get('reason', '')
+        })
+
+    except GatewayError as e:
+        log_entry = AIQueryLog(
+            request_text=f"Match opportunity: {call_notes[:500]}...",
+            response_text=None,
+            success=False,
+            error_message=str(e)[:500]
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        return jsonify({'success': False, 'error': f'AI request failed: {e}'}), 500
+
+    except Exception as e:
+        log_entry = AIQueryLog(
+            request_text=f"Match opportunity: {call_notes[:500]}...",
+            response_text=None,
+            success=False,
+            error_message=str(e)[:500]
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+        return jsonify({'success': False, 'error': f'AI request failed: {e}'}), 500
+
+
 @ai_bp.route('/api/ai/analyze-call', methods=['POST'])
 def api_ai_analyze_call():
     """

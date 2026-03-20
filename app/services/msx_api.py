@@ -806,6 +806,93 @@ def get_milestones_by_account(
         return {"success": False, "error": str(e)}
 
 
+def get_opportunities_by_account(
+    account_id: str,
+    open_only: bool = True,
+) -> Dict[str, Any]:
+    """
+    Get all opportunities for an account.
+
+    Args:
+        account_id: The account GUID.
+        open_only: If True, only return open opportunities (statecode=0).
+
+    Returns:
+        Dict with success, opportunities list, count.
+    """
+    try:
+        filters = [f"_parentaccountid_value eq '{account_id}'"]
+        if open_only:
+            filters.append("statecode eq 0")
+        filter_str = " and ".join(filters)
+
+        url = (
+            f"{CRM_BASE_URL}/opportunities"
+            f"?$filter={filter_str}"
+            f"&$select=opportunityid,name,msp_opportunitynumber,"
+            f"statecode,statuscode,estimatedvalue,estimatedclosedate,"
+            f"_ownerid_value"
+            f"&$orderby=name"
+            f"&$top=200"
+        )
+
+        response = _msx_request('GET', url)
+
+        if response.status_code == 200:
+            data = response.json()
+            raw_opps = data.get("value", [])
+
+            opportunities = []
+            for raw in raw_opps:
+                opp_id = raw.get("opportunityid")
+                state_code = raw.get("statecode")
+                state = raw.get(
+                    "statecode@OData.Community.Display.V1.FormattedValue",
+                    {0: "Open", 1: "Won", 2: "Lost"}.get(state_code, "Unknown")
+                )
+                status_reason = raw.get(
+                    "statuscode@OData.Community.Display.V1.FormattedValue", ""
+                )
+                owner = raw.get(
+                    "_ownerid_value@OData.Community.Display.V1.FormattedValue", ""
+                )
+                opportunities.append({
+                    "id": opp_id,
+                    "name": raw.get("name", ""),
+                    "number": raw.get("msp_opportunitynumber", ""),
+                    "state": state,
+                    "statecode": state_code,
+                    "status_reason": status_reason,
+                    "estimated_value": raw.get("estimatedvalue"),
+                    "estimated_close_date": raw.get("estimatedclosedate"),
+                    "owner": owner,
+                    "url": build_opportunity_url(opp_id),
+                })
+
+            return {
+                "success": True,
+                "opportunities": opportunities,
+                "count": len(opportunities),
+            }
+
+        elif response.status_code == 401:
+            return {"success": False, "error": "Not authenticated. Run 'az login' first."}
+        elif response.status_code == 403:
+            if is_vpn_blocked():
+                return {"success": False, "error": "IP blocked - connect to VPN.", "vpn_blocked": True}
+            return {"success": False, "error": "Access denied."}
+        else:
+            return {"success": False, "error": f"HTTP {response.status_code}: {response.text[:200]}"}
+
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error getting opportunities for account {account_id}")
+        return {"success": False, "error": str(e)}
+
+
 def build_opportunity_url(opportunity_id: str) -> str:
     """
     Build a direct MSX URL for an opportunity.
@@ -2057,8 +2144,9 @@ def get_tasks_for_milestones(
 
     all_tasks: List[Dict[str, Any]] = []
 
-    # Batch milestones in groups of 15 to keep OData filter length sane
-    batch_size = 15
+    # Batch milestones in groups of 75 to keep OData filter length sane
+    # (~4KB per filter, well under Dynamics 365's ~32KB limit)
+    batch_size = 75
     for i in range(0, len(milestone_msx_ids), batch_size):
         batch = milestone_msx_ids[i:i + batch_size]
 

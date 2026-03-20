@@ -331,6 +331,12 @@
         <div class="container-fluid px-4">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
                 <img src="{{ url_for('static', filename='favicon.svg') }}" alt="Sales Buddy" width="28" height="28" style="position:relative;top:1px;margin-right:2px;filter:drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);"><span class="ms-2">Sales Buddy</span>
+                {% if is_debug %}
+                    <span class="badge {{ 'bg-warning text-dark' if user_role == 'dss' else 'bg-info text-dark' }} ms-2"
+                          style="font-size: 0.6rem; vertical-align: middle; cursor: pointer;"
+                          onclick="event.preventDefault(); fetch('/api/admin/dev-toggle-role', {method:'POST'}).then(r=>r.json()).then(()=>location.reload());"
+                          title="Click to swap role">{{ 'DSS' if user_role == 'dss' else 'SE' }} MODE</span>
+                {% endif %}
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -342,6 +348,7 @@
                             <i class="bi bi-building"></i> Customers
                         </a>
                     </li>
+                    {% if not seller_mode and user_role != 'dss' %}
                     <li class="nav-item dropdown nav-hover-dropdown" id="navSellers">
                         <a class="nav-link dropdown-toggle" href="{{ url_for('sellers.sellers_list') }}" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-people"></i> Sellers
@@ -364,6 +371,7 @@
                             {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
                     <li class="nav-item" id="navNotes">
                         <a class="nav-link" href="{{ url_for('notes.notes_list') }}">
                             <i class="bi bi-journal-text"></i> Notes
@@ -628,7 +636,6 @@
                     <!-- STEP 1: Welcome + Dark Mode -->
                     <div class="onboarding-step" id="onboardingStep1">
                         <p class="lead mb-3">Let's get you set up! This wizard will walk you through connecting to MSX, enabling AI-powered features, and importing your data.</p>
-                        
                         <div class="card mb-3">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center">
@@ -646,7 +653,7 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="alert alert-info mb-0">
                             <i class="bi bi-info-circle"></i> <strong>What's next:</strong> We'll sign you in to Azure (which also enables AI features like topic suggestions and engagement summaries), then import your accounts, milestones, and revenue data.
                         </div>
@@ -826,7 +833,6 @@
                                     <button class="btn btn-primary btn-lg" id="onboardImportMilestones">
                                         <i class="bi bi-cloud-download"></i> Import Milestones
                                     </button>
-                                    <p class="mt-2 mb-0 small text-muted"><i class="bi bi-info-circle"></i> Optional — you can do this anytime from the Milestone Tracker.</p>
                                 </div>
                                 <!-- Progress state -->
                                 <div id="importMilestonesProgress" class="d-none">
@@ -977,6 +983,27 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Seller Mode Banner (SE only - shows when viewing as a specific seller) -->
+    {% if seller_mode and user_role == 'se' and seller_mode_seller %}
+    <div class="alert alert-info mb-0 py-2 rounded-0 border-start-0 border-end-0" style="border-top: 0;">
+        <div class="container d-flex align-items-center justify-content-between">
+            <span>
+                <i class="bi bi-eye-fill me-1"></i>
+                <strong>Viewing as:</strong> {{ seller_mode_seller.name }}
+                {% if seller_mode_seller.seller_type %}
+                <span class="badge bg-success ms-1">{{ seller_mode_seller.seller_type }}</span>
+                {% endif %}
+                {% if seller_mode_seller.territories %}
+                <span class="text-muted ms-1">- {{ seller_mode_seller.territories|map(attribute='name')|join(', ') }}</span>
+                {% endif %}
+            </span>
+            <button class="btn btn-sm btn-outline-danger" onclick="exitSellerMode()">
+                <i class="bi bi-x-lg"></i> Exit Seller Mode
+            </button>
         </div>
     </div>
     {% endif %}
@@ -1236,6 +1263,26 @@
     })();
     </script>
 
+    <!-- Seller Mode Scripts -->
+    <script defer>
+        async function exitSellerMode() {
+            try {
+                await fetch('/api/seller-mode/deactivate', { method: 'POST' });
+                window.location.href = '/';
+            } catch (err) {
+                console.error('Failed to exit seller mode:', err);
+            }
+        }
+        async function activateSellerMode(sellerId) {
+            try {
+                await fetch('/api/seller-mode/activate/' + sellerId, { method: 'POST' });
+                window.location.href = '/';
+            } catch (err) {
+                console.error('Failed to activate seller mode:', err);
+            }
+        }
+    </script>
+
     <!-- Dark Mode and Colored Sellers Toggle Scripts -->
     <script defer>
         const htmlElement = document.documentElement;
@@ -1256,6 +1303,8 @@
                 let milestonesImported = {{ 'true' if has_milestones else 'false' }};
                 let revenueImported = {{ 'true' if has_revenue else 'false' }};
                 let aiEnabled = true;
+                let roleSelected = true;  // No role selection in Step 1 - auto-detected in Step 3
+                let selectedRole = '{{ user_role }}';  // Updated after Step 3 auto-detect
                 const milestonesSyncState = '{{ milestones_sync_state }}';
                 const revenueSyncState = '{{ revenue_sync_state }}';
 
@@ -1366,6 +1415,11 @@
 
                 nextBtn.addEventListener('click', async () => {
                     if (currentStep < totalSteps) {
+                        // After Step 3: reload so navbar/UI reflects detected role
+                        if (currentStep === 3) {
+                            window.location.href = window.location.pathname + '?onboarding_step=4';
+                            return;
+                        }
                         showStep(currentStep + 1);
                     } else {
                         // Finish — dismiss modal
@@ -1386,17 +1440,19 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' }
                         });
-                        // Only trigger guided tour if it hasn't been completed (DB-backed flag)
-                        var tourCompleted = {{ 'true' if guided_tour_completed else 'false' }};
-                        if (!tourCompleted) {
-                            localStorage.setItem('salesbuddy_start_tour', '1');
-                        }
+                        // Guided tour disabled - plumbing kept but not triggered
+                        // var tourCompleted = {{ 'true' if guided_tour_completed else 'false' }};
+                        // if (!tourCompleted) {
+                        //     localStorage.setItem('salesbuddy_start_tour', '1');
+                        // }
                     } catch (err) {
                         console.error('Failed to dismiss onboarding:', err);
                     }
                 }
 
                 // --- Step 1: Dark Mode Toggle ---
+                // Role is now auto-detected in Step 3 (no manual selection)
+
                 const onboardDarkToggle = document.getElementById('onboardDarkModeToggle');
                 if (onboardDarkToggle) {
                     onboardDarkToggle.addEventListener('change', async function() {
@@ -1416,7 +1472,7 @@
 
                 // --- Step 2: Authentication ---
                 const SIGN_IN_TIMEOUT_MS = 120000;  // 2 min total timeout
-                const CONSENT_HINT_DELAY = 5;       // seconds before showing "look under windows" hint
+                const CONSENT_HINT_DELAY = 7;       // seconds before showing "look under windows" hint
                 let signInPollTimer = null;
                 let wizardElapsedTimer = null;
 
@@ -1522,6 +1578,17 @@
 
                     const emailEl = document.getElementById('signInEmail');
                     if (emailEl && email) emailEl.textContent = email;
+
+                    // Save alias for DSS seller matching (best-effort)
+                    if (email) {
+                        try {
+                            await fetch('/api/preferences/save-alias', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email: email })
+                            });
+                        } catch (e) { /* non-blocking */ }
+                    }
 
                     // Try to enable AI (consent may have been granted during login)
                     const aiStatusEl = document.getElementById('signInAiStatus');
@@ -1734,6 +1801,18 @@
                         // Auto-trigger favicon fetch after account sync
                         fetch('/api/admin/fetch-favicons', { method: 'POST' }).catch(() => {});
 
+                        // Auto-detect role: match alias to imported seller records
+                        try {
+                            const matchResp = await fetch('/api/preferences/match-seller', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            const matchData = await matchResp.json();
+                            selectedRole = matchData.matched ? 'dss' : 'se';
+                        } catch (e) {
+                            selectedRole = 'se';
+                        }
+
                         const summaryDiv = document.getElementById('importAccountsSummary');
                         if (finalSummary) {
                             const s = finalSummary;
@@ -1741,7 +1820,7 @@
                                 '<ul class="list-unstyled mb-0">' +
                                 '<li><i class="bi bi-people-fill text-primary"></i> PODs: ' + (s.pods_created || 0) + ' created</li>' +
                                 '<li><i class="bi bi-geo-alt text-info"></i> Territories: ' + (s.territories_created || 0) + ' created</li>' +
-                                '<li><i class="bi bi-person text-primary"></i> Sellers: ' + (s.sellers_created || 0) + ' created' + (s.sellers_updated ? ', ' + s.sellers_updated + ' updated' : '') + '</li>' +
+                                (selectedRole !== 'dss' ? '<li><i class="bi bi-person text-primary"></i> Sellers: ' + (s.sellers_created || 0) + ' created' + (s.sellers_updated ? ', ' + s.sellers_updated + ' updated' : '') + '</li>' : '') +
                                 '<li><i class="bi bi-person-gear text-secondary"></i> Solution Engineers: ' + (s.solution_engineers_created || 0) + ' created</li>' +
                                 '<li><i class="bi bi-building text-success"></i> Customers: ' + (s.customers_created || 0) + ' created' + (s.customers_updated ? ', ' + s.customers_updated + ' updated' : '') + (s.customers_unchanged ? ', ' + s.customers_unchanged + ' unchanged' : '') + (s.customers_skipped ? ', ' + s.customers_skipped + ' skipped' : '') + '</li>' +
                                 (s.duration ? '<li>Completed in ' + s.duration + 's</li>' : '') +
@@ -1847,7 +1926,11 @@
                                         : (eventData.total > 0 ? Math.round(eventData.current / eventData.total * 100) : 0);
                                     progressBar.style.width = pct + '%';
                                     progressPercent.textContent = pct + '%';
-                                    statusText.textContent = eventData.customer || ('Customer ' + eventData.current);
+                                    if (eventData.status === 'retrying') {
+                                        statusText.textContent = eventData.customer || 'Timeout, retrying...';
+                                    } else {
+                                        statusText.textContent = eventData.customer || ('Customer ' + eventData.current);
+                                    }
                                     // Only log errors to the detail pane
                                     if (eventData.status === 'error') {
                                         logDiv.innerHTML += '<div><i class="bi bi-x-circle text-danger"></i> ' +
@@ -2018,8 +2101,17 @@
                 async function initWizard() {
                     let startStep = 1;
 
+                    // Check for step override from URL (used after Step 1 role selection reload)
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const stepOverride = parseInt(urlParams.get('onboarding_step'));
+                    if (stepOverride >= 1 && stepOverride <= totalSteps) {
+                        // Clean the URL so refreshing doesn't re-trigger
+                        history.replaceState(null, '', window.location.pathname);
+                        startStep = stepOverride;
+                    }
+
                     // If user already has data, check auth and skip completed steps
-                    if (accountsImported || milestonesImported || revenueImported) {
+                    if (startStep === 1 && (accountsImported || milestonesImported || revenueImported)) {
                         try {
                             const resp = await fetch('/api/msx/status');
                             const data = await resp.json();

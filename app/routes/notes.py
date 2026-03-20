@@ -2,12 +2,13 @@
 Call log routes for Sales Buddy.
 Handles call log listing, creation, viewing, editing, and Fill My Day bulk import.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, jsonify, session
 from datetime import datetime
 import logging
 
-from app.models import db, Note, Customer, Seller, Territory, Topic, Partner, Milestone, MsxTask, UserPreference, NoteTemplate
+from app.models import db, Note, Customer, Seller, Territory, Topic, Partner, Milestone, Opportunity, MsxTask, UserPreference, NoteTemplate
 from app.services.msx_api import TASK_CATEGORIES, add_user_to_milestone_team
+from app.services.seller_mode import get_seller_mode_seller_id as _get_seller_mode_seller_id
 from app.services.backup import backup_customer as _backup_customer
 from app.services.milestone_tracking import track_note_on_milestones
 
@@ -181,6 +182,68 @@ def _handle_milestone_and_task(note):
     return True, None
 
 
+def _handle_opportunity(note):
+    """
+    Handle opportunity selection for DSS users.
+
+    Reads form data for opportunity info and creates/links Opportunity records.
+    No auto-writeback (no comments, no team join) per spec.
+
+    Returns:
+        tuple: (success: bool, error_message: str or None)
+    """
+    msx_ids = request.form.getlist('opportunity_msx_id')
+    msx_ids = [oid.strip() for oid in msx_ids if oid.strip()]
+
+    if not msx_ids:
+        note.opportunities = []
+        return True, None
+
+    names = request.form.getlist('opportunity_name')
+    numbers = request.form.getlist('opportunity_number')
+    states = request.form.getlist('opportunity_state')
+    est_values = request.form.getlist('opportunity_estimated_value')
+    urls = request.form.getlist('opportunity_url')
+
+    customer_id = request.form.get('customer_id')
+
+    opportunities = []
+    for i, msx_id in enumerate(msx_ids):
+        name = names[i] if i < len(names) else ''
+        number = numbers[i] if i < len(numbers) else ''
+        state = states[i] if i < len(states) else ''
+        est_val_str = est_values[i] if i < len(est_values) else ''
+        url = urls[i] if i < len(urls) else ''
+        est_val = float(est_val_str) if est_val_str else None
+
+        opp = Opportunity.query.filter_by(msx_opportunity_id=msx_id).first()
+        if not opp:
+            opp = Opportunity(
+                msx_opportunity_id=msx_id,
+                opportunity_number=number or None,
+                name=name,
+                state=state or None,
+                estimated_value=est_val,
+                msx_url=url or None,
+                customer_id=int(customer_id) if customer_id else None,
+            )
+            db.session.add(opp)
+        else:
+            if name:
+                opp.name = name
+            if state:
+                opp.state = state
+            if est_val is not None:
+                opp.estimated_value = est_val
+            if url:
+                opp.msx_url = url
+
+        opportunities.append(opp)
+
+    note.opportunities = opportunities
+    return True, None
+
+
 @notes_bp.route('/notes')
 def notes_list():
     """List all call logs (FR010)."""
@@ -192,6 +255,11 @@ def notes_list():
         db.joinedload(Note.topics),
         db.joinedload(Note.partners)
     )
+    
+    # Seller mode scoping
+    seller_mode_seller_id = _get_seller_mode_seller_id()
+    if seller_mode_seller_id:
+        query = query.join(Note.customer).filter(Customer.seller_id == seller_mode_seller_id)
     
     if filter_type == 'customer':
         query = query.filter(Note.customer_id.isnot(None))
@@ -298,10 +366,15 @@ def note_create():
         # Handle milestone and optional task creation (only for customer-linked notes)
         if customer_id:
             try:
-                _handle_milestone_and_task(note)
+                pref = UserPreference.query.first()
+                user_role = pref.user_role if pref else 'se'
+                if user_role == 'dss':
+                    _handle_opportunity(note)
+                else:
+                    _handle_milestone_and_task(note)
             except Exception as e:
-                logger.exception("Error handling milestone/task during call log create")
-                flash(f'Note will be saved, but milestone/task failed: {e}', 'warning')
+                logger.exception("Error handling milestone/opportunity during call log create")
+                flash(f'Note will be saved, but milestone/opportunity failed: {e}', 'warning')
         
         # Cross-link: attach note milestones to linked engagements
         _cross_link_milestones_to_engagements(note)
@@ -512,10 +585,15 @@ def note_edit(id):
         # Handle milestone and optional task creation (only for customer-linked notes)
         if customer_id:
             try:
-                _handle_milestone_and_task(note)
+                pref = UserPreference.query.first()
+                user_role = pref.user_role if pref else 'se'
+                if user_role == 'dss':
+                    _handle_opportunity(note)
+                else:
+                    _handle_milestone_and_task(note)
             except Exception as e:
-                logger.exception("Error handling milestone/task during call log edit")
-                flash(f'Note will be saved, but milestone/task failed: {e}', 'warning')
+                logger.exception("Error handling milestone/opportunity during call log edit")
+                flash(f'Note will be saved, but milestone/opportunity failed: {e}', 'warning')
         
         # Cross-link: attach note milestones to linked engagements
         _cross_link_milestones_to_engagements(note)

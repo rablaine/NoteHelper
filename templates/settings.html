@@ -9,6 +9,25 @@
             <h1 class="mb-0"><i class="bi bi-gear"></i> Settings</h1>
         </div>
 
+        <!-- Your Role -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person-badge"></i> Your Role</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-2">
+                    {% if user_role == 'dss' %}
+                    <i class="bi bi-person-fill fs-5"></i>
+                    <span>Digital Sales Specialist (DSS)</span>
+                    {% else %}
+                    <i class="bi bi-people-fill fs-5"></i>
+                    <span>Solution Engineer (SE)</span>
+                    {% endif %}
+                    <span class="badge bg-secondary ms-2">Set during onboarding</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Appearance -->
         <div class="card mb-4">
             <div class="card-header">

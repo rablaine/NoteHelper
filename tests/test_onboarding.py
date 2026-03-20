@@ -57,7 +57,7 @@ class TestOnboardingWizardDisplay:
         html = response.data.decode('utf-8')
 
         # Step 1: Welcome + Dark Mode
-        assert 'Choose Your Theme' in html
+        assert "get you set up" in html.lower()
         assert 'onboardDarkModeToggle' in html
 
         # Step 2: Authentication (az login flow)
