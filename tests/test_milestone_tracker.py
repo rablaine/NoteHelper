@@ -1050,12 +1050,11 @@ class TestMilestoneTrackerRoutes:
         }
         
         response = client.post('/api/milestone-tracker/sync')
-        assert response.status_code == 200
+        assert response.status_code == 202
         
         data = response.get_json()
         assert data["success"] is True
-        assert data["customers_synced"] == 5
-        assert data["milestones_created"] == 10
+        assert data["async"] is True
     
     @patch('app.services.milestone_sync.sync_all_customer_milestones')
     def test_sync_api_partial_failure(self, mock_sync, client, app, sample_data):
@@ -1072,7 +1071,9 @@ class TestMilestoneTrackerRoutes:
         }
         
         response = client.post('/api/milestone-tracker/sync')
-        assert response.status_code == 207
+        assert response.status_code == 202
+        data = response.get_json()
+        assert data["async"] is True
     
     def test_tracker_page_has_sync_button(self, client, app, sample_data):
         """Tracker page should have a sync button."""
@@ -1316,9 +1317,10 @@ class TestSSESync:
                 '/api/milestone-tracker/sync',
                 headers={'Accept': 'application/json'},
             )
-            assert response.status_code == 200
+            assert response.status_code == 202
             data = response.get_json()
             assert data["success"] is True
+            assert data["async"] is True
 
     def test_tracker_page_has_progress_bar_html(self, client, app, sample_data):
         """Tracker page should have the progress bar container."""
