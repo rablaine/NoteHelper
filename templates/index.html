@@ -97,6 +97,11 @@
                 </div>
                 {% endif %}
             </div>
+            {% if upcoming_milestones %}
+            <div class="card-footer text-center">
+                <a href="{{ url_for('milestones.milestone_tracker') }}" class="text-decoration-none small">View all milestones <i class="bi bi-arrow-right"></i></a>
+            </div>
+            {% endif %}
         </div>
     </div>
 
