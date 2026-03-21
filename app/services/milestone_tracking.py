@@ -323,7 +323,7 @@ def _build_engagement_html_table(engagement) -> str:
                 f'<td style="padding:8px 12px;font-weight:600;color:{acr_lcolor};'
                 f'white-space:nowrap;vertical-align:top;">Estimated ACR</td>'
                 f'<td style="padding:8px 12px;color:#198754;font-weight:700;'
-                f'font-size:1.1em;">{acr_str}</td>'
+                f'">{acr_str}</td>'
             )
         if target_str:
             cells += (
@@ -338,9 +338,8 @@ def _build_engagement_html_table(engagement) -> str:
 
     table_rows = ''.join(rows)
     return (
-        f'<table style="font-family:Segoe UI,sans-serif;max-width:600px;'
-        f'width:100%;border-collapse:collapse;border:1px solid #dee2e6;'
-        f'margin:0;padding:0;">'
+        f'<table style="max-width:600px;width:100%;border-collapse:collapse;'
+        f'border:1px solid #dee2e6;margin:0;padding:0;">'
         f'{table_rows}'
         f'</table>'
     )
