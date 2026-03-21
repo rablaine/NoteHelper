@@ -134,12 +134,21 @@ def engagement_view(id: int):
     ]
     unassigned_notes.sort(key=lambda n: n.call_date, reverse=True)
 
+    # All milestones for this customer (for edit mode in milestones card)
+    customer_milestones = (
+        Milestone.query
+        .filter_by(customer_id=customer.id)
+        .order_by(Milestone.title)
+        .all()
+    )
+
     return render_template(
         'engagement_view.html',
         engagement=engagement,
         customer=customer,
         linked_notes=linked_notes,
         unassigned_notes=unassigned_notes,
+        customer_milestones=customer_milestones,
     )
 
 
@@ -363,6 +372,32 @@ def engagement_assign_notes(id: int):
         flash(f'Assigned {len(notes)} note(s) to "{engagement.title}".', 'success')
 
     return redirect(url_for('engagements.engagement_view', id=id))
+
+
+@engagements_bp.route('/api/engagement/<int:id>/milestones', methods=['POST'])
+def api_engagement_update_milestones(id: int):
+    """Update which milestones are linked to an engagement (AJAX)."""
+    engagement = Engagement.query.get_or_404(id)
+    data = request.get_json()
+    if data is None:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+    milestone_ids = data.get('milestone_ids', [])
+    milestones = Milestone.query.filter(
+        Milestone.id.in_([int(mid) for mid in milestone_ids]),
+        Milestone.customer_id == engagement.customer_id
+    ).all() if milestone_ids else []
+
+    engagement.milestones = milestones
+    db.session.commit()
+
+    if milestones:
+        track_engagement_on_milestones(engagement)
+
+    return jsonify({
+        'success': True,
+        'count': len(milestones),
+    })
 
 
 @engagements_bp.route('/api/customer/<int:customer_id>/engagements')

@@ -117,12 +117,18 @@
         {% endif %}
 
         <!-- Linked Milestones -->
-        {% if engagement.milestones %}
         <div class="card mb-3">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-flag"></i> Milestones ({{ engagement.milestones|length }})</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-flag"></i> Milestones (<span id="msCount">{{ engagement.milestones|length }}</span>)</h5>
+                {% if customer_milestones %}
+                <button class="btn btn-sm btn-outline-secondary" id="msToggleBtn" onclick="toggleMilestoneEdit()">
+                    <i class="bi bi-pencil"></i> Edit
+                </button>
+                {% endif %}
             </div>
-            <div class="card-body">
+            <!-- View mode -->
+            <div class="card-body" id="msViewMode">
+                {% if engagement.milestones %}
                 {% for ms in engagement.milestones %}
                 <div class="d-flex align-items-start gap-2 {% if not loop.last %}mb-2 pb-2 border-bottom{% endif %}">
                     <i class="bi bi-{% if ms.msx_status == 'On Track' %}check-circle text-success{% elif ms.msx_status == 'At Risk' %}exclamation-triangle text-warning{% elif ms.msx_status == 'Blocked' %}x-circle text-danger{% elif ms.msx_status == 'Completed' %}check2-circle text-info{% else %}flag text-secondary{% endif %}" style="margin-top: 2px;" title="{{ ms.msx_status or 'Unknown' }}"></i>
@@ -153,9 +159,39 @@
                     </div>
                 </div>
                 {% endfor %}
+                {% else %}
+                <p class="text-muted fst-italic small mb-0">No milestones linked.{% if customer_milestones %} Click Edit to link milestones.{% endif %}</p>
+                {% endif %}
+            </div>
+            <!-- Edit mode -->
+            <div class="card-body d-none" id="msEditMode" style="max-height: 300px; overflow-y: auto;">
+                {% for ms in customer_milestones %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input ms-checkbox" type="checkbox"
+                           value="{{ ms.id }}" id="msEdit_{{ ms.id }}"
+                           {% if ms in engagement.milestones %}checked{% endif %}>
+                    <label class="form-check-label small" for="msEdit_{{ ms.id }}">
+                        {{ ms.display_text|truncate(60) }}
+                        {% if ms.msx_status %}
+                        <span class="badge {% if ms.msx_status == 'On Track' %}bg-success{% elif ms.msx_status == 'At Risk' %}bg-warning text-dark{% elif ms.msx_status == 'Blocked' %}bg-danger{% elif ms.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %} ms-1">{{ ms.msx_status }}</span>
+                        {% endif %}
+                        {% if ms.monthly_usage %}
+                        <span class="text-muted ms-1">${{ "{:,.0f}".format(ms.monthly_usage) }}/mo</span>
+                        {% endif %}
+                    </label>
+                </div>
+                {% endfor %}
+                {% if not customer_milestones %}
+                <p class="text-muted small mb-0">No milestones found for this customer.</p>
+                {% endif %}
+                <div class="mt-2 d-flex gap-2">
+                    <button class="btn btn-sm btn-primary" onclick="saveMilestoneLinks()">
+                        <i class="bi bi-check-lg"></i> Save
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleMilestoneEdit()">Cancel</button>
+                </div>
             </div>
         </div>
-        {% endif %}
     </div>
 
     <div class="col-md-7">
@@ -723,6 +759,50 @@ function deleteTask(taskId) {
         }
     })
     .catch(err => console.error(err));
+}
+
+// --- Milestone edit toggle ---
+function toggleMilestoneEdit() {
+    const viewMode = document.getElementById('msViewMode');
+    const editMode = document.getElementById('msEditMode');
+    const btn = document.getElementById('msToggleBtn');
+    const isEditing = !editMode.classList.contains('d-none');
+    if (isEditing) {
+        editMode.classList.add('d-none');
+        viewMode.classList.remove('d-none');
+        btn.innerHTML = '<i class="bi bi-pencil"></i> Edit';
+    } else {
+        viewMode.classList.add('d-none');
+        editMode.classList.remove('d-none');
+        btn.innerHTML = '<i class="bi bi-x-lg"></i> Cancel';
+    }
+}
+
+function saveMilestoneLinks() {
+    const checked = [...document.querySelectorAll('.ms-checkbox:checked')].map(cb => parseInt(cb.value));
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+    fetch('/api/engagement/{{ engagement.id }}/milestones', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({milestone_ids: checked})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to save');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> Save';
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> Save';
+    });
 }
 </script>
 {% endblock %}
