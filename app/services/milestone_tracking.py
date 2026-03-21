@@ -336,7 +336,7 @@ def _build_engagement_html_table(engagement) -> str:
     if not rows:
         return '<p>No story fields populated.</p>'
 
-    table_rows = '\n'.join(rows)
+    table_rows = ''.join(rows)
     return (
         f'<table style="font-family:Segoe UI,sans-serif;max-width:600px;'
         f'width:100%;border-collapse:collapse;border:1px solid #dee2e6;'
