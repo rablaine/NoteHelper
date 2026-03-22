@@ -96,7 +96,7 @@ db = sys.argv[1]
 conn = sqlite3.connect(f'file:{db}?mode=ro', uri=True)
 c = conn.cursor()
 stats = {}
-tables = {'customers': 'Customers', 'sellers': 'Sellers',
+tables = {'customers': 'Customers',
           'notes': 'Notes', 'milestones': 'Milestones'}
 for table, label in tables.items():
     try:
@@ -111,6 +111,12 @@ if 'Notes' not in stats:
         stats['Notes'] = c.fetchone()[0]
     except:
         pass
+# Active engagements count
+try:
+    c.execute("SELECT COUNT(*) FROM engagements WHERE status = 'Active'")
+    stats['Active Engagements'] = c.fetchone()[0]
+except:
+    pass
 conn.close()
 print(json.dumps(stats))
 "@
@@ -227,7 +233,7 @@ for ($i = 0; $i -lt $displayBackups.Count; $i++) {
     if ($stats) {
         $parts = @()
         if ($stats.'Customers') { $parts += "$($stats.'Customers') accts" }
-        if ($stats.'Sellers') { $parts += "$($stats.'Sellers') sellers" }
+        if ($stats.'Active Engagements') { $parts += "$($stats.'Active Engagements') active eng" }
         if ($stats.'Notes') { $parts += "$($stats.'Notes') notes" }
         if ($stats.'Milestones') { $parts += "$($stats.'Milestones') ms" }
         $statsStr = $parts -join ', '
@@ -252,7 +258,7 @@ if (Test-Path $DbFile) {
     if ($currentStats) {
         $parts = @()
         if ($currentStats.'Customers') { $parts += "$($currentStats.'Customers') accts" }
-        if ($currentStats.'Sellers') { $parts += "$($currentStats.'Sellers') sellers" }
+        if ($currentStats.'Active Engagements') { $parts += "$($currentStats.'Active Engagements') active eng" }
         if ($currentStats.'Notes') { $parts += "$($currentStats.'Notes') notes" }
         if ($currentStats.'Milestones') { $parts += "$($currentStats.'Milestones') ms" }
         $currentStatsStr = $parts -join ', '

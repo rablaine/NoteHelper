@@ -142,7 +142,7 @@ db = sys.argv[1]
 conn = sqlite3.connect(f'file:{db}?mode=ro', uri=True)
 c = conn.cursor()
 stats = {}
-tables = {'customers': 'Customers', 'sellers': 'Sellers',
+tables = {'customers': 'Customers',
           'notes': 'Notes', 'milestones': 'Milestones'}
 for table, label in tables.items():
     try:
@@ -157,6 +157,12 @@ if 'Notes' not in stats:
         stats['Notes'] = c.fetchone()[0]
     except:
         pass
+# Active engagements count
+try:
+    c.execute("SELECT COUNT(*) FROM engagements WHERE status = 'Active'")
+    stats['Active Engagements'] = c.fetchone()[0]
+except:
+    pass
 conn.close()
 print(json.dumps(stats))
 "@
