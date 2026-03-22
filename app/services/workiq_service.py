@@ -104,6 +104,21 @@ _PLANNING_PHRASES = [
     re.compile(r"ground\s+the\s+summary\s+in", re.IGNORECASE),
 ]
 
+# Patterns indicating a refusal or deflection instead of real meeting content.
+_REFUSAL_PATTERNS = [
+    re.compile(r"sorry.{0,30}(?:can'?t|cannot|unable)", re.IGNORECASE),
+    re.compile(r"(?:can'?t|cannot|unable)\s+(?:help|assist|chat|discuss|provide|respond)", re.IGNORECASE),
+    re.compile(r"let'?s\s+(?:talk\s+about\s+something|try\s+a\s+different)", re.IGNORECASE),
+    re.compile(r"(?:not\s+able|unable)\s+to\s+(?:provide|generate|summarize|find|access)", re.IGNORECASE),
+    re.compile(r"beyond\s+(?:my|the)\s+(?:scope|capability|abilities)", re.IGNORECASE),
+    re.compile(r"I'?m\s+(?:not\s+)?(?:designed|programmed|able)\s+to\b", re.IGNORECASE),
+    re.compile(r"(?:don'?t|do\s+not)\s+have\s+(?:the\s+)?(?:ability|capacity)\s+to", re.IGNORECASE),
+]
+
+# Minimum word count for a useful meeting summary response.
+# A request for a 250-word summary should return substantial content.
+_MIN_SUMMARY_WORDS = 30
+
 
 def _clean_ai_preamble(text: str) -> str:
     """Strip conversational AI preamble, disclaimers, and follow-up offers.
@@ -653,6 +668,36 @@ def get_meeting_summary(meeting_title: str, date_str: str = None,
         if planning_hits >= 2:
             logger.warning(f"AI returned planning narration instead of summary "
                            f"for: {meeting_title} ({planning_hits} planning phrases)")
+            return {
+                'summary': '',
+                'topics': [],
+                'action_items': [],
+                'task_subject': '',
+                'task_description': '',
+                'connect_impact': [],
+                'engagement_signals': {},
+                'retry_suggested': True
+            }
+
+        # Detect refusal/deflection responses ("Sorry I can't chat about this")
+        if any(p.search(response) for p in _REFUSAL_PATTERNS):
+            logger.warning(f"AI returned refusal response for: {meeting_title}")
+            return {
+                'summary': '',
+                'topics': [],
+                'action_items': [],
+                'task_subject': '',
+                'task_description': '',
+                'connect_impact': [],
+                'engagement_signals': {},
+                'retry_suggested': True
+            }
+
+        # Detect too-short responses that aren't real summaries
+        word_count = len(response.split())
+        if word_count < _MIN_SUMMARY_WORDS and 'SUMMARY:' not in response:
+            logger.warning(f"AI returned too-short response for: {meeting_title} "
+                           f"({word_count} words)")
             return {
                 'summary': '',
                 'topics': [],

@@ -4457,6 +4457,10 @@ var loadedMeetings = [];
 var autoFillAborted = false;
 var pendingTaskSuggestion = null;  // Stores task title/description from meeting import
 
+// In-memory only (not localStorage). Tracks the last WorkIQ meeting list fetch
+// so the user can retry import without re-fetching meetings. Cleared on page refresh.
+var _lastMeetingContext = null;
+
 // Apply pending task suggestion to task fields if milestones are already selected
 function applyPendingTaskSuggestion() {
     if (typeof pendingTaskSuggestion === 'undefined' || !pendingTaskSuggestion) return;
@@ -4624,7 +4628,7 @@ function openMeetingImportForAutoFill(meetings) {
     meetingImportModal.show();
 }
 
-function proceedWithMeeting(meeting, dateStr) {
+function proceedWithMeeting(meeting, dateStr, isRetry) {
     // Update date/time from meeting
     if (meeting.start_time) {
         var meetingDate = new Date(meeting.start_time);
@@ -4669,17 +4673,29 @@ function proceedWithMeeting(meeting, dateStr) {
                 return;
             }
             
-            // WorkIQ returned empty/echoed response — show retry option
+            // WorkIQ returned empty/echoed/refusal response
             if (data.retry_suggested) {
+                if (!isRetry) {
+                    // Auto-retry once with feedback
+                    var errEl = document.getElementById('autoFillError');
+                    errEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> WorkIQ returned an unexpected response. Retrying...';
+                    errEl.style.display = 'block';
+                    proceedWithMeeting(meeting, dateStr, true);
+                    return;
+                }
+                // Second attempt also failed - insert placeholder in note
+                var failContent = '<h2>' + escapeHtml(meeting.title) + '</h2>' +
+                    '<p><em>WorkIQ returned an invalid response. Rerunning the import may resolve this.</em></p>';
+                var existing = quill.root.innerHTML.trim();
+                if (existing && existing !== '<p><br></p>' && existing !== '<p></p>') {
+                    quill.root.innerHTML = existing + '<p><br></p><hr>' + failContent;
+                } else {
+                    quill.root.innerHTML = failContent;
+                }
+                setAutoFillStep(2, 'done');
+                _saveMeetingContext();
                 var errEl = document.getElementById('autoFillError');
-                errEl.innerHTML = "WorkIQ didn't return an expected response. " +
-                    '<a href="#" class="alert-link">Try again</a>';
-                errEl.querySelector('a').onclick = function(e) {
-                    e.preventDefault();
-                    errEl.style.display = 'none';
-                    setAutoFillStep(2, 'loading');
-                    proceedWithMeeting(meeting, dateStr);
-                };
+                errEl.textContent = "WorkIQ didn't return a usable response after retrying.";
                 errEl.style.display = 'block';
                 document.getElementById('autoFillBtn').disabled = false;
                 return;
@@ -4809,9 +4825,25 @@ function finishAutoFill() {
         document.getElementById('autoFillBtn').disabled = false;
     }, 1500);
     
+    // Switch button to "Retry Import" since we have a meeting context
+    _saveMeetingContext();
+    
     // Trigger autosave
     if (typeof debouncedAutoSave === 'function') {
         debouncedAutoSave();
+    }
+}
+
+function _saveMeetingContext() {
+    if (loadedMeetings.length > 0) {
+        _lastMeetingContext = {
+            meetings: loadedMeetings,
+            selectedIndex: selectedMeetingIndex
+        };
+        var btn = document.getElementById('importMeetingBtn');
+        btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Retry Import';
+        btn.classList.remove('btn-outline-info');
+        btn.classList.add('btn-outline-warning');
     }
 }
 
@@ -4879,6 +4911,9 @@ function applyMeetingImport(pendingData) {
     var data = pendingData.data;
     
     hideMeetingStatusCard();
+    
+    // Remember the meeting context so user can retry without re-fetching
+    _saveMeetingContext();
     
     // Build rich content for Quill
     var content = '<h2>' + escapeHtml(meeting.title) + '</h2>';
@@ -5003,6 +5038,14 @@ function openMeetingImport() {
             if (brToggle) brToggle.classList.add('d-none');
             if (window.hideBrainrotPanel) window.hideBrainrotPanel();
         });
+    }
+    
+    // If we have cached meetings from a previous import, reuse them
+    if (_lastMeetingContext) {
+        loadedMeetings = _lastMeetingContext.meetings;
+        var preSelect = _lastMeetingContext.selectedIndex;
+        showMeetingImportModalReady(loadedMeetings, preSelect, preSelect !== null ? 'Previously selected' : null);
+        return;
     }
     
     // Reset state
@@ -5276,19 +5319,65 @@ function importSelectedMeeting() {
                 return;
             }
             
-            // WorkIQ returned empty/echoed response — show retry in modal
+            // WorkIQ returned empty/echoed/refusal response - auto-retry once
             if (data.retry_suggested) {
-                hideMeetingStatusCard();
-                document.getElementById('meetingImportLoading').style.display = 'none';
-                document.getElementById('meetingImportContent').style.display = 'none';
-                document.getElementById('meetingImportError').style.display = 'none';
-                document.getElementById('meetingSummaryLoading').style.display = 'none';
-                document.getElementById('meetingSummaryRetry').style.display = 'block';
-                document.getElementById('retrySummaryBtn').onclick = function() {
-                    document.getElementById('meetingSummaryRetry').style.display = 'none';
-                    importSelectedMeeting();
-                };
-                meetingImportModal.show();
+                showMeetingStatusCard(
+                    '<div class="d-flex align-items-center">' +
+                    '<span class="spinner-border spinner-border-sm text-warning me-2"></span>' +
+                    '<div><strong>Retrying...</strong>' +
+                    '<br><small class="text-muted">WorkIQ returned an unexpected response, trying again</small></div>' +
+                    '</div>'
+                );
+                
+                _meetingAbortController = new AbortController();
+                var retryTimeoutId = setTimeout(function() { _meetingAbortController.abort(); }, 150000);
+                
+                fetch(url, { signal: _meetingAbortController.signal })
+                    .then(function(response) { return response.json(); })
+                    .then(function(retryData) {
+                        clearTimeout(retryTimeoutId);
+                        _meetingAbortController = null;
+                        
+                        if (!retryData.success || retryData.retry_suggested) {
+                            // Retry also failed - insert placeholder in note
+                            var failContent = '<h2>' + escapeHtml(meeting.title) + '</h2>' +
+                                '<p><em>WorkIQ returned an invalid response. Rerunning the import may resolve this.</em></p>';
+                            var existing = quill.root.innerHTML.trim();
+                            if (existing && existing !== '<p><br></p>' && existing !== '<p></p>') {
+                                quill.root.innerHTML = existing + '<p><br></p><hr>' + failContent;
+                            } else {
+                                quill.root.innerHTML = failContent;
+                            }
+                            hideMeetingStatusCard();
+                            _saveMeetingContext();
+                            if (typeof debouncedAutoSave === 'function') {
+                                debouncedAutoSave();
+                            }
+                            return;
+                        }
+                        
+                        // Retry succeeded - apply the import
+                        var pendingData = { meeting: meeting, data: retryData };
+                        if (quill.hasFocus()) {
+                            _pendingMeetingImport = pendingData;
+                            showMeetingStatusCard(
+                                '<div><strong class="text-success"><i class="bi bi-check-circle"></i> Summary ready</strong>' +
+                                '<br><small class="text-muted">Will insert when you pause typing</small>' +
+                                '<br><button class="btn btn-sm btn-success mt-2" onclick="applyPendingMeetingImport()"><i class="bi bi-arrow-down-circle"></i> Insert Now</button></div>'
+                            );
+                        } else {
+                            applyMeetingImport(pendingData);
+                        }
+                        if (typeof debouncedAutoSave === 'function') {
+                            debouncedAutoSave();
+                        }
+                    })
+                    .catch(function(error) {
+                        clearTimeout(retryTimeoutId);
+                        _meetingAbortController = null;
+                        hideMeetingStatusCard();
+                        showMeetingImportModalWithError('Retry failed: ' + error.message);
+                    });
                 return;
             }
             
