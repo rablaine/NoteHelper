@@ -608,7 +608,7 @@ class TestActiveEngagementsAPI:
         assert 'linked_note_count' in e
         assert 'opportunity_count' in e
         assert 'milestone_count' in e
-        assert 'updated_at' in e
+        assert 'latest_note_date' in e
         assert 'seller_name' in e
 
     def test_active_engagements_excludes_won_lost(self, client, app, engagement_data):
@@ -761,7 +761,7 @@ class TestEngagementsHub:
             'id', 'title', 'status', 'customer_name', 'customer_id',
             'seller_name', 'estimated_acr', 'target_date',
             'story_completeness', 'linked_note_count',
-            'opportunity_count', 'milestone_count', 'updated_at',
+            'opportunity_count', 'milestone_count', 'latest_note_date',
         ]
         for field in expected_fields:
             assert field in e, f"Missing field: {field}"

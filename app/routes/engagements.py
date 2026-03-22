@@ -108,7 +108,7 @@ def api_all_engagements():
             'opportunity_count': len(eng.opportunities),
             'milestone_count': len(eng.milestones),
             'open_action_item_count': eng.open_action_item_count,
-            'updated_at': eng.updated_at.isoformat() if eng.updated_at else None,
+            'latest_note_date': max((n.call_date for n in eng.notes), default=None).isoformat() if eng.notes else None,
         })
 
     return jsonify({'success': True, 'engagements': results, 'count': len(results)})

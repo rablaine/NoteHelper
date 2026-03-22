@@ -246,7 +246,7 @@ def api_seller_engagements(id):
             'linked_note_count': eng.linked_note_count,
             'opportunity_count': len(eng.opportunities),
             'milestone_count': len(eng.milestones),
-            'updated_at': eng.updated_at.isoformat() if eng.updated_at else None,
+            'latest_note_date': max((n.call_date for n in eng.notes), default=None).isoformat() if eng.notes else None,
         })
 
     return jsonify({'success': True, 'engagements': results, 'count': len(results)})

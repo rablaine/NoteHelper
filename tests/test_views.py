@@ -402,7 +402,7 @@ class TestSellerEngagementsAPI:
         assert 'linked_note_count' in eng_data
         assert 'opportunity_count' in eng_data
         assert 'milestone_count' in eng_data
-        assert 'updated_at' in eng_data
+        assert 'latest_note_date' in eng_data
 
 
 class TestSellerEngagementsUI:
