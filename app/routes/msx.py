@@ -72,7 +72,7 @@ from app.services.msx_api import (
     get_user_info,
 )
 from app.models import Customer, CustomerCSAM, Milestone, Opportunity, Territory, Seller, POD, SolutionEngineer, SyncStatus, Vertical, db
-from app.services.diagnostic_log import set_suppressed
+
 
 logger = logging.getLogger(__name__)
 
@@ -1113,7 +1113,6 @@ def _drain(q: queue.Queue) -> list:
 
 def _par_query_accounts(account_ids, batch_size, progress_q, worker_id):
     """Worker: query account details for a chunk of IDs."""
-    set_suppressed(True)
     from app.services.msx_api import msx_retry_state
 
     def _on_retry(attempt, max_retries, wait_secs, error_type):
@@ -1150,7 +1149,6 @@ def _par_query_accounts(account_ids, batch_size, progress_q, worker_id):
 
 def _par_query_territories(territory_ids, batch_size, progress_q, worker_id):
     """Worker: query territory details for a chunk of IDs."""
-    set_suppressed(True)
     from app.services.msx_api import msx_retry_state
 
     def _on_retry(attempt, max_retries, wait_secs, error_type):
@@ -1185,7 +1183,6 @@ def _par_query_territories(territory_ids, batch_size, progress_q, worker_id):
 
 def _par_query_teams(account_ids, batch_size, progress_q, worker_id):
     """Worker: query account teams for a chunk of account IDs."""
-    set_suppressed(True)
     from app.services.msx_api import msx_retry_state
 
     def _on_retry(attempt, max_retries, wait_secs, error_type):
@@ -1217,7 +1214,6 @@ _CSAM_BATCH = 10  # CSAMs are rare (~0-3 per account), safe to batch more
 
 def _par_query_csams(account_ids, batch_size, progress_q, worker_id):
     """Worker: query CSAM team members for a chunk of account IDs."""
-    set_suppressed(True)
     from app.services.msx_api import msx_retry_state
 
     def _on_retry(attempt, max_retries, wait_secs, error_type):
@@ -1247,7 +1243,6 @@ _DSS_BATCH = 10  # DSSs are sparse (~0-3 per account), safe to batch more
 
 def _par_query_dss(account_ids, batch_size, progress_q, worker_id):
     """Worker: query DSS team members for a chunk of account IDs."""
-    set_suppressed(True)
     from app.services.msx_api import msx_retry_state
 
     def _on_retry(attempt, max_retries, wait_secs, error_type):
@@ -1299,7 +1294,6 @@ def import_stream():
 
     def generate():
         phase = "initializing"
-        set_suppressed(True)
         try:
             import_start_time = time.time()
             progress_q: queue.Queue = queue.Queue()
@@ -2360,8 +2354,6 @@ def import_stream():
                 f"Error during parallel MSX import (phase: {phase}): {error_detail}"
             )
             yield _sse({"error": f"Import failed during '{phase}': {error_detail}"})
-        finally:
-            set_suppressed(False)
 
     return Response(
         stream_with_context(generate()),
