@@ -846,6 +846,7 @@ def _update_milestone_from_msx(
     milestone.milestone_number = msx_data.get("number") or milestone.milestone_number
     milestone.msx_status = msx_data.get("status") or milestone.msx_status
     milestone.msx_status_code = msx_data.get("status_code")
+    milestone.customer_commitment = msx_data.get("customer_commitment") or milestone.customer_commitment
     milestone.opportunity_name = msx_data.get("opportunity_name") or milestone.opportunity_name
     milestone.workload = msx_data.get("workload") or milestone.workload
     milestone.monthly_usage = msx_data.get("monthly_usage")
@@ -870,6 +871,7 @@ def _create_milestone_from_msx(
         title=msx_data.get("name", ""),
         msx_status=msx_data.get("status", "Unknown"),
         msx_status_code=msx_data.get("status_code"),
+        customer_commitment=msx_data.get("customer_commitment", ""),
         opportunity_name=msx_data.get("opportunity_name", ""),
         workload=msx_data.get("workload", ""),
         monthly_usage=msx_data.get("monthly_usage"),

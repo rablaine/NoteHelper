@@ -590,7 +590,8 @@ def get_milestone_details(milestone_id: str) -> Dict[str, Any]:
             f"{CRM_BASE_URL}/msp_engagementmilestones({milestone_id})"
             f"?$select=msp_name,msp_milestonestatus,msp_milestonenumber,"
             f"msp_milestonedate,msp_bacvrate,msp_monthlyuse,"
-            f"_msp_workloadlkid_value,msp_forecastcommentsjsonfield"
+            f"_msp_workloadlkid_value,msp_forecastcommentsjsonfield,"
+            f"msp_commitmentrecommendation"
         )
         response = _msx_request('GET', url)
 
@@ -655,11 +656,18 @@ def get_milestone_details(milestone_id: str) -> Dict[str, Any]:
                 "_msp_workloadlkid_value@OData.Community.Display.V1.FormattedValue", ""
             )
 
+            commitment = raw.get(
+                "msp_commitmentrecommendation"
+                "@OData.Community.Display.V1.FormattedValue",
+                ""
+            ) or raw.get("msp_commitmentrecommendation", "")
+
             milestone = {
                 "title": raw.get("msp_name", ""),
                 "milestone_number": raw.get("msp_milestonenumber", ""),
                 "msx_status": status_map.get(status_code, "Unknown"),
                 "msx_status_code": status_code,
+                "customer_commitment": commitment if isinstance(commitment, str) else str(commitment),
                 "due_date": due_date_str,
                 "dollar_value": raw.get("msp_bacvrate"),
                 "monthly_usage": raw.get("msp_monthlyuse"),
@@ -755,7 +763,8 @@ def get_milestones_by_account(
             f"?$filter={filter_str}"
             f"&$select=msp_engagementmilestoneid,msp_name,msp_milestonestatus,"
             f"msp_milestonenumber,_msp_opportunityid_value,msp_monthlyuse,"
-            f"_msp_workloadlkid_value,msp_milestonedate,msp_bacvrate"
+            f"_msp_workloadlkid_value,msp_milestonedate,msp_bacvrate,"
+            f"msp_commitmentrecommendation"
             f"&$orderby=msp_name"
         )
         
@@ -787,6 +796,12 @@ def get_milestones_by_account(
                 due_date_str = raw.get("msp_milestonedate")
                 dollar_value = raw.get("msp_bacvrate")  # BACV
                 
+                commitment = raw.get(
+                    "msp_commitmentrecommendation"
+                    "@OData.Community.Display.V1.FormattedValue",
+                    ""
+                ) or raw.get("msp_commitmentrecommendation", "")
+
                 milestones.append({
                     "id": milestone_id,
                     "name": raw.get("msp_name", ""),
@@ -794,6 +809,7 @@ def get_milestones_by_account(
                     "status": status,
                     "status_code": status_code,
                     "status_sort": MILESTONE_STATUS_ORDER.get(status, 99),
+                    "customer_commitment": commitment if isinstance(commitment, str) else str(commitment),
                     "msx_opportunity_id": raw.get("_msp_opportunityid_value"),
                     "opportunity_name": opp_name,
                     "workload": workload,

@@ -239,6 +239,8 @@ def api_milestone_msx_details(id: int):
                 milestone.msx_status = msx_data["msx_status"]
             if msx_data.get("msx_status_code") is not None:
                 milestone.msx_status_code = msx_data["msx_status_code"]
+            if msx_data.get("customer_commitment"):
+                milestone.customer_commitment = msx_data["customer_commitment"]
             if msx_data.get("milestone_number"):
                 milestone.milestone_number = msx_data["milestone_number"]
             if msx_data.get("dollar_value") is not None:

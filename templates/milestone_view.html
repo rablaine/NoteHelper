@@ -78,6 +78,23 @@
                 <!-- Cached details shown immediately -->
                 <div id="detailsCached">
                     <ul class="list-group list-group-flush">
+                        {% if milestone.msx_status %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Status</span>
+                            <span class="badge {% if milestone.msx_status == 'On Track' %}bg-success{% elif milestone.msx_status == 'At Risk' %}bg-warning text-dark{% elif milestone.msx_status == 'Blocked' %}bg-danger{% elif milestone.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}" id="statusBadgeDetail">{{ milestone.msx_status }}</span>
+                        </li>
+                        {% endif %}
+                        {% if milestone.customer_commitment %}
+                        <li class="list-group-item d-flex justify-content-between" id="commitmentRow">
+                            <span class="text-muted">Commitment</span>
+                            <span id="commitmentValue">{{ milestone.customer_commitment }}</span>
+                        </li>
+                        {% else %}
+                        <li class="list-group-item d-flex justify-content-between" id="commitmentRow" style="display:none !important;">
+                            <span class="text-muted">Commitment</span>
+                            <span id="commitmentValue"></span>
+                        </li>
+                        {% endif %}
                         {% if milestone.milestone_number %}
                         <li class="list-group-item d-flex justify-content-between">
                             <span class="text-muted">Number</span>
@@ -362,6 +379,23 @@ function renderDetails(ms) {
             'On Track': 'bg-success', 'At Risk': 'bg-warning text-dark',
             'Blocked': 'bg-danger', 'Completed': 'bg-info'
         }[ms.msx_status] || 'bg-secondary');
+    }
+    // Update status badge in details card
+    const detailBadge = document.getElementById('statusBadgeDetail');
+    if (detailBadge && ms.msx_status) {
+        detailBadge.textContent = ms.msx_status;
+        detailBadge.className = 'badge ' + ({
+            'On Track': 'bg-success', 'At Risk': 'bg-warning text-dark',
+            'Blocked': 'bg-danger', 'Completed': 'bg-info'
+        }[ms.msx_status] || 'bg-secondary');
+    }
+    // Update customer commitment
+    const commitRow = document.getElementById('commitmentRow');
+    const commitVal = document.getElementById('commitmentValue');
+    if (commitRow && commitVal && ms.customer_commitment) {
+        commitVal.textContent = ms.customer_commitment;
+        commitRow.style.display = '';
+        commitRow.classList.add('d-flex');
     }
     // Cached details stay visible - DB is updated server-side by the API call
 }

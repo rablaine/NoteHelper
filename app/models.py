@@ -812,6 +812,7 @@ class Milestone(db.Model):
     title = db.Column(db.String(500), nullable=True)  # msp_name from MSX
     msx_status = db.Column(db.String(50), nullable=True)  # "On Track", "Cancelled", etc.
     msx_status_code = db.Column(db.Integer, nullable=True)  # Numeric status code
+    customer_commitment = db.Column(db.String(50), nullable=True)  # "Committed", "Uncommitted", etc.
     opportunity_name = db.Column(db.String(500), nullable=True)  # Parent opportunity name (legacy, kept for compat)
     
     # Milestone tracker fields (populated from MSX sync)
