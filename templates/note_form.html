@@ -2852,6 +2852,7 @@ milestoneSearch.addEventListener('input', function() {
         const workload = (milestone.workload || '').toLowerCase();
         return name.includes(searchTerm) || number.includes(searchTerm) || oppName.includes(searchTerm) || workload.includes(searchTerm);
     });
+    currentMilestoneMatches = sortMilestones(currentMilestoneMatches);
     
     if (currentMilestoneMatches.length > 0) {
         selectedMilestoneIndex = 0;
@@ -2865,8 +2866,21 @@ milestoneSearch.addEventListener('input', function() {
     }
 });
 
+function sortMilestones(milestones) {
+    const statusOrder = {'On Track': 0, 'At Risk': 0, 'Blocked': 0, 'Completed': 1, 'Cancelled': 2, 'Lost to Competitor': 2, 'Hygiene/Duplicate': 2};
+    return milestones.sort(function(a, b) {
+        var ga = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 1;
+        var gb = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 1;
+        if (ga !== gb) return ga - gb;
+        // Within same group, sort by due_date descending (most recent first)
+        var da = a.due_date ? new Date(a.due_date) : new Date(0);
+        var db = b.due_date ? new Date(b.due_date) : new Date(0);
+        return db - da;
+    });
+}
+
 function showAllMilestones() {
-    currentMilestoneMatches = allMilestones.slice();
+    currentMilestoneMatches = sortMilestones(allMilestones.slice());
     selectedMilestoneIndex = 0;
     renderMilestoneDropdown();
     milestoneDropdown.style.display = 'block';
