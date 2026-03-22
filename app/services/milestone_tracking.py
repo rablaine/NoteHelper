@@ -364,10 +364,31 @@ def _track_engagement_worker(
     ref_tag: str,
 ) -> None:
     """Background thread worker for engagement milestone tracking."""
+    from app.services.msx_api import get_milestone_comments, get_msx_user_display_name
+
+    display_name = f"{get_msx_user_display_name()} via Sales Buddy"
     print(f"[milestone-tracking] engagement worker started: {ref_tag}, {len(milestones_data)} milestone(s)")
     for ms in milestones_data:
         msx_id = ms["msx_milestone_id"]
         try:
+            # First-writer-wins: skip if another Sales Buddy user already
+            # posted an engagement story to this milestone.
+            read_result = get_milestone_comments(msx_id)
+            if read_result.get("success"):
+                dominated = False
+                for c in read_result["comments"]:
+                    c_user = c.get("userId", "")
+                    c_text = c.get("comment", "")
+                    if (c_user != display_name
+                            and c_user.endswith("via Sales Buddy")
+                            and "· eng-" in c_text):
+                        print(f"[milestone-tracking] skipping engagement upsert to {msx_id}: "
+                              f"another user ({c_user}) already has an engagement story")
+                        dominated = True
+                        break
+                if dominated:
+                    continue
+
             print(f"[milestone-tracking] upserting engagement story to {msx_id}")
             result = _upsert_to_msx(msx_id, content, ref_tag, pin_to_top=True)
             print(f"[milestone-tracking] engagement upsert result: success={result and result.get('success')}")
