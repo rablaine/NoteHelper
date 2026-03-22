@@ -225,46 +225,8 @@
                 <h5 class="mb-0"><i class="bi bi-briefcase"></i> Opportunities</h5>
             </div>
             <div class="card-body p-2">
-                {% for opp in customer.opportunities.order_by(None).all()|sort(attribute='name') %}
-                    <div class="opp-mini-card rounded p-2 {% if not loop.last %}mb-2{% endif %}">
-                        <a href="{{ url_for('opportunities.opportunity_view', id=opp.id) }}" class="fw-bold text-decoration-none d-block{% if opp.milestones.count() > 0 %} mb-1{% endif %}" title="{{ opp.name }}">
-                            <i class="bi bi-briefcase"></i> {{ opp.name }}
-                        </a>
-                        {% set opp_milestones = opp.milestones.all() %}
-                        {% if opp_milestones %}
-                            {% for ms in opp_milestones %}
-                                <div class="d-flex align-items-start gap-2 {% if not loop.last %}mb-1{% endif %}" style="padding-left: 0.25rem;">
-                                    <i class="bi bi-{% if ms.msx_status == 'On Track' %}check-circle text-success{% elif ms.msx_status == 'At Risk' %}exclamation-triangle text-warning{% elif ms.msx_status == 'Blocked' %}x-circle text-danger{% elif ms.msx_status == 'Completed' %}check2-circle text-info{% else %}flag text-secondary{% endif %}" style="margin-top: 2px;" title="{{ ms.msx_status or 'Unknown' }}"></i>
-                                    <div class="min-width-0 flex-grow-1" style="min-width: 0;">
-                                        <div class="d-flex justify-content-between align-items-start gap-1">
-                                            <div style="min-width: 0; flex: 1;">
-                                                <a href="{{ url_for('milestones.milestone_view', id=ms.id) }}" class="text-decoration-none small text-truncate d-block" title="{{ ms.display_text }}">
-                                                    {{ ms.display_text }}
-                                                </a>
-                                                {% if ms.workload %}
-                                                    <div class="text-muted text-truncate" style="font-size: 0.7em;" title="{{ ms.workload }}">{{ ms.workload }}</div>
-                                                {% endif %}
-                                            </div>
-                                            <div class="text-end flex-shrink-0">
-                                                {% if ms.monthly_usage %}
-                                                    <span class="small text-muted">${{ "{:,.0f}".format(ms.monthly_usage) }}/mo</span>
-                                                {% endif %}
-                                                {% if ms.due_date %}
-                                                    {% set days_until = (ms.due_date - today).days %}
-                                                    {% if ms.msx_status == 'Completed' %}
-                                                    <div style="font-size: 0.7em;" class="text-success"><i class="bi bi-calendar-check"></i> {{ ms.due_date.strftime('%b %d, %Y') }}</div>
-                                                    {% else %}
-                                                    <div style="font-size: 0.7em;" class="{% if days_until < 0 %}text-danger{% elif days_until <= 30 %}text-warning{% elif days_until <= 90 %}text-success{% else %}text-muted{% endif %}"><i class="bi bi-calendar"></i> {{ ms.due_date.strftime('%b %d, %Y') }}{% if days_until < 0 %} <span class="fw-semibold">(overdue)</span>{% elif days_until <= 30 %} <span class="fw-semibold">({{ days_until }}d)</span>{% endif %}</div>
-                                                    {% endif %}
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-                {% endfor %}
+                {% set opportunities = customer.opportunities.order_by(None).all()|sort(attribute='name') %}
+                {% include 'partials/_customer_opportunities.html' %}
             </div>
         </div>
         {% endif %}

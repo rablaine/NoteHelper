@@ -528,6 +528,18 @@ def api_customer_info(customer_id):
     }), 200
 
 
+@customers_bp.route('/api/customer/<int:customer_id>/opportunities-html')
+def api_customer_opportunities_html(customer_id):
+    """Return server-rendered opportunities HTML for the customer info flyout."""
+    customer = Customer.query.filter_by(id=customer_id).first_or_404()
+    opportunities = sorted(customer.opportunities.all(), key=lambda o: o.name)
+    html = render_template(
+        'partials/_customer_opportunities.html',
+        opportunities=opportunities,
+    )
+    return html
+
+
 @customers_bp.route('/api/customer/<int:customer_id>/nickname', methods=['PUT'])
 def api_customer_nickname(customer_id):
     """Update a customer's nickname."""

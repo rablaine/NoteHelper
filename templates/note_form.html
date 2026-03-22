@@ -912,8 +912,9 @@
                     <span id="custInfoNickname" class="small"></span>
                     <button type="button" class="btn btn-sm p-0 ms-1 text-muted" onclick="editCustNickname()" title="Edit nickname" id="custInfoNicknameEditBtn"><i class="bi bi-pencil" style="font-size:0.7rem;"></i></button>
                 </div>
-                <div id="custInfoNicknameEditRow" style="display:none;" class="d-flex align-items-center gap-1 mt-1">
-                    <input type="text" class="form-control form-control-sm" id="custInfoNicknameInput" style="max-width:200px;" placeholder="Nickname">
+                <div id="custInfoNicknameEditRow" class="align-items-center gap-1" style="display:none;">
+                    <span class="text-muted small">Nickname:</span>
+                    <input type="text" class="form-control form-control-sm" id="custInfoNicknameInput" style="max-width:160px;" placeholder="Nickname">
                     <button type="button" class="btn btn-sm btn-primary py-0 px-2" onclick="saveCustNickname()"><i class="bi bi-check"></i></button>
                     <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="cancelCustNickname()"><i class="bi bi-x"></i></button>
                 </div>
@@ -969,6 +970,14 @@
     .offcanvas.flyout-shifted-3 {
         transform: translateX(-1197px) !important;
         z-index: 1042 !important;
+    }
+    .opp-mini-card {
+        background-color: rgba(0, 0, 0, 0.03);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    html[data-bs-theme="dark"] .opp-mini-card {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.08);
     }
 </style>
 <script>
@@ -1364,52 +1373,23 @@ function renderCustomerInfo(data) {
         vertSection.style.display = 'none';
     }
 
-    // Opportunities
+    // Opportunities (server-rendered partial)
     var oppsDiv = document.getElementById('custInfoOpps');
     var noOpps = document.getElementById('custInfoNoOpps');
     oppsDiv.innerHTML = '';
-    if (data.opportunities && data.opportunities.length) {
-        noOpps.style.display = 'none';
-        data.opportunities.sort(function(a, b) { return a.name.localeCompare(b.name); });
-        data.opportunities.forEach(function(opp) {
-            var card = document.createElement('div');
-            card.className = 'rounded p-2 mb-2';
-            card.style.cssText = 'background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color);';
-            var html = '<a href="/opportunity/' + opp.id + '" class="fw-bold text-decoration-none d-block' + (opp.milestones.length ? ' mb-1' : '') + '" target="_blank">' +
-                '<i class="bi bi-briefcase"></i> ' + escHtmlNote(opp.name) + '</a>';
-            opp.milestones.forEach(function(ms) {
-                var statusIcon = 'flag text-secondary';
-                if (ms.msx_status === 'On Track') statusIcon = 'check-circle text-success';
-                else if (ms.msx_status === 'At Risk') statusIcon = 'exclamation-triangle text-warning';
-                else if (ms.msx_status === 'Blocked') statusIcon = 'x-circle text-danger';
-                else if (ms.msx_status === 'Completed') statusIcon = 'check2-circle text-info';
-                html += '<div class="d-flex align-items-start gap-2" style="padding-left:0.25rem;">';
-                html += '<i class="bi bi-' + statusIcon + '" style="margin-top:2px;" title="' + escAttrNote(ms.msx_status || 'Unknown') + '"></i>';
-                html += '<div style="min-width:0; flex:1;">';
-                html += '<a href="/milestone/' + ms.id + '" class="text-decoration-none small text-truncate d-block" target="_blank">' + escHtmlNote(ms.display_text) + '</a>';
-                if (ms.workload) html += '<div class="text-muted text-truncate" style="font-size:0.7em;">' + escHtmlNote(ms.workload) + '</div>';
-                html += '</div>';
-                html += '<div class="text-end flex-shrink-0">';
-                if (ms.monthly_usage) html += '<span class="small text-muted">$' + Number(ms.monthly_usage).toLocaleString() + '/mo</span>';
-                if (ms.due_date) {
-                    var dd = new Date(ms.due_date + 'T00:00:00');
-                    var daysUntil = Math.ceil((dd - new Date()) / 86400000);
-                    var dateClass = 'text-muted';
-                    var extra = '';
-                    if (ms.msx_status === 'Completed') { dateClass = 'text-success'; }
-                    else if (daysUntil < 0) { dateClass = 'text-danger'; extra = ' <span class="fw-semibold">(overdue)</span>'; }
-                    else if (daysUntil <= 30) { dateClass = 'text-warning'; extra = ' <span class="fw-semibold">(' + daysUntil + 'd)</span>'; }
-                    else if (daysUntil <= 90) { dateClass = 'text-success'; }
-                    html += '<div style="font-size:0.7em;" class="' + dateClass + '"><i class="bi bi-calendar"></i> ' + dd.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + extra + '</div>';
-                }
-                html += '</div></div>';
-            });
-            card.innerHTML = html;
-            oppsDiv.appendChild(card);
+    noOpps.style.display = 'none';
+    fetch('/api/customer/' + data.id + '/opportunities-html')
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            if (html.trim()) {
+                oppsDiv.innerHTML = html;
+            } else {
+                noOpps.style.display = '';
+            }
+        })
+        .catch(function() {
+            noOpps.style.display = '';
         });
-    } else {
-        noOpps.style.display = '';
-    }
 
     // View link
     document.getElementById('custInfoViewLink').href = '/customer/' + data.id;
@@ -1417,7 +1397,8 @@ function renderCustomerInfo(data) {
 
 function editCustNickname() {
     document.getElementById('custInfoNicknameRow').style.display = 'none';
-    document.getElementById('custInfoNicknameEditRow').style.display = '';
+    var editRow = document.getElementById('custInfoNicknameEditRow');
+    editRow.style.display = 'flex';
     var current = document.getElementById('custInfoNickname').textContent.trim();
     var input = document.getElementById('custInfoNicknameInput');
     input.value = (current === '(none)') ? '' : current;
