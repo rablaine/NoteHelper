@@ -30,6 +30,7 @@ from prompts import (
     CONNECT_USER_PROMPT_SINGLE,
     CONNECT_USER_PROMPT_CHUNK,
     CONNECT_USER_PROMPT_SYNTHESIS,
+    ENGAGEMENT_STORY_PROMPT,
 )
 
 # ---------------------------------------------------------------------------
