@@ -2791,11 +2791,25 @@ def get_user_alias(systemuser_id: str) -> Optional[str]:
     Returns:
         Email alias (e.g., 'alexbla') or None if lookup fails
     """
+    info = get_user_info(systemuser_id)
+    return info["alias"] if info else None
+
+
+def get_user_info(systemuser_id: str) -> Optional[Dict[str, str]]:
+    """
+    Look up a systemuser by ID and return their alias and full name.
+    
+    Args:
+        systemuser_id: The MSX systemuser GUID
+        
+    Returns:
+        Dict with 'alias' and 'fullname' keys, or None if lookup fails
+    """
     if not systemuser_id:
         return None
     
     try:
-        url = f"{CRM_BASE_URL}/systemusers({systemuser_id})?$select=domainname,internalemailaddress"
+        url = f"{CRM_BASE_URL}/systemusers({systemuser_id})?$select=domainname,internalemailaddress,fullname"
         response = _msx_request('GET', url)
         
         if response.status_code != 200:
@@ -2803,17 +2817,19 @@ def get_user_alias(systemuser_id: str) -> Optional[str]:
             return None
         
         data = response.json()
-        # Get email from domainname or internalemailaddress
         email = data.get("domainname") or data.get("internalemailaddress") or ""
         
-        # Extract alias (part before @)
+        alias = None
         if "@" in email:
-            return email.split("@")[0]
+            alias = email.split("@")[0]
         
-        return None
+        return {
+            "alias": alias,
+            "fullname": data.get("fullname") or alias,
+        }
         
     except Exception as e:
-        logger.warning(f"Error looking up user alias for {systemuser_id}: {e}")
+        logger.warning(f"Error looking up user info for {systemuser_id}: {e}")
         return None
 
 

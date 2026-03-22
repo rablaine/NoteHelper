@@ -69,6 +69,7 @@ from app.services.msx_api import (
     batch_query_account_dss,
     build_account_url,
     get_user_alias,
+    get_user_info,
 )
 from app.models import Customer, CustomerCSAM, Milestone, Opportunity, Territory, Seller, POD, SolutionEngineer, SyncStatus, Vertical, db
 from app.services.diagnostic_log import set_suppressed
@@ -2039,7 +2040,7 @@ def import_stream():
             owner_ids = {
                 ad["owner_id"] for ad in accounts_data if ad.get("owner_id")
             }
-            owner_alias_cache: dict = {}  # systemuser_id -> alias
+            owner_alias_cache: dict = {}  # systemuser_id -> {alias, fullname}
             dae_total = len(owner_ids)
 
             yield _sse({
@@ -2048,7 +2049,7 @@ def import_stream():
             })
 
             for dae_idx, oid in enumerate(owner_ids, 1):
-                owner_alias_cache[oid] = get_user_alias(oid)
+                owner_alias_cache[oid] = get_user_info(oid)
                 if dae_idx % 5 == 0 or dae_idx == dae_total:
                     yield _sse({
                         "message": f"Resolving account owner aliases ({dae_idx}/{dae_total})...",
@@ -2190,13 +2191,16 @@ def import_stream():
                         # Update DAE (account owner) from MSX
                         owner_id = ad.get("owner_id")
                         if owner_id:
-                            alias = owner_alias_cache.get(owner_id)
+                            info = owner_alias_cache.get(owner_id)
+                            alias = info["alias"] if info else None
+                            fullname = info["fullname"] if info else None
                             if alias and cust.dae_alias != alias:
                                 cust.dae_alias = alias
                                 changed = True
-                            # Resolve DAE display name from fullname on the account
-                            # (owner name not in accounts query — use alias as fallback)
-                            if alias and not cust.dae_name:
+                            if fullname and cust.dae_name != fullname:
+                                cust.dae_name = fullname
+                                changed = True
+                            elif alias and not cust.dae_name:
                                 cust.dae_name = alias
                                 changed = True
 
@@ -2238,10 +2242,10 @@ def import_stream():
                     # DAE
                     owner_id = ad.get("owner_id")
                     if owner_id:
-                        alias = owner_alias_cache.get(owner_id)
-                        if alias:
-                            customer.dae_alias = alias
-                            customer.dae_name = alias
+                        info = owner_alias_cache.get(owner_id)
+                        if info:
+                            customer.dae_alias = info["alias"]
+                            customer.dae_name = info.get("fullname") or info["alias"]
                     # Available CSAMs (M2M)
                     acct_csam_list = account_csams.get(ad["id"], [])
                     for c in acct_csam_list:
