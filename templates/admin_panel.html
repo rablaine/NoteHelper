@@ -1676,7 +1676,6 @@ function checkForUpdates(refresh) {
                 }
                 statusEl.innerHTML = `
                     <div class="d-flex align-items-center gap-2">
-                        <span class="badge bg-success"><i class="bi bi-cloud-download"></i> Update Available</span>
                         <span>${data.commits_behind} new commit${data.commits_behind !== 1 ? 's' : ''} available</span>
                     </div>
                     <div class="mt-2 small text-muted">
@@ -1686,7 +1685,6 @@ function checkForUpdates(refresh) {
                         <button class="btn btn-success btn-sm" id="applyUpdateBtn" onclick="applyUpdate()">
                             <i class="bi bi-download"></i> Update Now
                         </button>
-                        ${!data.dismissed ? '<button class="btn btn-outline-secondary btn-sm" onclick="dismissUpdate()"><i class="bi bi-bell-slash"></i> Dismiss</button>' : ''}
                     </div>
                     ${restartHtml}
                 `;
