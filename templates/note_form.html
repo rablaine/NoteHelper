@@ -154,15 +154,17 @@
                             <div id="customerIndicator"
                                  {% if not note and not preselect_customer_id %}style="display:none;"{% endif %}
                                  class="d-flex align-items-center gap-2">
-                                <button type="button" class="btn btn-outline-secondary d-flex align-items-center gap-2 text-start w-100" onclick="openCustomerInfoFlyout()" id="customerIndicatorBtn">
-                                    <i class="bi bi-building"></i>
-                                    <span id="customerIndicatorName">
-                                        {% if note and note.customer %}{{ note.customer.nickname or note.customer.name }}
-                                        {% elif preselect_customer %}{{ preselect_customer.nickname or preselect_customer.name }}
-                                        {% endif %}
-                                    </span>
-                                    <i class="bi bi-chevron-right ms-auto" style="font-size:0.7rem;"></i>
-                                </button>
+                                <span id="customerIndicatorName">
+                                    {% if note and note.customer %}{{ note.customer.nickname or note.customer.name }}
+                                    {% elif preselect_customer %}{{ preselect_customer.nickname or preselect_customer.name }}
+                                    {% endif %}
+                                </span>
+                                <span id="customerIndicatorTpid" class="text-muted small">
+                                    {% if note and note.customer and note.customer.tpid %}({{ note.customer.tpid }})
+                                    {% elif preselect_customer and preselect_customer.tpid %}({{ preselect_customer.tpid }})
+                                    {% endif %}
+                                </span>
+                                <a href="javascript:void(0)" onclick="openCustomerInfoFlyout()" class="small text-muted text-decoration-none" id="customerIndicatorBtn">see details &rsaquo;</a>
                             </div>
                             {% if not seller_mode %}
                             {% if note and note.customer and note.customer.seller %}
@@ -1264,8 +1266,15 @@ function openCustomerInfoFlyout() {
     if (!custId) return;
     if (!_custInfoFlyoutInstance) {
         _custInfoFlyoutInstance = new bootstrap.Offcanvas(document.getElementById('customerInfoFlyout'));
+        var detailsLink = document.getElementById('customerIndicatorBtn');
+        document.getElementById('customerInfoFlyout').addEventListener('shown.bs.offcanvas', function() {
+            detailsLink.innerHTML = 'see details &lsaquo;';
+        });
+        document.getElementById('customerInfoFlyout').addEventListener('hidden.bs.offcanvas', function() {
+            detailsLink.innerHTML = 'see details &rsaquo;';
+        });
     }
-    _custInfoFlyoutInstance.show();
+    _custInfoFlyoutInstance.toggle();
     loadCustomerInfo(custId);
 }
 
@@ -1318,6 +1327,10 @@ function renderCustomerInfo(data) {
     } else {
         tpidDiv.textContent = data.tpid || '--';
     }
+
+    // Update indicator TPID
+    var indicatorTpid = document.getElementById('customerIndicatorTpid');
+    if (indicatorTpid) indicatorTpid.textContent = data.tpid ? '(' + data.tpid + ')' : '';
 
     // Territory
     document.getElementById('custInfoTerritory').innerHTML = data.territory
@@ -1441,6 +1454,7 @@ function saveCustNickname() {
         // Update the indicator button text
         var indicator = document.getElementById('customerIndicatorName');
         if (indicator) indicator.textContent = data.nickname || document.getElementById('custInfoName').textContent;
+        // TPID is unchanged by nickname save, no update needed
         // Invalidate cache
         delete _custInfoCache[custId];
     });
