@@ -152,8 +152,8 @@
             if (!isNaN(d)) targetDisplay = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
         }
         let updatedDisplay = '';
-        if (eng.updated_at) {
-            const d = new Date(eng.updated_at);
+        if (eng.latest_note_date) {
+            const d = new Date(eng.latest_note_date);
             if (!isNaN(d)) updatedDisplay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         }
 
