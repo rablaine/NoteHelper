@@ -78,10 +78,15 @@
                 <!-- Cached details shown immediately -->
                 <div id="detailsCached">
                     <ul class="list-group list-group-flush">
-                        {% if milestone.msx_status %}
-                        <li class="list-group-item d-flex justify-content-between">
-                            <span class="text-muted">Status</span>
-                            <span class="badge {% if milestone.msx_status == 'On Track' %}bg-success{% elif milestone.msx_status == 'At Risk' %}bg-warning text-dark{% elif milestone.msx_status == 'Blocked' %}bg-danger{% elif milestone.msx_status == 'Completed' %}bg-info{% else %}bg-secondary{% endif %}" id="statusBadgeDetail">{{ milestone.msx_status }}</span>
+                        {% if milestone.owner_name %}
+                        <li class="list-group-item d-flex justify-content-between" id="ownerRow">
+                            <span class="text-muted">Owner</span>
+                            <span id="ownerValue">{% if owner_link %}<a href="{{ owner_link.url }}"><i class="bi bi-person"></i> {{ milestone.owner_name }}</a>{% else %}{{ milestone.owner_name }}{% endif %}</span>
+                        </li>
+                        {% else %}
+                        <li class="list-group-item d-flex justify-content-between" id="ownerRow" style="display:none !important;">
+                            <span class="text-muted">Owner</span>
+                            <span id="ownerValue"></span>
                         </li>
                         {% endif %}
                         {% if milestone.customer_commitment %}
@@ -380,14 +385,18 @@ function renderDetails(ms) {
             'Blocked': 'bg-danger', 'Completed': 'bg-info'
         }[ms.msx_status] || 'bg-secondary');
     }
-    // Update status badge in details card
-    const detailBadge = document.getElementById('statusBadgeDetail');
-    if (detailBadge && ms.msx_status) {
-        detailBadge.textContent = ms.msx_status;
-        detailBadge.className = 'badge ' + ({
-            'On Track': 'bg-success', 'At Risk': 'bg-warning text-dark',
-            'Blocked': 'bg-danger', 'Completed': 'bg-info'
-        }[ms.msx_status] || 'bg-secondary');
+    // Update owner (preserve existing link if present)
+    const ownerRow = document.getElementById('ownerRow');
+    const ownerVal = document.getElementById('ownerValue');
+    if (ownerRow && ownerVal && ms.owner_name) {
+        const existingLink = ownerVal.querySelector('a');
+        if (existingLink) {
+            existingLink.childNodes[existingLink.childNodes.length - 1].textContent = ' ' + ms.owner_name;
+        } else {
+            ownerVal.textContent = ms.owner_name;
+        }
+        ownerRow.style.display = '';
+        ownerRow.classList.add('d-flex');
     }
     // Update customer commitment
     const commitRow = document.getElementById('commitmentRow');

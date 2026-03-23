@@ -12,7 +12,7 @@ from flask import (
     Blueprint, render_template, request, redirect, url_for,
     flash, g, jsonify, Response, stream_with_context, current_app,
 )
-from app.models import db, Milestone, MsxTask, Note, Customer, Seller
+from app.models import db, Milestone, MsxTask, Note, Customer, Seller, SolutionEngineer
 from app.services.seller_mode import get_seller_mode_seller_id
 
 logger = logging.getLogger(__name__)
@@ -71,11 +71,27 @@ def milestone_view(id):
             cached_comments = json.loads(milestone.cached_comments_json)
         except (json.JSONDecodeError, TypeError):
             cached_comments = None
+    # Check if owner matches a Seller or SE in our database
+    owner_link = None
+    if milestone.owner_name:
+        seller = Seller.query.filter(
+            db.func.lower(Seller.name) == milestone.owner_name.lower()
+        ).first()
+        if seller:
+            owner_link = {'url': url_for('sellers.seller_view', id=seller.id), 'type': 'seller'}
+        else:
+            se = SolutionEngineer.query.filter(
+                db.func.lower(SolutionEngineer.name) == milestone.owner_name.lower()
+            ).first()
+            if se:
+                owner_link = {'url': url_for('solution_engineers.solution_engineer_view', id=se.id), 'type': 'se'}
+
     return render_template(
         'milestone_view.html',
         milestone=milestone,
         tasks=tasks,
         cached_comments=cached_comments,
+        owner_link=owner_link,
     )
 
 
@@ -249,6 +265,8 @@ def api_milestone_msx_details(id: int):
                 milestone.monthly_usage = msx_data["monthly_usage"]
             if msx_data.get("workload"):
                 milestone.workload = msx_data["workload"]
+            if msx_data.get("owner_name"):
+                milestone.owner_name = msx_data["owner_name"]
             if msx_data.get("due_date"):
                 try:
                     milestone.due_date = datetime.fromisoformat(

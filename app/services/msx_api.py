@@ -591,7 +591,7 @@ def get_milestone_details(milestone_id: str) -> Dict[str, Any]:
             f"?$select=msp_name,msp_milestonestatus,msp_milestonenumber,"
             f"msp_milestonedate,msp_bacvrate,msp_monthlyuse,"
             f"_msp_workloadlkid_value,msp_forecastcommentsjsonfield,"
-            f"msp_commitmentrecommendation"
+            f"msp_commitmentrecommendation,_ownerid_value"
         )
         response = _msx_request('GET', url)
 
@@ -662,6 +662,10 @@ def get_milestone_details(milestone_id: str) -> Dict[str, Any]:
                 ""
             ) or raw.get("msp_commitmentrecommendation", "")
 
+            owner_name = raw.get(
+                "_ownerid_value@OData.Community.Display.V1.FormattedValue", ""
+            )
+
             milestone = {
                 "title": raw.get("msp_name", ""),
                 "milestone_number": raw.get("msp_milestonenumber", ""),
@@ -672,6 +676,7 @@ def get_milestone_details(milestone_id: str) -> Dict[str, Any]:
                 "dollar_value": raw.get("msp_bacvrate"),
                 "monthly_usage": raw.get("msp_monthlyuse"),
                 "workload": workload,
+                "owner_name": owner_name,
                 "comments": comments,
             }
 
