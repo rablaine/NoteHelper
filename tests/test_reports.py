@@ -322,7 +322,7 @@ class TestTopicTrends:
         with app.app_context():
             # sample_data has notes with call_date=now tagged with topics
             resp = client.get('/reports/one-on-one')
-            assert b'Topics (2w)' in resp.data
+            assert b'Topic Trends (FY)' in resp.data
             # sample_data tags note1 with 'Azure VM'
             assert b'Azure VM' in resp.data
 

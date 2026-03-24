@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone, date
 from flask import Blueprint, render_template, url_for, jsonify
 from app.models import (
     db, Customer, Engagement, Note, Milestone, Seller, SolutionEngineer,
-    notes_engagements, notes_milestones,
+    Topic, notes_engagements, notes_milestones,
 )
 from sqlalchemy import func, desc, or_
 
@@ -174,27 +174,68 @@ def report_one_on_one():
         .order_by(Milestone.due_date)
         .all()
     )
-    # Split into overdue and upcoming (next 30 days)
+    # Split into overdue and upcoming (next 2 weeks)
     overdue_milestones = [m for m in milestone_followups if m.due_date.date() < today]
     upcoming_milestones = [
         m for m in milestone_followups
-        if today <= m.due_date.date() <= today + timedelta(days=30)
+        if today <= m.due_date.date() <= today + timedelta(days=14)
     ]
 
-    # --- Topic trends (last 2 weeks) ---
+    # --- Topic trends (last 2 weeks + FY sparkline) ---
+    # Current 2-week counts for the card
     topic_counts = {}
     for note in recent_notes:
         for topic in note.topics:
             if topic.name not in topic_counts:
-                topic_counts[topic.name] = {'count': 0, 'customers': set()}
+                topic_counts[topic.name] = {'id': topic.id, 'count': 0, 'customers': set()}
             topic_counts[topic.name]['count'] += 1
             if note.customer:
                 topic_counts[topic.name]['customers'].add(note.customer.name)
-    # Sort by frequency, convert sets to counts
+
+    # FY sparkline: monthly note counts per topic since FY start
+    fy_year = today.year if today.month >= 7 else today.year - 1
+    fy_start = datetime(fy_year, 7, 1)
+    # Build list of month keys from FY start to current month
+    fy_months = []
+    m_year, m_month = fy_year, 7
+    while (m_year, m_month) <= (today.year, today.month):
+        fy_months.append((m_year, m_month))
+        m_month += 1
+        if m_month > 12:
+            m_month = 1
+            m_year += 1
+    fy_month_labels = [
+        datetime(y, m, 1).strftime('%b') for y, m in fy_months
+    ]
+
+    # Query all notes from FY start with their topics
+    fy_notes = (
+        Note.query
+        .filter(Note.call_date >= fy_start)
+        .options(db.joinedload(Note.topics))
+        .all()
+    )
+    # Build per-topic monthly counts
+    topic_monthly = {}  # topic_name -> {(year, month): count}
+    for note in fy_notes:
+        key = (note.call_date.year, note.call_date.month)
+        for topic in note.topics:
+            if topic.name not in topic_monthly:
+                topic_monthly[topic.name] = {}
+            topic_monthly[topic.name][key] = topic_monthly[topic.name].get(key, 0) + 1
+
+    # Sort by 2-week frequency, attach sparkline data
     top_topics = sorted(
         [
-            {'name': name, 'note_count': data['count'],
-             'customer_count': len(data['customers'])}
+            {
+                'id': data['id'],
+                'name': name,
+                'note_count': data['count'],
+                'customer_count': len(data['customers']),
+                'sparkline': [
+                    topic_monthly.get(name, {}).get(mk, 0) for mk in fy_months
+                ],
+            }
             for name, data in topic_counts.items()
         ],
         key=lambda t: t['note_count'],
@@ -220,6 +261,7 @@ def report_one_on_one():
         overdue_milestones=overdue_milestones,
         upcoming_milestones=upcoming_milestones,
         top_topics=top_topics,
+        fy_month_labels=fy_month_labels,
     )
 
 
