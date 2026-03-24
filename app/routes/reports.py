@@ -243,12 +243,14 @@ def report_one_on_one():
     )[:10]
 
     # Stats
+    wins_acr = sum(m.monthly_usage or 0 for m in milestone_wins)
     stats = {
         'recent_engagement_count': len(recent_engagements),
         'recent_note_count': len(recent_notes),
         'recent_customer_count': len(recent_customers),
         'open_engagement_count': len(open_engagements),
         'open_customer_count': len(all_customers),
+        'wins_acr': wins_acr,
     }
 
     return render_template(

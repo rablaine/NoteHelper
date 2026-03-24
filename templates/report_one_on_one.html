@@ -59,6 +59,14 @@
                 </div>
             </div>
         </div>
+        <div class="col-md-2">
+            <div class="card text-center border-success">
+                <div class="card-body py-2">
+                    <h3 class="mb-0 text-success">${{ '{:,.0f}'.format(stats.wins_acr) }}</h3>
+                    <small class="text-muted">Wins ACR/mo (2w)</small>
+                </div>
+            </div>
+        </div>
     </div>
 
     {% set wins_count = milestone_wins|length %}
