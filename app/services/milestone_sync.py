@@ -536,10 +536,20 @@ def _apply_customer_milestones(
     now = datetime.now(timezone.utc)
     seen_msx_ids = set()
 
-    # Pre-load existing milestones for this customer to avoid per-row queries
+    # Pre-load existing milestones globally by msx_milestone_id to catch
+    # milestones that were created under a different customer (e.g., via
+    # note save before sync existed, or after a customer re-parent in MSX).
+    incoming_msx_ids = [m.get("id") for m in msx_milestones if m.get("id")]
     existing_milestones_map: Dict[str, Milestone] = {}
+    if incoming_msx_ids:
+        for ms in Milestone.query.filter(
+            Milestone.msx_milestone_id.in_(incoming_msx_ids),
+        ).all():
+            existing_milestones_map[ms.msx_milestone_id] = ms
+    # Also load any remaining milestones for this customer (for deactivation)
     for ms in Milestone.query.filter_by(customer_id=customer.id).filter(
         Milestone.msx_milestone_id.isnot(None),
+        ~Milestone.msx_milestone_id.in_(list(existing_milestones_map.keys()) or ['']),
     ).all():
         existing_milestones_map[ms.msx_milestone_id] = ms
 
@@ -591,6 +601,8 @@ def _apply_customer_milestones(
 
         # Deactivate milestones for this customer that are no longer in MSX
         for msx_id, existing in existing_milestones_map.items():
+            if existing.customer_id != customer.id:
+                continue
             if existing.msx_status not in ACTIVE_STATUSES:
                 continue
             if msx_id not in seen_msx_ids:
