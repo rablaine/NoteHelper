@@ -317,26 +317,48 @@ if ($Setup) {
 
     # Detect OneDrive
     $onedrivePath = Find-OneDrivePath
-    if (-not $onedrivePath) {
-        Write-Host "  [ERROR] Could not find OneDrive folder." -ForegroundColor Red
-        Write-Host "  Make sure OneDrive is installed and signed in." -ForegroundColor Gray
+    if ($onedrivePath) {
+        $defaultBackupDir = Join-Path $onedrivePath 'Backups\SalesBuddy'
+        Write-Host "  Detected OneDrive: $onedrivePath" -ForegroundColor Green
         Write-Host ""
-        Read-Host "  Press Enter to close"
-        exit 1
+        Write-Host "  Backups will be saved to:" -ForegroundColor White
+        Write-Host "  $defaultBackupDir" -ForegroundColor Cyan
+        Write-Host ""
+        $confirm = Read-Host "  Use this path? (Y/n)"
+
+        if ($confirm -eq 'n' -or $confirm -eq 'N') {
+            $onedrivePath = $null  # Fall through to manual entry
+        }
+    } else {
+        Write-Host "  Could not auto-detect OneDrive folder." -ForegroundColor Yellow
+    }
+
+    if (-not $onedrivePath) {
+        Write-Host ""
+        Write-Host "  Enter your OneDrive folder path" -ForegroundColor White
+        Write-Host "  (e.g. C:\Users\you\OneDrive - Microsoft)" -ForegroundColor Gray
+        Write-Host ""
+        $manualPath = Read-Host "  Path"
+        $manualPath = $manualPath.Trim('"').Trim("'").Trim()
+
+        if (-not $manualPath) {
+            Write-Host "  Setup cancelled." -ForegroundColor Yellow
+            Write-Host ""
+            Read-Host "  Press Enter to close"
+            exit 0
+        }
+
+        if (-not (Test-Path $manualPath)) {
+            Write-Host "  [ERROR] Path does not exist: $manualPath" -ForegroundColor Red
+            Write-Host ""
+            Read-Host "  Press Enter to close"
+            exit 1
+        }
+
+        $onedrivePath = $manualPath
     }
 
     $defaultBackupDir = Join-Path $onedrivePath 'Backups\SalesBuddy'
-    Write-Host "  Detected OneDrive: $onedrivePath" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  Backups will be saved to:" -ForegroundColor White
-    Write-Host "  $defaultBackupDir" -ForegroundColor Cyan
-    Write-Host ""
-    $confirm = Read-Host "  Continue? (Y/n)"
-
-    if ($confirm -eq 'n' -or $confirm -eq 'N') {
-        Write-Host "  Setup cancelled." -ForegroundColor Yellow
-        exit 0
-    }
 
     # Create the backup directory
     if (-not (Test-Path $defaultBackupDir)) {
