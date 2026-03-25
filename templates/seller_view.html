@@ -339,8 +339,7 @@
     const msxLink = document.getElementById('standaloneMsMsxLink');
     const fullLink = document.getElementById('standaloneMsFullLink');
 
-    window.openStandaloneMilestoneDetail = function(event, msId, msTitle, msStatus, msUrl) {
-        if (event.target.closest('a, button')) return;
+    function showMsDetail(msId, msTitle, msStatus, msUrl) {
         if (!msModal) {
             msModal = new bootstrap.Modal(document.getElementById('standaloneMilestoneDetailModal'));
         }
@@ -366,6 +365,13 @@
                 });
             })
             .catch(function() { bodyEl.innerHTML = '<div class="text-danger p-3"><i class="bi bi-exclamation-triangle"></i> Failed to load milestone details.</div>'; });
+    }
+    window._showMsDetail = showMsDetail;
+
+    // For compact card rows (no parent modal)
+    window.openStandaloneMilestoneDetail = function(event, msId, msTitle, msStatus, msUrl) {
+        if (event.target.closest('a, button')) return;
+        showMsDetail(msId, msTitle, msStatus, msUrl);
     };
 })();
 </script>
@@ -389,26 +395,47 @@
     </div>
 </div>
 
+<!-- Override openMilestoneDetail AFTER tracker partial defines it -->
+<script>
+(function() {
+    window.openMilestoneDetail = function(event, msId, msTitle, msStatus, msUrl) {
+        if (event.target.closest('a, button')) return;
+        var parentModalEl = document.getElementById('milestonesModal');
+        var parentModal = bootstrap.Modal.getInstance(parentModalEl);
+        if (parentModal) {
+            var onceHidden = function() {
+                parentModalEl.removeEventListener('hidden.bs.modal', onceHidden);
+                window._showMsDetail(msId, msTitle, msStatus, msUrl);
+                var detailEl = document.getElementById('standaloneMilestoneDetailModal');
+                var onceDetailHidden = function() {
+                    detailEl.removeEventListener('hidden.bs.modal', onceDetailHidden);
+                    parentModal.show();
+                };
+                detailEl.addEventListener('hidden.bs.modal', onceDetailHidden);
+            };
+            parentModalEl.addEventListener('hidden.bs.modal', onceHidden);
+            parentModal.hide();
+        } else {
+            window._showMsDetail(msId, msTitle, msStatus, msUrl);
+        }
+    };
+})();
+</script>
+
 {% endif %}
 
 {% if revenue_alerts %}
 {% include 'partials/review_action.html' %}
 <script>
-// Refresh page when revenue modal closes (to sync compact list with any status changes)
-document.getElementById('revenueModal').addEventListener('hidden.bs.modal', function() {
-    location.reload();
-});
-
-// Alert Detail Modal - shared by compact card rows and revenue modal table rows
+// Modal chain: revenue modal → alert detail modal → back to revenue modal
 (function() {
     let detailModal = null;
     let detailDirty = false;
+    let returningToParent = false;
     const titleEl = document.getElementById('alertDetailTitle');
     const bodyEl = document.getElementById('alertDetailBody');
 
-    window.openAlertDetail = function(event, alertId, customerName, bucket) {
-        if (event.target.closest('a, button')) return;
-
+    function showAlertDetail(alertId, customerName, bucket) {
         if (!detailModal) {
             detailModal = new bootstrap.Modal(document.getElementById('alertDetailModal'));
         }
@@ -416,21 +443,46 @@ document.getElementById('revenueModal').addEventListener('hidden.bs.modal', func
         titleEl.textContent = customerName + ' - ' + bucket;
         bodyEl.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
         detailModal.show();
-
         fetch('/api/revenue/analysis/' + alertId + '/detail')
             .then(function(resp) {
                 if (!resp.ok) throw new Error('Failed to load');
                 return resp.text();
             })
-            .then(function(html) {
-                bodyEl.innerHTML = html;
-            })
-            .catch(function() {
-                bodyEl.innerHTML = '<div class="text-danger p-3"><i class="bi bi-exclamation-triangle"></i> Failed to load alert details.</div>';
-            });
+            .then(function(html) { bodyEl.innerHTML = html; })
+            .catch(function() { bodyEl.innerHTML = '<div class="text-danger p-3"><i class="bi bi-exclamation-triangle"></i> Failed to load alert details.</div>'; });
+    }
+
+    window.openAlertDetail = function(event, alertId, customerName, bucket) {
+        if (event.target.closest('a, button')) return;
+        var parentModalEl = document.getElementById('revenueModal');
+        var parentModal = parentModalEl ? bootstrap.Modal.getInstance(parentModalEl) : null;
+        if (parentModal && parentModalEl.classList.contains('show')) {
+            var onceHidden = function() {
+                parentModalEl.removeEventListener('hidden.bs.modal', onceHidden);
+                showAlertDetail(alertId, customerName, bucket);
+                var detailEl = document.getElementById('alertDetailModal');
+                var onceDetailHidden = function() {
+                    detailEl.removeEventListener('hidden.bs.modal', onceDetailHidden);
+                    returningToParent = true;
+                    parentModal.show();
+                };
+                detailEl.addEventListener('hidden.bs.modal', onceDetailHidden);
+            };
+            parentModalEl.addEventListener('hidden.bs.modal', onceHidden);
+            parentModal.hide();
+        } else {
+            showAlertDetail(alertId, customerName, bucket);
+        }
     };
 
+    // Refresh page when alert detail closes with changes (only if not returning to parent)
     document.getElementById('alertDetailModal').addEventListener('hidden.bs.modal', function() {
+        if (detailDirty && !returningToParent) location.reload();
+        returningToParent = false;
+    });
+
+    // Refresh page when revenue modal closes (to sync compact list with any status changes)
+    document.getElementById('revenueModal').addEventListener('hidden.bs.modal', function() {
         if (detailDirty) location.reload();
     });
 
