@@ -360,7 +360,7 @@
                 bodyEl.innerHTML = html;
                 bodyEl.querySelectorAll('script').forEach(function(old) {
                     var s = document.createElement('script');
-                    if (old.src) { s.src = old.src; } else { s.textContent = old.textContent; }
+                    if (old.src) { s.src = old.src; } else { s.textContent = '(function(){' + old.textContent + '})();'; }
                     old.replaceWith(s);
                 });
             })

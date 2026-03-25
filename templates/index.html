@@ -979,9 +979,11 @@
                         container.className = 'calendar-entries';
 
                         msForDay.forEach(ms => {
-                            const entry = document.createElement('a');
-                            entry.href = ms.url || '#';
-                            if (ms.url) entry.target = '_blank';
+                            const entry = document.createElement('div');
+                            entry.style.cursor = 'pointer';
+                            entry.addEventListener('click', function(e) {
+                                openHomeMilestoneDetail(e, ms.id, ms.title || '', ms.status || '', ms.url || '');
+                            });
                             const statusClass = ms.status === 'On Track' ? 'ms-status-ontrack'
                                 : ms.status === 'At Risk' ? 'ms-status-atrisk' : 'ms-status-blocked';
                             const colorIdx = customerColorMap[ms.customer_id] || 1;
@@ -1100,7 +1102,7 @@
                 bodyEl.innerHTML = html;
                 bodyEl.querySelectorAll('script').forEach(function(old) {
                     var s = document.createElement('script');
-                    if (old.src) { s.src = old.src; } else { s.textContent = old.textContent; }
+                    if (old.src) { s.src = old.src; } else { s.textContent = '(function(){' + old.textContent + '})();'; }
                     old.replaceWith(s);
                 });
             })
