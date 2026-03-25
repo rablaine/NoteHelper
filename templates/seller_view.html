@@ -197,7 +197,8 @@
             <div class="card-body p-0 flex-grow-1" style="overflow-y: auto; min-height: 0;">
                 <div class="list-group list-group-flush">
                 {% for alert in revenue_alerts %}
-                    <div class="list-group-item p-2" style="border-left: 3px solid {% if alert.review_status == 'actioned' %}var(--bs-success){% elif alert.review_status == 'reviewed' %}var(--bs-info){% elif alert.review_status == 'dismissed' %}var(--bs-secondary){% else %}transparent{% endif %};">
+                    <a href="#" data-alert-id="{{ alert.id }}" data-customer-name="{{ alert.customer_name }}" data-bucket="{{ alert.bucket }}"
+                       class="list-group-item list-group-item-action p-2 alert-detail-link" style="border-left: 3px solid {% if alert.review_status == 'actioned' %}var(--bs-success){% elif alert.review_status == 'reviewed' %}var(--bs-info){% elif alert.review_status == 'dismissed' %}var(--bs-secondary){% else %}transparent{% endif %}; text-decoration: none;{% if alert.review_status in ('actioned', 'dismissed', 'reviewed') %} opacity: 0.5;{% endif %}">
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="text-truncate me-2" style="min-width: 0;">
                                 <div class="fw-semibold text-truncate" style="font-size: 0.85rem;">
@@ -231,7 +232,7 @@
                             <i class="bi bi-arrow-right"></i> {{ alert.recommended_action }}
                         </div>
                         {% endif %}
-                    </div>
+                    </a>
                 {% endfor %}
                 </div>
             </div>
@@ -281,6 +282,27 @@
 </div>
 {% endif %}
 
+{% if revenue_alerts %}
+<!-- Alert Detail Modal -->
+<div class="modal fade" id="alertDetailModal" tabindex="-1" aria-labelledby="alertDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable" style="max-width: min(1100px, calc(100vw - 3rem)); width: calc(100vw - 3rem);">
+        <div class="modal-content" style="max-height: 90vh;">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="alertDetailModalLabel"><i class="bi bi-exclamation-triangle"></i> <span id="alertDetailTitle">Loading...</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3" id="alertDetailBody">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% if milestones %}
 <!-- Milestones Modal -->
 <div class="modal fade" id="milestonesModal" tabindex="-1" aria-labelledby="milestonesModalLabel" aria-hidden="true">
@@ -309,6 +331,51 @@
 document.getElementById('revenueModal').addEventListener('hidden.bs.modal', function() {
     location.reload();
 });
+
+// Alert Detail Modal
+(function() {
+    let detailModal = null;
+    let detailDirty = false;
+    const titleEl = document.getElementById('alertDetailTitle');
+    const bodyEl = document.getElementById('alertDetailBody');
+
+    document.querySelectorAll('.alert-detail-link').forEach(link => {
+        link.addEventListener('click', async function(e) {
+            e.preventDefault();
+            const aid = this.dataset.alertId;
+            const name = this.dataset.customerName;
+            const bucket = this.dataset.bucket;
+
+            if (!detailModal) {
+                detailModal = new bootstrap.Modal(document.getElementById('alertDetailModal'));
+            }
+            detailDirty = false;
+            titleEl.textContent = name + ' - ' + bucket;
+            bodyEl.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            detailModal.show();
+
+            try {
+                const resp = await fetch('/api/revenue/analysis/' + aid + '/detail');
+                if (!resp.ok) throw new Error('Failed to load');
+                bodyEl.innerHTML = await resp.text();
+            } catch (err) {
+                bodyEl.innerHTML = '<div class="text-danger p-3"><i class="bi bi-exclamation-triangle"></i> Failed to load alert details.</div>';
+            }
+        });
+    });
+
+    // Only reload if a review action was taken inside the detail modal
+    document.getElementById('alertDetailModal').addEventListener('hidden.bs.modal', function() {
+        if (detailDirty) location.reload();
+    });
+
+    // Listen for review saves inside the detail modal
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('#alertDetailModal .review-action-btn')) {
+            detailDirty = true;
+        }
+    });
+})();
 </script>
 {% endif %}
 
