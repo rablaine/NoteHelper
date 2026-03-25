@@ -774,8 +774,11 @@
                         entriesContainer.style.overflowY = 'auto';
                         
                         noteEntries.forEach(log => {
-                            const entry = document.createElement('a');
-                            entry.href = `/note/${log.id}`;
+                            const entry = document.createElement('div');
+                            entry.style.cursor = 'pointer';
+                            entry.addEventListener('click', function(e) {
+                                openHomeNoteDetail(log.id, log.customer_name);
+                            });
                             
                             if (log.is_general) {
                                 // General note: distinct muted style with sticky-note icon
@@ -1166,6 +1169,57 @@
 })();
 </script>
 {% endif %}
+
+<!-- Note Detail Modal -->
+<div class="modal fade" id="homeNoteDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable" style="max-width: min(1100px, calc(100vw - 3rem)); width: calc(100vw - 3rem);">
+        <div class="modal-content" style="max-height: 90vh;">
+            <div class="modal-header py-2">
+                <h5 class="modal-title"><i class="bi bi-journal-text"></i> <span id="homeNoteTitle">Loading...</span></h5>
+                <div class="d-flex align-items-center gap-2">
+                    <a id="homeNoteFullLink" href="#" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrows-fullscreen"></i> Full Page</a>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-3" id="homeNoteBody">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    let noteModal = null;
+    const titleEl = document.getElementById('homeNoteTitle');
+    const bodyEl = document.getElementById('homeNoteBody');
+    const fullLink = document.getElementById('homeNoteFullLink');
+
+    window.openHomeNoteDetail = function(noteId, customerName) {
+        if (!noteModal) {
+            noteModal = new bootstrap.Modal(document.getElementById('homeNoteDetailModal'));
+        }
+        titleEl.textContent = customerName || 'Note';
+        fullLink.href = '/note/' + noteId;
+        bodyEl.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        noteModal.show();
+        fetch('/api/note/' + noteId + '/detail')
+            .then(function(r) { if (!r.ok) throw new Error(); return r.text(); })
+            .then(function(html) {
+                bodyEl.innerHTML = html;
+                bodyEl.querySelectorAll('script').forEach(function(old) {
+                    var s = document.createElement('script');
+                    if (old.src) { s.src = old.src; } else { s.textContent = '(function(){' + old.textContent + '})();'; }
+                    old.replaceWith(s);
+                });
+            })
+            .catch(function() { bodyEl.innerHTML = '<div class="text-danger p-3"><i class="bi bi-exclamation-triangle"></i> Failed to load note details.</div>'; });
+    };
+})();
+</script>
 
 {% endblock %}
 
