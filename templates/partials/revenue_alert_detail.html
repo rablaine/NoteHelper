@@ -23,44 +23,51 @@
         {% endif %}
     </div>
     <div class="card-body">
-        <div class="row mb-2">
-            <div class="col-3">
-                <small class="text-muted">Avg Revenue</small>
-                <h5>${{ '{:,.0f}'.format(a.avg_revenue) }}</h5>
+        <div class="row">
+            <div class="col-6">
+                <div class="d-flex gap-3">
+                    <div>
+                        <small class="text-muted">Avg Revenue</small>
+                        <h5>${{ '{:,.0f}'.format(a.avg_revenue) }}</h5>
+                    </div>
+                    <div>
+                        <small class="text-muted">Latest</small>
+                        <h5>${{ '{:,.0f}'.format(a.latest_revenue) }}</h5>
+                    </div>
+                    <div>
+                        <small class="text-muted">Trend</small>
+                        <h5 class="{% if a.trend_slope < -3 %}text-danger{% elif a.trend_slope > 3 %}text-success{% endif %}">
+                            {{ '{:+.1f}'.format(a.trend_slope) }}%/mo
+                        </h5>
+                    </div>
+                    <div>
+                        <small class="text-muted">Priority</small>
+                        <h5>
+                            <span class="badge {% if a.priority_score >= 80 %}bg-danger{% elif a.priority_score >= 60 %}bg-warning text-dark{% elif a.priority_score >= 40 %}bg-info{% else %}bg-secondary{% endif %}">
+                                {{ a.priority_score }}
+                            </span>
+                        </h5>
+                    </div>
+                </div>
             </div>
-            <div class="col-3">
-                <small class="text-muted">Latest</small>
-                <h5>${{ '{:,.0f}'.format(a.latest_revenue) }}</h5>
-            </div>
-            <div class="col-3">
-                <small class="text-muted">Trend</small>
-                <h5 class="{% if a.trend_slope < -3 %}text-danger{% elif a.trend_slope > 3 %}text-success{% endif %}">
-                    {{ '{:+.1f}'.format(a.trend_slope) }}%/mo
-                </h5>
-            </div>
-            <div class="col-3">
-                <small class="text-muted">Priority</small>
-                <h5>
-                    <span class="badge {% if a.priority_score >= 80 %}bg-danger{% elif a.priority_score >= 60 %}bg-warning text-dark{% elif a.priority_score >= 40 %}bg-info{% else %}bg-secondary{% endif %}">
-                        {{ a.priority_score }}
-                    </span>
-                </h5>
+            <div class="col-6 border-start d-flex flex-column justify-content-center">
+                {% if a.recommended_action != 'NO ACTION' %}
+                <strong>{{ a.recommended_action }}</strong>
+                <small class="text-muted">{{ a.engagement_rationale }}</small>
+                {% if a.dollars_at_risk > 0 %}
+                <small class="text-danger mt-1"><i class="bi bi-exclamation-triangle"></i> ${{ '{:,.0f}'.format(a.dollars_at_risk) }}/mo at risk</small>
+                {% elif a.dollars_opportunity > 0 %}
+                <small class="text-success mt-1"><i class="bi bi-graph-up-arrow"></i> ${{ '{:,.0f}'.format(a.dollars_opportunity) }}/mo opportunity</small>
+                {% endif %}
+                {% else %}
+                {% if a.dollars_at_risk > 0 %}
+                <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> ${{ '{:,.0f}'.format(a.dollars_at_risk) }}/mo at risk</span>
+                {% elif a.dollars_opportunity > 0 %}
+                <span class="text-success"><i class="bi bi-graph-up-arrow"></i> ${{ '{:,.0f}'.format(a.dollars_opportunity) }}/mo opportunity</span>
+                {% endif %}
+                {% endif %}
             </div>
         </div>
-        {% if a.recommended_action != 'NO ACTION' %}
-        <hr>
-        <p class="mb-1"><strong>{{ a.recommended_action }}</strong></p>
-        <small class="text-muted">{{ a.engagement_rationale }}</small>
-        {% endif %}
-        {% if a.dollars_at_risk > 0 %}
-        <div class="mt-2">
-            <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> ${{ '{:,.0f}'.format(a.dollars_at_risk) }}/mo at risk</span>
-        </div>
-        {% elif a.dollars_opportunity > 0 %}
-        <div class="mt-2">
-            <span class="text-success"><i class="bi bi-graph-up-arrow"></i> ${{ '{:,.0f}'.format(a.dollars_opportunity) }}/mo opportunity</span>
-        </div>
-        {% endif %}
     </div>
     <div class="card-footer">
         <div class="d-flex justify-content-between align-items-center">
