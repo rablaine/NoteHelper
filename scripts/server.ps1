@@ -69,9 +69,15 @@ function Install-WithWinget {
 
 # Detect OneDrive for Business folder (excludes personal OneDrive)
 function Find-OneDriveBusinessPath {
+    # All candidates must resolve to 'OneDrive - Microsoft' to ensure we pick
+    # the Microsoft corporate account, not a partner tenant.
+    $expectedName = 'OneDrive - Microsoft'
+
     # Priority 1: OneDriveCommercial env var (always corporate)
     if ($env:OneDriveCommercial -and (Test-Path $env:OneDriveCommercial)) {
-        return $env:OneDriveCommercial
+        if ((Split-Path $env:OneDriveCommercial -Leaf) -eq $expectedName) {
+            return $env:OneDriveCommercial
+        }
     }
 
     # Priority 2: Registry Business1 account (always corporate)
@@ -79,17 +85,18 @@ function Find-OneDriveBusinessPath {
         $regPath = "HKCU:\Software\Microsoft\OneDrive\Accounts\Business1"
         if (Test-Path $regPath) {
             $folder = (Get-ItemProperty $regPath -ErrorAction SilentlyContinue).UserFolder
-            if ($folder -and (Test-Path $folder)) { return $folder }
+            if ($folder -and (Test-Path $folder) -and (Split-Path $folder -Leaf) -eq $expectedName) {
+                return $folder
+            }
         }
     } catch {}
 
     # Priority 3: Scan user profile for the Microsoft corporate OneDrive folder
     # Employees may have multiple OneDrive for Business accounts; we only want Microsoft.
     $candidates = Get-ChildItem $env:USERPROFILE -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq 'OneDrive - Microsoft' }
+        Where-Object { $_.Name -eq $expectedName }
     if ($candidates) {
-        return ($candidates | Sort-Object { $_.Name.Length } -Descending |
-            Select-Object -First 1).FullName
+        return ($candidates | Select-Object -First 1).FullName
     }
 
     return $null
