@@ -366,6 +366,7 @@ def index():
         has_milestones=has_milestones,
         has_engagements=engagement_count > 0,
         engagement_count=engagement_count,
+        pref=pref,
     )
 
 
