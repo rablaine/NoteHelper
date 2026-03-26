@@ -103,6 +103,110 @@ def get_seller_color(seller_id: int) -> str:
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+# Stale-milestone detection threshold
+_STALE_DAYS = 14
+
+
+def _find_stale_milestones(
+    seller_mode_sid: int | None = None,
+    stale_days: int = _STALE_DAYS,
+) -> list:
+    """
+    Return on-my-team milestones that are active (On Track / At Risk) but have
+    no forecast comments in the last *stale_days* days.
+
+    Engagement comments pinned at the top (modifiedOn starting with "2099-")
+    are ignored when determining staleness.
+
+    Each returned milestone gets a transient ``days_since_comment`` attribute.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+
+    # Microsoft fiscal quarter boundaries (FY starts July 1)
+    # Use datetime (not date) for comparisons - SQLite does string comparison
+    # and '2026-03-31 00:00:00' > '2026-03-31' would exclude last-day milestones.
+    today = date.today()
+    fy_month = (today.month - 7) % 12  # 0-based month within fiscal year
+    fq_start = (fy_month // 3) * 3  # 0-based first month of fiscal quarter
+    q_start_month = ((fq_start + 7 - 1) % 12) + 1  # back to calendar month
+    quarter_start = date(today.year, q_start_month, 1)
+    end_month = q_start_month + 3
+    end_year = today.year
+    if end_month > 12:
+        end_month -= 12
+        end_year += 1
+    quarter_end = date(end_year, end_month, 1) - timedelta(days=1)
+
+    # Convert to datetime for SQLite string comparison compatibility
+    from datetime import time as _time
+    q_start_dt = datetime.combine(quarter_start, _time.min)
+    q_end_dt = datetime.combine(quarter_end, _time(23, 59, 59))
+
+    q = Milestone.query.filter(
+        Milestone.on_my_team.is_(True),
+        Milestone.msx_status.in_(['On Track', 'At Risk']),
+        Milestone.due_date.isnot(None),
+        Milestone.due_date >= q_start_dt,
+        Milestone.due_date <= q_end_dt,
+    ).options(
+        db.joinedload(Milestone.customer).joinedload(Customer.seller),
+    )
+
+    if seller_mode_sid:
+        q = q.join(Customer, Milestone.customer_id == Customer.id).filter(
+            Customer.seller_id == seller_mode_sid
+        )
+
+    candidates = q.all()
+    stale = []
+
+    for ms in candidates:
+        days = _days_since_last_real_comment(ms)
+        if days is None or days >= stale_days:
+            ms.days_since_comment = days  # type: ignore[attr-defined]
+            stale.append(ms)
+
+    # Sort: milestones with *no* comments first, then oldest comment first
+    stale.sort(key=lambda m: m.days_since_comment if m.days_since_comment is not None else 9999,
+               reverse=True)
+    return stale
+
+
+def _days_since_last_real_comment(milestone: Milestone) -> int | None:
+    """
+    Parse cached_comments_json and return days since the most recent
+    non-engagement comment.  Returns None if there are no real comments.
+    """
+    if not milestone.cached_comments_json:
+        return None
+    try:
+        comments = json.loads(milestone.cached_comments_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    # Filter out engagement comments (pinned with far-future date)
+    real = [
+        c for c in comments
+        if not c.get('modifiedOn', '').startswith('2099-')
+        and '\u00b7 eng-' not in c.get('comment', '')
+    ]
+    if not real:
+        return None
+
+    latest = max(real, key=lambda c: c.get('modifiedOn', ''))
+    try:
+        modified = datetime.fromisoformat(
+            latest['modifiedOn'].replace('Z', '+00:00')
+        )
+        return (datetime.now(timezone.utc) - modified).days
+    except (ValueError, AttributeError, KeyError):
+        return None
+
+
+# =============================================================================
 # Main Routes
 # =============================================================================
 
@@ -158,6 +262,12 @@ def index():
     ).limit(10).all()
 
     has_milestones = Milestone.query.first() is not None
+
+    # Stale milestones: on my team, active (not blocked), no recent comments
+    stale_milestones = _find_stale_milestones(
+        seller_mode_sid=seller_mode_sid, stale_days=14
+    )
+
     engagement_q = Engagement.query.filter(
         Engagement.status.in_(['Active', 'On Hold'])
     )
@@ -171,6 +281,7 @@ def index():
         'index.html',
         open_tasks=open_tasks,
         upcoming_milestones=upcoming_milestones,
+        stale_milestones=stale_milestones,
         revenue_alerts=revenue_alerts,
         has_milestones=has_milestones,
         has_engagements=engagement_count > 0,

@@ -16,7 +16,7 @@
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-check2-square"></i> Action Items</h5>
-                {% if open_tasks %}<span class="badge bg-primary">{{ open_tasks|length }}</span>{% endif %}
+                {% if open_tasks or stale_milestones %}<span class="badge bg-primary">{{ (open_tasks|length) + (stale_milestones|length) }}</span>{% endif %}
             </div>
             <div class="card-body p-0" style="max-height: 360px; overflow-y: auto;">
                 {% if open_tasks %}
@@ -41,7 +41,44 @@
                     </div>
                     {% endfor %}
                 </div>
-                {% else %}
+                {% endif %}
+                {% if stale_milestones %}
+                {% if open_tasks %}<hr class="my-0">{% endif %}
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item bg-warning bg-opacity-10 py-1 px-3">
+                        <small class="fw-semibold text-muted"><i class="bi bi-clock-history"></i> Stale Milestones</small>
+                    </div>
+                    {% for ms in stale_milestones %}
+                    <div onclick="openHomeMilestoneDetail(event, {{ ms.id }}, '{{ (ms.title or ms.opportunity_name or '')|replace("'", "\\'") }}', '{{ ms.msx_status }}', '{{ ms.url or '' }}')"
+                         class="list-group-item list-group-item-action py-2 px-3" style="cursor: pointer;">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="me-2" style="min-width: 0;">
+                                <div class="fw-semibold text-truncate">
+                                    {{ ms.title or ms.opportunity_name or 'Milestone #' ~ ms.id }}
+                                </div>
+                                <div class="text-muted small text-truncate">
+                                    {% if ms.customer %}{{ ms.customer.name }}{% endif %}
+                                    {% if ms.workload %} - {{ ms.workload }}{% endif %}
+                                </div>
+                            </div>
+                            <div class="text-end flex-shrink-0">
+                                {% if ms.monthly_usage %}
+                                <span class="badge bg-secondary">
+                                    {{ '${:,.0f}'.format(ms.monthly_usage) }}/mo
+                                </span>
+                                {% endif %}
+                                {% if ms.customer and ms.customer.seller %}
+                                <div>
+                                    <a href="{{ url_for('sellers.seller_view', id=ms.customer.seller.id) }}" class="badge bg-primary text-decoration-none" onclick="event.stopPropagation();" style="font-size: 0.65rem;"><i class="bi bi-person"></i> {{ ms.customer.seller.name }}</a>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if not open_tasks and not stale_milestones %}
                 <div class="text-center text-muted py-4">
                     <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
                     <p class="mb-0 mt-2">No open action items yet.</p>
@@ -163,6 +200,8 @@
         </div>
     </div>
 </div>
+
+
 
 <style>
     /* Calendar styles */
