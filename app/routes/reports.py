@@ -164,22 +164,37 @@ def report_one_on_one():
 
     # Upcoming or overdue active milestones to follow up on
     today = date.today()
-    milestone_followups = (
+
+    # Current fiscal quarter milestones (on my team, active, with due date)
+    from datetime import time as _time
+    fy_month = (today.month - 7) % 12
+    fq_start = (fy_month // 3) * 3
+    q_start_month = ((fq_start + 7 - 1) % 12) + 1
+    quarter_start = datetime.combine(date(today.year, q_start_month, 1), _time.min)
+    end_month = q_start_month + 3
+    end_year = today.year
+    if end_month > 12:
+        end_month -= 12
+        end_year += 1
+    quarter_end = datetime.combine(
+        date(end_year, end_month, 1) - timedelta(days=1), _time(23, 59, 59)
+    )
+
+    quarter_milestones = (
         Milestone.query
         .filter(
             Milestone.on_my_team == True,  # noqa: E712
             Milestone.msx_status.in_(['On Track', 'At Risk', 'Blocked']),
             Milestone.due_date.isnot(None),
+            Milestone.due_date >= quarter_start,
+            Milestone.due_date <= quarter_end,
+        )
+        .options(
+            db.joinedload(Milestone.customer).joinedload(Customer.seller),
         )
         .order_by(Milestone.due_date)
         .all()
     )
-    # Split into overdue and upcoming (next 2 weeks)
-    overdue_milestones = [m for m in milestone_followups if m.due_date.date() < today]
-    upcoming_milestones = [
-        m for m in milestone_followups
-        if today <= m.due_date.date() <= today + timedelta(days=14)
-    ]
 
     # --- Topic trends (last 2 weeks + FY sparkline) ---
     # Current 2-week counts for the card
@@ -260,8 +275,10 @@ def report_one_on_one():
         stats=stats,
         cutoff_date=two_weeks_ago,
         milestone_wins=milestone_wins,
-        overdue_milestones=overdue_milestones,
-        upcoming_milestones=upcoming_milestones,
+        quarter_milestones=quarter_milestones,
+        quarter_start=quarter_start,
+        quarter_end=quarter_end,
+        today=today,
         top_topics=top_topics,
         fy_month_labels=fy_month_labels,
     )

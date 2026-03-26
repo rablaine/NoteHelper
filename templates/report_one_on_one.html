@@ -70,7 +70,7 @@
     </div>
 
     {% set wins_count = milestone_wins|length %}
-    {% set attention_count = (overdue_milestones|length) + (upcoming_milestones|length) %}
+    {% set attention_count = quarter_milestones|length %}
     <!-- Highlights: Wins, Needs Attention, Topics (under shorter column) -->
     <div class="row mb-4">
         <!-- Left column -->
@@ -183,13 +183,14 @@
 
         <!-- Right column -->
         <div class="col-md-6 d-flex flex-column gap-3">
-            <!-- Needs Attention: Overdue + Upcoming -->
+            <!-- Quarter Milestones -->
             <div class="card">
                 <div class="card-header py-2">
-                    <h6 class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i> Needs Attention</h6>
+                    <h6 class="mb-0"><i class="bi bi-flag-fill" style="color: #c49000;"></i> Quarter Milestones <span class="badge bg-secondary ms-1">{{ quarter_milestones|length }}</span></h6>
+                    <small class="text-muted">{{ quarter_start.strftime('%b %d') }} - {{ quarter_end.strftime('%b %d, %Y') }}</small>
                 </div>
                 <div class="card-body p-0">
-                    {% if overdue_milestones or upcoming_milestones %}
+                    {% if quarter_milestones %}
                     <div class="table-responsive">
                         <table class="table table-sm table-hover mb-0" style="font-size: 0.82em; --bs-table-bg: transparent;">
                             <thead>
@@ -197,11 +198,11 @@
                                     <th class="ps-3">Milestone</th>
                                     <th>Seller</th>
                                     <th class="text-end">Est. ACR</th>
-                                    <th class="text-end pe-3">Due Date</th>
+                                    <th class="text-end pe-3">Due</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for ms in overdue_milestones %}
+                                {% for ms in quarter_milestones %}
                                 <tr>
                                     <td class="ps-3">
                                         <small class="text-muted">{{ ms.customer.name if ms.customer else '' }}</small>
@@ -215,31 +216,14 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-end pe-3">
+                                        {% if ms.due_date and ms.due_date.date() < today %}
                                         <span class="badge bg-danger d-block mb-1" style="font-size: 0.8em;">Overdue</span>
-                                        <span class="badge border text-body-secondary d-block" style="font-size: 0.8em; font-weight: normal;"><i class="bi bi-calendar-x"></i> {{ ms.due_date.strftime('%b %d') }}</span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                                {% for ms in upcoming_milestones %}
-                                <tr>
-                                    <td class="ps-3">
-                                        <small class="text-muted">{{ ms.customer.name if ms.customer else '' }}</small>
-                                        <br><a href="{{ url_for('milestones.milestone_view', id=ms.id) }}" class="text-decoration-none">{{ ms.display_text[:45] }}{% if ms.display_text|length > 45 %}...{% endif %}</a>
-                                        {% if ms.workload %}<br><small class="text-muted">{{ ms.workload }}</small>{% endif %}
-                                    </td>
-                                    <td><small>{{ ms.customer.seller.name if ms.customer and ms.customer.seller else '' }}</small></td>
-                                    <td class="text-end">
-                                        {% if ms.monthly_usage %}
-                                        <small>${{ '{:,.0f}'.format(ms.monthly_usage) }}/mo</small>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end pe-3">
-                                        {% if ms.msx_status == 'At Risk' %}
+                                        {% elif ms.msx_status == 'At Risk' %}
                                         <span class="badge bg-warning text-dark d-block mb-1" style="font-size: 0.8em;">At Risk</span>
                                         {% elif ms.msx_status == 'Blocked' %}
                                         <span class="badge bg-danger d-block mb-1" style="font-size: 0.8em;">Blocked</span>
                                         {% endif %}
-                                        <span class="badge bg-info d-block" style="font-size: 0.8em;"><i class="bi bi-calendar"></i> {{ ms.due_date.strftime('%b %d') }}</span>
+                                        <span class="badge border text-body-secondary d-block" style="font-size: 0.8em; font-weight: normal;"><i class="bi bi-calendar"></i> {{ ms.due_date.strftime('%b %d') }}</span>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -248,7 +232,7 @@
                     </div>
                     {% else %}
                     <div class="p-3 text-center">
-                        <small class="text-muted">No overdue or upcoming milestones on your team.</small>
+                        <small class="text-muted">No milestones due this quarter on your team.</small>
                     </div>
                     {% endif %}
                 </div>

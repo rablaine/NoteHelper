@@ -290,14 +290,23 @@ class TestMilestoneHighlights:
             assert b'Overdue' in resp.data
 
     def test_upcoming_milestone_shows(self, client, app, sample_data):
-        """Upcoming active milestone on my team appears in Needs Attention."""
+        """Active milestone due this fiscal quarter on my team appears in Quarter Milestones."""
+        from datetime import date as _date
+        # Calculate a date within the current fiscal quarter
+        today = _date.today()
+        fy_month = (today.month - 7) % 12
+        fq_start = (fy_month // 3) * 3
+        q_start_month = ((fq_start + 7 - 1) % 12) + 1
+        # Use the 15th of the quarter start month (always in-range)
+        in_quarter = datetime(today.year, q_start_month, 15)
+
         with app.app_context():
             ms = Milestone(
                 url='https://example.com/ms5',
                 title='Upcoming Deployment',
                 msx_status='On Track',
                 on_my_team=True,
-                due_date=datetime.now(timezone.utc) + timedelta(days=10),
+                due_date=in_quarter,
                 customer_id=sample_data['customer1_id'],
             )
             db.session.add(ms)
@@ -311,7 +320,7 @@ class TestMilestoneHighlights:
         with app.app_context():
             resp = client.get('/reports/one-on-one')
             assert b'No milestones completed or committed in the last 2 weeks' in resp.data
-            assert b'No overdue or upcoming milestones' in resp.data
+            assert b'No milestones due this quarter' in resp.data
 
 
 class TestTopicTrends:
