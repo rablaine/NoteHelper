@@ -22,14 +22,18 @@
                 {% if open_tasks %}
                 <div class="list-group list-group-flush">
                     {% for task in open_tasks %}
-                    <div class="list-group-item list-group-item-action py-2 px-3" onclick="viewActionItem({{ task.id }}, {showEngagementLink: true})" style="cursor: pointer;">
+                    <div class="list-group-item list-group-item-action py-2 px-3" onclick="viewActionItem({{ task.id }}, {showEngagementLink: {{ 'true' if task.engagement else 'false' }}})" style="cursor: pointer;">
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="me-2" style="min-width: 0;">
                                 <div class="fw-semibold text-truncate{% if task.priority == 'high' %} text-danger{% endif %}">
-                                    {% if task.priority == 'high' %}<i class="bi bi-exclamation-triangle-fill me-1"></i>{% endif %}{{ task.title }}
+                                    {% if task.source == 'copilot' %}<i class="bi bi-stars text-info me-1"></i>{% endif %}{% if task.priority == 'high' %}<i class="bi bi-exclamation-triangle-fill me-1"></i>{% endif %}{{ task.title }}
                                 </div>
                                 <div class="text-muted small text-truncate">
-                                    {{ task.engagement.customer.name if task.engagement.customer else '' }}{% if task.engagement.customer %} &middot; {% endif %}{{ task.engagement.title }}
+                                    {% if task.source == 'copilot' %}
+                                        Copilot suggestion
+                                    {% elif task.engagement %}
+                                        {{ task.engagement.customer.name if task.engagement.customer else '' }}{% if task.engagement.customer %} &middot; {% endif %}{{ task.engagement.title }}
+                                    {% endif %}
                                 </div>
                             </div>
                             {% if task.due_date %}

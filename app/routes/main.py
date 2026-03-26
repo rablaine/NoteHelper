@@ -223,12 +223,20 @@ def index():
         db.joinedload(ActionItem.engagement).joinedload(Engagement.customer)
     )
     if seller_mode_sid:
-        open_tasks_q = open_tasks_q.join(
-            Engagement, ActionItem.engagement_id == Engagement.id
-        ).join(Customer, Engagement.customer_id == Customer.id).filter(
-            Customer.seller_id == seller_mode_sid
+        # In seller mode, show engagement tasks for this seller + all copilot tasks
+        open_tasks_q = open_tasks_q.filter(
+            db.or_(
+                ActionItem.source == 'copilot',
+                db.and_(
+                    ActionItem.engagement_id.isnot(None),
+                    ActionItem.engagement.has(
+                        Engagement.customer.has(Customer.seller_id == seller_mode_sid)
+                    ),
+                ),
+            )
         )
     open_tasks = open_tasks_q.order_by(
+        ActionItem.source.asc(),  # engagement first, then copilot
         ActionItem.due_date.asc().nullslast(),
         ActionItem.priority.desc(),
         ActionItem.created_at.desc()

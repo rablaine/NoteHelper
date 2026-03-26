@@ -58,6 +58,12 @@ function viewActionItem(taskId, opts) {
         if (t.contact) {
             meta.push('<span class="badge bg-light text-dark border"><i class="bi bi-person"></i> ' + t.contact + '</span>');
         }
+        if (t.source === 'copilot') {
+            meta.push('<span class="badge bg-info"><i class="bi bi-stars"></i> Copilot</span>');
+        }
+        if (t.source_url) {
+            meta.push('<a href="' + t.source_url + '" target="_blank" class="badge bg-primary text-decoration-none"><i class="bi bi-box-arrow-up-right"></i> Source</a>');
+        }
         if (t.note_id) {
             meta.push('<a href="/note/' + t.note_id + '" class="badge bg-info text-dark text-decoration-none"><i class="bi bi-journal-text"></i> Linked Note</a>');
         }
@@ -91,7 +97,7 @@ function viewActionItem(taskId, opts) {
 
         // Engagement link
         var engLink = document.getElementById('aiDetailEngLink');
-        if (opts.showEngagementLink) {
+        if (opts.showEngagementLink && t.engagement_id) {
             engLink.href = '/engagement/' + t.engagement_id;
             engLink.style.display = '';
         } else {

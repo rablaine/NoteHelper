@@ -223,6 +223,19 @@ def run_migrations(db):
     _add_column_if_not_exists(db, inspector, 'user_preferences',
                               'msx_auto_writeback', "BOOLEAN NOT NULL DEFAULT 0")
 
+    # Migration: Add last_copilot_sync to user_preferences
+    _add_column_if_not_exists(db, inspector, 'user_preferences',
+                              'last_copilot_sync', "DATETIME")
+
+    # Migration: Add source and source_url columns to action_items
+    _add_column_if_not_exists(db, inspector, 'action_items',
+                              'source', "VARCHAR(20) NOT NULL DEFAULT 'engagement'")
+    _add_column_if_not_exists(db, inspector, 'action_items',
+                              'source_url', "VARCHAR(2000)")
+
+    # Migration: Make action_items.engagement_id nullable (for copilot/project items)
+    _make_column_nullable(db, inspector, 'action_items', 'engagement_id')
+
     # =========================================================================
     # End migrations
     # =========================================================================
@@ -250,6 +263,65 @@ def _add_column_if_not_exists(db, inspector, table: str, column: str, column_def
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}"))
             conn.commit()
         print(f"  Added column '{column}' to '{table}'")
+
+
+def _make_column_nullable(db, inspector, table: str, column: str):
+    """Make an existing NOT NULL column nullable via SQLite table rebuild.
+
+    SQLite does not support ALTER COLUMN. This function checks if the column
+    is currently NOT NULL and, if so, rebuilds the table with the constraint
+    removed. Safe to run multiple times (idempotent).
+
+    Args:
+        db: SQLAlchemy database instance
+        inspector: SQLAlchemy inspector instance
+        table: Table name
+        column: Column name to make nullable
+    """
+    columns = inspector.get_columns(table)
+    col_info = next((c for c in columns if c['name'] == column), None)
+    if not col_info:
+        return
+    # If already nullable, nothing to do
+    if col_info.get('nullable', True):
+        return
+
+    print(f"  Making '{table}.{column}' nullable (table rebuild)...")
+    with db.engine.connect() as conn:
+        # Get the full CREATE TABLE statement
+        result = conn.execute(
+            text(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table}'")
+        )
+        create_sql = result.scalar()
+        if not create_sql:
+            return
+
+        # Modify: remove NOT NULL from the target column definition
+        # Match patterns like: column_name INTEGER NOT NULL  or  column_name INTEGER NOT NULL,
+        import re
+        pattern = rf'(\b{column}\b\s+\w+(?:\([^)]*\))?)\s+NOT\s+NULL'
+        new_create_sql = re.sub(pattern, r'\1', create_sql, count=1, flags=re.IGNORECASE)
+        if new_create_sql == create_sql:
+            # Pattern didn't match - maybe it has additional constraints
+            # Try broader pattern: column_name TYPE ... NOT NULL
+            pattern2 = rf'("{column}"|{column})(\s+[^,]*?)\s+NOT\s+NULL'
+            new_create_sql = re.sub(pattern2, r'\1\2', create_sql, count=1, flags=re.IGNORECASE)
+            if new_create_sql == create_sql:
+                print(f"  WARNING: Could not find NOT NULL constraint for '{table}.{column}'")
+                return
+
+        # Rename to temp, create new, copy data, drop temp
+        col_names = ', '.join(c['name'] for c in columns)
+        new_create_sql = new_create_sql.replace(f'CREATE TABLE {table}', f'CREATE TABLE {table}_new', 1)
+        # Also handle quoted table name
+        new_create_sql = new_create_sql.replace(f'CREATE TABLE "{table}"', f'CREATE TABLE "{table}_new"', 1)
+
+        conn.execute(text(f'ALTER TABLE {table} RENAME TO {table}_old'))
+        conn.execute(text(new_create_sql))
+        conn.execute(text(f'INSERT INTO {table}_new ({col_names}) SELECT {col_names} FROM {table}_old'))
+        conn.execute(text(f'DROP TABLE {table}_old'))
+        conn.commit()
+    print(f"  Made '{table}.{column}' nullable")
 
 
 def _add_index_if_not_exists(db, inspector, table: str, index_name: str, columns: list):

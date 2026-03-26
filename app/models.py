@@ -729,9 +729,10 @@ class ActionItem(db.Model):
 
     STATUSES = ['open', 'completed']
     PRIORITIES = ['normal', 'high']
+    SOURCES = ['engagement', 'copilot', 'project']
 
     id = db.Column(db.Integer, primary_key=True)
-    engagement_id = db.Column(db.Integer, db.ForeignKey('engagements.id'), nullable=False)
+    engagement_id = db.Column(db.Integer, db.ForeignKey('engagements.id'), nullable=True)  # Nullable for copilot/project items
     note_id = db.Column(db.Integer, db.ForeignKey('notes.id'), nullable=True)
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, nullable=True)  # Rich HTML from Quill
@@ -739,6 +740,8 @@ class ActionItem(db.Model):
     contact = db.Column(db.String(200), nullable=True)  # Point of contact
     status = db.Column(db.String(20), nullable=False, default='open')
     priority = db.Column(db.String(20), nullable=False, default='normal')
+    source = db.Column(db.String(20), nullable=False, default='engagement', server_default='engagement')  # engagement, copilot, project
+    source_url = db.Column(db.String(2000), nullable=True)  # External link (Teams/Outlook URL for copilot items)
     completed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
@@ -994,6 +997,7 @@ class UserPreference(db.Model):
     my_seller_id = db.Column(db.Integer, db.ForeignKey('sellers.id'), nullable=True)  # DSS's own Seller record
     my_seller_alias = db.Column(db.String(100), nullable=True)  # DSS's az login alias (persisted for offline use)
     msx_auto_writeback = db.Column(db.Boolean, default=False, nullable=False, server_default='0')  # Auto-sync note summaries and engagement stories to MSX milestones
+    last_copilot_sync = db.Column(db.DateTime, nullable=True)  # Last time Copilot daily action items were synced
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     
