@@ -19,21 +19,19 @@
                 {% if open_tasks or stale_milestones or hygiene_tasks %}<span class="badge bg-primary">{{ (open_tasks|length) + (stale_milestones|length) + (hygiene_tasks|length) }}</span>{% endif %}
             </div>
             <div class="card-body p-0" style="max-height: 360px; overflow-y: auto;">
-                {% if open_tasks %}
+                {% set engagement_tasks = open_tasks|selectattr('source', 'equalto', 'engagement')|list %}
+                {% set copilot_tasks = open_tasks|selectattr('source', 'equalto', 'copilot')|list %}
+                {% if engagement_tasks %}
                 <div class="list-group list-group-flush">
-                    {% for task in open_tasks %}
-                    <div class="list-group-item list-group-item-action py-2 px-3" onclick="viewActionItem({{ task.id }}, {showEngagementLink: {{ 'true' if task.engagement else 'false' }}})" style="cursor: pointer;">
+                    {% for task in engagement_tasks %}
+                    <div class="list-group-item list-group-item-action py-2 px-3" onclick="viewActionItem({{ task.id }}, {showEngagementLink: true})" style="cursor: pointer;">
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="me-2" style="min-width: 0;">
                                 <div class="fw-semibold text-truncate{% if task.priority == 'high' %} text-danger{% endif %}">
-                                    {% if task.source == 'copilot' %}<i class="bi bi-stars text-info me-1"></i>{% endif %}{% if task.priority == 'high' %}<i class="bi bi-exclamation-triangle-fill me-1"></i>{% endif %}{{ task.title }}
+                                    {% if task.priority == 'high' %}<i class="bi bi-exclamation-triangle-fill me-1"></i>{% endif %}{{ task.title }}
                                 </div>
                                 <div class="text-muted small text-truncate">
-                                    {% if task.source == 'copilot' %}
-                                        Copilot suggestion
-                                    {% elif task.engagement %}
-                                        {{ task.engagement.customer.name if task.engagement.customer else '' }}{% if task.engagement.customer %} &middot; {% endif %}{{ task.engagement.title }}
-                                    {% endif %}
+                                    {{ task.engagement.customer.name if task.engagement and task.engagement.customer else '' }}{% if task.engagement and task.engagement.customer %} &middot; {% endif %}{{ task.engagement.title if task.engagement else '' }}
                                 </div>
                             </div>
                             {% if task.due_date %}
@@ -46,8 +44,27 @@
                     {% endfor %}
                 </div>
                 {% endif %}
+                {% if copilot_tasks %}
+                {% if engagement_tasks %}<hr class="my-0">{% endif %}
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item bg-info bg-opacity-10 py-1 px-3" title="AI-generated action items from your emails, chats, and meetings via WorkIQ">
+                        <small class="fw-semibold text-muted"><i class="bi bi-stars"></i> Copilot Suggestions</small>
+                    </div>
+                    {% for task in copilot_tasks %}
+                    <div class="list-group-item list-group-item-action py-2 px-3" onclick="viewActionItem({{ task.id }}, {showEngagementLink: false})" style="cursor: pointer;">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="me-2" style="min-width: 0;">
+                                <div class="fw-semibold text-truncate">
+                                    {{ task.title }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 {% if stale_milestones %}
-                {% if open_tasks %}<hr class="my-0">{% endif %}
+                {% if engagement_tasks or copilot_tasks %}<hr class="my-0">{% endif %}
                 <div class="list-group list-group-flush">
                     <div class="list-group-item bg-warning bg-opacity-10 py-1 px-3" title="Milestones where you're on the team but haven't updated comments in 2 weeks or more">
                         <small class="fw-semibold text-muted"><i class="bi bi-clock-history"></i> Stale Milestones</small>
@@ -106,7 +123,7 @@
                     {% endfor %}
                 </div>
                 {% endif %}
-                {% if not open_tasks and not stale_milestones and not hygiene_tasks %}
+                {% if not engagement_tasks and not copilot_tasks and not stale_milestones and not hygiene_tasks %}
                 <div class="text-center text-muted py-4">
                     <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
                     <p class="mb-0 mt-2">No open action items yet.</p>
