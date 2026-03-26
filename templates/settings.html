@@ -78,6 +78,22 @@
             </div>
         </div>
 
+        <!-- MSX Auto-Writeback -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cloud-upload"></i> MSX Auto-Writeback</h5>
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="msxAutoWritebackSwitch" {{ 'checked' if pref and pref.msx_auto_writeback else '' }}>
+                    <label class="form-check-label" for="msxAutoWritebackSwitch">
+                        Automatically sync to MSX milestones
+                    </label>
+                    <div><small class="text-muted">When enabled, saving a note or engagement will automatically post an AI-generated summary to linked MSX milestones. When disabled, you can still manually post, edit, and delete comments on milestones and opportunities.</small></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Note Templates -->
         <div class="card mb-4">
             <div class="card-header">
@@ -195,6 +211,15 @@ document.getElementById('connectImpactSwitch').addEventListener('change', functi
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workiq_connect_impact: this.checked })
+    });
+});
+
+// MSX Auto-Writeback Toggle
+document.getElementById('msxAutoWritebackSwitch').addEventListener('change', function() {
+    fetch('/api/preferences/msx-auto-writeback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msx_auto_writeback: this.checked })
     });
 });
 

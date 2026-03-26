@@ -423,6 +423,9 @@ def note_create():
     
     # Pre-select engagement from query params
     preselect_engagement_id = request.args.get('engagement_id', type=int)
+
+    # Pre-select milestone from query params
+    preselect_milestone_id = request.args.get('milestone_id', type=int)
     
     # Capture referrer for redirect after creation
     referrer = request.referrer or ''
@@ -476,6 +479,7 @@ def note_create():
                          preselect_customer=preselect_customer,
                          preselect_topic_id=preselect_topic_id,
                          preselect_engagement_id=preselect_engagement_id,
+                         preselect_milestone_id=preselect_milestone_id,
                          previous_calls=previous_calls,
                          referrer=referrer,
                          today=today,

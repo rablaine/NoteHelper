@@ -22,6 +22,7 @@ maintain their own comments on the same milestone.
 All MSX and AI calls run in a background thread so the user isn't blocked.
 Failures are queued as flash notifications shown on the next page load.
 """
+import os
 import re
 import logging
 import threading
@@ -33,6 +34,22 @@ from markupsafe import Markup, escape
 from app.models import db
 
 logger = logging.getLogger(__name__)
+
+
+def is_auto_writeback_enabled() -> bool:
+    """Check if automatic MSX writeback is enabled.
+
+    Returns False if:
+    - The ``msx_auto_writeback`` user preference is False (default)
+    - The ``MSX_WRITEBACK_DISABLED`` env var is truthy (override)
+
+    Must be called inside an app context.
+    """
+    if os.environ.get('MSX_WRITEBACK_DISABLED', '').lower() in ('true', '1', 'yes'):
+        return False
+    from app.models import UserPreference
+    pref = UserPreference.query.first()
+    return bool(pref and pref.msx_auto_writeback)
 
 # Ref-tag format embedded in comment footers for upsert matching
 _NOTE_REF = "note-{id}"
@@ -194,6 +211,32 @@ def _build_note_fallback(topics: str) -> str:
     return "(Note linked — summary pending)"
 
 
+def _build_engagement_plain_text(engagement) -> str:
+    """Build a plain text version of engagement fields for MSX readability.
+
+    MSX renders the comment field in two places: once as stripped plain text
+    and once interpreting HTML. This plain text block ensures the stripped
+    view is still readable.
+    """
+    lines = []
+    if engagement.key_individuals:
+        lines.append(f"Key Individuals: {_strip_html(engagement.key_individuals)}")
+    if engagement.technical_problem:
+        lines.append(f"Technical Problem: {_strip_html(engagement.technical_problem)}")
+    if engagement.business_impact:
+        lines.append(f"Business Impact: {_strip_html(engagement.business_impact)}")
+    if engagement.solution_resources:
+        lines.append(f"Solution Resources: {_strip_html(engagement.solution_resources)}")
+    if engagement.estimated_acr:
+        lines.append(f"Estimated ACR: ${int(engagement.estimated_acr):,}/mo")
+    if engagement.target_date:
+        target_str = (engagement.target_date.strftime('%b %d, %Y')
+                      if isinstance(engagement.target_date, date)
+                      else str(engagement.target_date))
+        lines.append(f"Target Date: {target_str}")
+    return '\n'.join(lines)
+
+
 def _build_engagement_html_table(engagement) -> str:
     """Build an HTML table of engagement fields for MSX writeback.
 
@@ -294,9 +337,18 @@ def _track_note_worker(
     ref_tag: str,
     call_date_iso: str,
     note_id: int | None = None,
+    app=None,
 ) -> None:
     """Background thread worker for note milestone tracking."""
     print(f"[milestone-tracking] worker started: {ref_tag}, {len(milestones_data)} milestone(s)")
+
+    # Check writeback setting before any MSX reads or AI calls
+    if app:
+        with app.app_context():
+            if not is_auto_writeback_enabled():
+                print(f"[milestone-tracking] auto-writeback disabled, skipping {ref_tag}")
+                return
+
     for ms in milestones_data:
         msx_id = ms["msx_milestone_id"]
         try:
@@ -362,9 +414,17 @@ def _track_engagement_worker(
     milestones_data: list[dict],
     content: str,
     ref_tag: str,
+    app=None,
 ) -> None:
     """Background thread worker for engagement milestone tracking."""
     from app.services.msx_api import get_milestone_comments, get_msx_user_display_name
+
+    # Check writeback setting before any MSX reads
+    if app:
+        with app.app_context():
+            if not is_auto_writeback_enabled():
+                print(f"[milestone-tracking] auto-writeback disabled, skipping engagement {ref_tag}")
+                return
 
     display_name = f"{get_msx_user_display_name()} via Sales Buddy"
     print(f"[milestone-tracking] engagement worker started: {ref_tag}, {len(milestones_data)} milestone(s)")
@@ -448,9 +508,11 @@ def track_note_on_milestones(note, background: bool = True) -> list[dict] | None
 
     if background:
         print(f"[milestone-tracking] note {note_id}: spawning background thread")
+        from flask import current_app
+        app = current_app._get_current_object()
         thread = threading.Thread(
             target=_track_note_worker,
-            args=(milestones_data, plain, customer_name, topics, ref_tag, call_date_iso, note_id),
+            args=(milestones_data, plain, customer_name, topics, ref_tag, call_date_iso, note_id, app),
             daemon=True,
         )
         thread.start()
@@ -490,7 +552,11 @@ def track_engagement_on_milestones(engagement, background: bool = True) -> list[
         print(f"[milestone-tracking] engagement {engagement.id}: no story fields populated, skipping MSX write")
         return [] if not background else None
 
-    story = _build_engagement_html_table(engagement)
+    story_plain = _build_engagement_plain_text(engagement)
+    story_html = _build_engagement_html_table(engagement)
+    # Combine plain text + HTML table so MSX's plain text view is readable
+    # while the HTML view renders the styled table
+    story = f"{story_plain}\n\n{story_html}" if story_plain else story_html
     ref_tag = _ENG_REF.format(id=engagement.id)
     print(f"[milestone-tracking] engagement {engagement.id}: {len(engagement.milestones)} milestones, ref={ref_tag}")
     content = _add_footer(story, ref_tag)
@@ -508,9 +574,11 @@ def track_engagement_on_milestones(engagement, background: bool = True) -> list[
         return None
 
     if background:
+        from flask import current_app
+        app = current_app._get_current_object()
         thread = threading.Thread(
             target=_track_engagement_worker,
-            args=(milestones_data, content, ref_tag),
+            args=(milestones_data, content, ref_tag, app),
             daemon=True,
         )
         thread.start()

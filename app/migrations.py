@@ -219,6 +219,10 @@ def run_migrations(db):
     _add_column_if_not_exists(db, inspector, 'user_preferences',
                               'engagement_writeback_mode', "VARCHAR(20) NOT NULL DEFAULT 'ai_summary'")
 
+    # Migration: Add msx_auto_writeback to user_preferences (default off)
+    _add_column_if_not_exists(db, inspector, 'user_preferences',
+                              'msx_auto_writeback', "BOOLEAN NOT NULL DEFAULT 0")
+
     # =========================================================================
     # End migrations
     # =========================================================================
