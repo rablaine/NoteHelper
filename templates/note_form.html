@@ -5,6 +5,12 @@
 {% block extra_css %}
 <!-- Quill Rich Text Editor -->
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+<style>
+    /* Image resize handles in editor */
+    #editor img {
+        max-width: 100%;
+    }
+</style>
 {% if not note and previous_calls %}
 <style>
     /* Override container for full-width layout when showing previous calls */
@@ -1048,7 +1054,11 @@
 {% block extra_js %}
 <!-- Quill Rich Text Editor -->
 <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill-image-resize-module@3.0.0/image-resize.min.js"></script>
 <script>
+// Register image resize module
+Quill.register('modules/imageResize', ImageResize.default || ImageResize);
+
 // Initialize Quill editor
 var quill = new Quill('#editor', {
     theme: 'snow',
@@ -1058,9 +1068,10 @@ var quill = new Quill('#editor', {
             ['bold', 'italic', 'underline', 'strike'],
             [{ 'list': 'ordered'}, { 'list': 'bullet' }],
             [{ 'indent': '-1'}, { 'indent': '+1' }],
-            ['link'],
+            ['link', 'image'],
             ['clean']
         ],
+        imageResize: {},
         keyboard: {
             bindings: {
                 escape: {
@@ -1475,12 +1486,13 @@ document.getElementById('noteForm').onsubmit = function(e) {
     var content = document.querySelector('textarea[name=content]');
     content.value = quill.root.innerHTML;
     
-    // Validation: check if content is empty (only whitespace/tags)
+    // Validation: check if content is empty (only whitespace/tags, no images)
     var tempDiv = document.createElement('div');
     tempDiv.innerHTML = content.value;
     var textContent = tempDiv.textContent || tempDiv.innerText || '';
+    var hasImages = tempDiv.querySelector('img') !== null;
     
-    if (textContent.trim().length === 0) {
+    if (textContent.trim().length === 0 && !hasImages) {
         e.preventDefault();
         e.stopImmediatePropagation(); // Stop other submit handlers from running
         alert('Notes cannot be empty.');
@@ -4268,6 +4280,19 @@ function startAutoSave() {
     if (customerId) {
         // Listen to Quill text changes
         quill.on('text-change', debouncedAutoSave);
+        
+        // Listen for image resize (DOM mutations Quill doesn't track)
+        var editorEl = document.querySelector('#editor .ql-editor');
+        if (editorEl) {
+            new MutationObserver(function(mutations) {
+                for (var m of mutations) {
+                    if (m.type === 'attributes' && m.target.tagName === 'IMG') {
+                        debouncedAutoSave();
+                        return;
+                    }
+                }
+            }).observe(editorEl, { attributes: true, subtree: true, attributeFilter: ['style', 'width', 'height'] });
+        }
         
         // Listen to date and time field changes
         document.getElementById('call_date').addEventListener('input', debouncedAutoSave);

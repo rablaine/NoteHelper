@@ -331,6 +331,14 @@
             border-color: #495057;
         }
     </style>
+    <style>
+        /* Note content images: respect inline width, prevent overflow, clickable */
+        .call-content img {
+            max-width: 100%;
+            height: auto;
+            cursor: zoom-in;
+        }
+    </style>
     
     {% block extra_css %}{% endblock %}
 </head>
@@ -2834,6 +2842,25 @@
     </script>
 
     {% block extra_js %}{% endblock %}
+
+    <!-- Image zoom modal (click any image in .call-content to view full size) -->
+    <div class="modal fade" id="imageZoomModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: fit-content;">
+            <div class="modal-content bg-transparent border-0 shadow-none">
+                <div class="modal-body p-0 text-center">
+                    <img id="imageZoomImg" src="" style="max-height: 90vh; max-width: 80vw; cursor: zoom-out;" onclick="bootstrap.Modal.getInstance(document.getElementById('imageZoomModal')).hide()">
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('click', function(e) {
+        if (e.target.tagName === 'IMG' && e.target.closest('.call-content')) {
+            document.getElementById('imageZoomImg').src = e.target.src;
+            new bootstrap.Modal(document.getElementById('imageZoomModal')).show();
+        }
+    });
+    </script>
 
     <!-- Guided Product Tour (triggered once after first wizard dismissal) -->
     <script defer>
