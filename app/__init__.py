@@ -179,4 +179,14 @@ def create_app():
     from app.services.telemetry_shipper import start_flush_thread
     start_flush_thread(app)
 
+    # Start Copilot daily action items (sync on startup if stale, then daily at 6 AM)
+    # In Flask debug mode, the reloader starts the app twice. Only run background
+    # tasks in the child process (WERKZEUG_RUN_MAIN='true') or in non-debug mode.
+    import os as _os
+    _is_reloader_parent = app.debug and not _os.environ.get('WERKZEUG_RUN_MAIN')
+    if not app.config.get('TESTING') and not _is_reloader_parent:
+        from app.services.copilot_actions import start_copilot_sync_background, start_daily_scheduler
+        start_copilot_sync_background(app)
+        start_daily_scheduler(app)
+
     return app

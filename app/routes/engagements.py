@@ -692,6 +692,8 @@ def _action_item_to_dict(task: ActionItem) -> dict:
         'contact': task.contact,
         'status': task.status,
         'priority': task.priority,
+        'source': task.source,
+        'source_url': task.source_url,
         'is_overdue': task.is_overdue,
         'completed_at': task.completed_at.isoformat() if task.completed_at else None,
         'created_at': task.created_at.isoformat() if task.created_at else None,
