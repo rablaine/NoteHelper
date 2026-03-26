@@ -1062,6 +1062,23 @@ def update_workiq_connect_impact():
     return jsonify({'success': True, 'workiq_connect_impact': pref.workiq_connect_impact}), 200
 
 
+@main_bp.route('/api/preferences/msx-auto-writeback', methods=['POST'])
+def update_msx_auto_writeback():
+    """Toggle automatic MSX milestone writeback on or off."""
+    data = request.get_json()
+    enabled = bool(data.get('msx_auto_writeback', False))
+
+    pref = UserPreference.query.first()
+    if not pref:
+        pref = UserPreference()
+        db.session.add(pref)
+
+    pref.msx_auto_writeback = enabled
+    db.session.commit()
+
+    return jsonify({'success': True, 'msx_auto_writeback': pref.msx_auto_writeback}), 200
+
+
 # =============================================================================
 # User Role & Seller Mode
 # =============================================================================
