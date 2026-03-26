@@ -51,10 +51,10 @@ def _build_prompt() -> str:
             ActionItem.completed_at >= cutoff,
         ).all()
         if completed:
-            titles = [f'"{item.title}"' for item in completed]
+            titles = [item.title for item in completed]
             exclusions = (
                 "Do NOT include these items because I already completed them: "
-                + ", ".join(titles) + ". "
+                + "; ".join(titles) + ". "
             )
     except Exception:
         logger.debug("Could not query completed items for exclusion", exc_info=True)
