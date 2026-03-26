@@ -2829,6 +2829,14 @@ function loadMilestonesForCustomer(customerId) {
                 if (matchBtn && allMilestones.length > 0) {
                     matchBtn.style.display = 'inline-block';
                 }
+                // Auto-select milestone if pre-specified via query param
+                if (window._preselectMilestoneId && allMilestones.length > 0) {
+                    const target = allMilestones.find(m => m.local_milestone_id == window._preselectMilestoneId);
+                    if (target) {
+                        selectMilestone(target);
+                    }
+                    window._preselectMilestoneId = null;  // Only auto-select once
+                }
             } else if (data.needs_tpid) {
                 milestoneSearch.placeholder = 'Link customer to MSX first';
                 milestoneHelpText.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Customer has no MSX account linked</span>';
@@ -2957,6 +2965,9 @@ async function inlineSaveTPID() {
         saveBtn.innerHTML = '<i class="bi bi-check"></i> Save & Load Milestones';
     }
 }
+
+// Pre-select milestone from query param (set before milestones load)
+window._preselectMilestoneId = {{ preselect_milestone_id|default('null', true)|tojson }};
 
 // Listen for customer changes
 document.getElementById('customer_id').addEventListener('change', function() {
