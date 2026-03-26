@@ -49,7 +49,7 @@
                 {% if stale_milestones %}
                 {% if open_tasks %}<hr class="my-0">{% endif %}
                 <div class="list-group list-group-flush">
-                    <div class="list-group-item bg-warning bg-opacity-10 py-1 px-3">
+                    <div class="list-group-item bg-warning bg-opacity-10 py-1 px-3" title="Milestones where you're on the team but haven't updated comments in 2 weeks or more">
                         <small class="fw-semibold text-muted"><i class="bi bi-clock-history"></i> Stale Milestones</small>
                     </div>
                     {% for ms in stale_milestones %}
@@ -66,14 +66,16 @@
                                 </div>
                             </div>
                             <div class="text-end flex-shrink-0">
-                                {% if ms.monthly_usage %}
-                                <span class="badge bg-secondary">
-                                    {{ '${:,.0f}'.format(ms.monthly_usage) }}/mo
-                                </span>
-                                {% endif %}
                                 {% if ms.customer and ms.customer.seller %}
                                 <div>
-                                    <a href="{{ url_for('sellers.seller_view', id=ms.customer.seller.id) }}" class="badge bg-primary text-decoration-none" onclick="event.stopPropagation();" style="font-size: 0.65rem;"><i class="bi bi-person"></i> {{ ms.customer.seller.name }}</a>
+                                    <a href="{{ url_for('sellers.seller_view', id=ms.customer.seller.id) }}" class="badge {{ get_seller_color(ms.customer.seller.id) }} text-decoration-none" onclick="event.stopPropagation();" style="font-size: 0.65rem;"><i class="bi bi-person"></i> {{ ms.customer.seller.name }}</a>
+                                </div>
+                                {% endif %}
+                                {% if ms.monthly_usage %}
+                                <div>
+                                    <span class="badge bg-success" style="font-size: 0.65rem;">
+                                        {{ '${:,.0f}'.format(ms.monthly_usage) }}/mo
+                                    </span>
                                 </div>
                                 {% endif %}
                             </div>
