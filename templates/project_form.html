@@ -22,7 +22,9 @@
                 <label for="project_type" class="form-label">Type</label>
                 <select class="form-select" id="project_type" name="project_type">
                     {% for t in project_types %}
+                    {% if t != 'copilot_saved' %}
                     <option value="{{ t }}" {{ 'selected' if project and project.project_type == t }}>{{ t|replace('_', ' ')|title }}</option>
+                    {% endif %}
                     {% endfor %}
                     <option value="custom" {{ 'selected' if project and project.project_type not in project_types }}>Custom</option>
                 </select>
