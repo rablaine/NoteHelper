@@ -2940,6 +2940,9 @@ const milestoneHelpText = document.getElementById('milestone_help_text');
 const taskCreationSection = document.getElementById('task_creation_section');
 const taskCategorySelect = document.getElementById('task_category');
 
+// Guard: milestone/task UI only exists on customer notes
+const _hasMilestoneUI = !!milestoneSearch;
+
 // Initialize selectedMilestones from server-rendered cards (edit mode)
 (function initExistingMilestones() {
     if (!selectedMilestoneContainer) return;
@@ -2963,6 +2966,7 @@ const taskCategorySelect = document.getElementById('task_category');
 })();
 
 // Load task categories on page load
+if (_hasMilestoneUI) {
 fetch('/api/msx/task-categories')
     .then(response => response.json())
     .then(data => {
@@ -2972,6 +2976,7 @@ fetch('/api/msx/task-categories')
         }
     })
     .catch(error => console.error('Failed to load task categories:', error));
+}
 
 function populateTaskCategories() {
     taskCategorySelect.innerHTML = '<option value="">-- Select task category --</option>';
@@ -3188,6 +3193,7 @@ if (initialCustomerId) {
     loadMilestonesForCustomer(initialCustomerId);
 }
 
+if (_hasMilestoneUI) {
 milestoneSearch.addEventListener('input', function() {
     const searchTerm = this.value.toLowerCase().trim();
     
@@ -3279,6 +3285,7 @@ milestoneSearch.addEventListener('keydown', function(e) {
         selectedMilestoneIndex = -1;
     }
 });
+} // end if (_hasMilestoneUI)
 
 function getStatusBadgeClass(status) {
     switch (status) {
@@ -3348,6 +3355,7 @@ function handleMilestoneHover(index) {
 
 // Hide milestone dropdown when clicking outside
 document.addEventListener('click', function(e) {
+    if (!milestoneSearch || !milestoneDropdown) return;
     if (!milestoneSearch.contains(e.target) && !milestoneDropdown.contains(e.target)) {
         milestoneDropdown.style.display = 'none';
         currentMilestoneMatches = [];
