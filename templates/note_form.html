@@ -1783,7 +1783,7 @@ document.getElementById('noteForm').onsubmit = function(e) {
                 hiddenSelect.value = this.dataset.value;
                 updateLabel();
                 buildMenu();
-                if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
+                try { if (typeof debouncedAutoSave === 'function') debouncedAutoSave(); } catch(e) {}
             });
             menu.appendChild(li);
         }
@@ -1840,7 +1840,10 @@ document.getElementById('noteForm').onsubmit = function(e) {
                 due_date: document.getElementById('flyout_project_due_date').value,
             }),
         })
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
         .then(data => {
             if (!data.success) {
                 alert(data.error || 'Failed to create project');
@@ -1856,14 +1859,14 @@ document.getElementById('noteForm').onsubmit = function(e) {
             hiddenSelect.value = data.id;
             buildMenu();
             updateLabel();
-            if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
+            try { if (typeof debouncedAutoSave === 'function') debouncedAutoSave(); } catch(e) {}
 
             // Close the flyout
             bootstrap.Offcanvas.getInstance(document.getElementById('projectFlyout')).hide();
         })
         .catch(err => {
             console.error('Error creating project:', err);
-            alert('Failed to create project');
+            alert('Failed to create project: ' + err.message);
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Create Project';
         });
