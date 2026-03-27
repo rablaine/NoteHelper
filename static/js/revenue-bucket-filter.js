@@ -91,7 +91,15 @@ var RevenueBucketFilter = (function() {
         btn.setAttribute('data-bs-content', content);
         container.appendChild(btn);
 
-        new bootstrap.Popover(btn, { sanitize: false });
+        // Defer popover init until Bootstrap is available
+        function initPopover() {
+            if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
+                new bootstrap.Popover(btn, { sanitize: false });
+            } else {
+                setTimeout(initPopover, 50);
+            }
+        }
+        initPopover();
     }
 
     return {
