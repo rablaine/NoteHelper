@@ -46,6 +46,12 @@ def engagements_hub():
     story_partial = sum(1 for e in active_engagements if 0 < e.story_completeness < 100)
     story_complete = sum(1 for e in active_engagements if e.story_completeness == 100)
 
+    # Internal projects
+    from app.models import Project
+    active_projects = Project.query.filter(
+        Project.status.in_(['Active', 'On Hold'])
+    ).order_by(Project.updated_at.desc()).all()
+
     return render_template(
         'engagements_hub.html',
         stats={
@@ -58,6 +64,7 @@ def engagements_hub():
             'story_partial': story_partial,
             'story_complete': story_complete,
         },
+        projects=active_projects,
     )
 
 
@@ -685,6 +692,7 @@ def _action_item_to_dict(task: ActionItem) -> dict:
     return {
         'id': task.id,
         'engagement_id': task.engagement_id,
+        'project_id': task.project_id,
         'note_id': task.note_id,
         'title': task.title,
         'description': task.description,

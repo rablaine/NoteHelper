@@ -31,7 +31,11 @@
                                     {% if task.priority == 'high' %}<i class="bi bi-exclamation-triangle-fill me-1"></i>{% endif %}{{ task.title }}
                                 </div>
                                 <div class="text-muted small text-truncate">
-                                    {{ task.engagement.customer.name if task.engagement and task.engagement.customer else '' }}{% if task.engagement and task.engagement.customer %} &middot; {% endif %}{{ task.engagement.title if task.engagement else '' }}
+                                    {% if task.source == 'project' and task.project %}
+                                        <i class="bi bi-folder text-info me-1"></i>{{ task.project.title }}
+                                    {% elif task.engagement %}
+                                        {{ task.engagement.customer.name if task.engagement.customer else '' }}{% if task.engagement.customer %} &middot; {% endif %}{{ task.engagement.title }}
+                                    {% endif %}
                                 </div>
                             </div>
                             {% if task.due_date %}
