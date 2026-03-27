@@ -4443,8 +4443,10 @@ function debouncedAutoSave() {
     }
     
     // Set new timeout to save after delay
-    const customerId = document.getElementById('customer_id').value;
-    if (customerId) {
+    const customerEl = document.getElementById('customer_id');
+    const customerId = customerEl ? customerEl.value : null;
+    const isGeneralNote = !customerEl;
+    if (customerId || isGeneralNote) {
         autoSaveTimeout = setTimeout(() => {
             if (!draftDiscarded) {
                 saveDraft();
@@ -4453,13 +4455,14 @@ function debouncedAutoSave() {
     }
 }
 
-// Function to start auto-save for selected customer
+// Function to start auto-save for selected customer (or general note)
 function startAutoSave() {
     const customerSelect = document.getElementById('customer_id');
-    const customerId = customerSelect.value || customerSelect.querySelector('option[selected]')?.value;
+    const customerId = customerSelect ? (customerSelect.value || customerSelect.querySelector('option[selected]')?.value) : null;
+    const isGeneralNote = !customerSelect;
     
-    // Check for existing draft when customer changes
-    if (customerId && !draftRestored) {
+    // Check for existing draft
+    if ((customerId || isGeneralNote) && !draftRestored) {
         const hasDraft = restoreDraft();
         if (hasDraft) {
             draftRestored = true;
@@ -4481,8 +4484,8 @@ function startAutoSave() {
         }
     }
     
-    // Set up debounced auto-save listeners if customer selected
-    if (customerId) {
+    // Set up debounced auto-save listeners
+    if (customerId || isGeneralNote) {
         // Listen to Quill text changes
         quill.on('text-change', debouncedAutoSave);
         
@@ -4503,12 +4506,18 @@ function startAutoSave() {
         document.getElementById('call_date').addEventListener('input', debouncedAutoSave);
         document.getElementById('call_time').addEventListener('input', debouncedAutoSave);
         
-        console.log('Debounced auto-save enabled for customer', customerId);
+        console.log('Debounced auto-save enabled', customerId ? 'for customer ' + customerId : 'for general note');
     }
 }
 
-// Start auto-save when customer is selected
-document.getElementById('customer_id').addEventListener('change', startAutoSave);
+// Start auto-save when customer is selected (or immediately for general notes)
+var _customerSelectEl = document.getElementById('customer_id');
+if (_customerSelectEl) {
+    _customerSelectEl.addEventListener('change', startAutoSave);
+} else {
+    // General note - start auto-save immediately
+    startAutoSave();
+}
 
 // Flags to prevent saving after form submission or draft discard
 let formSubmittedSuccessfully = false;
@@ -4525,8 +4534,10 @@ function cancelNote() {
 
 // Save draft before page unload (unless form was successfully submitted or draft discarded)
 window.addEventListener('beforeunload', function(e) {
-    const customerId = document.getElementById('customer_id').value;
-    if (customerId && !formSubmittedSuccessfully && !draftDiscarded) {
+    const customerEl = document.getElementById('customer_id');
+    const customerId = customerEl ? customerEl.value : null;
+    const isGeneralNote = !customerEl;
+    if ((customerId || isGeneralNote) && !formSubmittedSuccessfully && !draftDiscarded) {
         saveDraft();
     }
 });
