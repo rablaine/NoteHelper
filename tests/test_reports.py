@@ -27,7 +27,7 @@ class TestReportsHub:
         """Reports hub should link to revenue reports."""
         with app.app_context():
             resp = client.get('/reports')
-            assert b'Revenue Reports' in resp.data
+            assert b'Synapse Analytics' in resp.data
 
 
 class TestOneOnOneReport:

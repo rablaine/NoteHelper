@@ -38,14 +38,14 @@ def reports_hub():
             'icon': 'bi-currency-dollar',
             'reports': [
                 {
-                    'id': 'revenue-reports',
-                    'name': 'Revenue Reports',
+                    'id': 'new-synapse-users',
+                    'name': 'New Azure Synapse Analytics Users',
                     'description': (
-                        'Bespoke reports built from imported revenue data '
-                        '(new product users, churn risk, etc.).'
+                        'Customers who have started using Azure Synapse Analytics '
+                        'in the last 6 months, grouped by seller.'
                     ),
-                    'icon': 'bi-bar-chart-line',
-                    'url': url_for('revenue.reports_list'),
+                    'icon': 'bi-database-gear',
+                    'url': url_for('revenue.report_new_synapse_users'),
                 },
             ],
         },
