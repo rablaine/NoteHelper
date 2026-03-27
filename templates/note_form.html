@@ -133,22 +133,35 @@
                     
                     <!-- Customer + Engagement side by side -->
                     {% if is_general_note %}
-                    <div class="mb-3">
-                        <div class="alert alert-secondary py-2 mb-2">
-                            <i class="bi bi-journal-text me-1"></i> This is a <strong>general note</strong> not associated with a specific customer.
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="alert alert-secondary py-2 mb-0">
+                                <i class="bi bi-journal-text me-1"></i> This is a <strong>general note</strong> not associated with a specific customer.
+                            </div>
                         </div>
-                        {% if active_projects %}
-                        <label for="project_id" class="form-label"><i class="bi bi-folder"></i> Project (optional)</label>
-                        <select class="form-select" id="project_id" name="project_id">
-                            <option value="">-- No project --</option>
-                            {% for p in active_projects %}
-                            <option value="{{ p.id }}"
-                                {% if (preselect_project_id and preselect_project_id == p.id) or (note and p in note.projects) %}selected{% endif %}>
-                                {{ p.title }} ({{ p.project_type|replace('_', ' ')|title }})
-                            </option>
-                            {% endfor %}
-                        </select>
-                        {% endif %}
+                        <div class="col-md-6">
+                            <label class="form-label"><i class="bi bi-folder"></i> Project (optional)</label>
+                            <select class="form-select" id="project_id" name="project_id">
+                                <option value="">-- No project --</option>
+                                {% for p in active_projects %}
+                                <option value="{{ p.id }}"
+                                    {% if (preselect_project_id and preselect_project_id == p.id) or (note and p in note.projects) %}selected{% endif %}>
+                                    {{ p.title }} ({{ p.project_type|replace('_', ' ')|title }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <!-- Compact dropdown trigger (mirrors engagement dropdown) -->
+                            <div class="dropdown" id="projectDropdown">
+                                <button class="form-select text-start text-truncate" type="button"
+                                        id="projectDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="true"
+                                        aria-expanded="false" style="cursor: pointer;">
+                                    <span class="text-muted">-- No project --</span>
+                                </button>
+                                <ul class="dropdown-menu w-100 shadow-sm py-1" id="projectDropdownMenu"
+                                    style="max-height: 240px; overflow-y: auto;">
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                     {% else %}
                     <div class="row mb-3">
@@ -1699,6 +1712,105 @@ document.getElementById('noteForm').onsubmit = function(e) {
 
     // Expose rebuild for external use
     window.rebuildEngagementDropdown = function() { buildMenu(); updateLabel(); };
+})();
+
+// --- Project dropdown (general notes) ---
+(function() {
+    const hiddenSelect = document.getElementById('project_id');
+    if (!hiddenSelect) return;
+    const dropdown = document.getElementById('projectDropdown');
+    if (!dropdown) return;
+
+    // Hide the native select, show the custom dropdown
+    hiddenSelect.style.display = 'none';
+
+    const btn = document.getElementById('projectDropdownBtn');
+    const menu = document.getElementById('projectDropdownMenu');
+
+    function buildMenu() {
+        menu.innerHTML = '';
+
+        // "+Create New Project" pinned at top
+        const createLi = document.createElement('li');
+        createLi.innerHTML = `
+            <button type="button" class="dropdown-item text-success fw-semibold py-1"
+                    onclick="createProjectInline()">
+                <i class="bi bi-plus-circle"></i> Create New Project
+            </button>`;
+        menu.appendChild(createLi);
+
+        const options = hiddenSelect.options;
+        if (options.length <= 1) {
+            // Only the "-- No project --" option
+            const emptyLi = document.createElement('li');
+            emptyLi.innerHTML = '<span class="dropdown-item text-muted small py-1">No active projects</span>';
+            menu.appendChild(emptyLi);
+            return;
+        }
+
+        const divLi = document.createElement('li');
+        divLi.innerHTML = '<hr class="dropdown-divider my-1">';
+        menu.appendChild(divLi);
+
+        for (let i = 0; i < options.length; i++) {
+            const opt = options[i];
+            const li = document.createElement('li');
+            const isSelected = opt.selected && opt.value;
+            li.innerHTML = `
+                <button type="button" class="dropdown-item py-1 ${isSelected ? 'active' : ''}"
+                        data-value="${opt.value}">
+                    ${opt.value ? '<i class="bi bi-folder me-1"></i>' : ''} ${opt.textContent.trim()}
+                </button>`;
+            li.querySelector('button').addEventListener('click', function() {
+                hiddenSelect.value = this.dataset.value;
+                updateLabel();
+                buildMenu();
+                if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
+            });
+            menu.appendChild(li);
+        }
+    }
+
+    function updateLabel() {
+        const selected = hiddenSelect.selectedOptions[0];
+        if (!selected || !selected.value) {
+            btn.innerHTML = '<span class="text-muted">-- No project --</span>';
+        } else {
+            btn.innerHTML = '<i class="bi bi-folder me-1"></i> ' + selected.textContent.trim();
+        }
+    }
+
+    window.createProjectInline = function() {
+        const title = prompt('Project title:');
+        if (!title || !title.trim()) return;
+        fetch('/api/project/create-inline', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: title.trim() }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                alert(data.error || 'Failed to create project');
+                return;
+            }
+            const opt = document.createElement('option');
+            opt.value = data.id;
+            opt.textContent = data.title + ' (' + data.project_type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) + ')';
+            hiddenSelect.appendChild(opt);
+            hiddenSelect.value = data.id;
+            buildMenu();
+            updateLabel();
+            if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
+        })
+        .catch(err => {
+            console.error('Error creating project:', err);
+            alert('Failed to create project');
+        });
+    };
+
+    buildMenu();
+    updateLabel();
 })();
 
 // --- Engagement milestone auto-suggest ---

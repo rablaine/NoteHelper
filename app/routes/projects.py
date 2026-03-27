@@ -163,3 +163,36 @@ def project_add_action_item(id):
     db.session.add(item)
     db.session.commit()
     return jsonify(success=True, id=item.id)
+
+
+@projects_bp.route('/api/project/create-inline', methods=['POST'])
+def project_create_inline():
+    """Create a project with just a title (inline from note form).
+
+    Accepts JSON with: title, [project_type, description]
+    Returns: {success: true, id: X, title: "...", project_type: "..."}
+    """
+    data = request.get_json(silent=True) or {}
+    title = (data.get('title') or '').strip()
+    if not title:
+        return jsonify(success=False, error='Title is required'), 400
+
+    project_type = (data.get('project_type') or 'general').strip()
+    allowed_types = [t for t in Project.BUILT_IN_TYPES if t != 'copilot_saved']
+    if project_type not in allowed_types:
+        project_type = 'general'
+
+    project = Project(
+        title=title,
+        description=(data.get('description') or '').strip() or None,
+        project_type=project_type,
+    )
+    db.session.add(project)
+    db.session.commit()
+
+    return jsonify(
+        success=True,
+        id=project.id,
+        title=project.title,
+        project_type=project.project_type,
+    )

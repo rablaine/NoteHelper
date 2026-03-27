@@ -439,9 +439,11 @@ def note_create():
     preselect_project_id = request.args.get('project_id', type=int)
 
     # Active projects for the project selector (general notes)
+    # Exclude copilot_saved - that's an internal backend construct.
     from app.models import Project
     active_projects = Project.query.filter(
-        Project.status.in_(['Active', 'On Hold'])
+        Project.status.in_(['Active', 'On Hold']),
+        Project.project_type != 'copilot_saved',
     ).order_by(Project.title).all()
     
     # Capture referrer for redirect after creation
@@ -680,7 +682,8 @@ def note_edit(id):
     
     from app.models import Project
     active_projects = Project.query.filter(
-        Project.status.in_(['Active', 'On Hold'])
+        Project.status.in_(['Active', 'On Hold']),
+        Project.project_type != 'copilot_saved',
     ).order_by(Project.title).all()
 
     return render_template('note_form.html',
