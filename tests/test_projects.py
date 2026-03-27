@@ -96,6 +96,92 @@ class TestProjectCreateInlineAPI:
             assert proj.due_date.isoformat() == '2026-06-15'
 
 
+class TestProjectGetJSON:
+    """Tests for GET /api/project/<id>."""
+
+    def test_get_project_json(self, client, app):
+        """Should return project details as JSON."""
+        with app.app_context():
+            proj = Project(title='Test Project', description='Desc',
+                           project_type='training')
+            db.session.add(proj)
+            db.session.commit()
+            pid = proj.id
+
+        resp = client.get(f'/api/project/{pid}')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['title'] == 'Test Project'
+        assert data['description'] == 'Desc'
+        assert data['project_type'] == 'training'
+        assert data['status'] == 'Active'
+
+    def test_get_project_404(self, client):
+        """Should return 404 for nonexistent project."""
+        resp = client.get('/api/project/99999')
+        assert resp.status_code == 404
+
+
+class TestProjectUpdateJSON:
+    """Tests for PUT /api/project/<id>."""
+
+    def test_update_project(self, client, app):
+        """Should update project fields."""
+        with app.app_context():
+            proj = Project(title='Old Title', project_type='general')
+            db.session.add(proj)
+            db.session.commit()
+            pid = proj.id
+
+        resp = client.put(f'/api/project/{pid}',
+                          data=json.dumps({'title': 'New Title',
+                                           'description': 'Updated',
+                                           'status': 'On Hold',
+                                           'due_date': '2026-09-01'}),
+                          content_type='application/json')
+        data = resp.get_json()
+        assert data['success'] is True
+        assert data['title'] == 'New Title'
+        assert data['status'] == 'On Hold'
+
+        with app.app_context():
+            proj = db.session.get(Project, pid)
+            assert proj.description == 'Updated'
+            assert proj.due_date.isoformat() == '2026-09-01'
+
+    def test_update_project_rejects_empty_title(self, client, app):
+        """Should return 400 when title is empty."""
+        with app.app_context():
+            proj = Project(title='Keep Me', project_type='general')
+            db.session.add(proj)
+            db.session.commit()
+            pid = proj.id
+
+        resp = client.put(f'/api/project/{pid}',
+                          data=json.dumps({'title': ''}),
+                          content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_update_project_rejects_copilot_saved_type(self, client, app):
+        """Should not allow changing type to copilot_saved."""
+        with app.app_context():
+            proj = Project(title='Safe', project_type='general')
+            db.session.add(proj)
+            db.session.commit()
+            pid = proj.id
+
+        resp = client.put(f'/api/project/{pid}',
+                          data=json.dumps({'title': 'Safe',
+                                           'project_type': 'copilot_saved'}),
+                          content_type='application/json')
+        data = resp.get_json()
+        assert data['success'] is True
+        # Type should remain 'general', not changed to copilot_saved
+        with app.app_context():
+            proj = db.session.get(Project, pid)
+            assert proj.project_type == 'general'
+
+
 class TestProjectFormPartial:
     """Tests that the project form partial renders correctly."""
 

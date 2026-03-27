@@ -55,12 +55,12 @@
     </div>
 </div>
 {% endif %}
-{% if project %}
-<div class="mb-3">
+{% if project or flyout_mode %}
+<div class="mb-3" id="{{ 'flyout_project_status_group' if flyout_mode else '' }}" {% if flyout_mode and not project %}style="display: none;"{% endif %}>
     <label for="{{ 'flyout_project_status' if flyout_mode else 'status' }}" class="form-label">Status</label>
     <select class="form-select" id="{{ 'flyout_project_status' if flyout_mode else 'status' }}" name="status">
         {% for s in ['Active', 'On Hold', 'Completed'] %}
-        <option value="{{ s }}" {{ 'selected' if project.status == s }}>{{ s }}</option>
+        <option value="{{ s }}" {{ 'selected' if project and project.status == s }}>{{ s }}</option>
         {% endfor %}
     </select>
 </div>

@@ -141,7 +141,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label"><i class="bi bi-folder"></i> Project (optional)</label>
+                            <label class="form-label d-flex align-items-center"><i class="bi bi-folder me-1"></i> Project (optional) <a href="javascript:void(0)" onclick="openProjectEditFlyout()" class="small text-muted text-decoration-none fw-normal ms-auto" id="projectDetailsLink" style="display: none;">see details &rsaquo;</a></label>
                             <select class="form-select" id="project_id" name="project_id">
                                 <option value="">-- No project --</option>
                                 {% for p in active_projects %}
@@ -1791,14 +1791,22 @@ document.getElementById('noteForm').onsubmit = function(e) {
 
     function updateLabel() {
         const selected = hiddenSelect.selectedOptions[0];
+        const detailsLink = document.getElementById('projectDetailsLink');
         if (!selected || !selected.value) {
             btn.innerHTML = '<span class="text-muted">Select...</span>';
+            if (detailsLink) detailsLink.style.display = 'none';
         } else {
             btn.innerHTML = '<i class="bi bi-folder me-1"></i> ' + selected.textContent.trim();
+            if (detailsLink) detailsLink.style.display = '';
         }
     }
 
+    // Track flyout mode: null = create, project ID = edit
+    var _flyoutEditProjectId = null;
+    var _projFlyoutInstance = null;
+
     window.createProjectInline = function() {
+        _flyoutEditProjectId = null;
         const flyout = document.getElementById('projectFlyout');
         const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(flyout);
         document.getElementById('projectFlyoutLabel').innerHTML = '<i class="bi bi-folder"></i> New Project';
@@ -1807,6 +1815,8 @@ document.getElementById('noteForm').onsubmit = function(e) {
         document.getElementById('flyout_project_description').value = '';
         document.getElementById('flyout_project_type').value = 'general';
         document.getElementById('flyout_project_due_date').value = '';
+        document.getElementById('flyout_project_status').value = 'Active';
+        document.getElementById('flyout_project_status_group').style.display = 'none';
         const saveBtn = document.getElementById('flyout_project_save');
         saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Create Project';
         saveBtn.disabled = false;
@@ -1815,6 +1825,56 @@ document.getElementById('noteForm').onsubmit = function(e) {
             document.getElementById('flyout_project_title').focus();
             flyout.removeEventListener('shown.bs.offcanvas', handler);
         });
+    };
+
+    window.openProjectEditFlyout = function() {
+        const projectId = hiddenSelect.value;
+        if (!projectId) return;
+
+        _flyoutEditProjectId = projectId;
+        const flyoutEl = document.getElementById('projectFlyout');
+        const detailsLink = document.getElementById('projectDetailsLink');
+
+        if (!_projFlyoutInstance) {
+            _projFlyoutInstance = new bootstrap.Offcanvas(flyoutEl);
+            flyoutEl.addEventListener('shown.bs.offcanvas', function() {
+                if (detailsLink) detailsLink.innerHTML = 'see details &lsaquo;';
+            });
+            flyoutEl.addEventListener('hidden.bs.offcanvas', function() {
+                if (detailsLink) detailsLink.innerHTML = 'see details &rsaquo;';
+            });
+        }
+
+        // If already open, just toggle closed
+        if (flyoutEl.classList.contains('show')) {
+            _projFlyoutInstance.toggle();
+            return;
+        }
+
+        document.getElementById('projectFlyoutLabel').innerHTML = '<i class="bi bi-folder"></i> Edit Project';
+        document.getElementById('flyout_project_title').value = '';
+        document.getElementById('flyout_project_title').classList.remove('is-invalid');
+        document.getElementById('flyout_project_status_group').style.display = '';
+        const saveBtn = document.getElementById('flyout_project_save');
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+        saveBtn.disabled = true;
+        _projFlyoutInstance.toggle();
+
+        fetch('/api/project/' + projectId)
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('flyout_project_title').value = data.title || '';
+                document.getElementById('flyout_project_description').value = data.description || '';
+                document.getElementById('flyout_project_type').value = data.project_type || 'general';
+                document.getElementById('flyout_project_due_date').value = data.due_date || '';
+                document.getElementById('flyout_project_status').value = data.status || 'Active';
+                saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Changes';
+                saveBtn.disabled = false;
+            })
+            .catch(err => {
+                console.error('Error loading project:', err);
+                saveBtn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Load Failed';
+            });
     };
 
     window.saveProjectFromFlyout = function() {
@@ -1828,48 +1888,84 @@ document.getElementById('noteForm').onsubmit = function(e) {
 
         const saveBtn = document.getElementById('flyout_project_save');
         saveBtn.disabled = true;
-        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
 
-        fetch('/api/project/create-inline', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                title: title,
-                project_type: document.getElementById('flyout_project_type').value,
-                description: document.getElementById('flyout_project_description').value.trim(),
-                due_date: document.getElementById('flyout_project_due_date').value,
-            }),
-        })
-        .then(r => {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-        })
-        .then(data => {
-            if (!data.success) {
-                alert(data.error || 'Failed to create project');
+        const payload = {
+            title: title,
+            project_type: document.getElementById('flyout_project_type').value,
+            description: document.getElementById('flyout_project_description').value.trim(),
+            due_date: document.getElementById('flyout_project_due_date').value,
+            status: document.getElementById('flyout_project_status').value,
+        };
+
+        if (_flyoutEditProjectId) {
+            // --- Edit mode ---
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+            fetch('/api/project/' + _flyoutEditProjectId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.error || 'Failed to save project');
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Changes';
+                    return;
+                }
+                // Update the option text in the hidden select
+                for (const opt of hiddenSelect.options) {
+                    if (opt.value == _flyoutEditProjectId) {
+                        opt.textContent = data.title + ' (' + data.project_type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) + ')';
+                        break;
+                    }
+                }
+                buildMenu();
+                updateLabel();
+                bootstrap.Offcanvas.getInstance(document.getElementById('projectFlyout')).hide();
+            })
+            .catch(err => {
+                console.error('Error saving project:', err);
+                alert('Failed to save project');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Changes';
+            });
+        } else {
+            // --- Create mode ---
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+            fetch('/api/project/create-inline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(data => {
+                if (!data.success) {
+                    alert(data.error || 'Failed to create project');
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Create Project';
+                    return;
+                }
+                const opt = document.createElement('option');
+                opt.value = data.id;
+                opt.textContent = data.title + ' (' + data.project_type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) + ')';
+                hiddenSelect.appendChild(opt);
+                hiddenSelect.value = data.id;
+                buildMenu();
+                updateLabel();
+                try { if (typeof debouncedAutoSave === 'function') debouncedAutoSave(); } catch(e) {}
+                bootstrap.Offcanvas.getInstance(document.getElementById('projectFlyout')).hide();
+            })
+            .catch(err => {
+                console.error('Error creating project:', err);
+                alert('Failed to create project: ' + err.message);
                 saveBtn.disabled = false;
                 saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Create Project';
-                return;
-            }
-            // Add new option to hidden select and select it
-            const opt = document.createElement('option');
-            opt.value = data.id;
-            opt.textContent = data.title + ' (' + data.project_type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) + ')';
-            hiddenSelect.appendChild(opt);
-            hiddenSelect.value = data.id;
-            buildMenu();
-            updateLabel();
-            try { if (typeof debouncedAutoSave === 'function') debouncedAutoSave(); } catch(e) {}
-
-            // Close the flyout
-            bootstrap.Offcanvas.getInstance(document.getElementById('projectFlyout')).hide();
-        })
-        .catch(err => {
-            console.error('Error creating project:', err);
-            alert('Failed to create project: ' + err.message);
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Create Project';
-        });
+            });
+        }
     };
 
     // Expose rebuild for draft restore
