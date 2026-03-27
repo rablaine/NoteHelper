@@ -21,8 +21,7 @@
             <div class="card-body p-0" style="max-height: 360px; overflow-y: auto;">
                 {% set engagement_tasks = open_tasks|selectattr('source', 'equalto', 'engagement')|list %}
                 {% set copilot_tasks = open_tasks|selectattr('source', 'equalto', 'copilot')|list %}
-                {% set saved_copilot_tasks = open_tasks|selectattr('source', 'equalto', 'project')|selectattr('project')|list|select('test', 'defined')|list %}
-                {# Filter saved copilot tasks: project.project_type == 'copilot_saved' #}
+                {# Split project tasks: copilot_saved vs regular #}
                 {% set _saved = [] %}
                 {% set _project_tasks = [] %}
                 {% for task in open_tasks if task.source == 'project' %}
