@@ -4666,9 +4666,12 @@ document.getElementById('noteForm').addEventListener('submit', async function(e)
     
     // Auto-create task in MSX if task fields are filled but task wasn't created via the button
     // Only create the task on the first milestone attached to the note
-    const taskSubject = document.getElementById('task_subject').value.trim();
-    const taskCategory = document.getElementById('task_category').value;
-    const createdTaskId = document.getElementById('created_task_id').value.trim();
+    const taskSubjectEl = document.getElementById('task_subject');
+    const taskSubject = taskSubjectEl ? taskSubjectEl.value.trim() : '';
+    const taskCategoryEl = document.getElementById('task_category');
+    const taskCategory = taskCategoryEl ? taskCategoryEl.value : '';
+    const createdTaskIdEl = document.getElementById('created_task_id');
+    const createdTaskId = createdTaskIdEl ? createdTaskIdEl.value.trim() : '';
     const milestoneId = selectedMilestones.length > 0 ? selectedMilestones[0].id : null;
     
     if (milestoneId && taskSubject && taskCategory && !createdTaskId) {
