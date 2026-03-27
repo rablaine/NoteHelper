@@ -9,25 +9,6 @@
             <h1 class="mb-0"><i class="bi bi-gear"></i> Settings</h1>
         </div>
 
-        <!-- Your Role -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-person-badge"></i> Your Role</h5>
-            </div>
-            <div class="card-body">
-                <div class="d-flex align-items-center gap-2">
-                    {% if user_role == 'dss' %}
-                    <i class="bi bi-person-fill fs-5"></i>
-                    <span>Digital Sales Specialist (DSS)</span>
-                    {% else %}
-                    <i class="bi bi-people-fill fs-5"></i>
-                    <span>Solution Engineer (SE)</span>
-                    {% endif %}
-                    <span class="badge bg-secondary ms-2">Set during onboarding</span>
-                </div>
-            </div>
-        </div>
-
         <!-- Appearance -->
         <div class="card mb-4">
             <div class="card-header">
@@ -41,6 +22,16 @@
                     </div>
                     <span class="small text-nowrap" style="cursor: pointer;" onclick="document.getElementById('settingsDarkModeSwitch').click()"><i class="bi bi-moon-fill"></i> Dark</span>
                 </div>
+            </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-house"></i> Dashboard</h5>
+            </div>
+            <div class="card-body">
+                {% include 'partials/_dashboard_settings.html' %}
             </div>
         </div>
 
@@ -94,30 +85,7 @@
             </div>
         </div>
 
-        <!-- Dashboard -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-house"></i> Dashboard</h5>
-            </div>
-            <div class="card-body">
-                <div class="form-check form-switch mb-3">
-                    <input class="form-check-input" type="checkbox" id="copilotActionsSwitch" {{ 'checked' if pref and pref.copilot_actions_enabled else '' }}>
-                    <label class="form-check-label" for="copilotActionsSwitch">
-                        Copilot daily action items
-                    </label>
-                    <div><small class="text-muted">Show AI-generated action items from your emails, chats, and meetings. Refreshes daily at 6 AM or on app start.</small></div>
-                </div>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="staleMilestonesSwitch" {{ 'checked' if pref and pref.show_stale_milestones else '' }}>
-                    <label class="form-check-label" for="staleMilestonesSwitch">
-                        Stale milestones in Action Items
-                    </label>
-                    <div><small class="text-muted">Show milestones with no recent comments in the Action Items card on the dashboard.</small></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Note Templates -->
+        <!-- WorkIQ Settings -->
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Note Templates</h5>
@@ -243,22 +211,6 @@ document.getElementById('msxAutoWritebackSwitch').addEventListener('change', fun
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ msx_auto_writeback: this.checked })
-    });
-});
-
-// Dashboard Toggles
-document.getElementById('copilotActionsSwitch').addEventListener('change', function() {
-    fetch('/api/preferences/dashboard-toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ copilot_actions_enabled: this.checked })
-    });
-});
-document.getElementById('staleMilestonesSwitch').addEventListener('change', function() {
-    fetch('/api/preferences/dashboard-toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ show_stale_milestones: this.checked })
     });
 });
 
