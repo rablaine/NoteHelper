@@ -1758,9 +1758,9 @@ document.getElementById('noteForm').onsubmit = function(e) {
             </button>`;
         menu.appendChild(createLi);
 
-        const options = hiddenSelect.options;
-        if (options.length <= 1) {
-            // Only the "-- No project --" option
+        // Collect real options (skip the empty "-- No project --" placeholder)
+        const realOptions = Array.from(hiddenSelect.options).filter(o => o.value);
+        if (realOptions.length === 0) {
             const emptyLi = document.createElement('li');
             emptyLi.innerHTML = '<span class="dropdown-item text-muted small py-1">No active projects</span>';
             menu.appendChild(emptyLi);
@@ -1771,14 +1771,13 @@ document.getElementById('noteForm').onsubmit = function(e) {
         divLi.innerHTML = '<hr class="dropdown-divider my-1">';
         menu.appendChild(divLi);
 
-        for (let i = 0; i < options.length; i++) {
-            const opt = options[i];
+        for (const opt of realOptions) {
             const li = document.createElement('li');
-            const isSelected = opt.selected && opt.value;
+            const isSelected = opt.selected;
             li.innerHTML = `
                 <button type="button" class="dropdown-item py-1 ${isSelected ? 'active' : ''}"
                         data-value="${opt.value}">
-                    ${opt.value ? '<i class="bi bi-folder me-1"></i>' : ''} ${opt.textContent.trim()}
+                    <i class="bi bi-folder me-1"></i> ${opt.textContent.trim()}
                 </button>`;
             li.querySelector('button').addEventListener('click', function() {
                 hiddenSelect.value = this.dataset.value;
@@ -1793,7 +1792,7 @@ document.getElementById('noteForm').onsubmit = function(e) {
     function updateLabel() {
         const selected = hiddenSelect.selectedOptions[0];
         if (!selected || !selected.value) {
-            btn.innerHTML = '<span class="text-muted">-- No project --</span>';
+            btn.innerHTML = '<span class="text-muted">Select...</span>';
         } else {
             btn.innerHTML = '<i class="bi bi-folder me-1"></i> ' + selected.textContent.trim();
         }
