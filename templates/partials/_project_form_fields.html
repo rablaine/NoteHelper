@@ -20,10 +20,27 @@
     <textarea class="form-control" id="{{ 'flyout_project_description' if flyout_mode else 'description' }}" name="description"
               rows="{{ 2 if flyout_mode else 3 }}" placeholder="What is this project about?">{{ project.description or '' }}</textarea>
 </div>
+{% if flyout_mode %}
+<div class="mb-3">
+    <label for="flyout_project_type" class="form-label">Type</label>
+    <select class="form-select" id="flyout_project_type" name="project_type">
+        {% for t in project_types %}
+        {% if t != 'copilot_saved' %}
+        <option value="{{ t }}" {{ 'selected' if project and project.project_type == t }}>{{ t|replace('_', ' ')|title }}</option>
+        {% endif %}
+        {% endfor %}
+    </select>
+</div>
+<div class="mb-3">
+    <label for="flyout_project_due_date" class="form-label">Due Date</label>
+    <input type="date" class="form-control" id="flyout_project_due_date" name="due_date"
+           value="{{ project.due_date.strftime('%Y-%m-%d') if project and project.due_date else '' }}">
+</div>
+{% else %}
 <div class="row mb-3">
-    <div class="col-md-6 mb-3 mb-md-0">
-        <label for="{{ 'flyout_project_type' if flyout_mode else 'project_type' }}" class="form-label">Type</label>
-        <select class="form-select" id="{{ 'flyout_project_type' if flyout_mode else 'project_type' }}" name="project_type">
+    <div class="col-6">
+        <label for="project_type" class="form-label">Type</label>
+        <select class="form-select" id="project_type" name="project_type">
             {% for t in project_types %}
             {% if t != 'copilot_saved' %}
             <option value="{{ t }}" {{ 'selected' if project and project.project_type == t }}>{{ t|replace('_', ' ')|title }}</option>
@@ -31,12 +48,13 @@
             {% endfor %}
         </select>
     </div>
-    <div class="col-md-6">
-        <label for="{{ 'flyout_project_due_date' if flyout_mode else 'due_date' }}" class="form-label">Due Date</label>
-        <input type="date" class="form-control" id="{{ 'flyout_project_due_date' if flyout_mode else 'due_date' }}" name="due_date"
+    <div class="col-6">
+        <label for="due_date" class="form-label">Due Date</label>
+        <input type="date" class="form-control" id="due_date" name="due_date"
                value="{{ project.due_date.strftime('%Y-%m-%d') if project and project.due_date else '' }}">
     </div>
 </div>
+{% endif %}
 {% if project %}
 <div class="mb-3">
     <label for="{{ 'flyout_project_status' if flyout_mode else 'status' }}" class="form-label">Status</label>
