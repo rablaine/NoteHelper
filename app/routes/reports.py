@@ -1,10 +1,10 @@
 """Reports blueprint - cross-domain reports hub and individual report views."""
 import logging
 from datetime import datetime, timedelta, timezone, date
-from flask import Blueprint, render_template, url_for, jsonify
+from flask import Blueprint, render_template, url_for, jsonify, request
 from app.models import (
     db, Customer, Engagement, Note, Milestone, Seller, SolutionEngineer,
-    Topic, RevenueAnalysis, notes_engagements, notes_milestones,
+    Topic, RevenueAnalysis, notes_engagements, notes_milestones, notes_topics,
 )
 from sqlalchemy import func, desc, or_
 
@@ -46,6 +46,22 @@ def reports_hub():
                     ),
                     'icon': 'bi-bar-chart-line',
                     'url': url_for('revenue.reports_list'),
+                },
+            ],
+        },
+        {
+            'title': 'Workload Coverage',
+            'icon': 'bi-diagram-3',
+            'reports': [
+                {
+                    'id': 'workload-report',
+                    'name': 'Workload Report',
+                    'description': (
+                        'Customers grouped by workload topic. Quickly find who is '
+                        'working on a specific technology for workshop targeting.'
+                    ),
+                    'icon': 'bi-tag',
+                    'url': url_for('reports.report_workload'),
                 },
             ],
         },
@@ -293,6 +309,135 @@ def report_one_on_one():
         reviewed_alerts=reviewed_alerts,
         top_topics=top_topics,
         fy_month_labels=fy_month_labels,
+    )
+
+
+@bp.route('/reports/workload')
+def report_workload():
+    """Workload report - customers grouped by topic/workload.
+
+    All data is loaded server-side; date filtering is done client-side
+    using the call_date on each customer-topic entry.
+    """
+    from app.services.seller_mode import get_seller_mode_seller_id
+    seller_mode_sid = get_seller_mode_seller_id()
+
+    # Get all topics with at least one note
+    topics_with_notes = (
+        Topic.query
+        .join(notes_topics, Topic.id == notes_topics.c.topic_id)
+        .join(Note, Note.id == notes_topics.c.note_id)
+        .group_by(Topic.id)
+        .having(func.count(Note.id) > 0)
+        .order_by(Topic.name)
+        .all()
+    )
+
+    workload_groups = []
+    for topic in topics_with_notes:
+        customer_q = (
+            Customer.query
+            .join(Note, Note.customer_id == Customer.id)
+            .join(notes_topics, Note.id == notes_topics.c.note_id)
+            .filter(notes_topics.c.topic_id == topic.id)
+        )
+        if seller_mode_sid:
+            customer_q = customer_q.filter(Customer.seller_id == seller_mode_sid)
+        customers = customer_q.distinct().order_by(Customer.name).all()
+
+        if not customers:
+            continue
+
+        customer_data = []
+        total_acr = 0
+        for cust in customers:
+            active_engs = [e for e in cust.engagements if e.status == 'Active']
+
+            # Get milestones linked to notes tagged with this topic for this customer
+            topic_milestones = (
+                Milestone.query
+                .join(notes_milestones, Milestone.id == notes_milestones.c.milestone_id)
+                .join(Note, Note.id == notes_milestones.c.note_id)
+                .join(notes_topics, Note.id == notes_topics.c.note_id)
+                .filter(
+                    notes_topics.c.topic_id == topic.id,
+                    Note.customer_id == cust.id,
+                    Milestone.msx_status.in_(['On Track', 'At Risk', 'Blocked']),
+                )
+                .distinct()
+                .all()
+            )
+            cust_acr = sum(m.monthly_usage or 0 for m in topic_milestones)
+            total_acr += cust_acr
+
+            latest_note = (
+                Note.query
+                .join(notes_topics, Note.id == notes_topics.c.note_id)
+                .filter(
+                    notes_topics.c.topic_id == topic.id,
+                    Note.customer_id == cust.id,
+                )
+                .order_by(desc(Note.call_date))
+                .first()
+            )
+
+            customer_data.append({
+                'customer': cust,
+                'engagement_count': len(active_engs),
+                'milestone_count': len(topic_milestones),
+                'acr': cust_acr,
+                'latest_note_date': latest_note.call_date if latest_note else None,
+                'latest_note_iso': latest_note.call_date.strftime('%Y-%m-%d') if latest_note and latest_note.call_date else '',
+                'committed': any(
+                    m.customer_commitment == 'Committed' for m in topic_milestones
+                ),
+            })
+
+        customer_data.sort(key=lambda c: c['acr'], reverse=True)
+
+        workload_groups.append({
+            'topic': topic,
+            'customer_count': len(customer_data),
+            'total_acr': total_acr,
+            'customers': customer_data,
+        })
+
+    workload_groups.sort(key=lambda g: g['customer_count'], reverse=True)
+
+    # Compute fiscal quarter boundaries for preset buttons
+    _today = date.today()
+    fy_month = (_today.month - 7) % 12
+    fq_start_idx = (fy_month // 3) * 3
+    q_start_month = ((fq_start_idx + 7 - 1) % 12) + 1
+    fq_start = date(_today.year, q_start_month, 1)
+    end_month = q_start_month + 3
+    end_year = _today.year
+    if end_month > 12:
+        end_month -= 12
+        end_year += 1
+    fq_end = date(end_year, end_month, 1) - timedelta(days=1)
+    # Previous quarter
+    prev_month = q_start_month - 3
+    prev_year = _today.year
+    if prev_month <= 0:
+        prev_month += 12
+        prev_year -= 1
+    prev_fq_start = date(prev_year, prev_month, 1)
+    prev_fq_end = fq_start - timedelta(days=1)
+
+    # FQ labels (e.g. "FQ3: Jan 1 - Mar 31")
+    fq_num = (fq_start_idx // 3) + 1
+    prev_fq_num = fq_num - 1 if fq_num > 1 else 4
+
+    return render_template(
+        'report_workload.html',
+        workload_groups=workload_groups,
+        fq_start=fq_start.isoformat(),
+        fq_end=fq_end.isoformat(),
+        fq_label=f'FQ{fq_num}',
+        prev_fq_start=prev_fq_start.isoformat(),
+        prev_fq_end=prev_fq_end.isoformat(),
+        prev_fq_label=f'FQ{prev_fq_num}',
     )
 
 

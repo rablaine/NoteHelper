@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% from 'partials/customer_favicon.html' import customer_favicon %}
+
+{% block title %}Workload Report - Sales Buddy{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2><i class="bi bi-diagram-3"></i> Workload Report</h2>
+        <p class="text-muted mb-0">Customers grouped by workload topic. Click a topic to expand.</p>
+    </div>
+    <a href="{{ url_for('reports.reports_hub') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Reports
+    </a>
+</div>
+
+<!-- Date Filters -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <label class="small text-muted fw-semibold mb-0">Filter by note date:</label>
+            <input type="date" id="dateFrom" class="form-control form-control-sm" style="width: auto;">
+            <span class="text-muted">to</span>
+            <input type="date" id="dateTo" class="form-control form-control-sm" style="width: auto;">
+            <div class="btn-group ms-2" role="group">
+                <button class="btn btn-sm btn-outline-secondary preset-btn" data-preset="fq">{{ fq_label }}</button>
+                <button class="btn btn-sm btn-outline-secondary preset-btn" data-preset="prev_fq">{{ prev_fq_label }}</button>
+                <button class="btn btn-sm btn-outline-secondary preset-btn" data-preset="30d">30d</button>
+                <button class="btn btn-sm btn-outline-secondary preset-btn" data-preset="90d">90d</button>
+                <button class="btn btn-sm btn-outline-secondary preset-btn" data-preset="all">All</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-3">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-2">
+                <h3 class="mb-0" id="statUniqueCustomers">-</h3>
+                <small class="text-muted">Unique Customers</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-2">
+                <h3 class="mb-0" id="statWorkloads">-</h3>
+                <small class="text-muted">Workloads</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-2">
+                <h3 class="mb-0" id="statCustomers">-</h3>
+                <small class="text-muted">Customer Engagements</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-success">
+            <div class="card-body py-2">
+                <h3 class="mb-0 text-success" id="statAcr">-</h3>
+                <small class="text-muted">Total ACR/mo (visible)</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workload Groups -->
+<div id="workloadContainer">
+{% if workload_groups %}
+{% for group in workload_groups %}
+<div class="card mb-2 workload-group" data-topic-id="{{ group.topic.id }}">
+    <div class="card-header py-2 collapsed" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#workload-{{ group.topic.id }}">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <i class="bi bi-chevron-right workload-chevron" style="transition: transform 0.2s;"></i>
+                <span class="badge bg-warning text-dark"><i class="bi bi-tag"></i> {{ group.topic.name }}</span>
+                <span class="badge bg-secondary ms-1 group-count">{{ group.customer_count }} customer{{ 's' if group.customer_count != 1 }}</span>
+            </div>
+            <span class="text-success fw-semibold group-acr"></span>
+        </div>
+    </div>
+    <div id="workload-{{ group.topic.id }}" class="collapse">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0" style="font-size: 0.88em;">
+                <thead>
+                    <tr class="text-muted" style="font-size: 0.85em;">
+                        <th class="ps-3">Customer</th>
+                        <th class="text-center" title="Active engagements for this customer">Engagements</th>
+                        <th class="text-center" title="Active milestones linked to notes tagged with this topic">Milestones</th>
+                        <th class="text-end" title="Estimated ACR from milestones linked to notes tagged with this topic">Est. ACR</th>
+                        <th class="text-end pe-3" title="Most recent note tagged with this topic for this customer">Last Activity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cd in group.customers %}
+                    <tr class="workload-row" data-note-date="{{ cd.latest_note_iso }}" data-acr="{{ cd.acr }}">
+                        <td class="ps-3">
+                            {{ customer_favicon(cd.customer) }}
+                            <a href="{{ url_for('customers.customer_view', id=cd.customer.id) }}" class="text-decoration-none">{{ cd.customer.name }}</a>
+                            {% if cd.committed %}<span class="badge bg-primary ms-1" style="font-size: 0.7em;">Committed</span>{% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if cd.engagement_count %}<span class="badge bg-info">{{ cd.engagement_count }}</span>{% else %}<span class="text-muted">-</span>{% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if cd.milestone_count %}<span class="badge bg-secondary">{{ cd.milestone_count }}</span>{% else %}<span class="text-muted">-</span>{% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if cd.acr %}<span class="text-success">${{ '{:,.0f}'.format(cd.acr) }}/mo</span>{% else %}<span class="text-muted">-</span>{% endif %}
+                        </td>
+                        <td class="text-end pe-3">
+                            {% if cd.latest_note_date %}<small class="text-muted">{{ cd.latest_note_date.strftime('%b %d, %Y') }}</small>{% else %}<span class="text-muted">-</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No workload data yet. Tag your notes with topics to see them grouped here.
+</div>
+{% endif %}
+</div>
+
+<div id="emptyState" class="alert alert-info d-none">
+    <i class="bi bi-info-circle"></i> No workloads found in the selected date range.
+</div>
+
+<style>
+    .workload-chevron {
+        transition: transform 0.2s;
+        display: inline-block;
+    }
+</style>
+
+<script>
+(function() {
+    // Chevron rotation - toggle on each click
+    document.querySelectorAll('.workload-group .card-header').forEach(function(header) {
+        header.addEventListener('click', function() {
+            var chevron = this.querySelector('.workload-chevron');
+            if (chevron) chevron.style.transform = chevron.style.transform === 'rotate(90deg)' ? '' : 'rotate(90deg)';
+        });
+    });
+    var dateFrom = document.getElementById('dateFrom');
+    var dateTo = document.getElementById('dateTo');
+    var presets = {
+        fq:      { from: '{{ fq_start }}', to: '{{ fq_end }}' },
+        prev_fq: { from: '{{ prev_fq_start }}', to: '{{ prev_fq_end }}' },
+    };
+
+    // Default to current FQ
+    dateFrom.value = presets.fq.from;
+    dateTo.value = presets.fq.to;
+
+    var STORAGE_KEY = 'salesbuddy_workload_filter';
+
+    function saveFilter(preset) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            from: dateFrom.value, to: dateTo.value, preset: preset || ''
+        }));
+    }
+
+    function applyFilter() {
+        var from = dateFrom.value;
+        var to = dateTo.value;
+        var visibleGroups = 0;
+        var totalCustomers = 0;
+        var totalAcr = 0;
+        var uniqueCustomerNames = new Set();
+
+        document.querySelectorAll('.workload-group').forEach(function(group) {
+            var rows = group.querySelectorAll('.workload-row');
+            var visibleRows = 0;
+            var groupAcr = 0;
+            rows.forEach(function(row) {
+                var noteDate = row.dataset.noteDate;
+                var show = true;
+                if (from && noteDate && noteDate < from) show = false;
+                if (to && noteDate && noteDate > to) show = false;
+                if (!noteDate && (from || to)) show = false;
+                row.style.display = show ? '' : 'none';
+                if (show) {
+                    visibleRows++;
+                    groupAcr += parseFloat(row.dataset.acr) || 0;
+                    var name = row.querySelector('a');
+                    if (name) uniqueCustomerNames.add(name.textContent.trim());
+                }
+            });
+
+            var countBadge = group.querySelector('.group-count');
+            if (countBadge) countBadge.textContent = visibleRows + ' customer' + (visibleRows !== 1 ? 's' : '');
+
+            var acrEl = group.querySelector('.group-acr');
+            if (acrEl) acrEl.textContent = groupAcr > 0 ? '$' + groupAcr.toLocaleString('en-US', {maximumFractionDigits: 0}) + '/mo' : '';
+
+            group.style.display = visibleRows > 0 ? '' : 'none';
+            if (visibleRows > 0) visibleGroups++;
+            totalCustomers += visibleRows;
+            totalAcr += groupAcr;
+        });
+
+        document.getElementById('statWorkloads').textContent = visibleGroups;
+        document.getElementById('statCustomers').textContent = totalCustomers;
+        document.getElementById('statAcr').textContent = '$' + totalAcr.toLocaleString('en-US', {maximumFractionDigits: 0});
+        document.getElementById('statUniqueCustomers').textContent = uniqueCustomerNames.size;
+        document.getElementById('emptyState').classList.toggle('d-none', visibleGroups > 0);
+    }
+
+    dateFrom.addEventListener('change', function() { saveFilter(''); applyFilter(); });
+    dateTo.addEventListener('change', function() { saveFilter(''); applyFilter(); });
+
+    document.querySelectorAll('.preset-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var p = this.dataset.preset;
+            document.querySelectorAll('.preset-btn').forEach(function(b) {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-outline-secondary');
+            });
+            this.classList.remove('btn-outline-secondary');
+            this.classList.add('btn-primary');
+
+            if (p === 'all') {
+                dateFrom.value = '';
+                dateTo.value = '';
+            } else if (p === '30d' || p === '90d') {
+                var days = parseInt(p);
+                var d = new Date();
+                d.setDate(d.getDate() - days);
+                dateFrom.value = d.toISOString().split('T')[0];
+                dateTo.value = new Date().toISOString().split('T')[0];
+            } else if (presets[p]) {
+                dateFrom.value = presets[p].from;
+                dateTo.value = presets[p].to;
+            }
+            saveFilter(p);
+            applyFilter();
+        });
+    });
+
+    // Restore saved filter or default to current FQ
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) {}
+    if (saved && (saved.from || saved.to)) {
+        dateFrom.value = saved.from || '';
+        dateTo.value = saved.to || '';
+        if (saved.preset) {
+            var btn = document.querySelector('[data-preset="' + saved.preset + '"]');
+            if (btn) { btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-primary'); }
+        }
+    } else {
+        dateFrom.value = presets.fq.from;
+        dateTo.value = presets.fq.to;
+        document.querySelector('[data-preset="fq"]').classList.remove('btn-outline-secondary');
+        document.querySelector('[data-preset="fq"]').classList.add('btn-primary');
+    }
+    applyFilter();
+})();
+</script>
+{% endblock %}

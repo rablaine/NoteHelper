@@ -250,6 +250,24 @@ const PageHelp = (function () {
     { pattern: /^\/revenue\/config/, title: 'Revenue Configuration', content: `
       <p>Configure revenue tracking settings — product groupings, alert thresholds, and seller mappings.</p>
     `},
+    { pattern: /^\/reports\/workload/, title: 'Workload Report', content: `
+      <p>Customers grouped by workload topic. Use this to find accounts working on a specific technology for workshop targeting or account team questions.</p>
+      <h6>How it works</h6>
+      <ul>
+        <li>Topics from your notes are used as workload tags</li>
+        <li>Click a topic row to expand and see the customers</li>
+        <li><strong>Committed</strong> badge means at least one milestone linked to a note with this topic is committed</li>
+        <li><strong>Last Activity</strong> shows the most recent note date for that topic + customer</li>
+      </ul>
+      <h6>Column definitions</h6>
+      <ul>
+        <li><strong>Engagements</strong> - active engagements for this customer (all, not topic-scoped)</li>
+        <li><strong>Milestones</strong> - active milestones linked to notes that are tagged with this topic. A milestone appears here because you wrote a note about it and tagged it with this workload.</li>
+        <li><strong>Est. ACR</strong> - sum of monthly usage from those topic-linked milestones only (not the customer's full ACR)</li>
+      </ul>
+      <h6>Date filter</h6>
+      <p>Use the From/To date pickers or preset buttons to scope which notes are considered. Only customers with notes in the selected date range will appear. Filter settings are saved between visits.</p>
+    `},
     { pattern: /^\/revenue\/reports/, title: 'Revenue Reports', content: `
       <p>Pre-built reports for revenue analysis — new users, growth trends, and product adoption.</p>
     `},
