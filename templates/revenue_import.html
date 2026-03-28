@@ -322,7 +322,12 @@ fileInput.addEventListener('change', async function() {
                 searchInput.oninput = function() {
                     var term = this.value.toLowerCase().trim();
                     itemLabels.forEach(function(row) {
-                        row.label.style.display = row.label.dataset.name.includes(term) ? '' : 'none';
+                        var match = !term || row.label.dataset.name.includes(term);
+                        if (match) {
+                            row.label.classList.remove('d-none');
+                        } else {
+                            row.label.classList.add('d-none');
+                        }
                     });
                 };
                 listEl.appendChild(searchInput);
