@@ -1184,6 +1184,22 @@
     <script src="{{ url_for('static', filename='js/page-help.js') }}" defer></script>
     <script>document.addEventListener('DOMContentLoaded', () => Share.init());</script>
 
+    <!-- Global: Esc closes any open Bootstrap popover -->
+    <script>
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.popover.show, .popover.bs-popover-auto, .popover.bs-popover-bottom, .popover.bs-popover-top').forEach(function(pop) {
+                var id = pop.id;
+                var trigger = id ? document.querySelector('[aria-describedby="' + id + '"]') : null;
+                if (trigger) {
+                    var instance = bootstrap.Popover.getInstance(trigger);
+                    if (instance) instance.hide();
+                }
+            });
+        }
+    });
+    </script>
+
     <!-- PWA: strip redundant app name from title, hide navbar brand, set telemetry cookie -->
     <script>
     if (window.matchMedia('(display-mode: standalone)').matches) {
