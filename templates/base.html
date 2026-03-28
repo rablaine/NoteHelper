@@ -1203,7 +1203,7 @@
                 e.preventDefault();
             }
         }
-    });
+    }, true);  // capture phase - fires before Bootstrap's modal handler
     document.addEventListener('click', function(e) {
         document.querySelectorAll('.popover').forEach(function(pop) {
             var id = pop.id;
