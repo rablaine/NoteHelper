@@ -1188,14 +1188,16 @@
     <script>
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            document.querySelectorAll('.popover.show, .popover.bs-popover-auto, .popover.bs-popover-bottom, .popover.bs-popover-top').forEach(function(pop) {
+            var closed = false;
+            document.querySelectorAll('.popover').forEach(function(pop) {
                 var id = pop.id;
                 var trigger = id ? document.querySelector('[aria-describedby="' + id + '"]') : null;
                 if (trigger) {
                     var instance = bootstrap.Popover.getInstance(trigger);
-                    if (instance) instance.hide();
+                    if (instance) { instance.hide(); closed = true; }
                 }
             });
+            if (closed) e.stopImmediatePropagation();
         }
     });
     </script>
