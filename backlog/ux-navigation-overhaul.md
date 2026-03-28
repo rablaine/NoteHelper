@@ -143,9 +143,9 @@ Prereq for removing Customers from navbar. Compact the sellers list so each sell
 - [x] Move Notes and Engagements to More dropdown (both modes)
 - [x] Fix seller_view Details card flex-shrink
 
-### Phase 2: Seller Page Customer Card Sort
-- [ ] Add sort options on seller view page: by name, by last note date
-- [ ] Persist sort preference (localStorage or user pref)
+### Phase 2: Seller Page Customer Card Sort ✅ (3/28/2026)
+- [x] Add sort options on seller view page: by name, by last note date
+- [x] Persist sort preference (localStorage)
 
 ### Phase 3: Projects Tab on Dashboard
 - [ ] Add a Projects tab alongside the existing Engagements tab on the home page
