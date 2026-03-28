@@ -46,6 +46,26 @@
                 </div>
             </div>
 
+            <!-- Instructions -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> How to Export from MSXi</h5>
+                </div>
+                <div class="card-body">
+                    <ol>
+                        <li>Go to <a href="https://msxinsights.microsoft.com/User/report/47b95fcd-1857-47f2-9c4b-8413a508ae00?reportTab=ReportSection146fc780baf4c55d7158" target="_blank">SME&C ACR Service Level Subscription Details SL4 - WW</a>
+                            <br>Or go to <a href="https://aka.ms/msxi" target="_blank">https://aka.ms/msxi</a> and search for the report name</li>
+                        <li>(If bookmarked/customized) Click <strong>"My Report Bookmarks"</strong> in the top right corner and <strong>"Clear current view"</strong></li>
+                        <li>Scroll down to the <strong>"ACR Details by Quarter / Month"</strong> section</li>
+                        <li>Under Choose Fields (left), check <strong>"ServiceLevel4."</strong> Leave <strong>ServiceCompGrouping</strong> checked.</li>
+                        <li>Right-click the <strong>"ACR Details by Quarter / Month"</strong> header text → <strong>Expand to next level</strong></li>
+                        <li>Repeat step 5</li>
+                        <li>Top right <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
+                        <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
+                    </ol>
+                </div>
+            </div>
+
             <!-- Bucket Picker (shown after import or when import history exists) -->
             <div class="card mb-4 {% if not import_history %}d-none{% endif %}" id="bucketPickerCard">
                 <div class="card-header">
@@ -58,26 +78,6 @@
                             <div class="spinner-border spinner-border-sm"></div> Loading buckets...
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Instructions -->
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> How to Export from MSXi</h5>
-                </div>
-                <div class="card-body">
-                    <ol>
-                        <li>Go to <a href="https://msxinsights.microsoft.com/User/report/47b95fcd-1857-47f2-9c4b-8413a508ae00?reportTab=ReportSection146fc780baf4c55d7158" target="_blank">SME&C ACR Service Level Subscription Details SL4 - WW</a>
-                            <br>Or go to <a href="https://aka.ms/msxi" target="_blank">https://aka.ms/msxi</a> and search for the report name</li>
-                        <li>(If bookmarked/customized) Click <strong>"My Report Bookmarks"</strong> in the top right corner and <strong>"Clear current view"</strong></li>
-                        <li>Scroll down to the <strong>"ACR Details by Quarter / Month"</strong> section</li>
-                        <li>Under Choose Fields (left), leave <strong>ServiceCompGrouping</strong> checked and also check <strong>"ServiceLevel4"</strong></li>
-                        <li>Right-click the <strong>"ACR Details by Quarter / Month"</strong> header text → <strong>Expand to next level</strong></li>
-                        <li>Repeat step 5</li>
-                        <li>Top right <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
-                        <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
-                    </ol>
                 </div>
             </div>
         </div>
@@ -288,7 +288,7 @@ fileInput.addEventListener('change', async function() {
     });
 })();
 
-// Inline bucket picker for the import page
+// Inline bucket picker for the import page (DOM creation, no innerHTML)
 (function() {
     var STORAGE_KEY = 'salesbuddy_revenue_bucket_filter';
     var pickerCard = document.getElementById('bucketPickerCard');
@@ -300,7 +300,7 @@ fileInput.addEventListener('change', async function() {
             .then(function(r) { return r.json(); })
             .then(function(buckets) {
                 if (!buckets || buckets.length === 0) {
-                    listEl.innerHTML = '<p class="text-muted small mb-0">No buckets found. Import revenue data first.</p>';
+                    listEl.textContent = 'No buckets found. Import revenue data first.';
                     return;
                 }
                 // Load saved selection
@@ -309,76 +309,92 @@ fileInput.addEventListener('change', async function() {
                     var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
                     if (saved && Array.isArray(saved)) selected = new Set(saved);
                 } catch(e) {}
-                // If no saved selection, default to all selected
                 if (selected.size === 0) selected = new Set(buckets);
 
-                var html = '<div class="mb-2">';
-                html += '<input type="text" class="form-control form-control-sm mb-2" id="importBucketSearch" placeholder="Search" autocomplete="off">';
-                html += '<label class="form-check d-flex align-items-center gap-2 mb-1 border-bottom pb-1" style="cursor:pointer;">';
-                var allChecked = buckets.every(function(b) { return selected.has(b); });
-                html += '<input class="form-check-input mt-0" type="checkbox" id="importBucketSelectAll"' + (allChecked ? ' checked' : '') + '>';
-                html += '<span class="small fw-semibold">Select all</span>';
-                html += '</label>';
-                html += '</div>';
-                html += '<div style="max-height:300px;overflow-y:auto;" id="importBucketItems">';
+                listEl.innerHTML = '';
+
+                // Search box
+                var searchInput = document.createElement('input');
+                searchInput.type = 'text';
+                searchInput.className = 'form-control form-control-sm mb-2';
+                searchInput.placeholder = 'Search';
+                searchInput.autocomplete = 'off';
+                searchInput.oninput = function() {
+                    var term = this.value.toLowerCase().trim();
+                    itemLabels.forEach(function(row) {
+                        row.label.style.display = row.label.dataset.name.includes(term) ? '' : 'none';
+                    });
+                };
+                listEl.appendChild(searchInput);
+
+                // Select all row
+                var selAllLabel = document.createElement('label');
+                selAllLabel.className = 'form-check d-flex align-items-center gap-2 mb-1 border-bottom pb-1';
+                selAllLabel.style.cursor = 'pointer';
+                var selAllCb = document.createElement('input');
+                selAllCb.type = 'checkbox';
+                selAllCb.className = 'form-check-input mt-0';
+                selAllCb.checked = buckets.every(function(b) { return selected.has(b); });
+                var selAllText = document.createElement('span');
+                selAllText.className = 'small fw-semibold';
+                selAllText.textContent = 'Select all';
+                selAllLabel.appendChild(selAllCb);
+                selAllLabel.appendChild(selAllText);
+                listEl.appendChild(selAllLabel);
+
+                // Scrollable item list
+                var itemsDiv = document.createElement('div');
+                itemsDiv.style.maxHeight = '300px';
+                itemsDiv.style.overflowY = 'auto';
+
+                var itemLabels = [];
                 buckets.forEach(function(b) {
-                    var checked = selected.has(b) ? ' checked' : '';
-                    html += '<label class="import-bucket-item form-check d-flex align-items-center gap-2 mb-0 py-1" data-name="' + b.toLowerCase() + '" style="cursor:pointer;">';
-                    html += '<input class="form-check-input mt-0 import-bucket-cb" type="checkbox" value="' + b + '"' + checked + '>';
-                    html += '<span class="small">' + b + '</span>';
-                    html += '</label>';
-                });
-                html += '</div>';
-                listEl.innerHTML = html;
+                    var label = document.createElement('label');
+                    label.className = 'form-check d-flex align-items-center gap-2 mb-0 py-1';
+                    label.style.cursor = 'pointer';
+                    label.dataset.name = b.toLowerCase();
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'form-check-input mt-0';
+                    cb.value = b;
+                    cb.checked = selected.has(b);
+                    var span = document.createElement('span');
+                    span.className = 'small';
+                    span.textContent = b;
+                    label.appendChild(cb);
+                    label.appendChild(span);
+                    itemsDiv.appendChild(label);
+                    itemLabels.push({ label: label, cb: cb });
 
-                // Wire events after DOM update
-                setTimeout(function() {
-                    // Search
-                    var searchEl = document.getElementById('importBucketSearch');
-                    if (searchEl) {
-                        searchEl.addEventListener('input', function() {
-                            var term = this.value.toLowerCase().trim();
-                            document.querySelectorAll('.import-bucket-item').forEach(function(item) {
-                                item.style.display = (item.dataset.name || '').includes(term) ? '' : 'none';
-                            });
-                        });
-                    }
-
-                    // Select all
-                    var selAllEl = document.getElementById('importBucketSelectAll');
-                    if (selAllEl) {
-                        selAllEl.addEventListener('change', function() {
-                            var checked = this.checked;
-                            document.querySelectorAll('.import-bucket-cb').forEach(function(cb) { cb.checked = checked; });
-                            saveImportBuckets(buckets);
-                        });
-                    }
-
-                    // Individual changes
-                    document.querySelectorAll('.import-bucket-cb').forEach(function(cb) {
-                        cb.addEventListener('change', function() {
-                            saveImportBuckets(buckets);
-                            var allCb = document.getElementById('importBucketSelectAll');
-                            if (allCb) allCb.checked = buckets.every(function(b) {
-                                var el = listEl.querySelector('input[value="' + b + '"]');
-                                return el && el.checked;
-                            });
+                    cb.addEventListener('change', function() {
+                        saveSelection();
+                        selAllCb.checked = buckets.every(function(b2) {
+                            var row = itemLabels.find(function(r) { return r.cb.value === b2; });
+                            return row && row.cb.checked;
                         });
                     });
-                }, 0);
+                });
+                listEl.appendChild(itemsDiv);
+
+                // Select all toggle
+                selAllCb.addEventListener('change', function() {
+                    var checked = this.checked;
+                    itemLabels.forEach(function(row) { row.cb.checked = checked; });
+                    saveSelection();
+                });
+
+                function saveSelection() {
+                    var sel = [];
+                    itemLabels.forEach(function(row) {
+                        if (row.cb.checked) sel.push(row.cb.value);
+                    });
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(sel));
+                }
             })
             .catch(function(err) {
                 console.error('Failed to load buckets:', err);
-                listEl.innerHTML = '<p class="text-danger small mb-0">Failed to load buckets.</p>';
+                listEl.textContent = 'Failed to load buckets.';
             });
-    }
-
-    function saveImportBuckets(allBuckets) {
-        var sel = [];
-        document.querySelectorAll('.import-bucket-cb').forEach(function(cb) {
-            if (cb.checked) sel.push(cb.value);
-        });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(sel));
     }
 
     // Load immediately if card is visible (import history exists)
@@ -386,7 +402,7 @@ fileInput.addEventListener('change', async function() {
         loadBucketPicker();
     }
 
-    // Also expose so the import success handler can show + load it
+    // Expose so the import success handler can show + load it
     window.showBucketPicker = function() {
         if (pickerCard) pickerCard.classList.remove('d-none');
         loadBucketPicker();
