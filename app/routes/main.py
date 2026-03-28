@@ -358,7 +358,8 @@ def index():
     engagement_count = engagement_q.count()
 
     project_count = Project.query.filter(
-        Project.status.in_(['Active', 'On Hold'])
+        Project.status.in_(['Active', 'On Hold']),
+        Project.project_type != 'copilot_saved',
     ).count()
 
     return render_template(
@@ -544,7 +545,8 @@ def api_active_engagements():
 def api_active_projects():
     """Return active/on-hold projects for the homepage tab."""
     projects = Project.query.filter(
-        Project.status.in_(['Active', 'On Hold'])
+        Project.status.in_(['Active', 'On Hold']),
+        Project.project_type != 'copilot_saved',
     ).order_by(Project.updated_at.desc()).all()
 
     results = []

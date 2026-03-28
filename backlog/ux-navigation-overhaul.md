@@ -154,8 +154,8 @@ Prereq for removing Customers from navbar. Compact the sellers list so each sell
 - [x] Tab persistence in localStorage
 
 ### Phase 4: Move Milestone Tracker + Revenue Analyzer to Reports ✅ (3/28/2026)
-- [x] Add Milestone Tracker link to Reports hub page (Meeting Prep group)
-- [x] Add Revenue Analyzer link to Reports hub page (Revenue Analysis group)
+- [x] Add Milestone Tracker to Reports hub (Data Hygiene group, first item)
+- [x] Add Revenue Analyzer to Reports hub (Revenue Analysis group, first item)
 - [x] Existing URLs unchanged (no broken bookmarks)
 
 ### Phase 5: Navbar Restructure
@@ -175,11 +175,13 @@ The main event. Rearrange the navbar to match intent-based navigation.
 - [ ] Links: [Import Now] → import page | [Dismiss] → hide until next month
 - [ ] Dismiss state persists (localStorage or DB)
 
-### Phase 7: Cleanup
-- [ ] Demote Engagements Hub to Browse dropdown (once Projects tab exists on dashboard)
-- [ ] Decide: does Reports hub page still exist, or is the dropdown sufficient?
-- [ ] Decide: where Fill My Day lives
-- [ ] Final pass on mobile nav behavior
+### Phase 7: Revenue Refactor
+Revenue is now a report, not a core feature. Refactor URLs and UX to match.
+- [ ] Products should be a core API, not a child of /revenue (populated via revenue import but standalone)
+- [ ] Customer revenue page URL: `/customer/<id>/revenue` instead of `/revenue/customer/<id>`
+- [ ] Remove "open in new tab" behavior when clicking a customer in Revenue Analyzer
+- [ ] Rename "View in Sales Buddy" button on customer revenue page to "View Customer Hub" (or similar) - indicates going to the main customer page, not a different app
+- [ ] General URL cleanup: revenue routes should feel like sub-views of existing entities, not a separate app
 
 ## Implementation Notes
 

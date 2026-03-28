@@ -32,32 +32,12 @@ def reports_hub():
                     'icon': 'bi-chat-left-text',
                     'url': url_for('reports.report_one_on_one'),
                 },
-                {
-                    'id': 'milestone-tracker',
-                    'name': 'Milestone Tracker',
-                    'description': (
-                        'All milestones across sellers and customers. Filter by '
-                        'time period, solution area, and alignment status.'
-                    ),
-                    'icon': 'bi-flag-fill',
-                    'url': url_for('milestones.milestone_tracker'),
-                },
             ],
         },
         {
             'title': 'Revenue Analysis',
             'icon': 'bi-currency-dollar',
             'reports': [
-                {
-                    'id': 'new-synapse-users',
-                    'name': 'New Azure Synapse Analytics Users',
-                    'description': (
-                        'Customers who have started using Azure Synapse Analytics '
-                        'in the last 6 months, grouped by seller.'
-                    ),
-                    'icon': 'bi-database-gear',
-                    'url': url_for('revenue.report_new_synapse_users'),
-                },
                 {
                     'id': 'revenue-analyzer',
                     'name': 'Revenue Analyzer',
@@ -67,6 +47,16 @@ def reports_hub():
                     ),
                     'icon': 'bi-graph-up',
                     'url': url_for('revenue.revenue_dashboard'),
+                },
+                {
+                    'id': 'new-synapse-users',
+                    'name': 'New Azure Synapse Analytics Users',
+                    'description': (
+                        'Customers who have started using Azure Synapse Analytics '
+                        'in the last 6 months, grouped by seller.'
+                    ),
+                    'icon': 'bi-database-gear',
+                    'url': url_for('revenue.report_new_synapse_users'),
                 },
             ],
         },
@@ -90,6 +80,16 @@ def reports_hub():
             'title': 'Data Hygiene',
             'icon': 'bi-clipboard-check',
             'reports': [
+                {
+                    'id': 'milestone-tracker',
+                    'name': 'Milestone Tracker',
+                    'description': (
+                        'Surface milestones across all accounts. Find milestones '
+                        'you are not aligned to yet and get on the team.'
+                    ),
+                    'icon': 'bi-flag-fill',
+                    'url': url_for('milestones.milestone_tracker'),
+                },
                 {
                     'id': 'hygiene-report',
                     'name': 'Engagement / Milestone Hygiene',

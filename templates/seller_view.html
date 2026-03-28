@@ -97,34 +97,28 @@
                 {% if customers %}
                 <div>
                     <table class="table table-hover table-sm mb-0" style="--bs-table-bg: transparent;">
-                        <thead class="sticky-top" style="background: var(--bs-card-bg, var(--bs-body-bg));">
+                        <thead>
                             <tr>
-                                <th style="font-size: 0.8rem;">Customer</th>
-                                <th style="font-size: 0.8rem;">Last Note</th>
-                                <th style="font-size: 0.8rem; width: 40px;"></th>
+                                <th style="font-size: 0.8rem; border-top: none;">Customer</th>
+                                <th style="font-size: 0.8rem; border-top: none; white-space: nowrap;">Last Note</th>
                             </tr>
                         </thead>
                         <tbody id="customerTableBody">
                             {% for customer_data in customers %}
-                            <tr data-customer-name="{{ customer_data.customer.name|lower }}" data-note-date="{{ customer_data.last_note.call_date.strftime('%Y-%m-%d') if customer_data.last_note else '0000-00-00' }}">
-                                <td style="font-size: 0.85rem;">
-                                    <a href="{{ url_for('customers.customer_view', id=customer_data.customer.id) }}" class="text-decoration-none">
-                                        {{ customer_favicon(customer_data.customer) }} {{ customer_data.customer.name }}
+                            <tr data-customer-name="{{ customer_data.customer.get_display_name()|lower }}" data-note-date="{{ customer_data.last_note.call_date.strftime('%Y-%m-%d') if customer_data.last_note else '0000-00-00' }}">
+                                <td style="font-size: 0.85rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <a href="{{ url_for('customers.customer_view', id=customer_data.customer.id) }}" class="text-decoration-none" title="{{ customer_data.customer.get_display_name() }}">
+                                        {{ customer_favicon(customer_data.customer) }} {{ customer_data.customer.get_display_name() }}
                                     </a>
                                 </td>
-                                <td style="font-size: 0.8rem;">
+                                <td style="font-size: 0.8rem; white-space: nowrap;">
                                     {% if customer_data.last_note %}
                                         <a href="{{ url_for('notes.note_view', id=customer_data.last_note.id) }}" class="text-decoration-none text-muted">
-                                            {{ customer_data.last_note.call_date.strftime('%b %d, %Y') }}
+                                            {{ customer_data.last_note.call_date.strftime('%b %d') }}
                                         </a>
                                     {% else %}
-                                        <span class="text-muted">No notes yet</span>
+                                        <span class="text-muted">No notes</span>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <a href="{{ url_for('notes.note_create', customer_id=customer_data.customer.id) }}" class="btn btn-sm btn-success py-0 px-1" title="New Note">
-                                        <i class="bi bi-plus"></i>
-                                    </a>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -143,7 +137,7 @@
         {% if milestones %}
         <div class="card mb-3 border-info flex-grow-1 d-flex flex-column" style="min-height: 0;">
             <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-flag"></i> Milestones <span class="badge bg-dark">{{ milestones|length }}</span></h5>
+                <h5 class="mb-0"><i class="bi bi-flag"></i> Milestones</h5>
                 <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#milestonesModal">
                     <i class="bi bi-arrows-fullscreen"></i> Full View
                 </button>
@@ -198,7 +192,7 @@
         {% if revenue_alerts %}
         <div class="card mb-3 border-warning flex-grow-1 d-flex flex-column" style="min-height: 0;">
             <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Revenue <span class="badge bg-dark">{{ revenue_alerts|length }}</span></h5>
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Revenue</h5>
                 <div class="d-flex align-items-center gap-2">
                     <span id="sellerBucketFilterContainer"></span>
                     <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#revenueModal">
