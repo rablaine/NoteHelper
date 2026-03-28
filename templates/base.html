@@ -828,12 +828,11 @@
                                                 <br><span class="text-muted">Or go to <a href="https://aka.ms/msxi" target="_blank">aka.ms/msxi</a> and search for the report name</span></li>
                                             <li>(If bookmarked/customized) Click <strong>"My Report Bookmarks"</strong> in the top right corner and <strong>"Clear current view"</strong></li>
                                             <li>Scroll to <strong>"ACR Details by Quarter / Month"</strong></li>
-                                            <li>Under Choose Fields (left), check <strong>"ServiceLevel4"</strong></li>
-                                            <li>In Filters (right), find <strong>ServiceCompGrouping</strong> and select your buckets</li>
+                                            <li>Under Choose Fields (left), check <strong>"ServiceLevel4."</strong> Leave <strong>ServiceCompGrouping</strong> checked.</li>
                                             <li>Right-click the <strong>"ACR Details by Quarter / Month"</strong> header text → <strong>Expand to next level</strong></li>
-                                            <li>Repeat step 6</li>
+                                            <li>Repeat step 5</li>
                                             <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
-                                            <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
+                                            <li>Open in Excel → <strong>Enable Editing</strong> → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
                                         </ol>
                                         <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush, these instructions are also shown in Steps 4 and 5.</p>
                                     </div>
@@ -906,12 +905,11 @@
                                                 <br><span class="text-muted">Or go to <a href="https://aka.ms/msxi" target="_blank">aka.ms/msxi</a> and search for the report name</span></li>
                                             <li>(If bookmarked/customized) Click <strong>"My Report Bookmarks"</strong> in the top right corner and <strong>"Clear current view"</strong></li>
                                             <li>Scroll to <strong>"ACR Details by Quarter / Month"</strong></li>
-                                            <li>Under Choose Fields (left), check <strong>"ServiceLevel4"</strong></li>
-                                            <li>In Filters (right), find <strong>ServiceCompGrouping</strong> and select your buckets</li>
+                                            <li>Under Choose Fields (left), check <strong>"ServiceLevel4."</strong> Leave <strong>ServiceCompGrouping</strong> checked.</li>
                                             <li>Right-click the <strong>"ACR Details by Quarter / Month"</strong> header text → <strong>Expand to next level</strong></li>
-                                            <li>Repeat step 6</li>
+                                            <li>Repeat step 5</li>
                                             <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
-                                            <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
+                                            <li>Open in Excel → <strong>Enable Editing</strong> → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
                                         </ol>
                                         <p class="mb-0 small text-muted"><i class="bi bi-info-circle"></i> No rush, these instructions are also shown in Step 5.</p>
                                     </div>
@@ -923,7 +921,7 @@
                     <!-- STEP 5: Revenue & Finish -->
                     <div class="onboarding-step d-none" id="onboardingStep5">
                         <h6 class="mb-3"><i class="bi bi-graph-up text-primary"></i> One More Thing: Revenue Data <span class="text-muted fw-normal">(~10 sec)</span></h6>
-                        <p>Importing revenue data powers the Revenue Analyzer — trend charts, service breakdowns, and growth tracking for your accounts.</p>
+                        <p>Importing revenue data powers the Revenue Analyzer - trend charts, service breakdowns, and growth tracking for your accounts.{% if user_role != 'dss' %} You will select your buckets after import.{% endif %}</p>
                         
                         <div class="card mb-3 border-primary">
                             <div class="card-body" id="importRevenueCard">
@@ -934,12 +932,11 @@
                                             <br><span class="text-muted small">Or go to <a href="https://aka.ms/msxi" target="_blank">aka.ms/msxi</a> and search for the report name</span></li>
                                         <li>(If bookmarked/customized) Click <strong>"My Report Bookmarks"</strong> in the top right corner and <strong>"Clear current view"</strong></li>
                                         <li>Scroll to <strong>"ACR Details by Quarter / Month"</strong></li>
-                                        <li>Under Choose Fields (left), check <strong>"ServiceLevel4"</strong></li>
-                                        <li>In Filters (right), find <strong>ServiceCompGrouping</strong> and select your buckets</li>
+                                        <li>Under Choose Fields (left), check <strong>"ServiceLevel4."</strong> Leave <strong>ServiceCompGrouping</strong> checked.</li>
                                         <li>Right-click the <strong>"ACR Details by Quarter / Month"</strong> header text → <strong>Expand to next level</strong></li>
-                                        <li>Repeat step 6</li>
+                                        <li>Repeat step 5</li>
                                         <li>Click <strong>'...'</strong> → <strong>Export Data</strong> → <strong>Data with current layout</strong></li>
-                                        <li>Open in Excel → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
+                                        <li>Open in Excel → <strong>Enable Editing</strong> → <strong>Save As</strong> → <strong>CSV (Comma delimited)</strong></li>
                                     </ol>
                                 </div>
 
@@ -967,14 +964,21 @@
 
                                 </div>
 
-                                <!-- Success state -->
-                                <div id="importRevenueSuccess" class="d-none text-center">
-                                    <i class="bi bi-check-circle-fill text-success fs-3"></i>
-                                    <p class="mt-2 mb-1 fw-bold text-success">Revenue imported!</p>
-                                    <div id="importRevenueSummary" class="small text-muted"></div>
-                                    <div class="alert alert-info mt-3 mb-0 py-2 small text-start">
-                                        <i class="bi bi-lightbulb text-warning"></i>
-                                        <strong>Tip:</strong> AI-powered suggestions and auto-summaries are ready to use! Check the Admin Panel to manage AI settings.
+                                <!-- Success state + Bucket picker side by side -->
+                                <div id="importRevenueSuccess" class="d-none">
+                                    <div class="row">
+                                        <div class="{{ 'col-6' if user_role != 'dss' else 'col-12' }} text-center">
+                                            <i class="bi bi-check-circle-fill text-success fs-3"></i>
+                                            <p class="mt-2 mb-1 fw-bold text-success">Revenue imported!</p>
+                                            <div id="importRevenueSummary" class="small text-muted"></div>
+                                        </div>
+                                        {% if user_role != 'dss' %}
+                                        <div class="col-6 text-start" id="wizardBucketPicker" style="display:none;">
+                                            <h6 class="mb-2"><i class="bi bi-funnel"></i> Select Your Buckets</h6>
+                                            <p class="text-muted small mb-2">Check the buckets you're compensated on.</p>
+                                            <div id="wizardBucketList"></div>
+                                        </div>
+                                        {% endif %}
                                     </div>
                                 </div>
 
@@ -1181,6 +1185,38 @@
     <!-- Contextual page help (F1) -->
     <script src="{{ url_for('static', filename='js/page-help.js') }}" defer></script>
     <script>document.addEventListener('DOMContentLoaded', () => Share.init());</script>
+
+    <!-- Global: Esc closes any open Bootstrap popover, click-outside closes popovers -->
+    <script>
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var closed = false;
+            document.querySelectorAll('.popover').forEach(function(pop) {
+                var id = pop.id;
+                var trigger = id ? document.querySelector('[aria-describedby="' + id + '"]') : null;
+                if (trigger) {
+                    var instance = bootstrap.Popover.getInstance(trigger);
+                    if (instance) { instance.hide(); closed = true; }
+                }
+            });
+            if (closed) {
+                e.stopImmediatePropagation();
+                e.stopPropagation();
+                e.preventDefault();
+            }
+        }
+    }, true);  // capture phase - fires before Bootstrap's modal handler
+    document.addEventListener('click', function(e) {
+        document.querySelectorAll('.popover').forEach(function(pop) {
+            var id = pop.id;
+            var trigger = id ? document.querySelector('[aria-describedby="' + id + '"]') : null;
+            if (trigger && !trigger.contains(e.target) && !pop.contains(e.target)) {
+                var instance = bootstrap.Popover.getInstance(trigger);
+                if (instance) instance.hide();
+            }
+        });
+    });
+    </script>
 
     <!-- PWA: strip redundant app name from title, hide navbar brand, set telemetry cookie -->
     <script>
@@ -1402,6 +1438,7 @@
 
                 function showRevenueAlreadyDone() {
                     showRevenueState('Success');
+                    loadWizardBucketPicker();
                     const summaryDiv = document.getElementById('importRevenueSummary');
                     if (summaryDiv && !summaryDiv.innerHTML.trim()) {
                         summaryDiv.innerHTML = '<span class="text-muted">Previously imported — no action needed.</span>';
@@ -2041,6 +2078,116 @@
                     }
                 }
 
+                function loadWizardBucketPicker() {
+                    var pickerDiv = document.getElementById('wizardBucketPicker');
+                    var listEl = document.getElementById('wizardBucketList');
+                    if (!pickerDiv || !listEl) return;
+
+                    var STORAGE_KEY = 'salesbuddy_revenue_bucket_filter';
+                    fetch('/api/revenue/buckets')
+                        .then(function(r) { return r.json(); })
+                        .then(function(buckets) {
+                            if (!buckets || buckets.length === 0) return;
+                            pickerDiv.style.display = '';
+                            listEl.innerHTML = '';
+
+                            var selected = new Set();
+                            try {
+                                var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                                if (saved && Array.isArray(saved)) selected = new Set(saved);
+                            } catch(e) {}
+                            if (selected.size === 0) selected = new Set(buckets);
+
+                            var searchInput = document.createElement('input');
+                            searchInput.type = 'text';
+                            searchInput.className = 'form-control form-control-sm mb-2';
+                            searchInput.placeholder = 'Search';
+                            searchInput.autocomplete = 'off';
+                            listEl.appendChild(searchInput);
+
+                            var selAllLabel = document.createElement('label');
+                            selAllLabel.className = 'd-flex align-items-center gap-2 mb-1 border-bottom pb-1';
+                            selAllLabel.style.cursor = 'pointer';
+                            var selAllCb = document.createElement('input');
+                            selAllCb.type = 'checkbox';
+                            selAllCb.checked = buckets.every(function(b) { return selected.has(b); });
+                            selAllCb.style.cssText = 'width:16px;height:16px;flex-shrink:0;';
+                            var selAllText = document.createElement('span');
+                            selAllText.className = 'small fw-semibold';
+                            selAllText.textContent = 'Select all';
+                            selAllLabel.appendChild(selAllCb);
+                            selAllLabel.appendChild(selAllText);
+                            listEl.appendChild(selAllLabel);
+
+                            var itemsDiv = document.createElement('div');
+                            itemsDiv.style.height = '200px';
+                            itemsDiv.style.overflowY = 'auto';
+
+                            var itemLabels = [];
+                            buckets.forEach(function(b) {
+                                var label = document.createElement('label');
+                                label.className = 'd-flex align-items-center gap-2 mb-0 py-1';
+                                label.style.cursor = 'pointer';
+                                label.dataset.name = b.toLowerCase();
+                                var cb = document.createElement('input');
+                                cb.type = 'checkbox';
+                                cb.value = b;
+                                cb.checked = selected.has(b);
+                                cb.style.cssText = 'width:16px;height:16px;flex-shrink:0;';
+                                var span = document.createElement('span');
+                                span.className = 'small';
+                                span.textContent = b;
+                                label.appendChild(cb);
+                                label.appendChild(span);
+                                itemsDiv.appendChild(label);
+                                itemLabels.push({ label: label, cb: cb });
+
+                                cb.addEventListener('change', function() {
+                                    saveWizardBuckets();
+                                    selAllCb.checked = buckets.every(function(b2) {
+                                        var row = itemLabels.find(function(r) { return r.cb.value === b2; });
+                                        return row && row.cb.checked;
+                                    });
+                                });
+                            });
+                            listEl.appendChild(itemsDiv);
+
+                            searchInput.oninput = function() {
+                                var term = this.value.toLowerCase().trim();
+                                itemLabels.forEach(function(row) {
+                                    if (!term || row.label.dataset.name.includes(term)) {
+                                        row.label.classList.remove('d-none');
+                                    } else {
+                                        row.label.classList.add('d-none');
+                                    }
+                                });
+                            };
+
+                            selAllCb.addEventListener('change', function() {
+                                var checked = this.checked;
+                                itemLabels.forEach(function(row) { row.cb.checked = checked; });
+                                saveWizardBuckets();
+                            });
+
+                            function saveWizardBuckets() {
+                                var sel = [];
+                                itemLabels.forEach(function(row) {
+                                    if (row.cb.checked) sel.push(row.cb.value);
+                                });
+                                localStorage.setItem(STORAGE_KEY, JSON.stringify(sel));
+                                // Persist to DB as compensated buckets fallback
+                                fetch('/api/revenue/compensated-buckets', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(sel),
+                                }).catch(function() {});
+                            }
+                        })
+                        .catch(function(err) {
+                            console.error('Failed to load wizard buckets:', err);
+                        });
+                }
+
                 async function importRevenue(file) {
                     showRevenueState('Progress');
                     const statusText = document.getElementById('importRevenueStatusText');
@@ -2105,6 +2252,7 @@
                                 '</ul>';
                         }
                         showRevenueState('Success');
+                        loadWizardBucketPicker();
                         setWizardProgress(90);
                         updateNextButton();
                     } catch (err) {

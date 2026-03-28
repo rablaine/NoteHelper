@@ -248,6 +248,10 @@ def run_migrations(db):
     _add_column_if_not_exists(db, inspector, 'action_items',
                               'project_id', "INTEGER REFERENCES projects(id)")
 
+    # Migration: Add compensated_buckets to user_preferences (revenue bucket fallback)
+    _add_column_if_not_exists(db, inspector, 'user_preferences',
+                              'compensated_buckets', "TEXT")
+
     # =========================================================================
     # End migrations
     # =========================================================================
