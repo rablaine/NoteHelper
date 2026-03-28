@@ -147,14 +147,16 @@ Prereq for removing Customers from navbar. Compact the sellers list so each sell
 - [x] Add sort options on seller view page: by name, by last note date
 - [x] Persist sort preference (localStorage)
 
-### Phase 3: Projects Tab on Dashboard
-- [ ] Add a Projects tab alongside the existing Engagements tab on the home page
-- [ ] Show active projects with status, customer, open tasks
+### Phase 3: Projects Tab on Dashboard ✅ (3/28/2026)
+- [x] Add a Projects tab alongside the existing Engagements tab on the home page
+- [x] Show active projects with status, type, open tasks, due date
+- [x] Lazy-load via /api/projects/active API
+- [x] Tab persistence in localStorage
 
-### Phase 4: Move Milestone Tracker + Revenue Analyzer to Reports
-- [ ] Add Milestone Tracker link to Reports hub page
-- [ ] Add Revenue Analyzer link to Reports hub page
-- [ ] Ensure both still work at their existing URLs (no breaking bookmarks)
+### Phase 4: Move Milestone Tracker + Revenue Analyzer to Reports ✅ (3/28/2026)
+- [x] Add Milestone Tracker link to Reports hub page (Meeting Prep group)
+- [x] Add Revenue Analyzer link to Reports hub page (Revenue Analysis group)
+- [x] Existing URLs unchanged (no broken bookmarks)
 
 ### Phase 5: Navbar Restructure
 The main event. Rearrange the navbar to match intent-based navigation.

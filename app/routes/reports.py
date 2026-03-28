@@ -32,6 +32,16 @@ def reports_hub():
                     'icon': 'bi-chat-left-text',
                     'url': url_for('reports.report_one_on_one'),
                 },
+                {
+                    'id': 'milestone-tracker',
+                    'name': 'Milestone Tracker',
+                    'description': (
+                        'All milestones across sellers and customers. Filter by '
+                        'time period, solution area, and alignment status.'
+                    ),
+                    'icon': 'bi-flag-fill',
+                    'url': url_for('milestones.milestone_tracker'),
+                },
             ],
         },
         {
@@ -47,6 +57,16 @@ def reports_hub():
                     ),
                     'icon': 'bi-database-gear',
                     'url': url_for('revenue.report_new_synapse_users'),
+                },
+                {
+                    'id': 'revenue-analyzer',
+                    'name': 'Revenue Analyzer',
+                    'description': (
+                        'Revenue trends, alerts, and drilldowns across all customers. '
+                        'Track declining accounts and expansion opportunities.'
+                    ),
+                    'icon': 'bi-graph-up',
+                    'url': url_for('revenue.revenue_dashboard'),
                 },
             ],
         },

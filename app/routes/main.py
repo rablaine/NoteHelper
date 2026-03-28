@@ -357,6 +357,10 @@ def index():
         )
     engagement_count = engagement_q.count()
 
+    project_count = Project.query.filter(
+        Project.status.in_(['Active', 'On Hold'])
+    ).count()
+
     return render_template(
         'index.html',
         open_tasks=open_tasks,
@@ -367,6 +371,8 @@ def index():
         has_milestones=has_milestones,
         has_engagements=engagement_count > 0,
         engagement_count=engagement_count,
+        has_projects=project_count > 0,
+        project_count=project_count,
         pref=pref,
     )
 
@@ -532,6 +538,29 @@ def api_active_engagements():
         })
 
     return jsonify({'success': True, 'engagements': results, 'count': len(results)})
+
+
+@main_bp.route('/api/projects/active')
+def api_active_projects():
+    """Return active/on-hold projects for the homepage tab."""
+    projects = Project.query.filter(
+        Project.status.in_(['Active', 'On Hold'])
+    ).order_by(Project.updated_at.desc()).all()
+
+    results = []
+    for p in projects:
+        results.append({
+            'id': p.id,
+            'title': p.title,
+            'description': (p.description[:100] + '...') if p.description and len(p.description) > 100 else p.description,
+            'status': p.status,
+            'project_type': p.project_type.replace('_', ' ').title(),
+            'open_task_count': p.open_task_count,
+            'due_date': p.due_date.strftime('%b %d') if p.due_date else None,
+            'is_overdue': p.is_overdue,
+        })
+
+    return jsonify({'success': True, 'projects': results, 'count': len(results)})
 
 
 @main_bp.route('/search')
