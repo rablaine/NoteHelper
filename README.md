@@ -48,7 +48,45 @@ Azure solution engineers and technical sellers who want to:
 - **Global Search** - full-text across notes, customers, sellers, topics, and territories
 - **Analytics Dashboard** - activity heatmap, engagement trends, top topics and customers
 
+## Install
+
+The easiest way to get started is the MSI installer. It handles all prerequisites and sets up everything automatically.
+
+### Download
+
+Download the latest `SalesBuddy.msi` from the [Releases](https://github.com/rablaine/SalesBuddy/releases) page and run it. The installer will:
+
+1. Install prerequisites (Git, Python 3.13+, Azure CLI, Node.js) via winget
+2. Clone the repo to `%LOCALAPPDATA%\SalesBuddy`
+3. Create the virtual environment and install dependencies
+4. Generate a `.env` file with a random secret key
+5. Run database migrations and register scheduled tasks
+6. Start the server
+
+On the final page you can choose to launch Sales Buddy, create Start Menu shortcuts, and create a desktop shortcut (all checked by default).
+
+### Build from Source
+
+If you prefer to build the MSI yourself:
+
+```powershell
+# Prerequisites: .NET SDK 8.0+ and WiX v4
+dotnet tool install -g wix
+
+cd installer
+.\build.ps1
+# Output: installer\output\SalesBuddy.msi
+```
+
+See [installer/README.md](installer/README.md) for details.
+
+### Uninstall
+
+Use **Add/Remove Programs** in Windows Settings, or run `scripts\uninstall.ps1` directly. The uninstaller stops the server, removes scheduled tasks and shortcuts, and optionally deletes app files (your database is preserved to `%TEMP%`).
+
 ## Getting Started
+
+> **Note:** If you installed via the MSI, skip to [Initial Setup (First Run)](#initial-setup-first-run) - everything below is already done.
 
 ### Prerequisites
 
