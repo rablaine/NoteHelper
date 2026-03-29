@@ -1,10 +1,15 @@
 # Sales Buddy - Uninstall Script
-# Removes all Sales Buddy scheduled tasks and stops the running server.
-# Does NOT delete the app files, database, or OneDrive backups.
+# Removes all Sales Buddy scheduled tasks, shortcuts, and stops the running server.
+# Optionally removes app files (prompts user unless -Silent).
 #
 # Usage:
-#   uninstall.bat                Double-click to run
-#   .\scripts\uninstall.ps1     Run directly from PowerShell
+#   uninstall.bat                       Double-click to run (interactive)
+#   .\scripts\uninstall.ps1             Run directly from PowerShell (interactive)
+#   .\scripts\uninstall.ps1 -Silent     MSI uninstall mode (no prompts, removes everything)
+
+param(
+    [switch]$Silent    # Skip prompts, remove everything (used by MSI uninstaller)
+)
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $RepoRoot
@@ -64,6 +69,67 @@ foreach ($taskName in $taskNames) {
     }
 }
 
+# -- Remove shortcuts ----------------------------------------------------------
+$StartMenuFolder = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Sales Buddy'
+$DesktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Sales Buddy.lnk'
+
+if (Test-Path $StartMenuFolder) {
+    Remove-Item $StartMenuFolder -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "  [OK] Removed Start Menu shortcuts." -ForegroundColor Green
+} else {
+    Write-Host "  [OK] No Start Menu shortcuts found." -ForegroundColor Green
+}
+
+if (Test-Path $DesktopShortcut) {
+    Remove-Item $DesktopShortcut -Force -ErrorAction SilentlyContinue
+    Write-Host "  [OK] Removed desktop shortcut." -ForegroundColor Green
+} else {
+    Write-Host "  [OK] No desktop shortcut found." -ForegroundColor Green
+}
+
+# -- Remove app files (optional) -----------------------------------------------
+$removeFiles = $false
+if ($Silent) {
+    # MSI uninstall: remove everything except the database
+    $removeFiles = $true
+} else {
+    Write-Host ""
+    $response = Read-Host "  Delete app files at $RepoRoot? Your database will be preserved. (y/N)"
+    if ($response -eq 'y' -or $response -eq 'Y') {
+        $removeFiles = $true
+    }
+}
+
+if ($removeFiles) {
+    # Preserve the database by copying it to a temp location first
+    $dbFile = Join-Path $RepoRoot 'data\salesbuddy.db'
+    $dbBackup = $null
+    if (Test-Path $dbFile) {
+        $dbBackup = Join-Path $env:TEMP "salesbuddy-uninstall-$(Get-Date -Format 'yyyyMMdd-HHmmss').db"
+        Copy-Item $dbFile $dbBackup -ErrorAction SilentlyContinue
+    }
+
+    # Remove the app directory
+    if (Test-Path $RepoRoot) {
+        Remove-Item $RepoRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path $RepoRoot)) {
+            Write-Host "  [OK] App files removed." -ForegroundColor Green
+        } else {
+            Write-Host "  [WARNING] Some files could not be removed (may be in use)." -ForegroundColor Yellow
+            Write-Host "            Close all Sales Buddy windows and delete manually:" -ForegroundColor Gray
+            Write-Host "            $RepoRoot" -ForegroundColor Yellow
+        }
+    }
+
+    # Tell user where the database backup is
+    if ($dbBackup -and (Test-Path $dbBackup)) {
+        Write-Host ""
+        Write-Host "  Your database was saved to:" -ForegroundColor Cyan
+        Write-Host "    $dbBackup" -ForegroundColor Yellow
+        Write-Host "  You can restore it by copying it to a new installation's data\ folder." -ForegroundColor Gray
+    }
+}
+
 # -- Summary -------------------------------------------------------------------
 Write-Host ""
 Write-Host "  Uninstall complete." -ForegroundColor Green
@@ -71,15 +137,20 @@ Write-Host ""
 Write-Host "  What was removed:" -ForegroundColor Gray
 Write-Host "    - Server process (stopped)" -ForegroundColor Gray
 Write-Host "    - Scheduled tasks (SalesBuddy-AutoStart, SalesBuddy-DailyBackup, SalesBuddy-MilestoneSync)" -ForegroundColor Gray
+Write-Host "    - Start Menu and desktop shortcuts" -ForegroundColor Gray
+if ($removeFiles) {
+    Write-Host "    - App files" -ForegroundColor Gray
+}
 Write-Host ""
 Write-Host "  What was NOT removed:" -ForegroundColor Gray
-Write-Host "    - App files (this folder: $RepoRoot)" -ForegroundColor Gray
-Write-Host "    - Database (data\salesbuddy.db)" -ForegroundColor Gray
+if (-not $removeFiles) {
+    Write-Host "    - App files (this folder: $RepoRoot)" -ForegroundColor Gray
+    Write-Host "    - Database (data\salesbuddy.db)" -ForegroundColor Gray
+}
 Write-Host "    - OneDrive backups" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  To fully remove Sales Buddy, delete this folder:" -ForegroundColor Gray
-Write-Host "    $RepoRoot" -ForegroundColor Yellow
-Write-Host ""
 
-Write-Host "Press any key to close..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+if (-not $Silent) {
+    Write-Host "Press any key to close..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
