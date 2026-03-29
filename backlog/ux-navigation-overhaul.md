@@ -174,20 +174,17 @@ The main event. Rearrange the navbar to match intent-based navigation.
 - [x] Links: [Import Now] goes to import page | [X] dismisses
 - [x] Dismiss state persists in localStorage until next month (keyed by year-month)
 
-### Phase 7: Revenue Refactor
+### Phase 7: Revenue Refactor ✅ (3/28/2026)
 Revenue is now a report, not a core feature. Refactor URLs and UX to match.
 
-**Revenue Import is now a top-level utility, not a sub-route of Revenue Analyzer.**
-The import feeds Products, customer revenue views, the Analyzer report, and the monthly reminder banner. It shouldn't live under `/revenue/import` or show "Revenue Analyzer" in the breadcrumb. It should be its own page at `/import/revenue` (or similar), with a breadcrumb that just says "Import Revenue Data" - no parent context. The "Go to Dashboard" button after import should go to the actual homepage (`/`), not the Revenue Analyzer.
-
-- [ ] Move revenue import route from `/revenue/import` to top-level (e.g., `/import/revenue`)
-- [ ] Remove Revenue Analyzer breadcrumb from import page
-- [ ] Fix post-import "Go to Dashboard" link to go to `/` (homepage), not Revenue Analyzer
-- [ ] Products should be a core API, not a child of /revenue (populated via revenue import but standalone)
-- [ ] Customer revenue page URL: `/customer/<id>/revenue` instead of `/revenue/customer/<id>`
-- [ ] Remove "open in new tab" behavior when clicking a customer in Revenue Analyzer
-- [ ] Rename "View in Sales Buddy" button on customer revenue page to "View Customer Hub" (or similar) - indicates going to the main customer page, not a different app
-- [ ] General URL cleanup: revenue routes should feel like sub-views of existing entities, not a separate app
+- [x] Move revenue import route to `/import/revenue` (old `/revenue/import` still works)
+- [x] Remove Revenue Analyzer breadcrumb from import page
+- [x] Fix post-import button: "Go Home" links to `/` instead of Revenue Analyzer
+- [x] Products at top-level: `/products` and `/product/<name>` (old URLs still work)
+- [x] Customer revenue at `/customer/<id>/revenue` (old URL still work)
+- [x] Customer bucket products at `/customer/<id>/revenue/bucket/<bucket>` (old URL still works)
+- [x] Remove `target="_blank"` from Revenue Analyzer customer links (opens in same tab)
+- [x] Rename "View in Sales Buddy" to "View Customer Hub" / "View Seller Hub" across all revenue templates
 
 ## Implementation Notes
 
