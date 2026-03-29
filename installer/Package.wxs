@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Sales Buddy MSI Installer
+    WiX v4 / WiX SDK 5.x
+
+    This MSI bootstraps a local dev-style install:
+      1. Runs install.ps1 (prereqs, git clone, venv, server start)
+      2. Registers in Add/Remove Programs for clean uninstall
+      3. Finish page offers Launch / Start Menu / Desktop shortcuts
+
+    The MSI itself installs no files to disk - all real work is done by
+    PowerShell scripts. The MSI is just a UX wrapper and Add/Remove entry.
+-->
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+    <Package Name="Sales Buddy"
+             Manufacturer="Sales Buddy Contributors"
+             Version="1.0.0"
+             UpgradeCode="f3a7c2d1-8e4b-4f9a-b6c5-1d2e3f4a5b6c"
+             Scope="perUser"
+             InstallerVersion="500">
+
+        <SummaryInformation Description="Sales Buddy - Note-taking app for Azure technical sellers" />
+
+        <!-- Upgrade: remove previous versions before install -->
+        <MajorUpgrade DowngradeErrorMessage="A newer version of Sales Buddy is already installed." />
+
+        <!-- Icon for Add/Remove Programs -->
+        <Icon Id="SalesBuddyIcon" SourceFile="..\static\icon.ico" />
+        <Property Id="ARPPRODUCTICON" Value="SalesBuddyIcon" />
+        <Property Id="ARPURLINFOABOUT" Value="https://github.com/rablaine/SalesBuddy" />
+        <Property Id="ARPNOREPAIR" Value="yes" />
+        <Property Id="ARPNOMODIFY" Value="yes" />
+
+        <!-- Checkbox properties for finish page (1 = checked by default) -->
+        <Property Id="LAUNCH_APP" Value="1" />
+        <Property Id="CREATE_SHORTCUTS" Value="1" />
+        <Property Id="CREATE_DESKTOP_SHORTCUT" Value="1" />
+
+        <!-- Minimal UI: Welcome -> Progress -> Finish -->
+        <ui:WixUI Id="WixUI_Minimal" />
+        <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+        <WixVariable Id="WixUIBannerBmp" Value="Banner.bmp" />
+        <WixVariable Id="WixUIDialogBmp" Value="Dialog.bmp" />
+
+        <!-- Empty component to satisfy WiX requirement for at least one component -->
+        <StandardDirectory Id="LocalAppDataFolder">
+            <Directory Id="INSTALLFOLDER" Name="SalesBuddy">
+                <Component Id="Marker" Guid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+                    <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+                    <RegistryValue Root="HKCU"
+                                   Key="Software\SalesBuddy"
+                                   Name="Installed"
+                                   Type="integer"
+                                   Value="1"
+                                   KeyPath="yes" />
+                </Component>
+            </Directory>
+        </StandardDirectory>
+
+        <Feature Id="Main" Title="Sales Buddy" Level="1">
+            <ComponentRef Id="Marker" />
+        </Feature>
+
+    </Package>
+
+</Wix>
