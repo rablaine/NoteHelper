@@ -215,10 +215,10 @@
                                 <span id="milestoneSyncStatus" class="text-muted">Checking...</span>
                             </div>
                             <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" role="switch" id="milestoneSyncToggle" onchange="toggleTask('milestone-sync', this.checked)" disabled>
+                                <input class="form-check-input" type="checkbox" role="switch" id="milestoneSyncToggle" onchange="toggleMilestoneSync()" disabled>
                             </div>
                         </div>
-                        <small class="text-muted d-block mt-1">Syncs milestones from MSX on Mon/Wed/Fri at a randomly assigned time (when Sales Buddy is running).</small>
+                        <small class="text-muted d-block mt-1">Auto-syncs milestones from MSX daily at a randomly assigned time. Catches up on startup if missed.</small>
                     </div>
                 </div>
 
@@ -2339,12 +2339,10 @@ function toggleTask(taskKey, enabled) {
     const toggleMap = {
         'backup': 'backupTaskToggle',
         'autostart': 'autoStartToggle',
-        'milestone-sync': 'milestoneSyncToggle',
     };
     const reloadMap = {
         'backup': loadBackupStatus,
         'autostart': loadAutoStartStatus,
-        'milestone-sync': loadMilestoneSyncStatus,
     };
     const toggleId = toggleMap[taskKey];
     const toggle = document.getElementById(toggleId);
@@ -2402,25 +2400,31 @@ function loadMilestoneSyncStatus() {
         .then(data => {
             const statusEl = document.getElementById('milestoneSyncStatus');
             const toggle = document.getElementById('milestoneSyncToggle');
-            if (data.task_exists) {
-                const isEnabled = data.task_status !== 'Disabled';
-                const badgeClass = isEnabled ? 'bg-success' : 'bg-secondary';
-                let label = data.task_status || 'Active';
-                if (isEnabled && data.task_next_run) {
-                    label += ` - next: ${data.task_next_run}`;
-                }
-                statusEl.innerHTML = `<span class="badge ${badgeClass}">${label}</span>`;
-                toggle.checked = isEnabled;
-                toggle.disabled = false;
-            } else {
-                statusEl.innerHTML = '<span class="badge bg-secondary">Not registered</span> <small class="text-muted">Run start.bat to register</small>';
-                toggle.checked = false;
-                toggle.disabled = true;
+            const badgeClass = data.enabled ? 'bg-success' : 'bg-secondary';
+            let label = data.enabled ? 'Active' : 'Disabled';
+            if (data.sync_time) {
+                label += ` - Mon/Wed/Fri at ${data.sync_time}`;
             }
+            if (data.last_sync) {
+                const lastDate = new Date(data.last_sync + 'Z');
+                label += ` (last: ${lastDate.toLocaleDateString()})`;
+            }
+            statusEl.innerHTML = `<span class="badge ${badgeClass}">${label}</span>`;
+            toggle.checked = data.enabled;
+            toggle.disabled = false;
         })
         .catch(() => {
             document.getElementById('milestoneSyncStatus').innerHTML = '<span class="text-muted">Could not check</span>';
         });
+}
+
+function toggleMilestoneSync() {
+    fetch('/api/admin/tasks/milestone-sync/toggle', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) loadMilestoneSyncStatus();
+        })
+        .catch(() => loadMilestoneSyncStatus());
 }
 
 // =============================================================================

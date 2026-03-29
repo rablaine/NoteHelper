@@ -157,10 +157,6 @@ def create_app():
     from app.services.msx_auth import start_token_refresh_job
     start_token_refresh_job(interval_seconds=300)  # Check every 5 minutes
     
-    # Start scheduled milestone sync (if MILESTONE_SYNC_HOUR is configured)
-    from app.services.scheduled_sync import start_scheduled_sync
-    start_scheduled_sync(app)
-    
     # Capture the git commit hash at boot time (frozen in memory)
     import subprocess
     try:
@@ -190,5 +186,10 @@ def create_app():
         from app.services.copilot_actions import start_copilot_sync_background, start_daily_scheduler
         start_copilot_sync_background(app)
         start_daily_scheduler(app)
+
+        # Start milestone sync scheduler (catchup on startup, then daily at random time)
+        from app.services.scheduled_sync import start_milestone_sync_background, start_daily_milestone_scheduler
+        start_milestone_sync_background(app)
+        start_daily_milestone_scheduler(app)
 
     return app

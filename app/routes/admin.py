@@ -675,7 +675,6 @@ def _list_backup_files(backup_dir: str, limit: int = 10) -> list[dict]:
 # Scheduled task names (must match scripts/backup.ps1 and scripts/server.ps1)
 _BACKUP_TASK_NAME = 'SalesBuddy-DailyBackup'
 _AUTOSTART_TASK_NAME = 'SalesBuddy-AutoStart'
-_MILESTONE_SYNC_TASK_NAME = 'SalesBuddy-MilestoneSync'
 
 
 def _check_scheduled_task(task_name: str) -> dict:
@@ -808,7 +807,6 @@ def api_task_toggle(task_key: str):
     task_map = {
         'backup': _BACKUP_TASK_NAME,
         'autostart': _AUTOSTART_TASK_NAME,
-        'milestone-sync': _MILESTONE_SYNC_TASK_NAME,
     }
     task_name = task_map.get(task_key)
     if not task_name:
@@ -843,13 +841,35 @@ def api_autostart_status():
 
 @admin_bp.route('/api/admin/tasks/milestone-sync/status', methods=['GET'])
 def api_milestone_sync_status():
-    """Return the milestone sync scheduled task status."""
-    task_info = _check_scheduled_task(_MILESTONE_SYNC_TASK_NAME)
+    """Return the in-process milestone sync scheduler status."""
+    pref = UserPreference.query.first()
+    if not pref:
+        return jsonify({'enabled': False, 'sync_time': None, 'last_sync': None})
+
+    sync_time = None
+    if pref.milestone_sync_hour is not None and pref.milestone_sync_minute is not None:
+        sync_time = f"{pref.milestone_sync_hour:02d}:{pref.milestone_sync_minute:02d}"
+
+    last_sync = None
+    if pref.last_milestone_sync:
+        last_sync = pref.last_milestone_sync.isoformat()
+
     return jsonify({
-        'task_exists': task_info['exists'],
-        'task_next_run': task_info['next_run'],
-        'task_status': task_info['status'],
+        'enabled': pref.milestone_auto_sync,
+        'sync_time': sync_time,
+        'last_sync': last_sync,
     })
+
+
+@admin_bp.route('/api/admin/tasks/milestone-sync/toggle', methods=['POST'])
+def api_milestone_sync_toggle():
+    """Toggle milestone auto-sync on/off."""
+    pref = UserPreference.query.first()
+    if not pref:
+        return jsonify({'success': False, 'error': 'No preferences found'}), 404
+    pref.milestone_auto_sync = not pref.milestone_auto_sync
+    db.session.commit()
+    return jsonify({'success': True, 'enabled': pref.milestone_auto_sync})
 
 
 # ==============================================================================
