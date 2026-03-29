@@ -176,6 +176,13 @@ The main event. Rearrange the navbar to match intent-based navigation.
 
 ### Phase 7: Revenue Refactor
 Revenue is now a report, not a core feature. Refactor URLs and UX to match.
+
+**Revenue Import is now a top-level utility, not a sub-route of Revenue Analyzer.**
+The import feeds Products, customer revenue views, the Analyzer report, and the monthly reminder banner. It shouldn't live under `/revenue/import` or show "Revenue Analyzer" in the breadcrumb. It should be its own page at `/import/revenue` (or similar), with a breadcrumb that just says "Import Revenue Data" - no parent context. The "Go to Dashboard" button after import should go to the actual homepage (`/`), not the Revenue Analyzer.
+
+- [ ] Move revenue import route from `/revenue/import` to top-level (e.g., `/import/revenue`)
+- [ ] Remove Revenue Analyzer breadcrumb from import page
+- [ ] Fix post-import "Go to Dashboard" link to go to `/` (homepage), not Revenue Analyzer
 - [ ] Products should be a core API, not a child of /revenue (populated via revenue import but standalone)
 - [ ] Customer revenue page URL: `/customer/<id>/revenue` instead of `/revenue/customer/<id>`
 - [ ] Remove "open in new tab" behavior when clicking a customer in Revenue Analyzer

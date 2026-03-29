@@ -362,20 +362,18 @@ def index():
         Project.project_type != 'copilot_saved',
     ).count()
 
-    # Revenue import reminder: check if last completed month's data is missing
+    # Revenue import reminder: check if user has imported since this month started
     show_revenue_reminder = False
     if pref and pref.revenue_import_reminder:
-        from app.models import CustomerRevenueData
-        has_any_revenue = CustomerRevenueData.query.first() is not None
-        if has_any_revenue:
+        from app.models import RevenueImport
+        last_import = RevenueImport.query.order_by(
+            RevenueImport.imported_at.desc()
+        ).first()
+        if last_import:
+            # User has imported before - remind if no import this month
             today = date.today()
-            # Last completed month: first day of previous month
-            first_of_this_month = today.replace(day=1)
-            last_month = (first_of_this_month - timedelta(days=1)).replace(day=1)
-            has_last_month = CustomerRevenueData.query.filter(
-                CustomerRevenueData.month_date == last_month
-            ).first() is not None
-            if not has_last_month:
+            first_of_this_month = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+            if last_import.imported_at.replace(tzinfo=timezone.utc) < first_of_this_month:
                 show_revenue_reminder = True
 
     return render_template(
