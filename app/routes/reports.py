@@ -49,6 +49,17 @@ def reports_hub():
                     'url': url_for('revenue.revenue_dashboard'),
                 },
                 {
+                    'id': 'whitespace',
+                    'name': 'Whitespace Analysis',
+                    'description': (
+                        'Find gaps in customer technology adoption. See which '
+                        'customers are missing spend in key buckets and identify '
+                        'outreach opportunities.'
+                    ),
+                    'icon': 'bi-grid-3x3-gap',
+                    'url': url_for('revenue.report_whitespace'),
+                },
+                {
                     'id': 'new-synapse-users',
                     'name': 'New Azure Synapse Analytics Users',
                     'description': (
