@@ -1,4 +1,10 @@
-# Sales Buddy
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="static/logo-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="static/logo.svg" />
+    <img alt="Sales Buddy" src="static/logo.svg" width="500" />
+  </picture>
+</p>
 
 A local-first productivity tool for Azure solution engineers and technical sellers. Unified customer views, call notes, revenue trends, milestones, and partner tracking - all in one place, running on your machine.
 
