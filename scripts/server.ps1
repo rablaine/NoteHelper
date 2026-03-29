@@ -647,53 +647,6 @@ if (-not $existingAutoStart) {
     Write-Host "  [OK] Auto-start at login registered." -ForegroundColor Green
 }
 
-# 12c: SalesBuddy-MilestoneSync (Mon/Wed/Fri at a random time between 9:30 AM and 4:30 PM)
-$MilestoneSyncTaskName = 'SalesBuddy-MilestoneSync'
-$existingMilestoneSync = Get-ScheduledTask -TaskName $MilestoneSyncTaskName -ErrorAction SilentlyContinue
-
-if (-not $existingMilestoneSync) {
-    Write-Host ""
-    Write-Host "  Registering milestone sync task..." -ForegroundColor Yellow
-
-    # Pick a random 5-minute slot between 9:30 AM and 4:30 PM (84 slots)
-    # so that many users' syncs are spread throughout the day.
-    $slotIndex = Get-Random -Minimum 0 -Maximum 84
-    $syncTime = (Get-Date '9:30AM').AddMinutes($slotIndex * 5)
-    $syncTimeStr = $syncTime.ToString('h:mmtt').ToLower()
-
-    $syncScript = Join-Path $PSScriptRoot 'milestone-sync.ps1'
-    $hiddenLauncher = Join-Path $PSScriptRoot 'run-hidden.vbs'
-    $msAction = New-ScheduledTaskAction `
-        -Execute 'wscript.exe' `
-        -Argument "`"$hiddenLauncher`" `"$syncScript`"" `
-        -WorkingDirectory $RepoRoot
-    $msTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Wednesday,Friday -At $syncTime
-    $msSettings = New-ScheduledTaskSettingsSet `
-        -AllowStartIfOnBatteries `
-        -DontStopIfGoingOnBatteries `
-        -StartWhenAvailable `
-        -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
-
-    $msRegistered = $false
-    try {
-        $msPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-        Register-ScheduledTask `
-            -TaskName $MilestoneSyncTaskName -Action $msAction -Trigger $msTrigger `
-            -Principal $msPrincipal -Settings $msSettings `
-            -Description "Milestone sync from MSX (Mon/Wed/Fri at $syncTimeStr when Sales Buddy is running)" `
-            -ErrorAction Stop | Out-Null
-        $msRegistered = $true
-    } catch {
-        Write-Host "  [WARNING] Could not register milestone sync task: $_" -ForegroundColor Yellow
-    }
-
-    if ($msRegistered) {
-        Write-Host "  [OK] Milestone sync scheduled Mon/Wed/Fri at $syncTimeStr." -ForegroundColor Green
-    }
-} elseif ($existingMilestoneSync) {
-    Write-Host "  [OK] Milestone sync task registered." -ForegroundColor Green
-}
-
 # ==============================================================================
 # Decision Logic
 # ==============================================================================

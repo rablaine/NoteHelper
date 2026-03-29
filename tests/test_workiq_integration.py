@@ -10,8 +10,10 @@ Covers:
 """
 import os
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from app import db
+from app.models import UserPreference
 
 
 # =============================================================================
@@ -201,56 +203,139 @@ class TestMeetingSummaryAPIPrompt:
 # =============================================================================
 
 class TestScheduledSync:
-    """Tests for scheduled milestone sync configuration."""
+    """Tests for in-process milestone sync scheduler."""
 
-    def test_sync_disabled_when_env_var_not_set(self, app):
-        """Scheduled sync should not start when MILESTONE_SYNC_HOUR is not set."""
-        from app.services.scheduled_sync import _sync_running, stop_scheduled_sync
-        import app.services.scheduled_sync as sync_mod
+    def test_ensure_sync_time_assigns_random_time(self, app):
+        """_ensure_sync_time should assign a 5-min slot between 9:30 and 16:25."""
+        from app.services.scheduled_sync import _ensure_sync_time
 
-        # Ensure stopped state
-        stop_scheduled_sync()
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_sync_hour = None
+            pref.milestone_sync_minute = None
+            db.session.commit()
 
-        with patch.dict(os.environ, {}, clear=False):
-            # Remove the env var if it exists
-            os.environ.pop('MILESTONE_SYNC_HOUR', None)
-            sync_mod._sync_running = False
-            sync_mod.start_scheduled_sync(app)
-            assert sync_mod._sync_running is False
+            hour, minute = _ensure_sync_time(pref)
+            total = hour * 60 + minute
+            assert 9 * 60 + 30 <= total <= 16 * 60 + 25
+            assert minute % 5 == 0  # must be a 5-minute slot
+            assert pref.milestone_sync_hour == hour
+            assert pref.milestone_sync_minute == minute
 
-    def test_sync_rejects_invalid_hour(self, app):
-        """Scheduled sync should reject invalid hour values."""
-        import app.services.scheduled_sync as sync_mod
-        sync_mod._sync_running = False
+    def test_ensure_sync_time_preserves_existing(self, app):
+        """_ensure_sync_time should not change an already-assigned time."""
+        from app.services.scheduled_sync import _ensure_sync_time
 
-        with patch.dict(os.environ, {'MILESTONE_SYNC_HOUR': '25'}):
-            sync_mod.start_scheduled_sync(app)
-            assert sync_mod._sync_running is False
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_sync_hour = 14
+            pref.milestone_sync_minute = 15
+            db.session.commit()
 
-        with patch.dict(os.environ, {'MILESTONE_SYNC_HOUR': 'abc'}):
-            sync_mod.start_scheduled_sync(app)
-            assert sync_mod._sync_running is False
+            hour, minute = _ensure_sync_time(pref)
+            assert hour == 14
+            assert minute == 15
 
-    def test_sync_starts_with_valid_hour(self, app):
-        """Scheduled sync should start when a valid hour is configured."""
-        import app.services.scheduled_sync as sync_mod
-        sync_mod._sync_running = False
+    def test_should_sync_true_when_never_synced_on_sync_day(self, app):
+        """_should_sync returns True on MWF if past sync time and never synced."""
+        from app.services.scheduled_sync import _should_sync
 
-        with patch.dict(os.environ, {'MILESTONE_SYNC_HOUR': '3'}):
-            sync_mod.start_scheduled_sync(app)
-            assert sync_mod._sync_running is True
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_sync_hour = 0
+            pref.milestone_sync_minute = 0
+            pref.last_milestone_sync = None
+            db.session.commit()
 
-        # Clean up
-        sync_mod.stop_scheduled_sync()
-        import time
-        time.sleep(0.1)  # Let the thread see the stop signal
+            # Mock today as a Monday (weekday 0)
+            with patch('app.services.scheduled_sync.datetime') as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 3, 23, 12, 0)  # Monday
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                assert _should_sync(pref) is True
 
-    def test_stop_sync(self, app):
-        """stop_scheduled_sync should set running flag to False."""
-        import app.services.scheduled_sync as sync_mod
-        sync_mod._sync_running = True
-        sync_mod.stop_scheduled_sync()
-        assert sync_mod._sync_running is False
+    def test_should_sync_false_on_non_sync_day(self, app):
+        """_should_sync returns False on Tue/Thu/Sat/Sun."""
+        from app.services.scheduled_sync import _should_sync
+
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_sync_hour = 0
+            pref.milestone_sync_minute = 0
+            pref.last_milestone_sync = None
+            db.session.commit()
+
+            # Mock today as a Tuesday (weekday 1)
+            with patch('app.services.scheduled_sync.datetime') as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 3, 24, 12, 0)  # Tuesday
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                assert _should_sync(pref) is False
+
+    def test_should_sync_false_before_sync_time(self, app):
+        """_should_sync returns False when we haven't reached today's time."""
+        from app.services.scheduled_sync import _should_sync
+
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_sync_hour = 16
+            pref.milestone_sync_minute = 25
+            pref.last_milestone_sync = None
+            db.session.commit()
+
+            # Monday at 9:00 AM, sync scheduled for 4:25 PM
+            with patch('app.services.scheduled_sync.datetime') as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 3, 23, 9, 0)  # Monday 9 AM
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                assert _should_sync(pref) is False
+
+    def test_startup_catchup_skips_when_disabled(self, app):
+        """start_milestone_sync_background should skip when auto_sync is off."""
+        from app.services.scheduled_sync import start_milestone_sync_background
+
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_auto_sync = False
+            db.session.commit()
+
+        # Should not raise or start any threads
+        with patch('app.services.scheduled_sync._run_sync') as mock_run:
+            start_milestone_sync_background(app)
+            mock_run.assert_not_called()
+
+    def test_missed_sync_catches_up_on_non_sync_day(self, app):
+        """Startup on Tuesday should catch up Monday's missed sync."""
+        from app.services.scheduled_sync import _missed_sync
+
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_sync_hour = 10
+            pref.milestone_sync_minute = 0
+            pref.last_milestone_sync = None  # never synced
+            db.session.commit()
+
+            # Tuesday noon - Monday's 10:00 AM sync was missed
+            with patch('app.services.scheduled_sync.datetime') as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 3, 24, 12, 0)  # Tuesday
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                assert _missed_sync(pref) is True
+
+    def test_missed_sync_false_when_already_synced(self, app):
+        """No catchup needed if last sync was after the most recent sync day."""
+        from app.services.scheduled_sync import _missed_sync
+
+        with app.app_context():
+            pref = UserPreference.query.first()
+            pref.milestone_sync_hour = 10
+            pref.milestone_sync_minute = 0
+            # Synced Monday at 10:05 AM UTC
+            pref.last_milestone_sync = datetime(2026, 3, 23, 15, 5, 0,
+                                                tzinfo=timezone.utc)
+            db.session.commit()
+
+            # Tuesday noon - Monday sync already ran
+            with patch('app.services.scheduled_sync.datetime') as mock_dt:
+                mock_dt.now.return_value = datetime(2026, 3, 24, 12, 0)  # Tuesday
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                assert _missed_sync(pref) is False
 
 
 # =============================================================================

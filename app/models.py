@@ -1077,6 +1077,10 @@ class UserPreference(db.Model):
     show_stale_milestones = db.Column(db.Boolean, default=True, nullable=False, server_default='1')  # Show stale milestones in Action Items card
     show_hygiene_tasks = db.Column(db.Boolean, default=True, nullable=False, server_default='1')  # Show data hygiene tasks in Action Items card
     last_copilot_sync = db.Column(db.DateTime, nullable=True)  # Last time Copilot daily action items were synced
+    milestone_auto_sync = db.Column(db.Boolean, default=True, nullable=False, server_default='1')  # Auto-sync milestones from MSX
+    milestone_sync_hour = db.Column(db.Integer, nullable=True)  # Random hour (5-8) for daily milestone sync
+    milestone_sync_minute = db.Column(db.Integer, nullable=True)  # Random minute (0-59) for sync time
+    last_milestone_sync = db.Column(db.DateTime, nullable=True)  # Last time milestone sync ran (UTC)
     compensated_buckets = db.Column(db.Text, nullable=True)  # JSON array of selected ServiceCompGrouping buckets (fallback for localStorage)
     revenue_import_reminder = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
