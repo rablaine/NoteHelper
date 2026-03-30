@@ -326,6 +326,12 @@ pytest --cov=app tests/  # with coverage
 - If the user says "commit" that does NOT mean "merge to main" - it means commit to the current feature branch only
 - Merging to `main` is a deployment gate - treat it seriously
 
+**CRITICAL - Undoing Commits:**
+- **NEVER use `git revert`** - the user does not want revert commits cluttering history
+- When asked to "revert", "undo", or "reset" a commit, **ALWAYS use `git reset --hard`** to remove it cleanly
+- If the commit was already pushed, reset locally then `git push --force-with-lease`
+- When the user says "undo that" or "revert that" in frustration, they mean: hard reset HEAD so we're back at the previous commit with none of the bad changes surviving
+
 **Merge to Production Checklist:**
 - Scoped tests passing for changed code
 - User explicitly confirms "ready to deploy" or "merge to main"
