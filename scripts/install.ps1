@@ -283,7 +283,8 @@ if (-not $SkipPrereqs) {
                 $pathsToAdd = @($pythonInstallDir, $pythonScriptsDir)
                 foreach ($p in $pathsToAdd) {
                     if ($userPath -notlike "*$p*") {
-                        $userPath = "$userPath;$p"
+                        # Prepend so our Python beats the WindowsApps Store stub
+                        $userPath = "$p;$userPath"
                     }
                     # Prepend so our real Python beats the WindowsApps Store stub
                     if ($env:Path -notlike "*$p*") {
@@ -394,10 +395,14 @@ if (-not $SkipPrereqs) {
 }
 
 # -- Step 3: Clone the repository --------------------------------------------
+# Disable Git Credential Manager to prevent login popups (public repo, no auth needed).
+$env:GIT_TERMINAL_PROMPT = '0'
+$env:GCM_INTERACTIVE = 'never'
+
 if (Test-Path (Join-Path $InstallDir '.git')) {
     Write-Log "Repository already exists at $InstallDir, pulling latest."
     Push-Location $InstallDir
-    $pullOutput = git pull --ff-only 2>&1
+    $pullOutput = git -c credential.helper= pull --ff-only 2>&1
     $pullOutput | ForEach-Object { Write-Log "  [git] $_" }
     Pop-Location
 } elseif (Test-Path $InstallDir) {
@@ -408,7 +413,7 @@ if (Test-Path (Join-Path $InstallDir '.git')) {
     Push-Location $InstallDir
     git init 2>&1 | ForEach-Object { Write-Log "  [git] $_" }
     git remote add origin $RepoUrl 2>&1 | ForEach-Object { Write-Log "  [git] $_" }
-    git fetch origin 2>&1 | ForEach-Object { Write-Log "  [git] $_" }
+    git -c credential.helper= fetch origin 2>&1 | ForEach-Object { Write-Log "  [git] $_" }
     git checkout -f -B main origin/main 2>&1 | ForEach-Object { Write-Log "  [git] $_" }
     Pop-Location
     if ($LASTEXITCODE -ne 0) {
@@ -419,7 +424,7 @@ if (Test-Path (Join-Path $InstallDir '.git')) {
 } else {
     Write-Log "Cloning repository..."
     Refresh-Path
-    $cloneOutput = git clone $RepoUrl $InstallDir 2>&1
+    $cloneOutput = git -c credential.helper= clone $RepoUrl $InstallDir 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Log "Failed to clone repository. Output: $cloneOutput" 'ERROR'
         exit 2

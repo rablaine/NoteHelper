@@ -334,8 +334,9 @@ if ($StopOnly) {
 
 # -- Step 1: Check Python -----------------------------------------------------
 function Test-PythonOk {
+    param([string]$PythonExe = 'python')
     try {
-        $ver = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+        $ver = & $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
         if ($ver) {
             $parts = $ver.Split('.')
             if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 13) {
@@ -352,6 +353,21 @@ if ($pyVersion) {
     Write-Host "  [OK] Python $pyVersion" -ForegroundColor Green
     $pythonOk = $true
 } else {
+    # Check NuGet-installed Python (MSI installer puts it here)
+    $nugetPython = Join-Path $env:LOCALAPPDATA 'python\python.exe'
+    if (Test-Path $nugetPython) {
+        $pyVersion = Test-PythonOk -PythonExe $nugetPython
+        if ($pyVersion) {
+            Write-Host "  [OK] Python $pyVersion (NuGet)" -ForegroundColor Green
+            # Prepend to PATH so venv creation and pip use this Python
+            $nugetDir = Join-Path $env:LOCALAPPDATA 'python'
+            $env:Path = "$nugetDir;$(Join-Path $nugetDir 'Scripts');$env:Path"
+            $pythonOk = $true
+        }
+    }
+}
+
+if (-not $pythonOk) {
     if ($pyVersion -eq $null) {
         Write-Host "  [ERROR] Python not found." -ForegroundColor Red
     } else {
