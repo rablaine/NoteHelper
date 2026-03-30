@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Sales Buddy{% endblock %}</title>
-    <script>if(window.matchMedia('(display-mode: standalone)').matches){document.title=document.title.replace(/ - Sales Buddy$/,'').replace(/^Sales Buddy - /,'').replace(/^Sales Buddy$/,'Home')}</script>
+    <script>if(window.matchMedia('(display-mode: standalone)').matches){document.title=document.title.replace(/ - Sales Buddy$/,'')}</script>
     <script>
         // Capture PWA install prompt early (fires before DOMContentLoaded)
         window.__pwaInstallPrompt = null;
@@ -534,7 +534,7 @@
     <nav class="navbar navbar-expand-lg sb-navbar sticky-top">
         <div class="container-fluid px-4 position-relative">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
-                <img src="{{ url_for('static', filename='Sales Buddy.png') }}" alt="Sales Buddy" height="28" style="position:relative;top:1px;margin-right:2px;">
+                <img src="{{ url_for('static', filename='Sales Buddy.png') }}" alt="Sales Buddy" height="28" style="margin-right:2px;position:relative;top:-1px;">
                 {% if is_debug %}
                     <span class="badge {{ 'bg-warning text-dark' if user_role == 'dss' else 'bg-info text-dark' }} ms-2"
                           style="font-size: 0.6rem; vertical-align: middle; cursor: pointer;"
@@ -1414,7 +1414,7 @@
     <!-- PWA: strip redundant app name from title, hide navbar brand, set telemetry cookie -->
     <script>
     if (window.matchMedia('(display-mode: standalone)').matches) {
-        document.title = document.title.replace(/ - Sales Buddy$/, '').replace(/^Sales Buddy - /, '').replace(/^Sales Buddy$/, 'Home');
+        document.title = document.title.replace(/ - Sales Buddy$/, '');
         var brand = document.querySelector('.navbar-brand');
         if (brand) brand.style.display = 'none';
         document.cookie = 'sb_app_mode=standalone;path=/;SameSite=Strict';
