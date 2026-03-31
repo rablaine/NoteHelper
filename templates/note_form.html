@@ -112,7 +112,7 @@
                  style="display:none; position:absolute; top:162px; right:12px; z-index:10; width:380px; animation: statusPulse 2s ease-in-out infinite;">
                 <div class="card-header bg-primary text-white py-2 px-3">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold"><i class="bi bi-calendar-event me-1"></i> Meeting Import</span>
+                        <span class="fw-semibold"><i class="bi bi-calendar-event me-1"></i> WorkIQ Import</span>
                         <button type="button" class="btn-close btn-close-white btn-close-sm" onclick="cancelMeetingStatus()" aria-label="Cancel"></button>
                     </div>
                 </div>
@@ -276,8 +276,13 @@
                     <!-- Attendees & Topics side-by-side -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <input type="text" class="form-control" id="attendee_search"
-                                   placeholder="Search attendees to add..." autocomplete="off">
+                            <div class="d-flex gap-2 align-items-center">
+                                <input type="text" class="form-control flex-grow-1" id="attendee_search"
+                                       placeholder="Search attendees to add..." autocomplete="off">
+                                <button type="button" class="btn btn-sm btn-outline-info flex-shrink-0" id="importAttendeesBtn" onclick="importMeetingAttendees()">
+                                    <i class="bi bi-people"></i> <span id="importAttendeesBtnText">Import Attendees</span>
+                                </button>
+                            </div>
                             <div id="attendee_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto; width: calc(50% - 2rem);"></div>
                             <div id="selected_attendees" class="mt-2 d-flex flex-wrap gap-2">
                                 {% if note and note.attendees %}
@@ -344,7 +349,7 @@
                                     <i class="bi bi-check2-square"></i> Create Action Item
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-info" id="importMeetingBtn" onclick="openMeetingImport()">
-                                    <i class="bi bi-calendar-event"></i> Import from Meeting
+                                    <i class="bi bi-calendar-event"></i> Import Summary
                                 </button>
                             </div>
                         </div>
@@ -677,7 +682,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="meetingImportModalLabel">
-                    <i class="bi bi-calendar-event"></i> Import from Meeting
+                    <i class="bi bi-calendar-event"></i> Import Summary
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -1059,6 +1064,27 @@
 </div>
 {% endif %}
 
+<!-- Attendee Review Modal -->
+<div class="modal fade" id="attendeeReviewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-people"></i> Meeting Attendees</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="attendeeReviewBody">
+                <div class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="attendeeReviewApplyBtn" onclick="applyMeetingAttendees()">
+                    <i class="bi bi-check-circle"></i> Add to Attendees
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Flyout stacking: multiple flyouts shift left so they don't overlap -->
 <style>
     /* Push flyouts below the sticky navbar (z-index 1050, ~56px tall) */
@@ -1222,18 +1248,23 @@ updateAiButtonState();
         'external': 'bi-person-dash'
     };
 
-    function addAttendee(type, id, name) {
-        if (isAlreadyAdded(type, id)) return;
+    function addAttendee(type, id, name, email) {
+        if (type !== 'external' && isAlreadyAdded(type, id)) return;
         var badge = document.createElement('span');
         badge.className = 'badge d-flex align-items-center ' + (colorMap[type] || 'bg-secondary');
         badge.dataset.attendeeType = type;
-        badge.dataset.attendeeId = String(id);
+        badge.dataset.attendeeId = String(id || '');
+        var hiddenInputs = '<input type="hidden" name="attendee_types" value="' + type + '">' +
+            '<input type="hidden" name="attendee_ref_ids" value="' + (id || '') + '">';
+        if (type === 'external') {
+            hiddenInputs += '<input type="hidden" name="attendee_ext_names" value="' + (name || '') + '">' +
+                '<input type="hidden" name="attendee_ext_emails" value="' + (email || '') + '">';
+        }
         badge.innerHTML =
             '<i class="bi ' + (iconMap[type] || 'bi-person') + ' me-1"></i>' +
             escHtmlNote(name) +
             '<button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.6rem;" onclick="removeAttendee(this)"></button>' +
-            '<input type="hidden" name="attendee_types" value="' + type + '">' +
-            '<input type="hidden" name="attendee_ref_ids" value="' + id + '">';
+            hiddenInputs;
         container.appendChild(badge);
         searchInput.value = '';
         dropdown.style.display = 'none';
@@ -1376,6 +1407,280 @@ window.removeAttendee = function(btn) {
     btn.closest('.badge').remove();
     if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
 };
+
+// ---- Import Attendees from Meeting ----
+var _meetingAttendeeData = null;
+var _importAttendeesMode = false;
+
+function importMeetingAttendees() {
+    _importAttendeesMode = true;
+    // Reuse the existing meeting import flow (fetch + picker)
+    openMeetingImport();
+}
+
+function _runAttendeeScrape(meetingTitle, meetingDate) {
+    var btn = document.getElementById('importAttendeesBtn');
+    btn.disabled = true;
+    document.getElementById('importAttendeesBtnText').textContent = 'Scanning...';
+
+    showMeetingStatusCard(
+        '<div class="d-flex align-items-center">' +
+        '<span class="spinner-border spinner-border-sm text-primary me-2"></span>' +
+        '<div><strong>Finding attendees...</strong>' +
+        '<br><small class="text-muted">' + escHtmlNote(meetingTitle) + '</small>' +
+        '<br><small class="text-muted fst-italic">This can take up to a minute</small></div>' +
+        '</div>'
+    );
+
+    var customerId = document.getElementById('customer_id') ? document.getElementById('customer_id').value : null;
+    var partnerIds = Array.from(document.querySelectorAll('input[name="partner_ids"]')).map(function(i) { return parseInt(i.value); });
+
+    fetch('/api/meeting-attendees/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            meeting_title: meetingTitle,
+            meeting_date: meetingDate,
+            customer_id: customerId ? parseInt(customerId) : null,
+            partner_ids: partnerIds
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        hideMeetingStatusCard();
+        btn.disabled = false;
+        document.getElementById('importAttendeesBtnText').textContent = 'Import Attendees';
+        if (!data.success) { alert(data.error || 'Failed'); return; }
+        _meetingAttendeeData = data;
+        _meetingAttendeeData._title = meetingTitle;
+        _meetingAttendeeData._date = meetingDate;
+        _showAttendeeReview(data.attendees);
+    })
+    .catch(function(err) {
+        hideMeetingStatusCard();
+        btn.disabled = false;
+        document.getElementById('importAttendeesBtnText').textContent = 'Import Attendees';
+        alert('Error: ' + err.message);
+    });
+}
+
+function _showAttendeeReview(attendees) {
+    var body = document.getElementById('attendeeReviewBody');
+    if (!attendees || attendees.length === 0) {
+        body.innerHTML = '<div class="text-center py-4"><i class="bi bi-inbox display-4 text-muted"></i>' +
+            '<p class="mt-2 text-muted">No attendees found. WorkIQ can be inconsistent - try again.</p>' +
+            '<button type="button" class="btn btn-primary" onclick="_retryAttendeeScrape()"><i class="bi bi-arrow-clockwise"></i> Try Again</button></div>';
+        new bootstrap.Modal(document.getElementById('attendeeReviewModal')).show();
+        return;
+    }
+
+    // Group by category
+    var groups = { microsoft: [], customer_contact: [], partner_contact: [], new_partner: [], unknown: [] };
+    attendees.forEach(function(a, i) { a._idx = i; (groups[a.category] || groups.unknown).push(a); });
+
+    var html = '<p class="text-muted small mb-3"><i class="bi bi-info-circle"></i> Review attendees from this meeting. Uncheck anyone you don\'t want to add.</p>';
+
+    // Microsoft (sellers/SEs)
+    if (groups.microsoft.length > 0) {
+        html += '<h6 class="mb-2"><i class="bi bi-microsoft text-primary"></i> Microsoft</h6>';
+        html += '<div class="list-group mb-3">';
+        groups.microsoft.forEach(function(a) {
+            html += _renderAttendeeRow(a, a.ref_type === 'external' ? 'Unknown MS employee' : (a.ref_type === 'seller' ? 'Seller' : 'Solution Engineer'), false);
+        });
+        html += '</div>';
+    }
+
+    // Customer contacts
+    if (groups.customer_contact.length > 0) {
+        html += '<h6 class="mb-2"><i class="bi bi-person-circle text-success"></i> Customer Contacts</h6>';
+        html += '<div class="list-group mb-3">';
+        groups.customer_contact.forEach(function(a) {
+            html += _renderAttendeeRow(a, a.is_new_contact ? 'New contact' : 'Existing contact', true);
+        });
+        html += '</div>';
+    }
+
+    // Partner contacts
+    if (groups.partner_contact.length > 0) {
+        html += '<h6 class="mb-2"><i class="bi bi-building text-purple"></i> Partner Contacts</h6>';
+        html += '<div class="list-group mb-3">';
+        groups.partner_contact.forEach(function(a) {
+            var detail = a.partner_name ? a.partner_name : 'Partner';
+            if (a.is_new_contact) detail += ' (new contact)';
+            html += _renderAttendeeRow(a, detail, true);
+        });
+        html += '</div>';
+    }
+
+    // New partners
+    if (groups.new_partner.length > 0) {
+        // Group by domain
+        var byDomain = {};
+        groups.new_partner.forEach(function(a) {
+            var d = a.new_partner_domain;
+            if (!byDomain[d]) byDomain[d] = [];
+            byDomain[d].push(a);
+        });
+        html += '<h6 class="mb-2"><i class="bi bi-plus-circle text-warning"></i> New Partners</h6>';
+        for (var domain in byDomain) {
+            html += '<div class="card mb-2"><div class="card-body py-2">';
+            html += '<div class="d-flex align-items-center gap-2 mb-2">';
+            html += '<input type="checkbox" class="form-check-input new-partner-check" data-domain="' + domain + '" checked>';
+            html += '<strong>Create partner:</strong> ';
+            html += '<input type="text" class="form-control form-control-sm" style="max-width:200px;" id="newPartnerName_' + domain.replace(/\./g, '_') + '" value="' + domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1) + '" placeholder="Partner name">';
+            html += '<span class="text-muted small">(' + domain + ')</span>';
+            html += '</div>';
+            byDomain[domain].forEach(function(a) {
+                html += _renderAttendeeRow(a, 'New contact', true);
+            });
+            html += '</div></div>';
+        }
+    }
+
+    body.innerHTML = html;
+    new bootstrap.Modal(document.getElementById('attendeeReviewModal')).show();
+}
+
+function _renderAttendeeRow(a, detail, showTitle) {
+    var nameHtml;
+    if (a.is_new_contact && a.category !== 'microsoft') {
+        nameHtml = '<input type="text" class="form-control form-control-sm fw-semibold att-review-name" ' +
+            'data-idx="' + a._idx + '" value="' + (a.name || '').replace(/"/g, '&quot;') + '" ' +
+            'onclick="event.stopPropagation();" style="max-width: 165px; display: inline-block;">';
+    } else {
+        nameHtml = '<span class="fw-semibold">' + escHtmlNote(a.name) + '</span>';
+    }
+
+    // Title display: existing title from DB, or new title from scrape
+    var titleLine = '';
+    if (showTitle) {
+        var hasExisting = a.existing_title && a.existing_title.trim();
+        var hasNew = a.title && a.title.trim();
+        var titlesMatch = hasExisting && hasNew && a.existing_title.trim().toLowerCase() === a.title.trim().toLowerCase();
+
+        if (hasNew && !hasExisting) {
+            // New title for contact that had none - editable with checkbox
+            titleLine = '<div class="text-success d-flex align-items-center gap-1 mt-1">' +
+                '<input type="checkbox" class="form-check-input att-title-cb" data-idx="' + a._idx + '" checked onclick="event.stopPropagation();" style="min-width:1em;">' +
+                '<small>Add title:</small> <input type="text" class="form-control form-control-sm att-title-input" data-idx="' + a._idx + '" ' +
+                'value="' + (a.title || '').replace(/"/g, '&quot;') + '" onclick="event.stopPropagation();" style="max-width:375px;"></div>';
+        } else if (hasNew && hasExisting && !titlesMatch) {
+            // Different title - show old, editable new with checkbox
+            titleLine = '<br><small class="text-muted">Current title: ' + escHtmlNote(a.existing_title) + '</small>' +
+                '<div class="text-success d-flex align-items-center gap-1">' +
+                '<input type="checkbox" class="form-check-input att-title-cb" data-idx="' + a._idx + '" onclick="event.stopPropagation();" style="min-width:1em;">' +
+                '<small>Update to:</small> <input type="text" class="form-control form-control-sm att-title-input" data-idx="' + a._idx + '" ' +
+                'value="' + (a.title || '').replace(/"/g, '&quot;') + '" onclick="event.stopPropagation();" style="max-width:375px;"></div>';
+        } else if (hasExisting) {
+            // Existing title, no change
+            titleLine = '<br><small class="text-muted">' + escHtmlNote(a.existing_title) + '</small>';
+        }
+    }
+
+    var needsBr = !titleLine || titleLine.indexOf('<div') < 0;
+    return '<label class="list-group-item d-flex align-items-start gap-2 py-1" style="cursor:pointer;">' +
+        '<input type="checkbox" class="form-check-input mt-1 flex-shrink-0 att-review-cb" data-idx="' + a._idx + '" ' +
+        (a.checked || a.has_updates ? 'checked' : '') + '>' +
+        '<div class="flex-grow-1">' +
+        nameHtml +
+        (a.email ? ' <small class="text-muted">- ' + escHtmlNote(a.email) + '</small>' : '') +
+        titleLine +
+        (needsBr ? '<br>' : '') + '<small class="text-muted">' + escHtmlNote(detail) + '</small>' +
+        '</div></label>';
+}
+
+function _retryAttendeeScrape() {
+    // Re-run with last meeting context
+    if (_meetingAttendeeData && _meetingAttendeeData._title && _meetingAttendeeData._date) {
+        var body = document.getElementById('attendeeReviewBody');
+        body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">Scanning again...</p></div>';
+        _runAttendeeScrape(_meetingAttendeeData._title, _meetingAttendeeData._date);
+    }
+}
+
+function applyMeetingAttendees() {
+    if (!_meetingAttendeeData) return;
+    var allAttendees = _meetingAttendeeData.attendees;
+
+    // Build payload from checked items
+    var selected = [];
+    document.querySelectorAll('.att-review-cb:checked').forEach(function(cb) {
+        var idx = parseInt(cb.dataset.idx);
+        var att = allAttendees[idx];
+        if (!att) return;
+        var entry = Object.assign({}, att);
+
+        // Read edited name from input
+        var nameInput = document.querySelector('.att-review-name[data-idx="' + idx + '"]');
+        if (nameInput && nameInput.value.trim()) {
+            entry.name = nameInput.value.trim();
+        }
+
+        // Read title update preference
+        var titleCb = document.querySelector('.att-title-cb[data-idx="' + idx + '"]');
+        var titleInput = document.querySelector('.att-title-input[data-idx="' + idx + '"]');
+        if (titleCb && !titleCb.checked) {
+            // User unchecked title update - clear it
+            entry.has_updates = false;
+            entry.title = null;
+        } else if (titleInput && titleInput.value.trim()) {
+            // User may have edited the title
+            entry.title = titleInput.value.trim();
+            entry.has_updates = true;
+        }
+
+        // For new_partner, check if the partner checkbox is checked and get the name
+        if (att.category === 'new_partner') {
+            var domainKey = (att.new_partner_domain || '').replace(/\./g, '_');
+            var partnerCb = document.querySelector('.new-partner-check[data-domain="' + att.new_partner_domain + '"]');
+            if (!partnerCb || !partnerCb.checked) return;
+            var nameInput = document.getElementById('newPartnerName_' + domainKey);
+            entry.new_partner_name = nameInput ? nameInput.value.trim() : att.new_partner_domain;
+        }
+        selected.push(entry);
+    });
+
+    var customerId = document.getElementById('customer_id') ? document.getElementById('customer_id').value : null;
+
+    var btn = document.getElementById('attendeeReviewApplyBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+
+    fetch('/api/meeting-attendees/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customerId ? parseInt(customerId) : null, attendees: selected })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Add to Attendees';
+        if (!data.success) { alert(data.error || 'Failed'); return; }
+
+        bootstrap.Modal.getInstance(document.getElementById('attendeeReviewModal')).hide();
+
+        // Add returned attendees to the note form
+        (data.attendee_results || []).forEach(function(a) {
+            if (typeof window.addAttendee === 'function') {
+                window.addAttendee(a.type, a.id || null, a.name, a.email || null);
+            }
+        });
+
+        // Add new partners to the note
+        (data.new_partners || []).forEach(function(p) {
+            if (typeof addPartner === 'function' && !isPartnerSelected(p.id)) {
+                addPartner(p.id, p.name);
+            }
+        });
+
+        if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Add to Attendees';
+        alert('Error: ' + err.message);
+    });
+}
 
 // ---- Customer Contacts Flyout ----
 var contactsFlyoutInstance = null;
@@ -5466,7 +5771,7 @@ function startAutoFill() {
             loadedMeetings = data.meetings || [];
             
             if (loadedMeetings.length === 0) {
-                showAutoFillError('No meetings found for this date. Try the manual "Import from Meeting" button.');
+                showAutoFillError('No meetings found for this date. Try the manual "Import Summary" button.');
                 return;
             }
             
@@ -5940,6 +6245,7 @@ function openMeetingImport() {
             var brToggle = document.getElementById('meetingBrainrotToggle');
             if (brToggle) brToggle.classList.add('d-none');
             if (window.hideBrainrotPanel) window.hideBrainrotPanel();
+            _importAttendeesMode = false; // Reset if modal dismissed without selecting
         });
     }
     
@@ -6051,6 +6357,11 @@ function showMeetingImportModalReady(meetings, autoSelectedIndex, autoSelectedRe
     document.getElementById('meetingAutoSelectNote').style.display = 'none';
     document.getElementById('meetingNoResults').style.display = 'none';
     document.getElementById('importSelectedMeetingBtn').disabled = true;
+    // Update button text based on mode
+    var importBtn = document.getElementById('importSelectedMeetingBtn');
+    importBtn.innerHTML = _importAttendeesMode
+        ? '<i class="bi bi-people"></i> Import Attendees'
+        : '<i class="bi bi-download"></i> Import Summary';
     
     if (meetings.length === 0) {
         document.getElementById('meetingImportContent').style.display = 'block';
@@ -6116,10 +6427,10 @@ function renderMeetingList(meetings, autoSelectedIndex, autoSelectedReason) {
     
     document.getElementById('meetingImportContent').style.display = 'block';
     
-    // Show the prompt customization section when meetings are available
+    // Show the prompt customization section when meetings are available (not in attendee import mode)
     var promptSection = document.getElementById('meetingPromptSection');
     if (promptSection) {
-        promptSection.style.display = 'block';
+        promptSection.style.display = _importAttendeesMode ? 'none' : 'block';
     }
 }
 
@@ -6159,6 +6470,16 @@ function importSelectedMeeting() {
     
     var meeting = loadedMeetings[selectedMeetingIndex];
     var dateStr = document.getElementById('call_date').value;
+
+    // Check if we're in import attendees mode
+    if (_importAttendeesMode) {
+        _importAttendeesMode = false;
+        // Save meeting context so subsequent imports reuse it
+        _lastMeetingContext = { meetings: loadedMeetings, selectedIndex: selectedMeetingIndex };
+        meetingImportModal.hide();
+        _runAttendeeScrape(meeting.title, dateStr);
+        return;
+    }
     
     // Check if we're in auto-fill mode
     if (window.autoFillModeActive) {
