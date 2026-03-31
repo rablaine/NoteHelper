@@ -329,7 +329,9 @@ function confirmDomainAndScrape() {
     domain = domain.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
 
     var confirmBtn = document.getElementById('scrapeDomainConfirmBtn');
+    var domainInput = document.getElementById('scrapeDomainInput');
     confirmBtn.disabled = true;
+    domainInput.disabled = true;
     confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving domain...';
 
     // Save domain to partner if it changed
@@ -350,6 +352,7 @@ function confirmDomainAndScrape() {
         .then(function(data) {
             if (data.error) {
                 confirmBtn.disabled = false;
+                domainInput.disabled = false;
                 confirmBtn.innerHTML = '<i class="bi bi-search"></i> Search Meetings';
                 document.getElementById('scrapeDomainError').textContent = data.error;
                 document.getElementById('scrapeDomainError').style.display = '';
@@ -360,6 +363,7 @@ function confirmDomainAndScrape() {
         })
         .catch(function(err) {
             confirmBtn.disabled = false;
+            domainInput.disabled = false;
             confirmBtn.innerHTML = '<i class="bi bi-search"></i> Search Meetings';
             document.getElementById('scrapeDomainError').textContent = 'Failed to save domain: ' + err.message;
             document.getElementById('scrapeDomainError').style.display = '';
