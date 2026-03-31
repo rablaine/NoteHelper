@@ -167,7 +167,7 @@
                     {% else %}
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="customer_id" class="form-label">Customer *</label>
+                            <label for="customer_id" class="form-label d-flex align-items-center">Customer * <a href="javascript:void(0)" onclick="openCustomerInfoFlyout()" class="small text-muted text-decoration-none fw-normal ms-auto" id="customerIndicatorBtn" {% if not note and not preselect_customer_id %}style="display:none;"{% endif %}>see details &rsaquo;</a></label>
                             <select class="form-select" id="customer_id" name="customer_id" required
                                     style="display:none;"
                                     {% if not note and preselect_customer_id %}disabled{% endif %}>
@@ -196,7 +196,6 @@
                                     {% elif preselect_customer and preselect_customer.tpid %}({{ preselect_customer.tpid }})
                                     {% endif %}
                                 </span>
-                                <a href="javascript:void(0)" onclick="openCustomerInfoFlyout()" class="small text-muted text-decoration-none" id="customerIndicatorBtn">see details &rsaquo;</a>
                             </div>
                             {% if not seller_mode %}
                             {% if note and note.customer and note.customer.seller %}
@@ -243,7 +242,6 @@
                     <!-- Call Date/Time and Partners side-by-side -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="call_date" class="form-label">Call Date & Time *</label>
                             <div class="d-flex gap-2">
                                 <input type="date" class="form-control" id="call_date" name="call_date" 
                                        value="{% if note %}{{ note.call_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" 
@@ -255,7 +253,6 @@
                         </div>
                         
                         <div class="col-md-6">
-                            <label for="partner_search" class="form-label">Partners</label>
                             <input type="text" class="form-control" id="partner_search" 
                                    placeholder="Search and add partners..." autocomplete="off">
                             <div id="partner_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
@@ -276,38 +273,57 @@
                         </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="topic_search" class="form-label mb-2">Topics</label>
-                        <div class="d-flex gap-2 align-items-center">
-                            <input type="text" class="form-control flex-grow-1" id="topic_search"
-                                   placeholder="Search or type new + Enter" autocomplete="off">
-                            <button type="button" class="btn btn-sm btn-outline-info flex-shrink-0" id="aiSuggestBtn">
-                                <i class="bi bi-stars"></i> <span id="aiSuggestBtnText">Auto-tag with AI</span>
-                            </button>
+                    <!-- Attendees & Topics side-by-side -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="attendee_search"
+                                   placeholder="Search attendees to add..." autocomplete="off">
+                            <div id="attendee_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto; width: calc(50% - 2rem);"></div>
+                            <div id="selected_attendees" class="mt-2 d-flex flex-wrap gap-2">
+                                {% if note and note.attendees %}
+                                    {% for att in note.attendees %}
+                                        <span class="badge d-flex align-items-center {% if att.person_type == 'customer_contact' %}bg-success{% elif att.person_type == 'partner_contact' %}bg-purple{% elif att.person_type == 'se' %}bg-info{% elif att.person_type == 'seller' %}bg-primary{% else %}bg-secondary{% endif %}" data-attendee-type="{{ att.person_type }}" data-attendee-id="{{ att.ref_id or '' }}">
+                                            <i class="bi {% if att.person_type == 'customer_contact' %}bi-person-circle{% elif att.person_type == 'partner_contact' %}bi-building{% elif att.person_type == 'se' %}bi-tools{% elif att.person_type == 'seller' %}bi-person{% else %}bi-person-dash{% endif %} me-1"></i>
+                                            {{ att.display_name }}
+                                            <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.6rem;" onclick="removeAttendee(this)"></button>
+                                            <input type="hidden" name="attendee_types" value="{{ att.person_type }}">
+                                            <input type="hidden" name="attendee_ref_ids" value="{{ att.ref_id or '' }}">
+                                        </span>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
                         </div>
-                        <div id="topic_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
-                        
-                        <div id="selected_topics" class="mt-2 d-flex flex-wrap gap-2">
-                            {% if note %}
-                                {% for topic in note.topics %}
-                                    <span class="badge bg-warning text-dark d-flex align-items-center" data-topic-id="{{ topic.id }}">
-                                        <i class="bi bi-tag me-1"></i> {{ topic.name }}
-                                        <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTopic({{ topic.id }})"></button>
-                                        <input type="hidden" name="topic_ids" value="{{ topic.id }}">
-                                    </span>
-                                {% endfor %}
-                            {% endif %}
-                            {% if preselect_topic_id %}
-                                {% for topic in topics %}
-                                    {% if topic.id == preselect_topic_id %}
+                        <div class="col-md-6">
+                            <div class="d-flex gap-2 align-items-center">
+                                <input type="text" class="form-control flex-grow-1" id="topic_search"
+                                       placeholder="Search topics to add..." autocomplete="off">
+                                <button type="button" class="btn btn-sm btn-outline-info flex-shrink-0" id="aiSuggestBtn">
+                                    <i class="bi bi-stars"></i> <span id="aiSuggestBtnText">Auto-tag with AI</span>
+                                </button>
+                            </div>
+                            <div id="topic_dropdown" class="list-group mt-1" style="display: none; position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                            <div id="selected_topics" class="mt-2 d-flex flex-wrap gap-2">
+                                {% if note %}
+                                    {% for topic in note.topics %}
                                         <span class="badge bg-warning text-dark d-flex align-items-center" data-topic-id="{{ topic.id }}">
                                             <i class="bi bi-tag me-1"></i> {{ topic.name }}
                                             <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTopic({{ topic.id }})"></button>
                                             <input type="hidden" name="topic_ids" value="{{ topic.id }}">
                                         </span>
-                                    {% endif %}
-                                {% endfor %}
-                            {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                                {% if preselect_topic_id %}
+                                    {% for topic in topics %}
+                                        {% if topic.id == preselect_topic_id %}
+                                            <span class="badge bg-warning text-dark d-flex align-items-center" data-topic-id="{{ topic.id }}">
+                                                <i class="bi bi-tag me-1"></i> {{ topic.name }}
+                                                <button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.7rem;" onclick="removeTopic({{ topic.id }})"></button>
+                                                <input type="hidden" name="topic_ids" value="{{ topic.id }}">
+                                            </span>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                     
@@ -1154,6 +1170,213 @@ function updateAiButtonState() {
 quill.on('text-change', updateAiButtonState);
 updateAiButtonState();
 
+// ---- Attendee Search & Add ----
+(function() {
+    var searchInput = document.getElementById('attendee_search');
+    var dropdown = document.getElementById('attendee_dropdown');
+    var container = document.getElementById('selected_attendees');
+    if (!searchInput) return;
+
+    var debounceTimer = null;
+    var currentResults = [];
+    var selectedIndex = -1;
+
+    function getCustomerId() {
+        var sel = document.getElementById('customer_id');
+        if (!sel) return null;
+        if (sel.disabled) {
+            var hidden = document.querySelector('input[type="hidden"][name="customer_id"]');
+            return hidden ? hidden.value : sel.value;
+        }
+        return sel.value || null;
+    }
+
+    function getPartnerIds() {
+        var inputs = document.querySelectorAll('input[name="partner_ids"]');
+        return Array.from(inputs).map(function(i) { return i.value; }).filter(Boolean);
+    }
+
+    function isAlreadyAdded(type, id) {
+        var badges = container.querySelectorAll('[data-attendee-type]');
+        for (var i = 0; i < badges.length; i++) {
+            if (badges[i].dataset.attendeeType === type &&
+                badges[i].dataset.attendeeId === String(id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    var colorMap = {
+        'customer_contact': 'bg-success',
+        'partner_contact': 'bg-purple',
+        'se': 'bg-info',
+        'seller': 'bg-primary',
+        'external': 'bg-secondary'
+    };
+    var iconMap = {
+        'customer_contact': 'bi-person-circle',
+        'partner_contact': 'bi-building',
+        'se': 'bi-tools',
+        'seller': 'bi-person',
+        'external': 'bi-person-dash'
+    };
+
+    function addAttendee(type, id, name) {
+        if (isAlreadyAdded(type, id)) return;
+        var badge = document.createElement('span');
+        badge.className = 'badge d-flex align-items-center ' + (colorMap[type] || 'bg-secondary');
+        badge.dataset.attendeeType = type;
+        badge.dataset.attendeeId = String(id);
+        badge.innerHTML =
+            '<i class="bi ' + (iconMap[type] || 'bi-person') + ' me-1"></i>' +
+            escHtmlNote(name) +
+            '<button type="button" class="btn-close btn-close-white ms-2" style="font-size: 0.6rem;" onclick="removeAttendee(this)"></button>' +
+            '<input type="hidden" name="attendee_types" value="' + type + '">' +
+            '<input type="hidden" name="attendee_ref_ids" value="' + id + '">';
+        container.appendChild(badge);
+        searchInput.value = '';
+        dropdown.style.display = 'none';
+        currentResults = [];
+        selectedIndex = -1;
+        searchInput.focus();
+        if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
+    }
+    window.addAttendee = addAttendee;
+
+    function renderDropdown() {
+        var filtered = currentResults.filter(function(r) {
+            return !isAlreadyAdded(r.type, r.id);
+        });
+        if (filtered.length === 0) {
+            dropdown.innerHTML = '<div class="list-group-item text-muted small">No matches</div>';
+            dropdown.style.display = 'block';
+            selectedIndex = -1;
+            return;
+        }
+        if (selectedIndex < 0 || selectedIndex >= filtered.length) {
+            selectedIndex = 0;
+        }
+        dropdown.innerHTML = filtered.map(function(r, idx) {
+            var active = (idx === selectedIndex) ? ' enter-target' : '';
+            return '<button type="button" class="list-group-item list-group-item-action small py-1' + active + '" data-idx="' + idx + '">' +
+                '<i class="bi ' + r.icon + ' text-' + r.color + ' me-1"></i>' +
+                '<span class="fw-semibold">' + escHtmlNote(r.name) + '</span>' +
+                (r.detail ? ' <span class="text-muted">- ' + escHtmlNote(r.detail) + '</span>' : '') +
+                (r.email ? ' <span class="text-muted small">(' + escHtmlNote(r.email) + ')</span>' : '') +
+                '</button>';
+        }).join('');
+        dropdown.style.display = 'block';
+        // Store filtered list for selection
+        dropdown._filtered = filtered;
+
+        var active = dropdown.querySelector('.enter-target');
+        if (active) active.scrollIntoView({ block: 'nearest' });
+    }
+
+    function selectCurrent() {
+        var filtered = dropdown._filtered || [];
+        if (selectedIndex < 0 || selectedIndex >= filtered.length) return;
+        var r = filtered[selectedIndex];
+        addAttendee(r.type, r.id, r.name);
+    }
+
+    function moveSel(delta) {
+        var filtered = dropdown._filtered || [];
+        if (filtered.length === 0) return;
+        var next = selectedIndex + delta;
+        if (next < 0) next = 0;
+        if (next >= filtered.length) next = filtered.length - 1;
+        selectedIndex = next;
+        renderDropdown();
+    }
+
+    searchInput.addEventListener('input', function() {
+        var q = this.value.trim();
+        if (q.length < 1) {
+            dropdown.style.display = 'none';
+            currentResults = [];
+            selectedIndex = -1;
+            return;
+        }
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+            var customerId = getCustomerId();
+            var partnerIds = getPartnerIds();
+            var url = '/api/attendee-search?q=' + encodeURIComponent(q);
+            if (customerId) url += '&customer_id=' + customerId;
+            if (partnerIds.length) url += '&partner_ids=' + partnerIds.join(',');
+
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    currentResults = data.results || [];
+                    selectedIndex = -1;
+                    renderDropdown();
+                });
+        }, 200);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+            if (dropdown.style.display === 'block' && currentResults.length > 0) {
+                e.preventDefault();
+                moveSel(1);
+            }
+        } else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
+            if (dropdown.style.display === 'block' && currentResults.length > 0) {
+                e.preventDefault();
+                moveSel(-1);
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            selectCurrent();
+        } else if (e.key === 'Escape') {
+            dropdown.style.display = 'none';
+            this.value = '';
+            currentResults = [];
+            selectedIndex = -1;
+        }
+    });
+
+    // Click on dropdown item
+    dropdown.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-idx]');
+        if (!btn) return;
+        e.preventDefault();
+        var idx = parseInt(btn.dataset.idx);
+        var filtered = dropdown._filtered || [];
+        if (idx >= 0 && idx < filtered.length) {
+            addAttendee(filtered[idx].type, filtered[idx].id, filtered[idx].name);
+        }
+    });
+
+    // Hover updates selection
+    dropdown.addEventListener('mouseover', function(e) {
+        var btn = e.target.closest('[data-idx]');
+        if (btn) {
+            selectedIndex = parseInt(btn.dataset.idx);
+            dropdown.querySelectorAll('.list-group-item').forEach(function(el) { el.classList.remove('enter-target'); });
+            btn.classList.add('enter-target');
+        }
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+            currentResults = [];
+            selectedIndex = -1;
+        }
+    });
+})();
+
+window.removeAttendee = function(btn) {
+    btn.closest('.badge').remove();
+    if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
+};
+
 // ---- Customer Contacts Flyout ----
 var contactsFlyoutInstance = null;
 
@@ -1196,6 +1419,11 @@ function getSelectedCustomerId() {
 function openContactsFlyout() {
     var custId = getSelectedCustomerId();
     if (!custId) return;
+    var flyoutEl = document.getElementById('contactsFlyout');
+    if (flyoutEl && flyoutEl.classList.contains('show')) {
+        getContactsFlyout().hide();
+        return;
+    }
     var flyout = getContactsFlyout();
     if (flyout) flyout.show();
     loadFlyoutContacts(custId);
@@ -1759,6 +1987,7 @@ document.getElementById('noteForm').onsubmit = function(e) {
                 hiddenSelect.innerHTML = '';
                 buildMenu();
                 updateLabel();
+                if (typeof syncEngTaskButton === 'function') syncEngTaskButton();
                 return;
             }
             
@@ -1777,17 +2006,23 @@ document.getElementById('noteForm').onsubmit = function(e) {
                     });
                     buildMenu();
                     updateLabel();
+                    if (typeof syncEngTaskButton === 'function') syncEngTaskButton();
                 })
                 .catch(err => {
                     console.error('Error loading engagements:', err);
                     buildMenu();
                     updateLabel();
+                    if (typeof syncEngTaskButton === 'function') syncEngTaskButton();
                 });
         });
     }
 
     // Expose rebuild for external use
-    window.rebuildEngagementDropdown = function() { buildMenu(); updateLabel(); };
+    window.rebuildEngagementDropdown = function() {
+        buildMenu();
+        updateLabel();
+        if (typeof syncEngTaskButton === 'function') syncEngTaskButton();
+    };
 })();
 
 // --- Project dropdown (general notes) ---
@@ -2007,6 +2242,7 @@ document.getElementById('noteForm').onsubmit = function(e) {
                 }
                 buildMenu();
                 updateLabel();
+                _projFlyoutCleanState = _getProjFlyoutState();
                 bootstrap.Offcanvas.getInstance(document.getElementById('projectFlyout')).hide();
             })
             .catch(err => {
@@ -2042,6 +2278,7 @@ document.getElementById('noteForm').onsubmit = function(e) {
                 buildMenu();
                 updateLabel();
                 try { if (typeof debouncedAutoSave === 'function') debouncedAutoSave(); } catch(e) {}
+                _projFlyoutCleanState = _getProjFlyoutState();
                 bootstrap.Offcanvas.getInstance(document.getElementById('projectFlyout')).hide();
             })
             .catch(err => {
@@ -3025,6 +3262,7 @@ function savePartnerFromFlyout() {
                 addPartner(data.id, data.name);
             }
             _flyoutCleanState = _getFlyoutState();
+            _flyoutCleanState = _getFlyoutState();
             bootstrap.Offcanvas.getInstance(document.getElementById('partnerFlyout')).hide();
             partnerSearch.value = '';
         }
@@ -3206,9 +3444,8 @@ function saveEngagementFromFlyout() {
                 if (typeof window.rebuildEngagementDropdown === 'function') {
                     window.rebuildEngagementDropdown();
                 }
+                _engFlyoutCleanState = _getEngFlyoutState();
                 bootstrap.Offcanvas.getInstance(document.getElementById('engagementFlyout')).hide();
-            } else {
-                alert(data.error || 'Failed to update engagement.');
             }
         })
         .catch(err => {
@@ -3249,6 +3486,7 @@ function saveEngagementFromFlyout() {
                 if (typeof window.onEngagementSelectionChanged === 'function') {
                     window.onEngagementSelectionChanged();
                 }
+                _engFlyoutCleanState = _getEngFlyoutState();
                 bootstrap.Offcanvas.getInstance(document.getElementById('engagementFlyout')).hide();
                 if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
             }
@@ -4529,6 +4767,13 @@ function saveDraft() {
             id: parseInt(input.value),
             name: input.closest('.badge').textContent.trim().replace('×', '').trim()
         })),
+        attendees: Array.from(document.getElementById('selected_attendees').querySelectorAll('[data-attendee-type]')).map(function(badge) {
+            return {
+                type: badge.dataset.attendeeType,
+                id: badge.dataset.attendeeId,
+                name: badge.textContent.trim().replace('\u00d7', '').trim()
+            };
+        }),
         milestones: milestoneData,
         dismissedMilestoneIds: Array.from(window.dismissedMilestoneIds || []),
         engagementIds: Array.from(document.getElementById('engagement_ids')?.selectedOptions || []).map(o => parseInt(o.value)),
@@ -4547,7 +4792,7 @@ function saveDraft() {
     tempDiv.innerHTML = draftData.content;
     const textContent = (tempDiv.textContent || tempDiv.innerText || '').trim();
     
-    if (textContent.length > 0 || draftData.topics.length > 0 || draftData.pendingTopics.length > 0 || draftData.partners.length > 0 || milestoneData.length > 0 || draftData.project_id) {
+    if (textContent.length > 0 || draftData.topics.length > 0 || draftData.pendingTopics.length > 0 || draftData.partners.length > 0 || draftData.attendees.length > 0 || milestoneData.length > 0 || draftData.project_id) {
         try {
             localStorage.setItem(draftKey, JSON.stringify(draftData));
             console.log('Draft auto-saved');
@@ -4634,6 +4879,13 @@ function restoreDraft() {
                 }
             });
         }
+
+        // Restore attendees
+        if (draft.attendees && draft.attendees.length > 0 && typeof window.addAttendee === 'function') {
+            draft.attendees.forEach(att => {
+                window.addAttendee(att.type, att.id, att.name);
+            });
+        }
         
         // Restore dismissed milestone suggestions
         if (draft.dismissedMilestoneIds && draft.dismissedMilestoneIds.length > 0) {
@@ -4658,10 +4910,9 @@ function restoreDraft() {
                 Array.from(engSelect.options).forEach(function(opt) {
                     opt.selected = draft.engagementIds.includes(parseInt(opt.value));
                 });
-                // Rebuild the visible dropdown and sync task button
-                if (typeof buildMenu === 'function') buildMenu();
-                if (typeof updateLabel === 'function') updateLabel();
-                if (typeof syncEngTaskButton === 'function') syncEngTaskButton();
+                if (typeof window.rebuildEngagementDropdown === 'function') {
+                    window.rebuildEngagementDropdown();
+                }
                 // Show engagement section if hidden
                 var engSection = document.getElementById('engagementSection');
                 if (engSection) engSection.style.display = '';
@@ -4823,21 +5074,6 @@ function startAutoSave() {
         const hasDraft = restoreDraft();
         if (hasDraft) {
             draftRestored = true;
-            
-            // Show dismissible alert
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-info alert-dismissible fade show mt-3';
-            alertDiv.innerHTML = `
-                <i class="bi bi-info-circle"></i> <strong>Draft restored!</strong> Your unsaved changes have been recovered.
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            `;
-            document.querySelector('form').insertBefore(alertDiv, document.querySelector('form').firstChild);
-            
-            // Auto-dismiss after 5 seconds
-            setTimeout(() => {
-                alertDiv.classList.remove('show');
-                setTimeout(() => alertDiv.remove(), 150);
-            }, 5000);
         }
     }
     

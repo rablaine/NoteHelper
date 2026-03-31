@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime
 import logging
 
-from app.models import db, Note, Customer, Seller, Territory, Topic, Partner, Milestone, Opportunity, MsxTask, UserPreference, NoteTemplate
+from app.models import db, Note, Customer, Seller, Territory, Topic, Partner, Milestone, Opportunity, MsxTask, UserPreference, NoteTemplate, NoteAttendee, SolutionEngineer, CustomerContact, PartnerContact
 from app.services.msx_api import TASK_CATEGORIES, add_user_to_milestone_team
 from app.services.seller_mode import get_seller_mode_seller_id as _get_seller_mode_seller_id
 from app.services.backup import backup_customer as _backup_customer
@@ -371,6 +371,14 @@ def note_create():
         
         db.session.add(note)
         
+        # Add attendees
+        attendee_types = request.form.getlist('attendee_types')
+        attendee_ref_ids = request.form.getlist('attendee_ref_ids')
+        for atype, ref_id in zip(attendee_types, attendee_ref_ids):
+            attendee = _make_attendee(atype, ref_id)
+            if attendee:
+                note.attendees.append(attendee)
+
         # Handle milestone and optional task creation (only for customer-linked notes)
         if customer_id:
             try:
@@ -638,6 +646,15 @@ def note_edit(id):
             proj = db.session.get(Project, int(project_id))
             if proj:
                 note.projects.append(proj)
+
+        # Update attendees
+        note.attendees = []
+        attendee_types = request.form.getlist('attendee_types')
+        attendee_ref_ids = request.form.getlist('attendee_ref_ids')
+        for atype, ref_id in zip(attendee_types, attendee_ref_ids):
+            attendee = _make_attendee(atype, ref_id)
+            if attendee:
+                note.attendees.append(attendee)
         
         # Handle milestone and optional task creation (only for customer-linked notes)
         if customer_id:
@@ -1293,3 +1310,153 @@ def api_share_receive_note():
         db.session.rollback()
         logger.error(f"Note share import error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# =============================================================================
+# Attendee helpers and API
+# =============================================================================
+
+def _make_attendee(atype: str, ref_id: str) -> 'NoteAttendee | None':
+    """Create a NoteAttendee from a type string and reference ID."""
+    try:
+        rid = int(ref_id)
+    except (ValueError, TypeError):
+        return None
+    if atype == 'customer_contact':
+        return NoteAttendee(customer_contact_id=rid)
+    elif atype == 'partner_contact':
+        return NoteAttendee(partner_contact_id=rid)
+    elif atype == 'se':
+        return NoteAttendee(solution_engineer_id=rid)
+    elif atype == 'seller':
+        return NoteAttendee(seller_id=rid)
+    return None
+
+
+@notes_bp.route('/api/note/<int:note_id>/attendees')
+def api_note_attendees(note_id):
+    """List attendees for a note."""
+    note = Note.query.get_or_404(note_id)
+    return jsonify([a.to_dict() for a in note.attendees])
+
+
+@notes_bp.route('/api/note/<int:note_id>/attendees', methods=['POST'])
+def api_add_attendee(note_id):
+    """Add an attendee to a note."""
+    note = Note.query.get_or_404(note_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data'}), 400
+
+    atype = data.get('type', '')
+    ref_id = data.get('id')
+
+    if atype == 'external':
+        attendee = NoteAttendee(
+            note_id=note.id,
+            external_name=data.get('name', '').strip() or None,
+            external_email=data.get('email', '').strip() or None,
+        )
+    else:
+        attendee = _make_attendee(atype, ref_id)
+        if not attendee:
+            return jsonify({'success': False, 'error': 'Invalid attendee'}), 400
+        attendee.note_id = note.id
+
+    db.session.add(attendee)
+    db.session.commit()
+    return jsonify({'success': True, 'attendee': attendee.to_dict()})
+
+
+@notes_bp.route('/api/note/<int:note_id>/attendees/<int:attendee_id>', methods=['DELETE'])
+def api_remove_attendee(note_id, attendee_id):
+    """Remove an attendee from a note."""
+    attendee = NoteAttendee.query.filter_by(id=attendee_id, note_id=note_id).first_or_404()
+    db.session.delete(attendee)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@notes_bp.route('/api/attendee-search')
+def api_attendee_search():
+    """Search across all person types for the attendee picker.
+
+    Query params:
+        q: search string (required)
+        customer_id: filter customer contacts to this customer
+        partner_ids: comma-separated partner IDs for partner contact filtering
+    """
+    q = request.args.get('q', '').strip().lower()
+    if len(q) < 1:
+        return jsonify({'results': []})
+
+    customer_id = request.args.get('customer_id', type=int)
+    partner_ids_str = request.args.get('partner_ids', '')
+    partner_ids = [int(x) for x in partner_ids_str.split(',') if x.strip().isdigit()]
+
+    results = []
+
+    # Customer contacts (filtered to note's customer)
+    if customer_id:
+        contacts = CustomerContact.query.filter(
+            CustomerContact.customer_id == customer_id,
+            db.or_(
+                db.func.lower(CustomerContact.name).contains(q),
+                db.func.lower(CustomerContact.email).contains(q),
+            )
+        ).limit(10).all()
+        for c in contacts:
+            results.append({
+                'type': 'customer_contact', 'id': c.id,
+                'name': c.name, 'email': c.email, 'detail': c.title,
+                'icon': 'bi-person-circle', 'color': 'success',
+            })
+
+    # Partner contacts (filtered to tagged partners)
+    if partner_ids:
+        pcontacts = PartnerContact.query.filter(
+            PartnerContact.partner_id.in_(partner_ids),
+            db.or_(
+                db.func.lower(PartnerContact.name).contains(q),
+                db.func.lower(PartnerContact.email).contains(q),
+            )
+        ).limit(10).all()
+        for c in pcontacts:
+            results.append({
+                'type': 'partner_contact', 'id': c.id,
+                'name': c.name, 'email': c.email,
+                'detail': c.partner.name if c.partner else None,
+                'icon': 'bi-building', 'color': 'purple',
+            })
+
+    # Solution engineers
+    ses = SolutionEngineer.query.filter(
+        db.or_(
+            db.func.lower(SolutionEngineer.name).contains(q),
+            db.func.lower(SolutionEngineer.alias).contains(q),
+        )
+    ).limit(10).all()
+    for se in ses:
+        results.append({
+            'type': 'se', 'id': se.id,
+            'name': se.name, 'email': se.get_email(),
+            'detail': se.specialty,
+            'icon': 'bi-tools', 'color': 'info',
+        })
+
+    # Sellers
+    sellers = Seller.query.filter(
+        db.or_(
+            db.func.lower(Seller.name).contains(q),
+            db.func.lower(Seller.alias).contains(q),
+        )
+    ).limit(10).all()
+    for s in sellers:
+        results.append({
+            'type': 'seller', 'id': s.id,
+            'name': s.name, 'email': s.get_email(),
+            'detail': s.seller_type,
+            'icon': 'bi-person', 'color': 'primary',
+        })
+
+    return jsonify({'results': results})
