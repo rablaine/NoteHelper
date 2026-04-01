@@ -473,7 +473,8 @@ def api_partner_get(id):
         'specialty_ids': [s.id for s in partner.specialties],
         'specialties': [{'id': s.id, 'name': s.name} for s in partner.specialties],
         'contacts': [
-            {'id': c.id, 'name': c.name, 'title': c.title or '', 'email': c.email or '', 'is_primary': c.is_primary}
+            {'id': c.id, 'name': c.name, 'title': c.title or '', 'email': c.email or '',
+             'is_primary': c.is_primary, 'photo_b64': c.photo_b64 or ''}
             for c in partner.contacts
         ],
     })

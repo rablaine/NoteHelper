@@ -664,14 +664,23 @@ function openContactPhotoModal(el) {
         removeBtn.style.display = 'none';
     }
     document.getElementById('contactPhotoStatus').textContent = '';
-    new bootstrap.Modal(document.getElementById('contactPhotoModal')).show();
+    var modal = new bootstrap.Modal(document.getElementById('contactPhotoModal'));
+    document.getElementById('contactPhotoModal').addEventListener('shown.bs.modal', function handler() {
+        document.getElementById('contactPhotoPaste').focus();
+        document.getElementById('contactPhotoModal').removeEventListener('shown.bs.modal', handler);
+    });
+    modal.show();
 }
 
-// Handle paste anywhere in the modal
-document.addEventListener('DOMContentLoaded', function() {
+// Handle paste - listen on document level when photo modal is open
+var _photoModalOpen = false;
+(function() {
     var modal = document.getElementById('contactPhotoModal');
     if (!modal) return;
-    modal.addEventListener('paste', function(e) {
+    modal.addEventListener('shown.bs.modal', function() { _photoModalOpen = true; });
+    modal.addEventListener('hidden.bs.modal', function() { _photoModalOpen = false; });
+    document.addEventListener('paste', function(e) {
+        if (!_photoModalOpen) return;
         var items = (e.clipboardData || e.originalEvent.clipboardData).items;
         for (var i = 0; i < items.length; i++) {
             if (items[i].type.indexOf('image') !== -1) {
@@ -682,7 +691,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
-});
+})();
 
 function processContactPhoto(blob) {
     var status = document.getElementById('contactPhotoStatus');
@@ -1064,7 +1073,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="modal-body text-center">
                 <img id="contactPhotoFull" src="" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: none;">
-                <div id="contactPhotoPaste" class="border rounded p-4 text-muted" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 120px; cursor: pointer;">
+                <div id="contactPhotoPaste" class="border rounded p-4 text-muted" tabindex="0" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 120px; cursor: pointer; outline: none;">
                     <i class="bi bi-clipboard-plus" style="font-size: 2rem;"></i>
                     <div class="small mt-2">Click here, then Ctrl+V to paste a screenshot</div>
                 </div>

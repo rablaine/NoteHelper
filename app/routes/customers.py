@@ -454,7 +454,8 @@ def api_customers_autocomplete():
 def api_customer_contacts(customer_id):
     """Get all contacts for a customer."""
     customer = Customer.query.filter_by(id=customer_id).first_or_404()
-    contacts = [{'id': c.id, 'name': c.name, 'email': c.email or '', 'title': c.title or ''}
+    contacts = [{'id': c.id, 'name': c.name, 'email': c.email or '', 'title': c.title or '',
+                 'photo_b64': c.photo_b64 or '', 'photo_full_b64': c.photo_full_b64 or ''}
                 for c in customer.contacts]
     return jsonify(contacts), 200
 
