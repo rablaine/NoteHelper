@@ -721,3 +721,106 @@ class TestPartnerRecommendation:
         assert resp.status_code == 200
         assert b'recommendPartnersBtn' in resp.data
         assert b'Partner Recommendations' in resp.data
+
+    @patch('app.routes.ai.gateway_call')
+    def test_recommendations_are_persisted(self, mock_gw, app, client):
+        """Successful recommendations should be saved to the database."""
+        eid = self._create_engagement_and_partners(app)
+        mock_gw.return_value = {
+            'recommendations': [
+                {
+                    'partner_id': 1,
+                    'partner_name': 'Data Migration Pros',
+                    'fit_score': 92,
+                    'reason': 'Great fit for ADF work.',
+                },
+                {
+                    'partner_id': 2,
+                    'partner_name': 'Cloud General Inc',
+                    'fit_score': 45,
+                    'reason': 'Decent general cloud skills.',
+                },
+            ],
+            'usage': {},
+        }
+
+        resp = client.post(
+            '/api/ai/recommend-partners',
+            json={'engagement_id': eid},
+        )
+        assert resp.status_code == 200
+
+        from app.models import PartnerRecommendation
+        with app.app_context():
+            recs = PartnerRecommendation.query.filter_by(
+                engagement_id=eid
+            ).order_by(PartnerRecommendation.rank).all()
+            assert len(recs) == 2
+            assert recs[0].rank == 1
+            assert recs[0].fit_score == 92
+            assert recs[0].reason == 'Great fit for ADF work.'
+            assert recs[1].rank == 2
+            assert recs[1].fit_score == 45
+
+    @patch('app.routes.ai.gateway_call')
+    def test_regenerate_replaces_old_recommendations(self, mock_gw, app, client):
+        """Regenerating recommendations should replace the previous batch."""
+        eid = self._create_engagement_and_partners(app)
+
+        # First generation
+        mock_gw.return_value = {
+            'recommendations': [
+                {'partner_id': 1, 'partner_name': 'P1', 'fit_score': 80,
+                 'reason': 'First run.'},
+            ],
+            'usage': {},
+        }
+        client.post('/api/ai/recommend-partners', json={'engagement_id': eid})
+
+        # Second generation with different results
+        mock_gw.return_value = {
+            'recommendations': [
+                {'partner_id': 2, 'partner_name': 'P2', 'fit_score': 75,
+                 'reason': 'Second run.'},
+                {'partner_id': 3, 'partner_name': 'P3', 'fit_score': 50,
+                 'reason': 'Also second run.'},
+            ],
+            'usage': {},
+        }
+        client.post('/api/ai/recommend-partners', json={'engagement_id': eid})
+
+        from app.models import PartnerRecommendation
+        with app.app_context():
+            recs = PartnerRecommendation.query.filter_by(
+                engagement_id=eid
+            ).order_by(PartnerRecommendation.rank).all()
+            # Should only have the second batch
+            assert len(recs) == 2
+            assert recs[0].reason == 'Second run.'
+            assert recs[1].reason == 'Also second run.'
+
+    @patch('app.routes.ai.gateway_call')
+    def test_saved_recs_shown_on_page_load(self, mock_gw, app, client):
+        """Engagement view should display saved recommendations without AI call."""
+        eid = self._create_engagement_and_partners(app)
+
+        # Generate and persist
+        mock_gw.return_value = {
+            'recommendations': [
+                {'partner_id': 1, 'partner_name': 'Data Migration Pros',
+                 'fit_score': 92, 'reason': 'Top pick for ADF.'},
+            ],
+            'usage': {},
+        }
+        client.post('/api/ai/recommend-partners', json={'engagement_id': eid})
+
+        # Load the page - should show saved rec without another AI call
+        mock_gw.reset_mock()
+        resp = client.get(f'/engagement/{eid}')
+        assert resp.status_code == 200
+        assert b'Data Migration Pros' in resp.data
+        assert b'Top pick for ADF.' in resp.data
+        assert b'92% fit' in resp.data
+        assert b'Refresh' in resp.data  # Button says Refresh when recs exist
+        # No gateway call should have been made for the page load
+        mock_gw.assert_not_called()

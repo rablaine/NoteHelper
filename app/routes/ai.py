@@ -692,6 +692,24 @@ def api_ai_recommend_partners():
             total_tokens=usage.get('total_tokens', 0),
         )
         db.session.add(log_entry)
+
+        # Persist recommendations - clear old ones, save new batch
+        from app.models import PartnerRecommendation
+        PartnerRecommendation.query.filter_by(
+            engagement_id=engagement.id
+        ).delete()
+        for idx, rec in enumerate(recommendations):
+            partner_id = rec.get('partner_id')
+            # Only save if the partner actually exists in our DB
+            if partner_id and Partner.query.get(partner_id):
+                db.session.add(PartnerRecommendation(
+                    engagement_id=engagement.id,
+                    partner_id=partner_id,
+                    rank=idx + 1,
+                    fit_score=rec.get('fit_score', 0),
+                    reason=rec.get('reason', ''),
+                ))
+
         db.session.commit()
 
         return jsonify({
