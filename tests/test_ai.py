@@ -467,3 +467,257 @@ class TestEngagementStoryPreviewAndApply:
         with app.app_context():
             eng = Engagement.query.get(eid)
             assert eng.target_date == date(2025, 12, 31)
+
+
+# ---------------------------------------------------------------------------
+# Partner recommendation tests
+# ---------------------------------------------------------------------------
+
+class TestPartnerRecommendation:
+    """Test partner recommendation via AI gateway."""
+
+    def _create_engagement_and_partners(self, app):
+        """Create an engagement with notes and partners with specialties."""
+        from app.models import Customer, Note, Engagement, Partner, Specialty
+        with app.app_context():
+            customer = Customer(name="Fabrikam", tpid=77777)
+            db.session.add(customer)
+            db.session.flush()
+
+            engagement = Engagement(
+                customer_id=customer.id,
+                title="Data Lake Migration",
+                status="Active",
+                technical_problem="Need to migrate on-prem data warehouse",
+                solution_resources="Azure Data Factory, ADLS Gen2",
+            )
+            db.session.add(engagement)
+            db.session.flush()
+
+            topic = Topic(name="Azure Data Factory")
+            db.session.add(topic)
+            db.session.flush()
+
+            note = Note(
+                customer_id=customer.id,
+                call_date=datetime(2025, 7, 10),
+                content="Discussed ADF pipelines and data lake architecture.",
+            )
+            db.session.add(note)
+            db.session.flush()
+            note.topics.append(topic)
+            engagement.notes.append(note)
+
+            # Partner 1: highly rated, relevant specialties
+            spec1 = Specialty(name="Azure Data Factory")
+            spec2 = Specialty(name="Azure Data Lake Storage")
+            db.session.add_all([spec1, spec2])
+            db.session.flush()
+
+            partner1 = Partner(
+                name="Data Migration Pros",
+                overview="Expert data migration partner",
+                rating=5,
+            )
+            db.session.add(partner1)
+            db.session.flush()
+            partner1.specialties.extend([spec1, spec2])
+
+            # Partner 2: lower rated, some relevance
+            partner2 = Partner(
+                name="Cloud General Inc",
+                overview="General cloud consulting",
+                rating=3,
+            )
+            db.session.add(partner2)
+            db.session.flush()
+
+            # Partner 3: no rating, different focus
+            partner3 = Partner(
+                name="Security First LLC",
+                overview="Cybersecurity focused partner",
+                rating=1,
+            )
+            db.session.add(partner3)
+            db.session.flush()
+
+            db.session.commit()
+            return engagement.id
+
+    @patch('app.routes.ai.gateway_call')
+    def test_recommend_partners_success(self, mock_gw, app, client):
+        """Successful partner recommendation returns ranked results."""
+        eid = self._create_engagement_and_partners(app)
+        mock_gw.return_value = {
+            'recommendations': [
+                {
+                    'partner_id': 1,
+                    'partner_name': 'Data Migration Pros',
+                    'fit_score': 92,
+                    'reason': 'Strong ADF and ADLS expertise with 5-star rating.',
+                },
+                {
+                    'partner_id': 2,
+                    'partner_name': 'Cloud General Inc',
+                    'fit_score': 45,
+                    'reason': 'General cloud skills but lower rating.',
+                },
+            ],
+            'usage': {
+                'model': 'gpt-4o-mini',
+                'prompt_tokens': 500,
+                'completion_tokens': 200,
+                'total_tokens': 700,
+            },
+        }
+
+        resp = client.post(
+            '/api/ai/recommend-partners',
+            json={'engagement_id': eid},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['success'] is True
+        assert len(data['recommendations']) == 2
+        assert data['recommendations'][0]['fit_score'] == 92
+        assert data['recommendations'][0]['partner_name'] == 'Data Migration Pros'
+
+        # Verify context sent to gateway includes rating and specialties
+        call_args = mock_gw.call_args
+        user_msg = call_args[0][1]['user_message']
+        assert 'Data Migration Pros' in user_msg
+        assert '5/5 stars' in user_msg
+        assert 'Azure Data Factory' in user_msg
+        assert 'Data Lake Migration' in user_msg
+
+        # Verify audit log
+        with app.app_context():
+            log = AIQueryLog.query.first()
+            assert log is not None
+            assert log.success is True
+            assert 'Partner recommendations' in log.request_text
+
+    def test_recommend_partners_requires_engagement_id(self, app, client):
+        """Missing engagement_id returns 400."""
+        resp = client.post('/api/ai/recommend-partners', json={})
+        assert resp.status_code == 400
+        assert resp.get_json()['success'] is False
+
+    def test_recommend_partners_engagement_not_found(self, app, client):
+        """Non-existent engagement returns 404."""
+        resp = client.post(
+            '/api/ai/recommend-partners',
+            json={'engagement_id': 99999},
+        )
+        assert resp.status_code == 404
+
+    def test_recommend_partners_no_partners(self, app, client):
+        """No partners in DB returns 400 with helpful message."""
+        from app.models import Customer, Engagement
+        with app.app_context():
+            customer = Customer(name="Lonely Customer", tpid=88888)
+            db.session.add(customer)
+            db.session.flush()
+            engagement = Engagement(
+                customer_id=customer.id, title="No Partners", status="Active",
+            )
+            db.session.add(engagement)
+            db.session.commit()
+            eid = engagement.id
+
+        resp = client.post(
+            '/api/ai/recommend-partners',
+            json={'engagement_id': eid},
+        )
+        assert resp.status_code == 400
+        assert 'No partners' in resp.get_json()['error']
+
+    @patch('app.routes.ai.gateway_call')
+    def test_recommend_partners_gateway_error(self, mock_gw, app, client):
+        """Gateway errors are handled gracefully and logged."""
+        eid = self._create_engagement_and_partners(app)
+        from app.gateway_client import GatewayError
+        mock_gw.side_effect = GatewayError("Service unavailable")
+
+        resp = client.post(
+            '/api/ai/recommend-partners',
+            json={'engagement_id': eid},
+        )
+        assert resp.status_code == 502
+        data = resp.get_json()
+        assert data['success'] is False
+
+        with app.app_context():
+            log = AIQueryLog.query.first()
+            assert log is not None
+            assert log.success is False
+
+    @patch('app.routes.ai.gateway_call')
+    def test_recommend_includes_partner_notes_as_past_work(
+        self, mock_gw, app, client
+    ):
+        """Partners with linked notes should have past work in context."""
+        from app.models import Customer, Note, Engagement, Partner
+        with app.app_context():
+            customer = Customer(name="Acme Corp", tpid=11111)
+            db.session.add(customer)
+            db.session.flush()
+
+            engagement = Engagement(
+                customer_id=customer.id, title="Test Eng", status="Active",
+            )
+            db.session.add(engagement)
+            db.session.flush()
+
+            partner = Partner(name="Experienced Partner", rating=4)
+            db.session.add(partner)
+            db.session.flush()
+
+            # Link a note to the partner
+            note = Note(
+                customer_id=customer.id,
+                call_date=datetime(2025, 5, 1),
+                content="Partner demo on Fabric migrations.",
+            )
+            db.session.add(note)
+            db.session.flush()
+            partner.notes.append(note)
+            db.session.commit()
+            eid = engagement.id
+
+        mock_gw.return_value = {
+            'recommendations': [],
+            'usage': {},
+        }
+
+        resp = client.post(
+            '/api/ai/recommend-partners',
+            json={'engagement_id': eid},
+        )
+        assert resp.status_code == 200
+
+        call_args = mock_gw.call_args
+        user_msg = call_args[0][1]['user_message']
+        assert 'Experienced Partner' in user_msg
+        assert '4/5 stars' in user_msg
+        assert 'Past Work' in user_msg
+        assert 'Acme Corp' in user_msg
+
+    def test_recommend_button_visible(self, app, client):
+        """Recommend Partners button should be visible on engagement view."""
+        from app.models import Customer, Engagement
+        with app.app_context():
+            customer = Customer(name="Button Test Co", tpid=22222)
+            db.session.add(customer)
+            db.session.flush()
+            engagement = Engagement(
+                customer_id=customer.id, title="Button Test", status="Active",
+            )
+            db.session.add(engagement)
+            db.session.commit()
+            eid = engagement.id
+
+        resp = client.get(f'/engagement/{eid}')
+        assert resp.status_code == 200
+        assert b'recommendPartnersBtn' in resp.data
+        assert b'Partner Recommendations' in resp.data
