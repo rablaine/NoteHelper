@@ -674,7 +674,7 @@ function openContactPhotoModal(el) {
 
 // Handle paste - listen on document level when photo modal is open
 var _photoModalOpen = false;
-(function() {
+window.addEventListener('load', function() {
     var modal = document.getElementById('contactPhotoModal');
     if (!modal) return;
     modal.addEventListener('shown.bs.modal', function() { _photoModalOpen = true; });
@@ -691,7 +691,7 @@ var _photoModalOpen = false;
             }
         }
     });
-})();
+});
 
 function processContactPhoto(blob) {
     var status = document.getElementById('contactPhotoStatus');
