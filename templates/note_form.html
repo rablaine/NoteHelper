@@ -142,7 +142,7 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label d-flex align-items-center"><i class="bi bi-folder me-1"></i> Project (optional) <a href="javascript:void(0)" onclick="openProjectEditFlyout()" class="small text-muted text-decoration-none fw-normal ms-auto" id="projectDetailsLink" style="display: none;">see details &rsaquo;</a></label>
-                            <select class="form-select" id="project_id" name="project_id">
+                            <select class="form-select" id="project_id" name="project_id" style="display:none;">
                                 <option value="">-- No project --</option>
                                 {% for p in active_projects %}
                                 <option value="{{ p.id }}"
@@ -1820,7 +1820,7 @@ function isContactsFlyoutDirty() {
     return false;
 }
 
-document.getElementById('contactsFlyout').addEventListener('hide.bs.offcanvas', function(e) {
+document.getElementById('contactsFlyout')?.addEventListener('hide.bs.offcanvas', function(e) {
     if (isContactsFlyoutDirty()) {
         if (!confirm('You have unsaved contact edits. Discard them?')) {
             e.preventDefault();
@@ -3932,7 +3932,7 @@ function openEngagementEditFlyout() {
 }
 
 // Guard the engagement flyout close
-document.getElementById('engagementFlyout').addEventListener('hide.bs.offcanvas', function(e) {
+document.getElementById('engagementFlyout')?.addEventListener('hide.bs.offcanvas', function(e) {
     if (isEngFlyoutDirty()) {
         if (!confirm('You have unsaved changes in the engagement flyout. Discard them?')) {
             e.preventDefault();
