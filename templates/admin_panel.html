@@ -2466,23 +2466,34 @@ function runAdminMilestoneSync() {
         const decoder = new TextDecoder();
         let buffer = '';
 
+        function processEvents(text) {
+            buffer += text;
+            const events = buffer.split('\n\n');
+            buffer = events.pop();
+
+            for (const block of events) {
+                if (!block.trim()) continue;
+                let eventType = 'message';
+                let eventData = '';
+                for (const line of block.split('\n')) {
+                    if (line.startsWith('event: ')) eventType = line.slice(7);
+                    else if (line.startsWith('data: ')) eventData = line.slice(6);
+                }
+                if (!eventData) continue;
+                try {
+                    handleSyncEvent(eventType, JSON.parse(eventData));
+                } catch (e) { /* skip parse errors */ }
+            }
+        }
+
         function read() {
             reader.read().then(({ done, value }) => {
                 if (done) {
+                    if (buffer.trim()) processEvents('\n\n');
                     onSyncDone();
                     return;
                 }
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const evt = JSON.parse(line.slice(6));
-                            handleSyncEvent(evt);
-                        } catch (e) { /* skip parse errors */ }
-                    }
-                }
+                processEvents(decoder.decode(value, { stream: true }));
                 read();
             });
         }
@@ -2495,23 +2506,22 @@ function runAdminMilestoneSync() {
         resultDiv.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Sync failed: ' + err.message + '</span>';
     });
 
-    function handleSyncEvent(evt) {
-        if (evt.type === 'progress') {
-            const pct = Math.round((evt.current / evt.total) * 100);
+    function handleSyncEvent(type, data) {
+        if (type === 'progress') {
+            const pct = data.progress != null ? data.progress : Math.round((data.current / data.total) * 100);
             bar.style.width = pct + '%';
             pctText.textContent = pct + '%';
-            statusText.textContent = evt.message || ('Syncing ' + evt.current + ' of ' + evt.total + '...');
-        } else if (evt.type === 'start') {
-            statusText.textContent = evt.message || 'Starting sync...';
-        } else if (evt.type === 'vpn_blocked') {
+            statusText.textContent = data.customer ? ('Syncing: ' + data.customer) : ('Syncing ' + data.current + ' of ' + data.total + '...');
+        } else if (type === 'start') {
+            statusText.textContent = data.message || ('Syncing milestones for ' + data.total + ' customers...');
+        } else if (type === 'vpn_blocked') {
             onSyncError('VPN or network issue - cannot reach MSX. Make sure you are connected to corpnet or VPN.');
-        } else if (evt.type === 'complete') {
-            const pct = 100;
-            bar.style.width = pct + '%';
-            pctText.textContent = pct + '%';
+        } else if (type === 'complete') {
+            bar.style.width = '100%';
+            pctText.textContent = '100%';
             bar.classList.remove('progress-bar-animated');
-        } else if (evt.type === 'error') {
-            onSyncError(evt.message || 'Sync failed.');
+        } else if (type === 'error') {
+            onSyncError(data.message || 'Sync failed.');
         }
     }
 
