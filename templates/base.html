@@ -3800,10 +3800,17 @@
                 .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
                 // Inline code
                 .replace(/`([^`]+)`/g, '<code>$1</code>')
+                // Headings (h4, h3, h2, h1 - order matters: longest prefix first)
+                .replace(/^#### (.+)$/gm, '<h6>$1</h6>')
+                .replace(/^### (.+)$/gm, '<h5>$1</h5>')
+                .replace(/^## (.+)$/gm, '<h5>$1</h5>')
+                .replace(/^# (.+)$/gm, '<h5>$1</h5>')
                 // Bold
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                 // Italic
                 .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                // Ordered lists
+                .replace(/^\s*\d+\.\s+(.+)/gm, '<li>$1</li>')
                 // Unordered lists
                 .replace(/^\s*[-*]\s+(.+)/gm, '<li>$1</li>')
                 // Wrap consecutive <li> in <ul>
