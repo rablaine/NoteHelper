@@ -18,6 +18,9 @@
     <button type="button" class="btn btn-outline-secondary" onclick="copyReportForEmail()" title="Copy table for pasting into Teams or Outlook email">
         <i class="bi bi-clipboard"></i> Copy for Email
     </button>
+    <button type="button" class="btn btn-outline-secondary" onclick="downloadReportEmail()" title="Download .eml file to open in Outlook as a ready-to-send email">
+        <i class="bi bi-envelope"></i> Email
+    </button>
 </div>
 
 <script>
@@ -182,15 +185,12 @@
     }
 
     /**
-     * Copy table as formatted HTML to clipboard for pasting into
-     * Teams or Outlook. Preserves table structure, links, and basic styling.
+     * Build styled HTML string from all visible report tables.
+     * Shared by copyReportForEmail and downloadReportEmail.
      */
-    window.copyReportForEmail = function() {
+    function buildReportHtml() {
         const tables = getTables();
-        if (tables.length === 0) {
-            showExportToast('No table data to copy.', 'warning');
-            return;
-        }
+        if (tables.length === 0) return null;
 
         const title = CUSTOM_TITLE || document.querySelector('h2')?.textContent?.trim() || 'Report';
 
@@ -205,7 +205,6 @@
             const skip = getSkipColumns(table);
             html += '<table style="border-collapse: collapse; width: 100%; font-size: 13px;">';
 
-            // Header row
             if (headerCells.length > 0) {
                 html += '<tr>';
                 headerCells.forEach((th, idx) => {
@@ -216,7 +215,6 @@
                 html += '</tr>';
             }
 
-            // Body rows (skip hidden)
             bodyRows.forEach(tr => {
                 if (tr.style.display === 'none') return;
                 const cells = tr.querySelectorAll('td');
@@ -245,9 +243,22 @@
 
         html += '<p style="font-size: 11px; color: #888;">Exported from Sales Buddy</p>';
         html += '</div>';
+        return html;
+    }
 
-        // Use clipboard API with HTML MIME type
+    /**
+     * Copy table as formatted HTML to clipboard for pasting into
+     * Teams or Outlook. Preserves table structure, links, and basic styling.
+     */
+    window.copyReportForEmail = function() {
+        const html = buildReportHtml();
+        if (!html) {
+            showExportToast('No table data to copy.', 'warning');
+            return;
+        }
+
         const blob = new Blob([html], { type: 'text/html' });
+        const tables = getTables();
         const plainText = tables.length > 0
             ? tableToRows(tables[0]).map(r => r.join('\t')).join('\n')
             : '';
@@ -260,7 +271,6 @@
         ]).then(() => {
             showExportToast('Copied! Paste into Teams or Outlook.', 'success');
         }).catch(() => {
-            // Fallback: copy plain text
             navigator.clipboard.writeText(plainText).then(() => {
                 showExportToast('Copied as text (HTML copy not supported in this browser).', 'info');
             }).catch(() => {
@@ -268,6 +278,103 @@
             });
         });
     };
+
+    /**
+     * Download a .eml file that opens in Outlook as a ready-to-send email
+     * with the HTML report in the body and CSV as an attachment.
+     */
+    window.downloadReportEmail = function() {
+        const html = buildReportHtml();
+        if (!html) {
+            showExportToast('No table data to email.', 'warning');
+            return;
+        }
+
+        // Build CSV attachment
+        const tables = getTables();
+        let allRows = [];
+        tables.forEach((table, idx) => {
+            if (idx > 0 && allRows.length > 0) allRows.push([]);
+            allRows = allRows.concat(tableToRows(table));
+        });
+        const csv = rowsToCSV(allRows);
+        const csvBase64 = btoa(unescape(encodeURIComponent('\ufeff' + csv)));
+
+        const title = CUSTOM_TITLE || document.querySelector('h2')?.textContent?.trim() || 'Report';
+        const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const subject = title + ' - ' + today;
+        const boundary = 'boundary_' + Date.now();
+        const attachBoundary = 'attach_' + Date.now();
+
+        // Build MIME .eml content
+        const eml = [
+            'MIME-Version: 1.0',
+            'Subject: ' + subject,
+            'X-Unsent: 1',
+            'Content-Type: multipart/mixed; boundary="' + boundary + '"',
+            '',
+            '--' + boundary,
+            'Content-Type: multipart/alternative; boundary="' + attachBoundary + '"',
+            '',
+            '--' + attachBoundary,
+            'Content-Type: text/html; charset="UTF-8"',
+            'Content-Transfer-Encoding: quoted-printable',
+            '',
+            quotedPrintableEncode(html),
+            '',
+            '--' + attachBoundary + '--',
+            '',
+            '--' + boundary,
+            'Content-Type: text/csv; charset="UTF-8"; name="' + FILENAME + '.csv"',
+            'Content-Transfer-Encoding: base64',
+            'Content-Disposition: attachment; filename="' + FILENAME + '.csv"',
+            '',
+            csvBase64.match(/.{1,76}/g).join('\r\n'),
+            '',
+            '--' + boundary + '--',
+        ].join('\r\n');
+
+        const blob = new Blob([eml], { type: 'message/rfc822' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = FILENAME + '.eml';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showExportToast('Email downloaded. Open it in Outlook to send.', 'success');
+    };
+
+    /**
+     * Encode a string as quoted-printable for MIME email bodies.
+     */
+    function quotedPrintableEncode(str) {
+        const encoded = unescape(encodeURIComponent(str));
+        let result = '';
+        let lineLen = 0;
+        for (let i = 0; i < encoded.length; i++) {
+            const c = encoded.charCodeAt(i);
+            let chunk;
+            if (c === 13 || c === 10) {
+                // Pass through CRLF
+                result += encoded[i];
+                lineLen = 0;
+                continue;
+            } else if (c === 9 || (c >= 32 && c <= 126 && c !== 61)) {
+                chunk = encoded[i];
+            } else {
+                chunk = '=' + ('0' + c.toString(16).toUpperCase()).slice(-2);
+            }
+            if (lineLen + chunk.length > 75) {
+                result += '=\r\n';
+                lineLen = 0;
+            }
+            result += chunk;
+            lineLen += chunk.length;
+        }
+        return result;
+    }
 
     function escapeHtml(str) {
         const div = document.createElement('div');
