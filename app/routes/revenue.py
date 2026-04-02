@@ -1069,7 +1069,7 @@ def reports_list():
     reports = [
         {
             'id': 'new-synapse-users',
-            'name': 'New Azure Synapse Analytics Users',
+            'name': 'New Synapse Customers',
             'description': 'Customers who have started using Azure Synapse Analytics in the last 6 months, grouped by seller.',
             'icon': 'bi-database-gear',
             'url': url_for('revenue.report_new_synapse_users')
