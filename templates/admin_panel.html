@@ -218,7 +218,22 @@
                                 <input class="form-check-input" type="checkbox" role="switch" id="milestoneSyncToggle" onchange="toggleMilestoneSync()" disabled>
                             </div>
                         </div>
-                        <small class="text-muted d-block mt-1">Auto-syncs milestones from MSX daily at a randomly assigned time. Catches up on startup if missed.</small>
+                        <small class="text-muted d-block mt-1">Auto-syncs milestones from MSX on Mon/Wed/Fri at a randomly assigned time. Catches up on startup if missed.</small>
+                        <hr class="my-2">
+                        <button class="btn btn-primary btn-sm" id="adminMilestoneSyncBtn" onclick="runAdminMilestoneSync()">
+                            <i class="bi bi-arrow-repeat"></i> Sync Now
+                        </button>
+                        <div id="adminMilestoneSyncProgress" class="mt-2 d-none">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted" id="adminMilestoneSyncText">Starting sync...</small>
+                                <small class="text-muted" id="adminMilestoneSyncPercent">0%</small>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                     role="progressbar" id="adminMilestoneSyncBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div id="adminMilestoneSyncResult" class="mt-2 d-none"></div>
                     </div>
                 </div>
 
@@ -2425,6 +2440,114 @@ function toggleMilestoneSync() {
             if (data.success) loadMilestoneSyncStatus();
         })
         .catch(() => loadMilestoneSyncStatus());
+}
+
+function runAdminMilestoneSync() {
+    const btn = document.getElementById('adminMilestoneSyncBtn');
+    const progressDiv = document.getElementById('adminMilestoneSyncProgress');
+    const resultDiv = document.getElementById('adminMilestoneSyncResult');
+    const statusText = document.getElementById('adminMilestoneSyncText');
+    const pctText = document.getElementById('adminMilestoneSyncPercent');
+    const bar = document.getElementById('adminMilestoneSyncBar');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+    progressDiv.classList.remove('d-none');
+    resultDiv.classList.add('d-none');
+    bar.style.width = '0%';
+    pctText.textContent = '0%';
+    statusText.textContent = 'Starting sync...';
+
+    fetch('/api/milestone-tracker/sync', {
+        method: 'POST',
+        headers: { 'Accept': 'text/event-stream' }
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function processEvents(text) {
+            buffer += text;
+            const events = buffer.split('\n\n');
+            buffer = events.pop();
+
+            for (const block of events) {
+                if (!block.trim()) continue;
+                let eventType = 'message';
+                let eventData = '';
+                for (const line of block.split('\n')) {
+                    if (line.startsWith('event: ')) eventType = line.slice(7);
+                    else if (line.startsWith('data: ')) eventData = line.slice(6);
+                }
+                if (!eventData) continue;
+                try {
+                    handleSyncEvent(eventType, JSON.parse(eventData));
+                } catch (e) { /* skip parse errors */ }
+            }
+        }
+
+        function read() {
+            reader.read().then(({ done, value }) => {
+                if (done) {
+                    if (buffer.trim()) processEvents('\n\n');
+                    onSyncDone();
+                    return;
+                }
+                processEvents(decoder.decode(value, { stream: true }));
+                read();
+            });
+        }
+        read();
+    }).catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
+        progressDiv.classList.add('d-none');
+        resultDiv.classList.remove('d-none');
+        resultDiv.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Sync failed: ' + err.message + '</span>';
+    });
+
+    function handleSyncEvent(type, data) {
+        if (type === 'progress') {
+            const pct = data.progress != null ? data.progress : Math.round((data.current / data.total) * 100);
+            bar.style.width = pct + '%';
+            pctText.textContent = pct + '%';
+            statusText.textContent = data.customer ? ('Syncing: ' + data.customer) : ('Syncing ' + data.current + ' of ' + data.total + '...');
+        } else if (type === 'start') {
+            statusText.textContent = data.message || ('Syncing milestones for ' + data.total + ' customers...');
+        } else if (type === 'vpn_blocked') {
+            onSyncError('VPN or network issue - cannot reach MSX. Make sure you are connected to corpnet or VPN.');
+        } else if (type === 'complete') {
+            bar.style.width = '100%';
+            pctText.textContent = '100%';
+            bar.classList.remove('progress-bar-animated');
+        } else if (type === 'error') {
+            onSyncError(data.message || 'Sync failed.');
+        }
+    }
+
+    function onSyncDone() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Done!';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-success');
+        progressDiv.classList.add('d-none');
+        resultDiv.classList.remove('d-none');
+        resultDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> Milestone sync complete.</span>';
+        loadMilestoneSyncStatus();
+        setTimeout(() => {
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-primary');
+        }, 3000);
+    }
+
+    function onSyncError(msg) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
+        progressDiv.classList.add('d-none');
+        resultDiv.classList.remove('d-none');
+        resultDiv.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> ' + msg + '</span>';
+    }
 }
 
 // =============================================================================
