@@ -1,8 +1,8 @@
-# Copilot Agent & MCP Server
+# SalesIQ Agent & MCP Server
 
 ## Overview
 
-Build an in-app AI chat panel ("Copilot") backed by Azure OpenAI via the existing APIM gateway, plus an MCP server so VS Code Copilot can interact with SalesBuddy data. Both consume a shared tool registry so logic is never duplicated.
+Build an in-app AI chat panel ("SalesIQ") backed by Azure OpenAI via the existing APIM gateway, plus an MCP server so VS Code Copilot can interact with SalesBuddy data. Both consume a shared tool registry so logic is never duplicated.
 
 ## Implementation Phases
 
@@ -10,12 +10,12 @@ Build an in-app AI chat panel ("Copilot") backed by Azure OpenAI via the existin
 
 **Status:** Complete
 
-Built `app/services/copilot_tools.py` with a `@tool` decorator pattern. 13 read-only tools covering all major entities (Customer, Note, Engagement, Milestone, Seller, Opportunity, Partner, ActionItem) and reports (Hygiene, Workload, What's New, Revenue Alerts, Whitespace).
+Built `app/services/salesiq_tools.py` with a `@tool` decorator pattern. 13 read-only tools covering all major entities (Customer, Note, Engagement, Milestone, Seller, Opportunity, Partner, ActionItem) and reports (Hygiene, Workload, What's New, Revenue Alerts, Whitespace).
 
 Enforcement:
 - `copilot-instructions.md` rule: "add a tool when adding a queryable entity or report"
-- `tests/test_copilot_tools.py::TestToolCoverage` - fails if a core entity or report is missing a tool
-- `tests/test_copilot_tools.py::TestToolExecution` - verifies tools actually run against the DB
+- `tests/test_salesiq_tools.py::TestToolCoverage` - fails if a core entity or report is missing a tool
+- `tests/test_salesiq_tools.py::TestToolExecution` - verifies tools actually run against the DB
 
 Key exports: `get_openai_tools()`, `get_mcp_tools()`, `execute_tool(name, params)`
 
@@ -25,7 +25,7 @@ Key exports: `get_openai_tools()`, `get_mcp_tools()`, `execute_tool(name, params
 
 **Status:** Complete
 
-Built the full chat pipeline: gateway `POST /v1/chat` endpoint with server-side system prompt construction, page validation (`VALID_PAGES` whitelist), and tool passthrough. Flask `POST /api/ai/chat` with multi-round tool-calling orchestration loop (max 3 rounds), local tool execution via the `copilot_tools` registry, and token usage accumulation across rounds. Added `chat_completion_with_tools()` to `openai_client.py` and `CHAT_SYSTEM_PROMPT` to `prompts.py`. 13 tests in `tests/test_ai_chat.py`. Deployed to APIM staging and verified end-to-end with live tool calls.
+Built the full chat pipeline: gateway `POST /v1/chat` endpoint with server-side system prompt construction, page validation (`VALID_PAGES` whitelist), and tool passthrough. Flask `POST /api/ai/chat` with multi-round tool-calling orchestration loop (max 3 rounds), local tool execution via the `salesiq_tools` registry, and token usage accumulation across rounds. Added `chat_completion_with_tools()` to `openai_client.py` and `CHAT_SYSTEM_PROMPT` to `prompts.py`. 13 tests in `tests/test_ai_chat.py`. Deployed to APIM staging and verified end-to-end with live tool calls.
 
 **Original goal:** `POST /api/ai/chat` - the user sends a message, the backend orchestrates tool calls via Azure OpenAI, returns a final answer.
 
@@ -90,7 +90,7 @@ Build dynamically per request:
 
 **Status:** Complete
 
-Built chat flyout in `base.html` with Copilot icon branding, URL-based page context auto-detection, `window.copilotContext` overrides on key pages (customer_view, customers_list, milestone_view, seller_view), sessionStorage message history, Markdown rendering, typing indicator, and `config.DEBUG` dev gate. Fixed flyout stacking for 5+ levels.
+Built chat flyout in `base.html` with SalesIQ branding, URL-based page context auto-detection, `window.copilotContext` overrides on key pages (customer_view, customers_list, milestone_view, seller_view), sessionStorage message history, Markdown rendering, typing indicator, and `config.DEBUG` dev gate. Fixed flyout stacking for 5+ levels.
 
 **Goal:** A working chat panel in the browser, gated behind `FLASK_ENV=development` so it doesn't ship to production yet.
 
@@ -135,11 +135,11 @@ The chat JS includes this with every request. Context changes when the user navi
 
 ---
 
-### Phase 4: More Entity & Report Tools - DONE
+### Phase 4: More Entity & Report Tools - IN PROGRESS
 
-**Status:** Complete
+**Status:** Tools built, but tool definitions need refinement for real-world chat queries (see validation list below)
 
-Added 7 tools to `copilot_tools.py` (total: 21 tools):
+Added 7 tools to `salesiq_tools.py` (total: 21 tools):
 - `get_milestones_due_soon` - milestones due within N days with seller/team filters
 - `get_territory_summary` - list all territories or get detail with customers, sellers, SEs, 30-day note count
 - `get_pod_overview` - list all PODs or get detail with territories, sellers, solution engineers
@@ -150,7 +150,7 @@ Added 7 tools to `copilot_tools.py` (total: 21 tools):
 
 All 7 tools have coverage tests in `TestToolCoverage` and execution tests in `TestToolExecution` (52 tests total, all passing).
 
-#### Phase 4 polish (chat UX & prompt fixes):
+#### Phase 4 polish (chat UX & prompt fixes) - DONE:
 - Rebranded chat panel from "Copilot" to "SalesIQ"
 - Replaced Copilot icon with `bi-chat-dots` Bootstrap icon
 - Added markdown heading (h1-h4) and ordered list rendering
@@ -161,6 +161,79 @@ All 7 tools have coverage tests in `TestToolCoverage` and execution tests in `Te
 - System prompt: added Sales Buddy terminology (milestones not "work items", notes not "call logs"), POD/territory/contact/analytics concepts, "use tools immediately" rule
 - User identity injection from UserPreference (name, role), single-user app context
 - Gateway deployed to staging with all prompt/context changes
+
+#### Phase 4 remaining work: tool definition gaps
+
+Testing revealed the model picks wrong tools or returns partial data for common questions. Known issues:
+
+- `search_customers` returns up to 20 results but no `total_count` - model can't answer "how many customers do I have?"
+- No tool returns aggregate counts (total customers, total notes, total engagements, total sellers)
+- No tool lists sellers - `get_seller_workload` requires a known `seller_id`
+- No tool surfaces "what should I work on today?" or priority-ranked items
+- `search_notes` has no way to get "most recent N notes" without a keyword
+- No tool for engagement listing/search (only `get_engagement_details` for a known ID)
+- No tool for project listing or details
+- Report tools return raw data but model struggles to summarize large result sets
+
+#### Phase 4 validation queries
+
+Test each query in the SalesIQ chat panel. For each, note whether the model picks the right tool, gets accurate data, and gives a useful answer. Queries marked with (GAP) are expected to fail or give poor results with the current toolset.
+
+**Counting & overview questions:**
+1. How many customers do I have? (GAP - no total count)
+2. How many open engagements are there?  (GAP - no engagement count/list tool)
+3. How many milestones are committed right now?
+4. Who are my sellers? (GAP - no seller list tool)
+5. Give me a quick summary of my portfolio
+6. What territories do I cover?
+7. How many PODs am I in?
+
+**Customer-focused questions:**
+8. What's going on with Contoso?
+9. Which customers haven't had a note in 30 days?
+10. Show me my top 5 customers by revenue
+11. What customers does Sarah cover?
+12. Which customers have open Fabric engagements?
+13. What's the revenue trend for Contoso over the last 6 months?
+
+**Engagement & milestone questions:**
+14. What milestones are due this week?
+15. What's at risk right now?
+16. Show me all committed milestones for Q3
+17. Which engagements are stalled? (GAP - no engagement search/filter)
+18. What did we close last month?
+19. List open action items across all engagements
+
+**Notes & activity questions:**
+20. What did I talk about with Fabrikam last time?
+21. Show me my most recent notes (GAP - no "recent notes" without keyword)
+22. What topics have come up the most this quarter?
+23. When was my last call with Contoso?
+24. Search my notes for anything about Cosmos DB
+
+**Prep & planning questions:**
+25. Prep me for my 1:1
+26. What should I focus on today? (GAP - no priority/recommendation tool)
+27. I have a meeting with Contoso in an hour - what do I need to know?
+28. Fill my day - what customers need attention?
+29. What's new since last Friday?
+
+**Revenue & whitespace questions:**
+30. Which customers have declining revenue?
+31. Where's my whitespace?
+32. What Fabric opportunities am I missing?
+33. Show me revenue alerts
+
+**Partner & contact questions:**
+34. Find me the contact at Contoso who works on data
+35. Which partners specialize in Fabric?
+36. What partners have we worked with recently? (GAP - no partner activity tool)
+
+**Cross-cutting / complex questions:**
+37. Compare Sarah's workload to mine
+38. Which territories are understaffed? (GAP - no workload-per-territory tool)
+39. What hygiene issues do I need to clean up?
+40. Summarize everything that happened last week
 
 ---
 
@@ -230,7 +303,7 @@ Browser (Chat Panel)          VS Code (MCP Client)
   Flask Backend               MCP Server (app/mcp_server.py)
         |                              |
         +--------- Shared Tool Registry --------+
-                  app/services/copilot_tools.py
+                  app/services/salesiq_tools.py
                          |
                    Existing service layer
                    (models, queries, routes)
@@ -238,7 +311,7 @@ Browser (Chat Panel)          VS Code (MCP Client)
 
 ## Key Files
 
-- `app/services/copilot_tools.py` - Tool definitions + handler functions (shared)
+- `app/services/salesiq_tools.py` - Tool definitions + handler functions (shared)
 - `app/routes/ai.py` - `POST /api/ai/chat` endpoint (chat panel backend)
 - `app/mcp_server.py` - MCP server for VS Code/external clients
 - `templates/partials/_chat_panel.html` - Chat panel UI partial
@@ -246,7 +319,8 @@ Browser (Chat Panel)          VS Code (MCP Client)
 
 ## Resume Context
 
-**Last completed:** Phase 1 (tool registry) - merged to main.
+**Last completed:** Phase 3 (chat panel UI) and Phase 4 polish (UX/prompt fixes) - merged to main.
+**In progress:** Phase 4 tool definitions - 21 tools built but validation queries exposed gaps in counting, listing, and cross-entity queries. See validation query list above.
 
 **Next up:** Phase 2 (chat endpoint). Start with 2a (gateway `POST /ai/chat`) then 2b (Flask `POST /api/ai/chat` with tool execution loop).
 
