@@ -736,14 +736,14 @@ def api_ai_recommend_partners():
 
 
 # ---------------------------------------------------------------------------
-# POST /api/ai/chat — Copilot chat with tool calling
+# POST /api/ai/chat — SalesIQ chat with tool calling
 # ---------------------------------------------------------------------------
 MAX_TOOL_ROUNDS = 3
 
 
 @ai_bp.route('/api/ai/chat', methods=['POST'])
 def api_ai_chat():
-    """Copilot chat endpoint.
+    """SalesIQ chat endpoint.
 
     Orchestrates a multi-turn conversation with tool calling:
     1. Send user message + tool definitions to the gateway.

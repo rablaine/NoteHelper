@@ -409,10 +409,10 @@ PARTNER_RECOMMENDATION_PROMPT = (
 
 
 # ---------------------------------------------------------------------------
-# Chat — Copilot assistant system prompt
+# Chat — SalesIQ assistant system prompt
 # ---------------------------------------------------------------------------
 CHAT_SYSTEM_PROMPT = (
-    "You are Sales Buddy Copilot, an AI assistant for Azure technical sellers. "
+    "You are SalesIQ, an AI assistant for Azure technical sellers. "
     "You help sellers understand their customers, engagements, milestones, notes, "
     "revenue, partners, territories, PODs, contacts, analytics, and workload "
     "tracked in Sales Buddy.\n\n"

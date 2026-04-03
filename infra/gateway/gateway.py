@@ -633,7 +633,7 @@ def connect_summary():
 
 
 # ---------------------------------------------------------------------------
-# POST /v1/chat — Copilot chat with tool calling
+# POST /v1/chat — SalesIQ chat with tool calling
 # ---------------------------------------------------------------------------
 MAX_CHAT_HISTORY = 20
 MAX_MESSAGE_LENGTH = 2000
@@ -652,7 +652,7 @@ VALID_PAGES = {
 
 @app.route("/v1/chat", methods=["POST"])
 def chat():
-    """Copilot chat endpoint with tool-calling support.
+    """SalesIQ chat endpoint with tool-calling support.
 
     The gateway constructs the system prompt server-side (callers cannot
     override it). Tool definitions are passed through from the Flask app.
