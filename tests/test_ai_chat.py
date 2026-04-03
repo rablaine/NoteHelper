@@ -1,4 +1,4 @@
-"""Tests for the Copilot chat endpoint (POST /api/ai/chat)."""
+"""Tests for the SalesIQ chat endpoint (POST /api/ai/chat)."""
 import json
 from unittest.mock import patch, MagicMock
 

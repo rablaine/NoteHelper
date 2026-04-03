@@ -1,4 +1,4 @@
-"""Shared tool registry for Copilot chat panel and MCP server.
+"""Shared tool registry for SalesIQ chat panel and MCP server.
 
 Tools are registered via the @tool decorator. Each tool is a thin wrapper
 over existing service/query code - never duplicate business logic here.
@@ -17,7 +17,7 @@ TOOLS: list[dict] = []
 
 
 def tool(name: str, description: str, parameters: dict):
-    """Register a function as a Copilot/MCP tool.
+    """Register a function as a SalesIQ/MCP tool.
 
     Args:
         name: Unique tool name (snake_case).

@@ -494,11 +494,11 @@ def recommend_partners():
 # ---------------------------------------------------------------------------
 @app.route("/v1/summarize-note", methods=["POST"])
 def summarize_note():
-    """Summarize a call log for a milestone comment.
+    """Summarize a note for a milestone comment.
 
-    Accepts the call log text and a list of existing milestone comments.
+    Accepts the note text and a list of existing milestone comments.
     Returns a 2-4 sentence summary covering only new information, or
-    ``NO_NEW_INFO`` if the call adds nothing beyond what's already tracked.
+    ``NO_NEW_INFO`` if the note adds nothing beyond what's already tracked.
     """
     try:
         body = request.get_json(force=True)
@@ -523,7 +523,7 @@ def summarize_note():
             f"Customer: {customer_name}\n"
             f"Topics: {topics}\n\n"
             f"=== EXISTING MILESTONE COMMENTS ===\n{existing_section}\n\n"
-            f"=== NEW CALL LOG ===\n{call_notes[:10000]}"
+            f"=== NEW NOTE ===\n{call_notes[:10000]}"
         )
 
         result = chat_completion(
@@ -633,7 +633,7 @@ def connect_summary():
 
 
 # ---------------------------------------------------------------------------
-# POST /v1/chat — Copilot chat with tool calling
+# POST /v1/chat — SalesIQ chat with tool calling
 # ---------------------------------------------------------------------------
 MAX_CHAT_HISTORY = 20
 MAX_MESSAGE_LENGTH = 2000
@@ -652,7 +652,7 @@ VALID_PAGES = {
 
 @app.route("/v1/chat", methods=["POST"])
 def chat():
-    """Copilot chat endpoint with tool-calling support.
+    """SalesIQ chat endpoint with tool-calling support.
 
     The gateway constructs the system prompt server-side (callers cannot
     override it). Tool definitions are passed through from the Flask app.
