@@ -235,6 +235,32 @@ Test each query in the SalesIQ chat panel. For each, note whether the model pick
 39. What hygiene issues do I need to clean up?
 40. Summarize everything that happened last week
 
+#### Phase 4 architecture notes
+
+**Current state:** Almost all query logic lives inline in route handlers (main.py, reports.py, customers.py, notes.py). Tools in `salesiq_tools.py` duplicate those queries independently. There is no shared service layer for queries.
+
+```
+Current:   Routes (inline queries)     Tools (duplicate queries)
+Ideal:     Routes (HTML)  -->  Service functions (queries)  <--  Tools (chat/MCP)
+```
+
+**Strategy - composite tools over atomic ones:**
+
+1. **Add composite tools for overview/counting questions.** A single `get_portfolio_overview` that returns total customers, total engagements, total milestones, recent activity count, etc. One tool call answers 7+ validation queries. Same idea for `list_sellers`, `search_engagements`.
+
+2. **Keep atomic tools for specific lookups.** "What's going on with Contoso?" needs `get_customer_summary`, not a page dump. These are fine as-is.
+
+3. **Extract service functions gradually.** When next touching a route like `reports.py::report_one_on_one()`, pull the query logic into `app/services/report_queries.py`. Then both the route and the tool call the same function. Don't refactor everything at once.
+
+**Tool count limits:** At 21 tools (~3,200 tokens), we're using ~12-15% of the 128K context window. Can comfortably reach 80-100 tools before context pressure. The real constraint is tool selection accuracy - models get worse picking the right tool past ~40-50. Composite tools help here too (fewer tools, each more capable).
+
+**Priority when resuming Phase 4:**
+- Add `get_portfolio_overview` (kills queries 1-7)
+- Add `list_sellers` (kills query 4, unblocks query 37)
+- Add `search_engagements` (kills query 17)
+- Add `total_count` to `search_customers` response (kills query 1)
+- Add `search_notes` support for "most recent N" without keyword (kills query 21)
+
 ---
 
 ### Phase 5: MCP Server
