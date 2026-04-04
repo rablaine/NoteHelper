@@ -1,8 +1,8 @@
 """
 Tests for AI-powered features (gateway-only).
 
-All AI calls go through the APIM gateway.  AI is always enabled —
-the onboarding wizard enforces consent before users access the product.
+All AI calls go through the APIM gateway. AI is always enabled for
+any user signed in with a Microsoft corporate account.
 """
 
 import json
@@ -10,7 +10,7 @@ from datetime import datetime
 from unittest.mock import patch, MagicMock
 import pytest
 from app import db
-from app.models import AIQueryLog, Topic, User, UserPreference
+from app.models import AIQueryLog, Topic, User
 
 
 # ---------------------------------------------------------------------------
@@ -23,58 +23,6 @@ def _make_admin(app):
         user = User.query.first()
         user.is_admin = True
         db.session.commit()
-
-
-# ---------------------------------------------------------------------------
-# Consent grant / revoke endpoint tests
-# ---------------------------------------------------------------------------
-
-class TestConsentEndpoints:
-    """Test the /api/admin/ai-enable and ai-disable endpoints."""
-
-    @patch('app.gateway_client.check_ai_consent', return_value={
-        'status': 'ok', 'consented': True, 'error': None, 'needs_relogin': False
-    })
-    def test_grant_enables_ai(self, mock_consent, app, client):
-        """Granting consent should set ai_enabled = True."""
-        _make_admin(app)
-
-        resp = client.post('/api/admin/ai-enable')
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data['success'] is True
-        assert data['ai_enabled'] is True
-
-        with app.app_context():
-            prefs = UserPreference.query.first()
-            assert prefs.ai_enabled is True
-
-    @patch('app.gateway_client.check_ai_consent', return_value={
-        'status': 'needs_relogin', 'consented': False,
-        'error': 'consent_required', 'needs_relogin': True
-    })
-    def test_grant_rejected_without_consent(self, mock_consent, app, client):
-        """Granting without consent returns 403."""
-        _make_admin(app)
-        resp = client.post('/api/admin/ai-enable')
-        assert resp.status_code == 403
-        data = resp.get_json()
-        assert data['success'] is False
-        assert data['ai_enabled'] is False
-
-    def test_revoke_disables_ai(self, app, client):
-        """Revoking should set ai_enabled = False."""
-        _make_admin(app)
-
-        resp = client.post('/api/admin/ai-disable')
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data['success'] is True
-        assert data['ai_enabled'] is False
-
-        with app.app_context():
-            prefs = UserPreference.query.first()
-            assert prefs.ai_enabled is False
 
 
 # ---------------------------------------------------------------------------
