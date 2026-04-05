@@ -1198,6 +1198,9 @@ def _upsert_opportunity(
     opp_value = msx_data.get("opportunity_estimated_value")
     opp_close_date = msx_data.get("opportunity_estimated_close_date") or None
     opp_owner = msx_data.get("opportunity_owner") or None
+    opp_customer_need = msx_data.get("opportunity_customer_need") or None
+    opp_description = msx_data.get("opportunity_description") or None
+    opp_compete = msx_data.get("opportunity_compete_threat") or None
     opp_url = build_opportunity_url(msx_opp_id)
 
     if opportunity:
@@ -1217,6 +1220,12 @@ def _upsert_opportunity(
             opportunity.estimated_close_date = opp_close_date
         if opp_owner:
             opportunity.owner_name = opp_owner
+        if opp_customer_need:
+            opportunity.customer_need = opp_customer_need
+        if opp_description:
+            opportunity.description = opp_description
+        if opp_compete:
+            opportunity.compete_threat = opp_compete
         opportunity.msx_url = opp_url
         return opportunity, False
     else:
@@ -1231,6 +1240,9 @@ def _upsert_opportunity(
             estimated_value=opp_value,
             estimated_close_date=opp_close_date,
             owner_name=opp_owner,
+            customer_need=opp_customer_need,
+            description=opp_description,
+            compete_threat=opp_compete,
             msx_url=opp_url,
         )
         db.session.add(opportunity)

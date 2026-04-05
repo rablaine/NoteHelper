@@ -778,7 +778,8 @@ def get_milestones_by_account(
             f"msp_forecastcommentsjsonfield,createdon,modifiedon"
             f"&$expand=msp_OpportunityId($select=opportunityid,name,"
             f"msp_opportunitynumber,statecode,statuscode,estimatedvalue,"
-            f"estimatedclosedate,_ownerid_value)"
+            f"estimatedclosedate,_ownerid_value,customerneed,description,"
+            f"msp_competethreatlevel)"
             f"&$orderby=msp_name"
         )
         
@@ -830,6 +831,9 @@ def get_milestones_by_account(
                 opp_owner = raw_opp.get(
                     "_ownerid_value@OData.Community.Display.V1.FormattedValue", ""
                 )
+                opp_compete = raw_opp.get(
+                    "msp_competethreatlevel@OData.Community.Display.V1.FormattedValue", ""
+                )
 
                 milestones.append({
                     "id": milestone_id,
@@ -859,6 +863,9 @@ def get_milestones_by_account(
                     "opportunity_estimated_value": raw_opp.get("estimatedvalue"),
                     "opportunity_estimated_close_date": raw_opp.get("estimatedclosedate"),
                     "opportunity_owner": opp_owner,
+                    "opportunity_customer_need": raw_opp.get("customerneed", ""),
+                    "opportunity_description": raw_opp.get("description", ""),
+                    "opportunity_compete_threat": opp_compete,
                 })
             
             # Sort by status (active first), then by name
