@@ -23,11 +23,20 @@
 <div class="card mb-3">
     <div class="card-body py-2">
         <div class="d-flex align-items-center gap-2 flex-wrap">
+            {% if user_role != 'dss' %}
+            <label class="small text-muted fw-semibold mb-0">Seller:</label>
+            <select id="filterSeller" class="form-select form-select-sm" style="width: 180px;">
+                <option value="">All Sellers</option>
+                {% for s in sellers %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
             <label class="small text-muted fw-semibold mb-0">Customer:</label>
             <select id="filterCustomer" class="form-select form-select-sm" style="width: 220px;">
                 <option value="">All Customers</option>
                 {% for c in customers %}
-                <option value="{{ c.id }}">{{ c.name }}</option>
+                <option value="{{ c.id }}" data-seller-id="{{ c.seller_id or '' }}">{{ c.name }}</option>
                 {% endfor %}
             </select>
             <input type="text" id="filterSearch" class="form-control form-control-sm" style="width: 220px;" placeholder="Search by name, number, owner...">
@@ -310,6 +319,7 @@
     let filteredMilestoneTitle = '';
 
     // DOM refs
+    const filterSeller = document.getElementById('filterSeller');  // null in DSS mode
     const filterCustomer = document.getElementById('filterCustomer');
     const filterSearch = document.getElementById('filterSearch');
     const btnApply = document.getElementById('btnApplyFilters');
@@ -320,6 +330,28 @@
     const msStatusFilter = document.getElementById('msStatusFilterWrap');
     const msTeamFilter = document.getElementById('msTeamFilter');
     const msOppFilter = document.getElementById('msOppFilter');
+
+    // ----- Seller → Customer dropdown filtering -----
+    function filterCustomerBySeller(sellerId) {
+        const opts = filterCustomer.querySelectorAll('option[data-seller-id]');
+        opts.forEach(opt => {
+            if (!sellerId || opt.dataset.sellerId === sellerId) {
+                opt.style.display = '';
+                opt.disabled = false;
+            } else {
+                opt.style.display = 'none';
+                opt.disabled = true;
+            }
+        });
+        // If current customer selection doesn't match seller, reset it
+        const selected = filterCustomer.options[filterCustomer.selectedIndex];
+        if (selected && selected.disabled) filterCustomer.value = '';
+    }
+    if (filterSeller) {
+        filterSeller.addEventListener('change', function() {
+            filterCustomerBySeller(this.value);
+        });
+    }
 
     // ----- Utilities -----
     function fmt$(val) {
@@ -394,6 +426,7 @@
     async function loadOpportunities() {
         const params = new URLSearchParams();
         if (filterCustomer.value) params.set('customer_id', filterCustomer.value);
+        else if (filterSeller && filterSeller.value) params.set('seller_id', filterSeller.value);
         if (filterSearch.value) params.set('search', filterSearch.value);
         if (oppStatusFilter.value) params.set('status', oppStatusFilter.value);
         if (oppTeamFilter.value) params.set('team', oppTeamFilter.value);
@@ -439,7 +472,7 @@
                 <td>${escHtml(opp.customer_name || '-')}</td>
                 <td>${escHtml(opp.owner_name || '-')}</td>
                 <td class="text-nowrap">${escHtml(opp.estimated_close_date || '-')}</td>
-                <td class="text-end">${fmt$(opp.estimated_value)}</td>
+                <td class="text-end text-nowrap">${fmt$(opp.estimated_value)}${opp.acr_from_milestones ? '<span class="text-muted ms-1" title="Calculated from milestone ACR/mo" style="font-size:.7em;vertical-align:super">*</span>' : ''}</td>
                 <td class="text-end text-nowrap">
                     ${dealTeamBtn(opp.id, opp.on_deal_team)}
                 </td>
@@ -532,6 +565,7 @@
     async function loadMilestones() {
         const params = new URLSearchParams();
         if (filterCustomer.value) params.set('customer_id', filterCustomer.value);
+        else if (filterSeller && filterSeller.value) params.set('seller_id', filterSeller.value);
         if (filterSearch.value) params.set('search', filterSearch.value);
         if (msTeamFilter.value) params.set('team', msTeamFilter.value);
 
@@ -772,6 +806,7 @@
     async function loadTasks() {
         const params = new URLSearchParams();
         if (filterCustomer.value) params.set('customer_id', filterCustomer.value);
+        else if (filterSeller && filterSeller.value) params.set('seller_id', filterSeller.value);
         if (filterSearch.value) params.set('search', filterSearch.value);
 
         document.getElementById('tasksBody').innerHTML = '<tr><td colspan="5" class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading tasks...</td></tr>';
@@ -971,6 +1006,7 @@
 
     btnApply.addEventListener('click', applyAll);
     btnClear.addEventListener('click', () => {
+        if (filterSeller) { filterSeller.value = ''; filterCustomerBySeller(''); }
         filterCustomer.value = '';
         filterSearch.value = '';
         oppStatusFilter.value = 'open';

@@ -1083,9 +1083,17 @@ def report_msx_workspace():
         .all()
     )
 
+    # Build seller list and customer-seller mapping for SE mode filtering
+    sellers = Seller.query.order_by(Seller.name).all()
+    customer_seller_map = {
+        c.id: c.seller_id for c in customers if c.seller_id
+    }
+
     return render_template(
         'report_msx_workspace.html',
         customers=customers,
+        sellers=sellers,
+        customer_seller_map=customer_seller_map,
         task_categories=TASK_CATEGORIES,
     )
 
@@ -1094,6 +1102,7 @@ def report_msx_workspace():
 def api_msx_workspace_opportunities():
     """JSON endpoint: opportunities with filters for the MSX workspace."""
     customer_id = request.args.get('customer_id', type=int)
+    seller_id = request.args.get('seller_id', type=int)
     status_filter = request.args.get('status', '')  # 'open', 'won', 'lost', or ''
     search = request.args.get('search', '').strip()
     team_filter = request.args.get('team', '')  # 'on', 'off', or ''
@@ -1102,6 +1111,9 @@ def api_msx_workspace_opportunities():
 
     if customer_id:
         query = query.filter(Opportunity.customer_id == customer_id)
+    elif seller_id:
+        seller_customer_ids = [c.id for c in Customer.query.filter_by(seller_id=seller_id).all()]
+        query = query.filter(Opportunity.customer_id.in_(seller_customer_ids))
     else:
         # Only show opportunities for customers we track
         query = query.filter(Opportunity.customer_id.isnot(None))
@@ -1128,9 +1140,35 @@ def api_msx_workspace_opportunities():
 
     opportunities = query.order_by(Opportunity.name).all()
 
+    # Pre-compute milestone ACR sums for opportunities missing estimated_value
+    opp_ids_no_value = [o.id for o in opportunities if not o.estimated_value]
+    ms_acr_sums = {}
+    if opp_ids_no_value:
+        rows = (
+            db.session.query(
+                Milestone.opportunity_id,
+                func.sum(Milestone.monthly_usage),
+            )
+            .filter(
+                Milestone.opportunity_id.in_(opp_ids_no_value),
+                Milestone.msx_status != 'Cancelled',
+                Milestone.monthly_usage.isnot(None),
+            )
+            .group_by(Milestone.opportunity_id)
+            .all()
+        )
+        ms_acr_sums = {row[0]: row[1] for row in rows}
+
     results = []
     for opp in opportunities:
         cust = opp.customer
+        acr = opp.estimated_value
+        acr_from_milestones = False
+        if not acr:
+            ms_sum = ms_acr_sums.get(opp.id)
+            if ms_sum:
+                acr = ms_sum
+                acr_from_milestones = True
         results.append({
             'id': opp.id,
             'msx_id': opp.msx_opportunity_id,
@@ -1138,7 +1176,8 @@ def api_msx_workspace_opportunities():
             'number': opp.opportunity_number,
             'state': opp.state or 'Open',
             'status_reason': opp.status_reason,
-            'estimated_value': opp.estimated_value,
+            'estimated_value': acr,
+            'acr_from_milestones': acr_from_milestones,
             'estimated_close_date': opp.estimated_close_date,
             'owner_name': opp.owner_name,
             'on_deal_team': opp.on_deal_team,
@@ -1157,6 +1196,7 @@ def api_msx_workspace_opportunities():
 def api_msx_workspace_milestones():
     """JSON endpoint: milestones with filters for the MSX workspace."""
     customer_id = request.args.get('customer_id', type=int)
+    seller_id = request.args.get('seller_id', type=int)
     opportunity_id = request.args.get('opportunity_id', type=int)
     status_filter = request.args.get('status', '')  # comma-separated
     team_filter = request.args.get('team', '')  # 'on', 'off', or ''
@@ -1166,6 +1206,9 @@ def api_msx_workspace_milestones():
 
     if customer_id:
         query = query.filter(Milestone.customer_id == customer_id)
+    elif seller_id:
+        seller_customer_ids = [c.id for c in Customer.query.filter_by(seller_id=seller_id).all()]
+        query = query.filter(Milestone.customer_id.in_(seller_customer_ids))
     else:
         query = query.filter(Milestone.customer_id.isnot(None))
 
@@ -1234,6 +1277,7 @@ def api_msx_workspace_milestones():
 def api_msx_workspace_tasks():
     """JSON endpoint: tasks from local DB (synced from MSX)."""
     customer_id = request.args.get('customer_id', type=int)
+    seller_id = request.args.get('seller_id', type=int)
     milestone_id = request.args.get('milestone_id', type=int)
     search = request.args.get('search', '').strip()
 
@@ -1241,6 +1285,9 @@ def api_msx_workspace_tasks():
 
     if customer_id:
         query = query.filter(Milestone.customer_id == customer_id)
+    elif seller_id:
+        seller_customer_ids = [c.id for c in Customer.query.filter_by(seller_id=seller_id).all()]
+        query = query.filter(Milestone.customer_id.in_(seller_customer_ids))
     else:
         query = query.filter(Milestone.customer_id.isnot(None))
 
