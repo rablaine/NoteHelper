@@ -115,6 +115,8 @@ def _msx_request(
             return requests.post(url, headers=hdrs, json=json_data, timeout=REQUEST_TIMEOUT)
         elif method.upper() == 'PATCH':
             return requests.patch(url, headers=hdrs, json=json_data, timeout=REQUEST_TIMEOUT)
+        elif method.upper() == 'DELETE':
+            return requests.delete(url, headers=hdrs, timeout=REQUEST_TIMEOUT)
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
     
@@ -2388,6 +2390,177 @@ def get_tasks_for_milestones(
 
     logger.info(f"Fetched {len(all_tasks)} user tasks across {len(milestone_msx_ids)} milestones")
     return {"success": True, "tasks": all_tasks}
+
+
+def update_task(
+    task_id: str,
+    fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Update a task in MSX.
+
+    Args:
+        task_id: The MSX task GUID.
+        fields: Dict of field names to new values. Supported keys:
+            subject, description, scheduledend, statuscode.
+
+    Returns:
+        Dict with success: bool and optional error message.
+    """
+    if _is_writeback_disabled():
+        return dict(_WRITEBACK_BLOCKED)
+
+    allowed = {"subject", "description", "scheduledend", "statuscode"}
+    payload = {k: v for k, v in fields.items() if k in allowed}
+    if not payload:
+        return {"success": False, "error": "No valid fields to update."}
+
+    try:
+        response = _msx_request(
+            'PATCH', f"{CRM_BASE_URL}/tasks({task_id})", json_data=payload
+        )
+        if response.status_code in (200, 204):
+            logger.info(f"Updated task {task_id}: {list(payload.keys())}")
+            return {"success": True}
+        return {
+            "success": False,
+            "error": f"HTTP {response.status_code}: {response.text[:300]}",
+        }
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error updating task {task_id}")
+        return {"success": False, "error": str(e)}
+
+
+def close_task(task_id: str) -> Dict[str, Any]:
+    """
+    Close a task in MSX using the CloseTask action with fallback.
+
+    Args:
+        task_id: The MSX task GUID.
+
+    Returns:
+        Dict with success: bool and optional error message.
+    """
+    if _is_writeback_disabled():
+        return dict(_WRITEBACK_BLOCKED)
+
+    try:
+        # Primary approach: CloseTask action
+        payload = {
+            "TaskClose": {
+                "subject": "Task Closed",
+                "activityid@odata.bind": f"/tasks({task_id})",
+            },
+            "Status": 5,
+        }
+        response = _msx_request('POST', f"{CRM_BASE_URL}/CloseTask", json_data=payload)
+        if response.status_code in (200, 204):
+            logger.info(f"Closed task {task_id} via CloseTask action")
+            return {"success": True}
+
+        # Fallback: bound Close method
+        logger.info(f"CloseTask returned {response.status_code}, trying bound Close method")
+        fallback_payload = {"Status": 5}
+        response = _msx_request(
+            'POST',
+            f"{CRM_BASE_URL}/tasks({task_id})/Microsoft.Dynamics.CRM.Close",
+            json_data=fallback_payload,
+        )
+        if response.status_code in (200, 204):
+            logger.info(f"Closed task {task_id} via bound Close method")
+            return {"success": True}
+
+        return {
+            "success": False,
+            "error": f"HTTP {response.status_code}: {response.text[:300]}",
+        }
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error closing task {task_id}")
+        return {"success": False, "error": str(e)}
+
+
+def delete_task(task_id: str) -> Dict[str, Any]:
+    """
+    Delete a task from MSX.
+
+    Args:
+        task_id: The MSX task GUID.
+
+    Returns:
+        Dict with success: bool and optional error message.
+    """
+    if _is_writeback_disabled():
+        return dict(_WRITEBACK_BLOCKED)
+
+    try:
+        response = _msx_request('DELETE', f"{CRM_BASE_URL}/tasks({task_id})")
+        if response.status_code in (200, 204):
+            logger.info(f"Deleted task {task_id}")
+            return {"success": True}
+        return {
+            "success": False,
+            "error": f"HTTP {response.status_code}: {response.text[:300]}",
+        }
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error deleting task {task_id}")
+        return {"success": False, "error": str(e)}
+
+
+def update_milestone(
+    milestone_id: str,
+    fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Update a milestone in MSX.
+
+    Args:
+        milestone_id: The MSX milestone GUID.
+        fields: Dict of field names to new values. Supported keys:
+            msp_milestonedate, msp_monthlyuse, msp_forecastcomments.
+
+    Returns:
+        Dict with success: bool and optional error message.
+    """
+    if _is_writeback_disabled():
+        return dict(_WRITEBACK_BLOCKED)
+
+    allowed = {"msp_milestonedate", "msp_monthlyuse", "msp_forecastcomments"}
+    payload = {k: v for k, v in fields.items() if k in allowed}
+    if not payload:
+        return {"success": False, "error": "No valid fields to update."}
+
+    try:
+        response = _msx_request(
+            'PATCH',
+            f"{CRM_BASE_URL}/msp_engagementmilestones({milestone_id})",
+            json_data=payload,
+        )
+        if response.status_code in (200, 204):
+            logger.info(f"Updated milestone {milestone_id}: {list(payload.keys())}")
+            return {"success": True}
+        return {
+            "success": False,
+            "error": f"HTTP {response.status_code}: {response.text[:300]}",
+        }
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Request timed out. Check VPN connection."}
+    except requests.exceptions.ConnectionError as e:
+        return {"success": False, "error": f"Connection error (VPN?): {str(e)[:100]}"}
+    except Exception as e:
+        logger.exception(f"Error updating milestone {milestone_id}")
+        return {"success": False, "error": str(e)}
 
 
 # =============================================================================

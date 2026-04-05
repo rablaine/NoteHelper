@@ -698,6 +698,46 @@ def join_deal_team():
 
 
 # -----------------------------------------------------------------------------
+# Task CRUD Routes (for MSX Workspace)
+# -----------------------------------------------------------------------------
+
+@msx_bp.route('/task/<string:task_id>/update', methods=['PATCH'])
+def update_task_route(task_id: str):
+    """Update a task in MSX. Accepts subject, description, scheduledend, statuscode."""
+    if not request.is_json:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+    from app.services.msx_api import update_task
+    result = update_task(task_id, request.json)
+    return jsonify(result)
+
+
+@msx_bp.route('/task/<string:task_id>/close', methods=['POST'])
+def close_task_route(task_id: str):
+    """Close a task in MSX."""
+    from app.services.msx_api import close_task
+    result = close_task(task_id)
+    return jsonify(result)
+
+
+@msx_bp.route('/task/<string:task_id>/delete', methods=['DELETE'])
+def delete_task_route(task_id: str):
+    """Delete a task from MSX."""
+    from app.services.msx_api import delete_task
+    result = delete_task(task_id)
+    return jsonify(result)
+
+
+@msx_bp.route('/milestone/<string:milestone_id>/update', methods=['PATCH'])
+def update_milestone_route(milestone_id: str):
+    """Update a milestone in MSX. Accepts msp_milestonedate, msp_monthlyuse."""
+    if not request.is_json:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+    from app.services.msx_api import update_milestone
+    result = update_milestone(milestone_id, request.json)
+    return jsonify(result)
+
+
+# -----------------------------------------------------------------------------
 # Exploration / Schema Discovery Routes
 # -----------------------------------------------------------------------------
 
