@@ -338,8 +338,8 @@
         let html = '';
         for (const opp of sorted) {
             const teamBadge = opp.on_deal_team
-                ? '<span class="badge bg-success"><i class="bi bi-people-fill"></i> On Team</span>'
-                : '<span class="badge bg-outline-secondary text-muted border"><i class="bi bi-people"></i> Not On Team</span>';
+                ? '<span class="badge bg-success" title="You are on this deal team"><i class="bi bi-people-fill"></i></span>'
+                : '';
             html += `<tr class="opp-row" data-id="${opp.id}" data-msx-id="${escHtml(opp.msx_id || '')}">
                 <td><button class="btn btn-sm btn-link p-0 opp-expand" title="Expand"><i class="bi bi-chevron-right"></i></button></td>
                 <td>${escHtml(opp.name)}</td>
@@ -350,7 +350,7 @@
                 <td class="text-end">${fmt$(opp.estimated_value)}</td>
                 <td>${teamBadge}</td>
                 <td>
-                    ${!opp.on_deal_team ? `<button class="btn btn-sm btn-outline-success join-deal-team" data-id="${opp.id}" title="Join Deal Team"><i class="bi bi-person-plus"></i></button>` : ''}
+                    ${!opp.on_deal_team ? `<button class="btn btn-sm btn-outline-success join-deal-team" data-id="${opp.id}" title="Join this opportunity's deal team in MSX"><i class="bi bi-person-plus"></i></button>` : ''}
                 </td>
             </tr>`;
         }
@@ -474,8 +474,8 @@
         let html = '';
         for (const ms of sorted) {
             const teamBadge = ms.on_my_team
-                ? '<span class="badge bg-success"><i class="bi bi-people-fill"></i> On Team</span>'
-                : '<span class="badge bg-outline-secondary text-muted border"><i class="bi bi-people"></i></span>';
+                ? '<span class="badge bg-success" title="You are on this milestone team"><i class="bi bi-people-fill"></i></span>'
+                : '';
             const dueCls = urgencyClass(ms.due_date_urgency);
             html += `<tr class="ms-row" data-id="${ms.id}" data-msx-id="${escHtml(ms.msx_id || '')}">
                 <td>
@@ -494,8 +494,8 @@
                 <td>
                     ${teamBadge}
                     ${!ms.on_my_team
-                        ? `<button class="btn btn-sm btn-outline-success join-ms-team" data-id="${ms.id}" title="Join Team"><i class="bi bi-person-plus"></i></button>`
-                        : `<button class="btn btn-sm btn-outline-danger leave-ms-team" data-id="${ms.id}" title="Leave Team"><i class="bi bi-person-dash"></i></button>`
+                        ? `<button class="btn btn-sm btn-outline-success join-ms-team" data-id="${ms.id}" title="Join this milestone's access team in MSX"><i class="bi bi-person-plus"></i></button>`
+                        : `<button class="btn btn-sm btn-outline-danger leave-ms-team" data-id="${ms.id}" title="Leave this milestone's access team in MSX"><i class="bi bi-person-dash"></i></button>`
                     }
                 </td>
             </tr>`;
