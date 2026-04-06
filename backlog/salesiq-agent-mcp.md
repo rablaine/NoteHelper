@@ -42,7 +42,26 @@ Test each in the SalesIQ chat panel. Queries marked (GAP) need the tools above.
 ## Future Work
 
 - **Documentation** - README section + Admin Panel link once tools are refined and SalesIQ is ungated from dev
-- **MCP Resources (stretch)** - Expose entities as MCP resources (`salesbuddy://customer/{id}`, etc.)
+
+### MCP Resources: Domain Ontology
+
+The agent currently relies on tool names and descriptions to figure out what exists and how things connect. That's flat - it doesn't know that a customer *has* engagements, which *have* milestones, which *link to* opportunities. A seller *belongs to* a territory, which *belongs to* a POD. This causes wrong tool selection and multi-step query failures.
+
+**Solution:** Use MCP Resources (`resources/list` / `resources/read`) to expose on-demand reference data the agent can pull when it needs orientation, instead of stuffing everything into the system prompt.
+
+**Resources to build:**
+
+1. **`salesbuddy://domain-model`** - Entity-relationship graph describing all entities, how they connect, cardinality, and which tools operate on each entity. Structured JSON or markdown. The agent reads this once per session to understand what's queryable and how to chain tools.
+
+2. **`salesbuddy://glossary`** - Domain-specific term definitions. "Milestone" means an MSX sales opportunity tracked in Dynamics, not a project checkpoint. "Engagement" is an active workstream, not an email interaction. "POD" is an organizational group containing territories. Prevents the agent from misinterpreting user questions.
+
+3. **`salesbuddy://workflows`** (optional) - Common intent-to-tool-chain mappings. "Prep for a 1:1" = `get_seller_workload` then `report_one_on_one`. "Deep dive on a customer" = `search_customers` then `get_customer_summary` then `get_revenue_customer_detail`. Helps the agent plan multi-tool sequences.
+
+**Implementation:** Add `@mcp.list_resources()` and `@mcp.read_resource()` handlers to `app/mcp_server.py`. Content can live in a new `app/services/salesiq_ontology.py` module or inline in the MCP server. The domain model resource should be auto-generated from the tool registry + model relationships where possible so it stays in sync.
+
+**Also consider MCP Resource Templates** (`resources/templates/list`) for parameterized lookups like `salesbuddy://entity/{type}` that return the schema, relationships, and available tools for a specific entity type on demand.
+
+**MCP Prompts** (`prompts/list` / `prompts/get`) are another option for pre-wired intent resolution - reusable prompt templates like `prep_one_on_one(seller_name)` that tell the agent exactly which tools to call and in what order. Less about ontology, more about canned workflows.
 
 ---
 
